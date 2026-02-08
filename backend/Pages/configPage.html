@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Moonfin</title>
+</head>
+<body>
+    <div id="MoonfinConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="MoonfinConfigForm">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h2 class="sectionTitle">Moonfin Settings</h2>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">General</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
+                                <span>Enable Settings Sync</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Allow Moonfin clients to sync their settings across devices via this server.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Jellyseerr Integration</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="JellyseerrEnabled" is="emby-checkbox" />
+                                <span>Enable Jellyseerr</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Enable Jellyseerr integration for all users. Users can configure their own API keys in their client settings.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="JellyseerrUrl">Jellyseerr URL</label>
+                            <input type="url" id="JellyseerrUrl" is="emby-input" placeholder="https://jellyseerr.example.com" />
+                            <div class="fieldDescription">
+                                The URL of your Jellyseerr instance. If you only have one URL (e.g. a local IP), enter it here.
+                            </div>
+                        </div>
+                        <div style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 1em 1.5em; margin: 1em 0;">
+                            <strong>SSO Proxy:</strong> When Jellyseerr is enabled, Moonfin provides single sign-on.
+                            Users authenticate once with their Jellyfin credentials, and the session is stored server-side.
+                            All Moonfin clients (web, webOS, Tizen) can access Jellyseerr through <code>/Moonfin/Jellyseerr/Api/</code>
+                            without re-authenticating.
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Web Plugin Status</h3>
+                        <div class="fieldDescription" style="margin-bottom: 1em;">
+                            <p>The Moonfin web UI is served from:</p>
+                            <ul style="margin-left: 1.5em;">
+                                <li><code>/Moonfin/Web/plugin.js</code></li>
+                                <li><code>/Moonfin/Web/plugin.css</code></li>
+                            </ul>
+                            <p style="margin-top: 1em;">
+                                <strong>Note:</strong> The web UI must be loaded via 
+                                <a href="https://github.com/nicholasgasior/jellyfin-plugin-js-injector" target="_blank">JS Injector</a> plugin.
+                                See the Moonfin README for setup instructions.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var MoonfinConfig = {
+                pluginUniqueId: '8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b'
+            };
+
+            document.addEventListener('pageshow', function(e) {
+                if (e.target.id !== 'MoonfinConfigPage') return;
+
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
+                    document.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
+                    document.querySelector('#JellyseerrEnabled').checked = config.JellyseerrEnabled;
+                    document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
+                    Dashboard.hideLoadingMsg();
+                });
+
+                document.querySelector('#MoonfinConfigForm')
+                    .addEventListener('submit', function(ev) {
+                        ev.preventDefault();
+                        Dashboard.showLoadingMsg();
+                        ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
+                            config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
+                            config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
+                            config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
+                            ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
+                                Dashboard.processPluginConfigurationUpdateResult(result);
+                            });
+                        });
+                        return false;
+                    });
+            });
+        </script>
+    </div>
+</body>
+</html>

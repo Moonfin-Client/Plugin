@@ -1,0 +1,149 @@
+.moonfin-mdblist-rating-compact {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: 10px;
+    white-space: nowrap;
+}
+
+.moonfin-mdblist-rating-compact:last-child {
+    margin-right: 0;
+}
+
+.moonfin-mdblist-icon {
+    height: 18px;
+    width: auto;
+    object-fit: contain;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.moonfin-mdblist-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.moonfin-mdblist-ratings-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 10px 0;
+}
+
+.moonfin-mdblist-ratings-row:empty {
+    display: none;
+}
+
+.moonfin-mdblist-rating-full {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 6px 12px;
+    transition: background 0.2s;
+}
+
+.moonfin-mdblist-rating-full:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.moonfin-mdblist-icon-lg {
+    height: 24px;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.moonfin-mdblist-rating-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.moonfin-mdblist-rating-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.2;
+}
+
+.moonfin-mdblist-rating-name {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.2;
+}
+
+.moonfin-mdblist-sources {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 16px;
+    margin-top: 8px;
+}
+
+.moonfin-mdblist-source-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 4px 0;
+}
+
+.moonfin-mdblist-source-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #00a4dc;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.moonfin-mdblist-source-label span {
+    user-select: none;
+}
+
+.moonfin-mdblist-config {
+    padding: 4px 0 0 0;
+}
+
+@media (max-width: 768px) {
+    .moonfin-mdblist-rating-compact {
+        gap: 3px;
+        margin-right: 6px;
+    }
+
+    .moonfin-mdblist-icon {
+        height: 14px;
+    }
+
+    .moonfin-mdblist-value {
+        font-size: 11px;
+    }
+
+    .moonfin-mdblist-ratings-row {
+        gap: 8px;
+    }
+
+    .moonfin-mdblist-rating-full {
+        padding: 4px 8px;
+        gap: 6px;
+    }
+
+    .moonfin-mdblist-icon-lg {
+        height: 20px;
+    }
+
+    .moonfin-mdblist-rating-value {
+        font-size: 13px;
+    }
+
+    .moonfin-mdblist-rating-name {
+        font-size: 10px;
+    }
+
+    .moonfin-mdblist-sources {
+        grid-template-columns: 1fr;
+    }
+}

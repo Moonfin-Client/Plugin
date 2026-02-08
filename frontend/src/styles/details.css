@@ -1,0 +1,2027 @@
+/**
+ * Moonfin Details Panel - webOS Moonfin Style
+ */
+
+.moonfin-details-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.moonfin-details-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.moonfin-details-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #0a0a0a;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.moonfin-details-panel::-webkit-scrollbar {
+    display: none;
+}
+
+.moonfin-details-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 70vh;
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    opacity: 0.6;
+}
+
+.moonfin-details-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 70vh;
+    background: linear-gradient(
+        to bottom,
+        rgba(10, 10, 10, 0.2) 0%,
+        rgba(10, 10, 10, 0.5) 35%,
+        rgba(10, 10, 10, 0.85) 65%,
+        #0a0a0a 100%
+    );
+}
+
+.moonfin-details-back {
+    position: fixed;
+    top: 24px;
+    left: 24px;
+    z-index: 10001;
+    width: 48px;
+    height: 48px;
+    border: none;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.moonfin-details-back svg {
+    width: 24px;
+    height: 24px;
+    color: #fff;
+}
+
+.moonfin-details-back:hover,
+.moonfin-details-back:focus {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.1);
+    outline: none;
+}
+
+body.moonfin-details-visible .moonfin-navbar {
+    z-index: 10002;
+}
+
+/* When navbar is active, hide the back button (navbar handles navigation) */
+body.moonfin-navbar-active .moonfin-details-back {
+    display: none;
+}
+
+.moonfin-details-content {
+    position: relative;
+    z-index: 1;
+    padding: 200px 60px 60px;
+    min-height: 100vh;
+}
+
+.moonfin-details-header {
+    display: flex;
+    gap: 48px;
+    margin-bottom: 40px;
+    align-items: flex-start;
+}
+
+.moonfin-info-section {
+    flex: 1;
+    min-width: 0;
+    max-width: 70%;
+}
+
+.moonfin-episode-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.moonfin-series-name {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+}
+
+.moonfin-episode-number {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 10px;
+    border-radius: 4px;
+}
+
+.moonfin-title-section {
+    margin-bottom: 16px;
+}
+
+.moonfin-logo {
+    max-width: 400px;
+    max-height: 120px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+}
+
+.moonfin-title {
+    font-size: 48px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+    line-height: 1.1;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.moonfin-info-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.moonfin-info-item {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.moonfin-info-pill {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.9);
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.moonfin-star-rating {
+    color: #ffc107;
+}
+
+.moonfin-star-rating svg {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 2px;
+}
+
+.moonfin-critic-rating {
+    color: #ff6b6b;
+}
+
+.moonfin-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.moonfin-badge-4k {
+    background: linear-gradient(135deg, #9c27b0, #673ab7);
+    color: #fff;
+}
+
+.moonfin-badge-hd {
+    background: #2196f3;
+    color: #fff;
+}
+
+.moonfin-badge-hdr {
+    background: linear-gradient(135deg, #ff9800, #f57c00);
+    color: #fff;
+}
+
+.moonfin-badge-dv {
+    background: linear-gradient(135deg, #000, #333);
+    color: #fff;
+    border: 1px solid #666;
+}
+
+.moonfin-badge-atmos {
+    background: linear-gradient(135deg, #1a237e, #3f51b5);
+    color: #fff;
+}
+
+.moonfin-badge-dtsx {
+    background: #212121;
+    color: #00bcd4;
+    border: 1px solid #00bcd4;
+}
+
+.moonfin-badge-surround {
+    background: #455a64;
+    color: #fff;
+}
+
+.moonfin-tagline {
+    font-style: italic;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 17px;
+    margin: 0 0 16px 0;
+    letter-spacing: 0.3px;
+}
+
+.moonfin-overview {
+    font-size: 15px;
+    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+    max-height: 130px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+}
+
+.moonfin-poster-section {
+    flex-shrink: 0;
+    width: 260px;
+}
+
+.moonfin-poster {
+    width: 260px;
+    height: 390px;
+    background-color: #1a1a1a;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.moonfin-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.moonfin-poster-landscape {
+    width: 420px;
+}
+
+.moonfin-poster-landscape .moonfin-poster {
+    width: 420px;
+    height: 236px;
+}
+
+.moonfin-actions {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 48px;
+    flex-wrap: wrap;
+}
+
+.moonfin-btn-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: transform 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.moonfin-btn-wrapper:hover {
+    transform: scale(1.08);
+}
+
+.moonfin-btn-wrapper:focus {
+    outline: none;
+    transform: scale(1.08);
+}
+
+.moonfin-btn-circle {
+    width: 72px;
+    height: 72px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.moonfin-btn-circle svg {
+    width: 32px;
+    height: 32px;
+    color: #fff;
+}
+
+.moonfin-btn-wrapper:hover .moonfin-btn-circle,
+.moonfin-btn-wrapper:focus .moonfin-btn-circle {
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 4px 20px rgba(0, 164, 220, 0.3);
+    border-color: rgba(0, 164, 220, 0.5);
+}
+
+.moonfin-btn-primary {
+    background: #00a4dc;
+    border-color: #00a4dc;
+}
+
+.moonfin-btn-wrapper:hover .moonfin-btn-primary,
+.moonfin-btn-wrapper:focus .moonfin-btn-primary {
+    background: #0bb8f0;
+    box-shadow: 0 4px 24px rgba(0, 164, 220, 0.5);
+    border-color: #0bb8f0;
+}
+
+.moonfin-btn-wrapper.active .moonfin-btn-circle {
+    background: rgba(0, 164, 220, 0.25);
+    border-color: rgba(0, 164, 220, 0.6);
+}
+
+.moonfin-btn-wrapper.active .moonfin-btn-circle svg {
+    color: #00a4dc;
+}
+
+.moonfin-btn-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
+    transition: color 0.2s;
+}
+
+.moonfin-btn-wrapper:hover .moonfin-btn-label,
+.moonfin-btn-wrapper:focus .moonfin-btn-label {
+    color: #fff;
+}
+
+.moonfin-btn-wrapper.active .moonfin-btn-label {
+    color: #00a4dc;
+}
+
+.moonfin-metadata-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-bottom: 48px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.moonfin-metadata-cell {
+    flex: 1 1 180px;
+    padding: 16px 20px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.moonfin-metadata-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    font-weight: 600;
+}
+
+.moonfin-metadata-value {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.moonfin-sections {
+    margin-top: 0;
+}
+
+.moonfin-section {
+    margin-bottom: 48px;
+}
+
+.moonfin-section-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+    letter-spacing: 0.3px;
+}
+
+.moonfin-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.moonfin-section-arrows {
+    display: flex;
+    gap: 8px;
+}
+
+.moonfin-section-arrow {
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    padding: 0;
+}
+
+.moonfin-section-arrow svg {
+    width: 20px;
+    height: 20px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.moonfin-section-arrow:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(0, 164, 220, 0.5);
+    transform: scale(1.1);
+}
+
+.moonfin-section-arrow:hover svg {
+    color: #fff;
+}
+
+.moonfin-section-arrow:active {
+    transform: scale(0.95);
+}
+
+.moonfin-section-scroll {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.moonfin-section-scroll::-webkit-scrollbar {
+    height: 0;
+    display: none;
+}
+
+.moonfin-section-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.moonfin-section-scroll::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+
+.moonfin-cast-card {
+    flex-shrink: 0;
+    width: 150px;
+    text-align: center;
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: transform 0.2s;
+}
+
+.moonfin-cast-card:hover,
+.moonfin-cast-card:focus {
+    transform: scale(1.06);
+    outline: none;
+}
+
+.moonfin-cast-photo {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    margin: 0 auto 10px;
+    background-color: #1a1a1a;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.moonfin-cast-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.moonfin-cast-photo svg {
+    width: 48px;
+    height: 48px;
+    color: #555;
+}
+
+.moonfin-cast-card:hover .moonfin-cast-photo,
+.moonfin-cast-card:focus .moonfin-cast-photo {
+    border-color: rgba(0, 164, 220, 0.6);
+    box-shadow: 0 0 0 3px rgba(0, 164, 220, 0.2);
+}
+
+.moonfin-cast-name {
+    display: block;
+    font-size: 14px;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.moonfin-cast-role {
+    display: block;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.moonfin-similar-card {
+    flex-shrink: 0;
+    width: 180px;
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: transform 0.2s;
+}
+
+.moonfin-similar-card:hover,
+.moonfin-similar-card:focus {
+    transform: scale(1.05);
+    outline: none;
+}
+
+.moonfin-similar-poster {
+    width: 180px;
+    height: 270px;
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    border: 2px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.moonfin-similar-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.moonfin-similar-card:hover .moonfin-similar-poster,
+.moonfin-similar-card:focus .moonfin-similar-poster {
+    border-color: rgba(0, 164, 220, 0.6);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.moonfin-similar-title {
+    display: block;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.moonfin-season-card {
+    flex-shrink: 0;
+    width: 160px;
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: transform 0.2s;
+}
+
+.moonfin-season-card:hover,
+.moonfin-season-card:focus {
+    transform: scale(1.05);
+    outline: none;
+}
+
+.moonfin-season-poster {
+    width: 160px;
+    height: 240px;
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 14px;
+    border: 2px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.moonfin-season-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.moonfin-season-card:hover .moonfin-season-poster,
+.moonfin-season-card:focus .moonfin-season-poster {
+    border-color: rgba(0, 164, 220, 0.6);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.moonfin-season-name {
+    display: block;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.moonfin-episode-card {
+    flex-shrink: 0;
+    width: 260px;
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: transform 0.2s;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border: 2px solid transparent;
+}
+
+.moonfin-episode-card:hover,
+.moonfin-episode-card:focus {
+    transform: scale(1.03);
+    outline: none;
+    border-color: rgba(0, 164, 220, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.moonfin-episode-card.moonfin-episode-current {
+    border-color: rgba(0, 164, 220, 0.6);
+    background: rgba(0, 164, 220, 0.1);
+}
+
+.moonfin-episode-thumb {
+    width: 100%;
+    height: 146px;
+    background-color: #1a1a1a;
+    overflow: hidden;
+    position: relative;
+}
+
+.moonfin-episode-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.moonfin-episode-thumb-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a1a;
+}
+
+.moonfin-episode-thumb-placeholder svg {
+    width: 40px;
+    height: 40px;
+    color: rgba(255, 255, 255, 0.2);
+}
+
+.moonfin-episode-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.moonfin-episode-progress-bar {
+    height: 100%;
+    background: #00a4dc;
+    border-radius: 0 2px 2px 0;
+}
+
+.moonfin-episode-info {
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.moonfin-episode-ep-number {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.5);
+    flex-shrink: 0;
+}
+
+.moonfin-episode-ep-title {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.moonfin-episode-ep-runtime {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.4);
+    flex-shrink: 0;
+}
+
+.moonfin-details-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 16px;
+}
+
+.moonfin-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(255, 255, 255, 0.08);
+    border-top-color: #00a4dc;
+    border-radius: 50%;
+    animation: moonfin-spin 0.8s linear infinite;
+}
+
+@keyframes moonfin-spin {
+    to { transform: rotate(360deg); }
+}
+
+.moonfin-details-error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 16px;
+}
+
+.moonfin-mdblist-ratings-row {
+    margin-bottom: 12px;
+}
+
+@media (max-width: 1200px) {
+    .moonfin-details-content {
+        padding: 160px 40px 50px;
+    }
+
+    .moonfin-details-header {
+        gap: 32px;
+    }
+
+    .moonfin-poster-section {
+        width: 200px;
+    }
+
+    .moonfin-poster {
+        width: 200px;
+        height: 300px;
+    }
+
+    .moonfin-poster-landscape {
+        width: 320px;
+    }
+
+    .moonfin-poster-landscape .moonfin-poster {
+        width: 320px;
+        height: 180px;
+    }
+
+    .moonfin-title {
+        font-size: 38px;
+    }
+
+    .moonfin-btn-circle {
+        width: 64px;
+        height: 64px;
+        border-radius: 14px;
+    }
+
+    .moonfin-btn-circle svg {
+        width: 28px;
+        height: 28px;
+    }
+
+    .moonfin-actions {
+        gap: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .moonfin-details-backdrop {
+        height: 55vh;
+    }
+
+    .moonfin-details-gradient {
+        height: 55vh;
+    }
+
+    .moonfin-details-content {
+        padding: 100px 24px 40px;
+    }
+
+    .moonfin-details-header {
+        flex-direction: column-reverse;
+        align-items: center;
+        text-align: center;
+        gap: 24px;
+    }
+
+    .moonfin-info-section {
+        max-width: 100%;
+    }
+
+    .moonfin-poster-section {
+        width: 160px;
+    }
+
+    .moonfin-poster {
+        width: 160px;
+        height: 240px;
+    }
+
+    .moonfin-poster-landscape {
+        width: 280px;
+    }
+
+    .moonfin-poster-landscape .moonfin-poster {
+        width: 280px;
+        height: 158px;
+    }
+
+    .moonfin-title {
+        font-size: 30px;
+    }
+
+    .moonfin-logo {
+        max-width: 280px;
+        max-height: 80px;
+    }
+
+    .moonfin-info-row {
+        justify-content: center;
+    }
+
+    .moonfin-mdblist-ratings-row {
+        display: flex;
+        justify-content: center;
+    }
+
+    .moonfin-tagline {
+        font-size: 15px;
+    }
+
+    .moonfin-overview {
+        font-size: 14px;
+        text-align: left;
+    }
+
+    .moonfin-actions {
+        justify-content: center;
+        gap: 16px;
+        margin-bottom: 36px;
+    }
+
+    .moonfin-btn-circle {
+        width: 60px;
+        height: 60px;
+        border-radius: 14px;
+    }
+
+    .moonfin-btn-circle svg {
+        width: 26px;
+        height: 26px;
+    }
+
+    .moonfin-btn-label {
+        font-size: 12px;
+    }
+
+    .moonfin-metadata-group {
+        margin-bottom: 36px;
+    }
+
+    .moonfin-metadata-cell {
+        padding: 12px 16px;
+    }
+
+    .moonfin-section {
+        margin-bottom: 36px;
+    }
+
+    .moonfin-section-title {
+        font-size: 19px;
+    }
+    
+    .moonfin-section-header {
+        margin-bottom: 16px;
+    }
+
+    .moonfin-episode-header {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .moonfin-details-backdrop {
+        height: 45vh;
+    }
+
+    .moonfin-details-gradient {
+        height: 45vh;
+    }
+
+    .moonfin-details-content {
+        padding: 70px 16px 30px;
+    }
+
+    .moonfin-details-back {
+        top: 14px;
+        left: 14px;
+        width: 40px;
+        height: 40px;
+    }
+
+    .moonfin-details-back svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .moonfin-poster-section {
+        width: 120px;
+    }
+
+    .moonfin-poster {
+        width: 120px;
+        height: 180px;
+        border-radius: 8px;
+    }
+
+    .moonfin-poster-landscape {
+        width: 220px;
+    }
+
+    .moonfin-poster-landscape .moonfin-poster {
+        width: 220px;
+        height: 124px;
+    }
+
+    .moonfin-title {
+        font-size: 24px;
+    }
+
+    .moonfin-logo {
+        max-width: 200px;
+        max-height: 60px;
+    }
+
+    .moonfin-info-row {
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .moonfin-info-item {
+        font-size: 13px;
+    }
+
+    .moonfin-info-pill {
+        font-size: 11px;
+        padding: 1px 7px;
+    }
+
+    .moonfin-badge {
+        font-size: 10px;
+        padding: 1px 6px;
+    }
+
+    .moonfin-tagline {
+        font-size: 13px;
+        margin-bottom: 10px;
+    }
+
+    .moonfin-overview {
+        font-size: 13px;
+        line-height: 1.5;
+        -webkit-line-clamp: 4;
+    }
+
+    .moonfin-actions {
+        gap: 12px;
+        margin-bottom: 28px;
+    }
+
+    .moonfin-btn-circle {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+    }
+
+    .moonfin-btn-circle svg {
+        width: 22px;
+        height: 22px;
+    }
+
+    .moonfin-btn-label {
+        font-size: 11px;
+    }
+
+    .moonfin-metadata-group {
+        margin-bottom: 28px;
+    }
+
+    .moonfin-metadata-cell {
+        flex: 1 1 140px;
+        padding: 10px 14px;
+    }
+
+    .moonfin-metadata-label {
+        font-size: 10px;
+    }
+
+    .moonfin-metadata-value {
+        font-size: 13px;
+    }
+
+    .moonfin-section {
+        margin-bottom: 28px;
+    }
+
+    .moonfin-section-title {
+        font-size: 17px;
+    }
+    
+    .moonfin-section-header {
+        margin-bottom: 12px;
+    }
+
+    .moonfin-section-arrow {
+        width: 30px;
+        height: 30px;
+    }
+
+    .moonfin-section-arrow svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .moonfin-section-scroll {
+        gap: 12px;
+        padding-bottom: 12px;
+    }
+
+    .moonfin-cast-card {
+        width: 110px;
+    }
+
+    .moonfin-cast-photo {
+        width: 88px;
+        height: 88px;
+    }
+
+    .moonfin-cast-photo svg {
+        width: 32px;
+        height: 32px;
+    }
+
+    .moonfin-cast-name {
+        font-size: 12px;
+    }
+
+    .moonfin-cast-role {
+        font-size: 10px;
+    }
+
+    .moonfin-similar-card {
+        width: 130px;
+    }
+
+    .moonfin-similar-poster {
+        width: 130px;
+        height: 195px;
+    }
+
+    .moonfin-similar-title {
+        font-size: 11px;
+    }
+
+    .moonfin-season-card {
+        width: 120px;
+    }
+
+    .moonfin-season-poster {
+        width: 120px;
+        height: 180px;
+    }
+
+    .moonfin-season-name {
+        font-size: 11px;
+    }
+
+    .moonfin-series-name {
+        font-size: 14px;
+    }
+
+    .moonfin-episode-number {
+        font-size: 12px;
+    }
+
+    .moonfin-episode-card {
+        width: 200px;
+    }
+
+    .moonfin-episode-thumb {
+        height: 112px;
+    }
+
+    .moonfin-episode-ep-title {
+        font-size: 12px;
+    }
+
+    .moonfin-episode-ep-number {
+        font-size: 11px;
+    }
+
+    .moonfin-episode-info {
+        padding: 8px 10px;
+        gap: 6px;
+    }
+
+    .moonfin-details-loading,
+    .moonfin-details-error {
+        font-size: 14px;
+    }
+
+    .moonfin-spinner {
+        width: 40px;
+        height: 40px;
+    }
+}
+
+@media (max-width: 360px) {
+    .moonfin-details-content {
+        padding: 55px 12px 24px;
+    }
+
+    .moonfin-poster-section {
+        width: 100px;
+    }
+
+    .moonfin-poster {
+        width: 100px;
+        height: 150px;
+    }
+
+    .moonfin-poster-landscape {
+        width: 180px;
+    }
+
+    .moonfin-poster-landscape .moonfin-poster {
+        width: 180px;
+        height: 101px;
+    }
+
+    .moonfin-title {
+        font-size: 20px;
+    }
+
+    .moonfin-info-row {
+        gap: 6px;
+    }
+
+    .moonfin-actions {
+        gap: 8px;
+    }
+
+    .moonfin-btn-circle {
+        width: 46px;
+        height: 46px;
+        border-radius: 10px;
+    }
+
+    .moonfin-btn-circle svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .moonfin-btn-label {
+        font-size: 10px;
+    }
+
+    .moonfin-cast-card {
+        width: 90px;
+    }
+
+    .moonfin-cast-photo {
+        width: 72px;
+        height: 72px;
+    }
+
+    .moonfin-similar-card {
+        width: 110px;
+    }
+
+    .moonfin-similar-poster {
+        width: 110px;
+        height: 165px;
+    }
+
+    .moonfin-season-card {
+        width: 100px;
+    }
+
+    .moonfin-season-poster {
+        width: 100px;
+        height: 150px;
+    }
+
+    .moonfin-episode-card {
+        width: 180px;
+    }
+
+    .moonfin-episode-thumb {
+        height: 101px;
+    }
+}
+
+@media (min-width: 1920px) {
+    .moonfin-details-content {
+        padding: 220px 100px 80px;
+    }
+
+    .moonfin-poster-section {
+        width: 320px;
+    }
+
+    .moonfin-poster {
+        width: 320px;
+        height: 480px;
+    }
+
+    .moonfin-poster-landscape {
+        width: 520px;
+    }
+
+    .moonfin-poster-landscape .moonfin-poster {
+        width: 520px;
+        height: 293px;
+    }
+
+    .moonfin-title {
+        font-size: 56px;
+    }
+
+    .moonfin-info-item {
+        font-size: 17px;
+    }
+
+    .moonfin-overview {
+        font-size: 17px;
+        max-height: 160px;
+        -webkit-line-clamp: 6;
+    }
+
+    .moonfin-btn-circle {
+        width: 100px;
+        height: 100px;
+        border-radius: 20px;
+    }
+
+    .moonfin-btn-circle svg {
+        width: 44px;
+        height: 44px;
+    }
+
+    .moonfin-btn-label {
+        font-size: 15px;
+    }
+
+    .moonfin-actions {
+        gap: 32px;
+        margin-bottom: 56px;
+    }
+
+    .moonfin-metadata-cell {
+        padding: 20px 24px;
+    }
+
+    .moonfin-metadata-value {
+        font-size: 16px;
+    }
+
+    .moonfin-section-title {
+        font-size: 26px;
+    }
+
+    .moonfin-section-header {
+        margin-bottom: 24px;
+    }
+
+    .moonfin-section-arrow {
+        width: 44px;
+        height: 44px;
+    }
+
+    .moonfin-section-arrow svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .moonfin-section-scroll {
+        gap: 20px;
+    }
+
+    .moonfin-cast-card {
+        width: 160px;
+    }
+
+    .moonfin-cast-photo {
+        width: 130px;
+        height: 130px;
+    }
+
+    .moonfin-cast-name {
+        font-size: 16px;
+    }
+
+    .moonfin-cast-role {
+        font-size: 14px;
+    }
+
+    .moonfin-similar-card {
+        width: 200px;
+    }
+
+    .moonfin-similar-poster {
+        width: 200px;
+        height: 300px;
+    }
+
+    .moonfin-similar-title {
+        font-size: 15px;
+    }
+
+    .moonfin-season-card {
+        width: 180px;
+    }
+
+    .moonfin-season-poster {
+        width: 180px;
+        height: 270px;
+    }
+
+    .moonfin-season-name {
+        font-size: 15px;
+    }
+
+    .moonfin-episode-card {
+        width: 320px;
+    }
+
+    .moonfin-episode-thumb {
+        height: 180px;
+    }
+
+    .moonfin-episode-ep-title {
+        font-size: 16px;
+    }
+
+    .moonfin-episode-ep-number {
+        font-size: 15px;
+    }
+
+    .moonfin-episode-info {
+        padding: 12px 16px;
+    }
+}
+
+.moonfin-focusable:focus {
+    outline: none;
+}
+
+.moonfin-details-panel *:focus {
+    outline: none;
+}
+
+.moonfin-more-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10003;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: moonfin-fade-in 0.2s ease;
+}
+
+@keyframes moonfin-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.moonfin-more-menu {
+    background: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 24px;
+    min-width: 320px;
+    max-width: 480px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.moonfin-more-menu::-webkit-scrollbar {
+    display: none;
+}
+
+.moonfin-more-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0 0 20px 0;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.moonfin-more-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.moonfin-more-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 16px;
+    text-align: left;
+    width: 100%;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.moonfin-more-item:hover,
+.moonfin-more-item:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(0, 164, 220, 0.5);
+    outline: none;
+}
+
+.moonfin-more-item-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.moonfin-more-item-icon svg {
+    width: 24px;
+    height: 24px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.moonfin-more-item:hover .moonfin-more-item-icon svg,
+.moonfin-more-item:focus .moonfin-more-item-icon svg {
+    color: #00a4dc;
+}
+
+.moonfin-more-item-text {
+    flex: 1;
+    font-size: 16px;
+}
+
+.moonfin-more-item-danger {
+    color: #ff6b6b;
+}
+
+.moonfin-more-item-danger .moonfin-more-item-icon svg {
+    color: #ff6b6b;
+}
+
+.moonfin-more-item-danger:hover,
+.moonfin-more-item-danger:focus {
+    background: rgba(255, 50, 50, 0.15);
+}
+
+.moonfin-more-item-danger:hover .moonfin-more-item-icon svg,
+.moonfin-more-item-danger:focus .moonfin-more-item-icon svg {
+    color: #ff4444;
+}
+
+.moonfin-toast {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(30, 30, 30, 0.95);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 10010;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.moonfin-toast.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.moonfin-media-info-menu {
+    max-width: 560px;
+}
+
+.moonfin-media-info-content {
+    margin-bottom: 16px;
+}
+
+.moonfin-media-info-empty {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    padding: 16px 0;
+    margin: 0;
+}
+
+.moonfin-media-info-stream {
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.moonfin-media-info-stream:last-child {
+    border-bottom: none;
+}
+
+.moonfin-media-info-stream-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: #00a4dc;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.moonfin-media-info-row {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.75);
+    line-height: 1.6;
+}
+
+.moonfin-media-info-close {
+    margin-top: 8px;
+    justify-content: center;
+}
+
+.moonfin-season-detail-header {
+    display: flex;
+    gap: 32px;
+    align-items: flex-end;
+    margin-bottom: 40px;
+}
+
+.moonfin-season-detail-poster {
+    flex-shrink: 0;
+    width: 180px;
+}
+
+.moonfin-season-detail-poster img {
+    width: 100%;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.moonfin-season-detail-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 8px;
+}
+
+.moonfin-season-detail-series {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 500;
+}
+
+.moonfin-season-detail-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+    line-height: 1.15;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.moonfin-season-detail-count {
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 4px;
+}
+
+.moonfin-season-episodes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.moonfin-season-ep {
+    display: flex;
+    gap: 20px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.moonfin-season-ep:hover,
+.moonfin-season-ep:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(0, 164, 220, 0.4);
+    outline: none;
+}
+
+.moonfin-season-ep-thumb {
+    position: relative;
+    width: 280px;
+    min-height: 160px;
+    flex-shrink: 0;
+    background: #111;
+    overflow: hidden;
+}
+
+.moonfin-season-ep-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.moonfin-season-ep-thumb-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a1a;
+}
+
+.moonfin-season-ep-thumb-placeholder svg {
+    width: 40px;
+    height: 40px;
+    color: rgba(255, 255, 255, 0.15);
+}
+
+.moonfin-season-ep-body {
+    flex: 1;
+    padding: 16px 20px 16px 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.moonfin-season-ep-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.moonfin-season-ep-number {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.moonfin-season-ep-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.moonfin-season-ep-check {
+    width: 16px;
+    height: 16px;
+    color: #00a4dc;
+}
+
+.moonfin-season-ep-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.moonfin-season-ep-overview {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.55);
+    line-height: 1.5;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .moonfin-season-detail-header {
+        gap: 20px;
+    }
+
+    .moonfin-season-detail-poster {
+        width: 130px;
+    }
+
+    .moonfin-season-detail-title {
+        font-size: 28px;
+    }
+
+    .moonfin-season-ep-thumb {
+        width: 200px;
+        min-height: 120px;
+    }
+
+    .moonfin-season-ep-title {
+        font-size: 16px;
+    }
+
+    .moonfin-season-ep-overview {
+        -webkit-line-clamp: 2;
+    }
+}
+
+@media (max-width: 480px) {
+    .moonfin-season-detail-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 16px;
+    }
+
+    .moonfin-season-detail-poster {
+        width: 120px;
+    }
+
+    .moonfin-season-detail-title {
+        font-size: 24px;
+    }
+
+    .moonfin-season-detail-count {
+        font-size: 13px;
+    }
+
+    .moonfin-season-ep {
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .moonfin-season-ep-thumb {
+        width: 100%;
+        min-height: 0;
+        height: 180px;
+    }
+
+    .moonfin-season-ep-body {
+        padding: 12px 16px;
+    }
+
+    .moonfin-season-ep-title {
+        font-size: 15px;
+    }
+
+    .moonfin-season-ep-overview {
+        font-size: 13px;
+        -webkit-line-clamp: 2;
+    }
+}
+
+@media (min-width: 1400px) {
+    .moonfin-season-detail-poster {
+        width: 220px;
+    }
+
+    .moonfin-season-detail-title {
+        font-size: 42px;
+    }
+
+    .moonfin-season-ep-thumb {
+        width: 340px;
+        min-height: 190px;
+    }
+
+    .moonfin-season-ep-title {
+        font-size: 20px;
+    }
+
+    .moonfin-season-ep-overview {
+        font-size: 15px;
+    }
+}
+
+.moonfin-person-backdrop {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important;
+}
+
+.moonfin-person-header {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    margin-bottom: 40px;
+}
+
+.moonfin-person-photo-wrapper {
+    flex-shrink: 0;
+    width: 220px;
+}
+
+.moonfin-person-photo {
+    width: 100%;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.moonfin-person-photo-placeholder {
+    width: 100%;
+    aspect-ratio: 2/3;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.moonfin-person-photo-placeholder svg {
+    width: 64px;
+    height: 64px;
+    color: rgba(255, 255, 255, 0.25);
+}
+
+.moonfin-person-info {
+    flex: 1;
+    min-width: 0;
+    padding-top: 16px;
+}
+
+.moonfin-person-info .moonfin-title {
+    margin-bottom: 12px;
+}
+
+.moonfin-person-info .moonfin-overview {
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.moonfin-person-info .moonfin-overview::-webkit-scrollbar {
+    display: none;
+}
+
+.moonfin-person-film-year {
+    display: block;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.4);
+    margin-top: 2px;
+}
+
+.moonfin-poster-placeholder {
+    width: 100%;
+    aspect-ratio: 2/3;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.moonfin-poster-placeholder svg {
+    width: 40px;
+    height: 40px;
+    color: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+    .moonfin-person-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 20px;
+    }
+
+    .moonfin-person-photo-wrapper {
+        width: 160px;
+    }
+
+    .moonfin-person-info .moonfin-overview {
+        max-height: 150px;
+    }
+}
+
+@media (max-width: 480px) {
+    .moonfin-person-photo-wrapper {
+        width: 130px;
+    }
+}
+
+@media (min-width: 1600px) {
+    .moonfin-person-photo-wrapper {
+        width: 260px;
+    }
+}

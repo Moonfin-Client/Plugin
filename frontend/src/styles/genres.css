@@ -1,0 +1,547 @@
+.moonfin-genres-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9998;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.moonfin-genres-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+body.moonfin-navbar-active .moonfin-genres-overlay {
+    padding-top: 80px;
+}
+
+@media (max-width: 768px) {
+    body.moonfin-navbar-active .moonfin-genres-overlay {
+        padding-top: 60px;
+    }
+}
+
+.moonfin-genres-header {
+    display: flex;
+    align-items: center;
+    padding: 24px 32px 16px;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: linear-gradient(to bottom, rgba(26, 26, 46, 0.98) 0%, rgba(26, 26, 46, 0.9) 80%, transparent 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.moonfin-genres-title-section {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.moonfin-genres-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.moonfin-genres-count {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+}
+
+.moonfin-genres-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+}
+
+.moonfin-genres-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: #00a4dc;
+    border-radius: 50%;
+    animation: moonfin-genres-spin 0.8s linear infinite;
+}
+
+@keyframes moonfin-genres-spin {
+    to { transform: rotate(360deg); }
+}
+
+.moonfin-genres-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.moonfin-genres-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    padding: 8px 32px 32px;
+}
+
+.moonfin-genre-card {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    aspect-ratio: 16 / 9;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.moonfin-genre-card:hover {
+    transform: scale(1.03);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.moonfin-genre-backdrop {
+    position: absolute;
+    inset: 0;
+}
+
+.moonfin-genre-backdrop-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.moonfin-genre-backdrop-placeholder {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #2a2a4e 0%, #1a1a3e 100%);
+}
+
+.moonfin-genre-backdrop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    transition: background 0.2s;
+}
+
+.moonfin-genre-card:hover .moonfin-genre-backdrop-overlay {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.moonfin-genre-info {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    text-align: center;
+}
+
+.moonfin-genre-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.moonfin-genre-item-count {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 4px;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.moonfin-genres-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 32px 12px;
+    flex-wrap: wrap;
+}
+
+.moonfin-genres-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+
+.moonfin-genres-toolbar-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.moonfin-genres-toolbar-btn .material-icons {
+    font-size: 18px;
+}
+
+.moonfin-genres-letter-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: wrap;
+    flex: 1;
+    justify-content: center;
+}
+
+.moonfin-genres-letter-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.moonfin-genres-letter-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.moonfin-genres-letter-btn.active {
+    background: #00a4dc;
+    color: #fff;
+}
+
+.moonfin-genres-browse-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 20px;
+    padding: 8px 32px 32px;
+}
+
+.moonfin-genre-item-card {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    border-radius: 8px;
+    overflow: visible;
+}
+
+.moonfin-genre-item-card:hover {
+    transform: scale(1.04);
+}
+
+.moonfin-genre-item-card:hover .moonfin-genre-item-poster img {
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.moonfin-genre-item-poster {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.moonfin-genre-item-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    transition: border-color 0.2s;
+}
+
+.moonfin-genre-item-no-poster {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.moonfin-genre-item-no-poster .material-icons {
+    font-size: 48px;
+    color: rgba(255, 255, 255, 0.2);
+}
+
+.moonfin-genre-item-type-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #fff;
+}
+
+.moonfin-genre-item-type-badge.movie {
+    background: rgba(0, 164, 220, 0.85);
+}
+
+.moonfin-genre-item-type-badge.series {
+    background: rgba(0, 200, 83, 0.85);
+}
+
+.moonfin-genre-item-info {
+    padding: 8px 2px 0;
+}
+
+.moonfin-genre-item-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.moonfin-genre-item-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 2px;
+}
+
+.moonfin-genres-load-more {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
+}
+
+.moonfin-genres-dropdown {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.moonfin-genres-dropdown.visible {
+    opacity: 1;
+}
+
+.moonfin-genres-dropdown-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.moonfin-genres-dropdown-content {
+    position: relative;
+    background: rgba(30, 30, 50, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 16px;
+    padding: 24px 32px;
+    min-width: 260px;
+    max-width: 90vw;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.moonfin-genres-dropdown-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.moonfin-genres-dropdown-option {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+    margin-top: 4px;
+}
+
+.moonfin-genres-dropdown-option:first-of-type {
+    margin-top: 0;
+}
+
+.moonfin-genres-dropdown-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.moonfin-genres-dropdown-option.active {
+    background: #00a4dc;
+    color: #fff;
+}
+
+@media (max-width: 768px) {
+    .moonfin-genres-header {
+        padding: 16px 20px 12px;
+    }
+
+    .moonfin-genres-title {
+        font-size: 22px;
+    }
+
+    .moonfin-genres-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+        padding: 8px 20px 24px;
+    }
+
+    .moonfin-genre-name {
+        font-size: 18px;
+    }
+
+    .moonfin-genres-toolbar {
+        padding: 0 20px 10px;
+        gap: 6px;
+    }
+
+    .moonfin-genres-letter-nav {
+        gap: 1px;
+    }
+
+    .moonfin-genres-letter-btn {
+        width: 26px;
+        height: 26px;
+        font-size: 11px;
+    }
+
+    .moonfin-genres-browse-grid {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 14px;
+        padding: 8px 20px 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .moonfin-genres-header {
+        padding: 12px 16px 10px;
+        gap: 10px;
+    }
+
+    .moonfin-genres-title {
+        font-size: 18px;
+    }
+
+    .moonfin-genres-count {
+        font-size: 12px;
+    }
+
+    .moonfin-genres-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 10px;
+        padding: 8px 16px 20px;
+    }
+
+    .moonfin-genre-name {
+        font-size: 16px;
+    }
+
+    .moonfin-genre-item-count {
+        font-size: 11px;
+    }
+
+    .moonfin-genres-toolbar {
+        padding: 0 16px 8px;
+        gap: 4px;
+    }
+
+    .moonfin-genres-toolbar-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    .moonfin-genres-letter-nav {
+        display: none;
+    }
+
+    .moonfin-genres-browse-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 10px;
+        padding: 8px 16px 20px;
+    }
+
+    .moonfin-genre-item-name {
+        font-size: 12px;
+    }
+
+    .moonfin-genre-item-meta {
+        font-size: 11px;
+    }
+}
+
+@media (min-width: 1400px) {
+    .moonfin-genres-grid {
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    }
+
+    .moonfin-genres-browse-grid {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
+}
+
+@media (min-width: 1920px) {
+    .moonfin-genres-grid {
+        grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+        padding: 8px 48px 48px;
+    }
+
+    .moonfin-genres-header {
+        padding: 32px 48px 20px;
+    }
+
+    .moonfin-genres-toolbar {
+        padding: 0 48px 16px;
+    }
+
+    .moonfin-genres-browse-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 24px;
+        padding: 8px 48px 48px;
+    }
+}

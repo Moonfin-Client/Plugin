@@ -1,0 +1,300 @@
+/**
+ * Moonfin Jellyseerr Styles
+ */
+
+/* Prevent body scroll when Jellyseerr is open */
+body.moonfin-jellyseerr-open {
+    overflow: hidden;
+}
+
+.moonfin-jellyseerr-container {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99998;
+    background: #0a0a0a;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+}
+
+.moonfin-jellyseerr-container.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.moonfin-jellyseerr-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: linear-gradient(to bottom, rgba(20, 20, 20, 0.98), rgba(15, 15, 15, 0.95));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    flex-shrink: 0;
+}
+
+.moonfin-jellyseerr-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: white;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.moonfin-jellyseerr-icon {
+    color: #00a4dc;
+}
+
+.moonfin-jellyseerr-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.moonfin-jellyseerr-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.moonfin-jellyseerr-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.moonfin-jellyseerr-btn:active {
+    transform: scale(0.95);
+}
+
+.moonfin-jellyseerr-close:hover {
+    background: rgba(244, 67, 54, 0.3);
+    color: #f44336;
+}
+
+.moonfin-jellyseerr-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 16px;
+    z-index: 1;
+}
+
+.moonfin-jellyseerr-container.loaded .moonfin-jellyseerr-loading {
+    display: none;
+}
+
+.moonfin-jellyseerr-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: #00a4dc;
+    border-radius: 50%;
+    animation: moonfin-jellyseerr-spin 1s linear infinite;
+}
+
+@keyframes moonfin-jellyseerr-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.moonfin-jellyseerr-iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #0a0a0a;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.moonfin-jellyseerr-container.loaded .moonfin-jellyseerr-iframe {
+    opacity: 1;
+}
+
+@media (max-width: 768px) {
+    .moonfin-jellyseerr-container {
+        top: 50px;
+    }
+
+    .moonfin-jellyseerr-header {
+        padding: 10px 16px;
+    }
+
+    .moonfin-jellyseerr-title {
+        font-size: 16px;
+        gap: 8px;
+    }
+
+    .moonfin-jellyseerr-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    .moonfin-jellyseerr-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+}
+
+.moonfin-jellyseerr-sso-user {
+    font-size: 14px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.moonfin-jellyseerr-signout:hover {
+    background: rgba(255, 152, 0, 0.3);
+    color: #ff9800;
+}
+
+.moonfin-jellyseerr-login {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.moonfin-jellyseerr-login-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+.moonfin-jellyseerr-login-panel {
+    position: relative;
+    background: #1a1a2e;
+    border-radius: 12px;
+    padding: 2em;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.moonfin-jellyseerr-login-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1em;
+}
+
+.moonfin-jellyseerr-login-header h3 {
+    margin: 0;
+    color: white;
+    font-size: 1.3em;
+    font-weight: 600;
+}
+
+.moonfin-jellyseerr-login-close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.moonfin-jellyseerr-login-close:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.moonfin-jellyseerr-login-error {
+    background: rgba(244, 67, 54, 0.15);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    border-radius: 8px;
+    padding: 0.75em 1em;
+    color: #ef5350;
+    font-size: 0.9em;
+    margin-bottom: 1em;
+}
+
+.moonfin-jellyseerr-login-field {
+    margin-bottom: 1em;
+}
+
+.moonfin-jellyseerr-login-field label {
+    display: block;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85em;
+    margin-bottom: 0.4em;
+    font-weight: 500;
+}
+
+.moonfin-jellyseerr-login-field input {
+    width: 100%;
+    padding: 0.75em 1em;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    font-size: 1em;
+    outline: none;
+    transition: border-color 0.2s ease, background 0.2s ease;
+    box-sizing: border-box;
+}
+
+.moonfin-jellyseerr-login-field input:focus {
+    border-color: #00a4dc;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.moonfin-jellyseerr-login-submit {
+    width: 100%;
+    padding: 0.85em;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #7b2cbf, #9d4edd);
+    color: white;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.1s ease;
+    margin-top: 0.5em;
+}
+
+.moonfin-jellyseerr-login-submit:hover {
+    opacity: 0.9;
+}
+
+.moonfin-jellyseerr-login-submit:active {
+    transform: scale(0.98);
+}
+
+.moonfin-jellyseerr-login-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

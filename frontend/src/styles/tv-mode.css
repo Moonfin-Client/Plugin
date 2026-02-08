@@ -1,0 +1,155 @@
+/**
+ * Moonfin TV Mode Styles
+ * Styles for TV/10-foot experience with focus states
+ */
+
+body.moonfin-tv-mode {
+    /* Larger base font for 10-foot viewing */
+    font-size: 1.2em;
+}
+
+.moonfin-tv-mode .moonfin-focusable:focus,
+.moonfin-tv-mode .moonfin-nav-btn:focus,
+.moonfin-tv-mode .moonfin-user-btn:focus,
+.moonfin-tv-mode .moonfin-library-btn:focus,
+.moonfin-tv-mode .moonfin-focused {
+    outline: 3px solid #00a4dc !important;
+    outline-offset: 4px;
+    box-shadow: 0 0 20px rgba(0, 164, 220, 0.5);
+    transform: scale(1.05);
+    transition: all 0.15s ease-out;
+}
+
+.moonfin-tv-mode *:focus {
+    outline: none;
+}
+
+.moonfin-tv-mode .moonfin-navbar {
+    height: 80px;
+    padding: 12px 48px;
+}
+
+.moonfin-tv-mode .moonfin-navbar-active {
+    padding-top: 85px !important;
+}
+
+.moonfin-tv-mode .moonfin-nav-btn {
+    width: 56px;
+    height: 56px;
+    padding: 14px;
+    margin: 0 8px;
+}
+
+.moonfin-tv-mode .moonfin-nav-btn svg {
+    width: 28px;
+    height: 28px;
+}
+
+.moonfin-tv-mode .moonfin-user-avatar {
+    width: 52px;
+    height: 52px;
+}
+
+.moonfin-tv-mode .moonfin-clock {
+    font-size: 1.3em;
+}
+
+.moonfin-tv-mode .moonfin-mediabar {
+    min-height: 55vh;
+}
+
+.moonfin-tv-mode .moonfin-mediabar-content:focus,
+.moonfin-tv-mode .moonfin-mediabar-content.moonfin-focused {
+    outline: 4px solid #00a4dc !important;
+    outline-offset: -4px;
+    box-shadow: inset 0 0 40px rgba(0, 164, 220, 0.3);
+}
+
+.moonfin-tv-mode .moonfin-mediabar.moonfin-focused::after {
+    content: "← → to browse • ↓ to exit • Enter to view";
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+    z-index: 100;
+}
+
+.moonfin-tv-mode .moonfin-jellyseerr-fab {
+    width: 72px;
+    height: 72px;
+    bottom: 40px;
+    right: 40px;
+}
+
+.moonfin-tv-mode .moonfin-jellyseerr-fab svg {
+    width: 36px;
+    height: 36px;
+}
+
+.moonfin-tv-mode .moonfin-settings-panel {
+    width: 450px;
+    font-size: 1.1em;
+}
+
+.moonfin-tv-mode .moonfin-settings-content {
+    padding: 24px;
+}
+
+.moonfin-tv-mode .moonfin-library-btn {
+    padding: 14px 24px;
+    font-size: 1.1em;
+    min-width: 120px;
+}
+
+.moonfin-tv-mode button,
+.moonfin-tv-mode a,
+.moonfin-tv-mode [role="button"],
+.moonfin-tv-mode input,
+.moonfin-tv-mode select {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Hover states should also apply to focus in TV mode */
+.moonfin-tv-mode .moonfin-nav-btn:focus {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.moonfin-tv-mode .moonfin-user-btn:focus {
+    transform: scale(1.15);
+}
+
+.moonfin-tv-mode {
+    scroll-behavior: smooth;
+}
+
+.moonfin-tv-mode::-webkit-scrollbar {
+    display: none;
+}
+
+.moonfin-tv-mode {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.moonfin-tv-mode * {
+    /* Slightly slower animations for TV viewing distance */
+    animation-duration: 0.4s;
+}
+
+@keyframes moonfin-focus-pulse {
+    0%, 100% {
+        box-shadow: 0 0 15px rgba(0, 164, 220, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 25px rgba(0, 164, 220, 0.6);
+    }
+}
+
+.moonfin-tv-mode .moonfin-focused {
+    animation: moonfin-focus-pulse 1.5s ease-in-out infinite;
+}

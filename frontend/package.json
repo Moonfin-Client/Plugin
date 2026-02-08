@@ -1,0 +1,21 @@
+{
+  "name": "moonfin-web-plugin",
+  "version": "1.0.0",
+  "description": "Moonfin-style UI plugin for Jellyfin Web. Brings the navbar, featured media bar, and custom settings",
+  "main": "dist/plugin.js",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "jellyfin",
+    "plugin",
+    "moonfin",
+    "ui",
+    "navbar",
+    "media-bar"
+  ],
+  "author": "Moonfin",
+  "license": "GPL-3.0"
+}

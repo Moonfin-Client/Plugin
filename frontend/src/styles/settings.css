@@ -1,0 +1,502 @@
+/**
+ * Moonfin Settings Panel Styles
+ * Inspired by Jellyfin-Enhanced panel design
+ */
+
+.moonfin-settings-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99999;
+    display: flex;
+    justify-content: flex-end;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.moonfin-settings-dialog.open {
+    opacity: 1;
+    visibility: visible;
+}
+
+.moonfin-settings-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+}
+
+.moonfin-settings-panel {
+    position: relative;
+    width: 420px;
+    max-width: 90vw;
+    height: 100%;
+    background: rgba(20, 20, 25, 0.97);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -4px 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.moonfin-settings-dialog.open .moonfin-settings-panel {
+    transform: translateX(0);
+}
+
+.moonfin-settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 15, 20, 0.8);
+}
+
+.moonfin-settings-header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.moonfin-settings-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: #00a4dc;
+}
+
+.moonfin-settings-subtitle {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+}
+
+.moonfin-settings-close {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.7);
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.moonfin-settings-close:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+}
+
+.moonfin-settings-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 16px 20px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.moonfin-settings-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.moonfin-settings-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.moonfin-settings-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.moonfin-panel-section {
+    margin-bottom: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    overflow: hidden;
+}
+
+.moonfin-panel-summary {
+    padding: 14px 16px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #00a4dc;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s ease;
+}
+
+.moonfin-panel-summary::-webkit-details-marker {
+    display: none;
+}
+
+.moonfin-panel-summary::after {
+    content: '';
+    margin-left: auto;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid rgba(255, 255, 255, 0.4);
+    transition: transform 0.2s ease;
+}
+
+.moonfin-panel-section[open] > .moonfin-panel-summary::after {
+    transform: rotate(180deg);
+}
+
+.moonfin-panel-summary:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.moonfin-panel-section-content {
+    padding: 4px 16px 16px;
+}
+
+.moonfin-toggle-card {
+    margin-bottom: 10px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    border-left: 3px solid #00a4dc;
+}
+
+.moonfin-toggle-card:last-child {
+    margin-bottom: 0;
+}
+
+.moonfin-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.moonfin-toggle-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #00a4dc;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.moonfin-toggle-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.moonfin-toggle-title {
+    font-weight: 500;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.moonfin-toggle-desc {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+    margin-top: 2px;
+    line-height: 1.4;
+}
+
+.moonfin-select-card {
+    margin-bottom: 10px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    border-left: 3px solid rgba(0, 164, 220, 0.4);
+}
+
+.moonfin-select-card:last-child {
+    margin-bottom: 0;
+}
+
+.moonfin-select-info {
+    margin-bottom: 8px;
+}
+
+.moonfin-panel-select {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s ease;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.moonfin-panel-select:hover,
+.moonfin-panel-select:focus {
+    border-color: #00a4dc;
+}
+
+.moonfin-panel-select option {
+    background: #1a1a1e;
+    color: #fff;
+}
+
+.moonfin-panel-range {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    cursor: pointer;
+    outline: none;
+    margin-top: 4px;
+}
+
+.moonfin-panel-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #00a4dc;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.moonfin-panel-range::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+
+.moonfin-panel-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #00a4dc;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.moonfin-range-value {
+    font-weight: 600;
+    color: #00a4dc;
+    font-size: 13px;
+}
+
+.moonfin-color-preview {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    margin: 4px 0 10px;
+}
+
+.moonfin-panel-input {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    outline: none;
+    transition: border-color 0.2s ease;
+    box-sizing: border-box;
+}
+
+.moonfin-panel-input:focus {
+    border-color: #00a4dc;
+}
+
+.moonfin-input-label {
+    display: block;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 4px;
+}
+
+.moonfin-panel-btn {
+    display: inline-block;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    text-align: center;
+}
+
+.moonfin-panel-btn-primary {
+    background: #00a4dc;
+    color: #fff;
+}
+
+.moonfin-panel-btn-primary:hover {
+    background: #0096c8;
+}
+
+.moonfin-panel-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.moonfin-panel-btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.moonfin-panel-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.moonfin-panel-btn-ghost {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 6px 14px;
+    width: auto;
+}
+
+.moonfin-panel-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+.moonfin-panel-btn-ghost:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.moonfin-panel-btn-close {
+    background: #00a4dc;
+    color: #fff;
+    padding: 6px 20px;
+    width: auto;
+}
+
+.moonfin-panel-btn-close:hover {
+    background: #0096c8;
+}
+
+.moonfin-settings-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 15, 20, 0.8);
+    gap: 12px;
+}
+
+.moonfin-settings-footer-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.moonfin-sync-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.moonfin-sync-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #666;
+    flex-shrink: 0;
+}
+
+.moonfin-sync-indicator.connected {
+    background: #4caf50;
+    box-shadow: 0 0 4px #4caf50;
+}
+
+.moonfin-sync-indicator.disconnected {
+    background: #f44336;
+}
+
+.moonfin-sync-indicator.checking,
+.moonfin-sync-indicator.syncing {
+    background: #ff9800;
+    animation: moonfin-pulse 1s infinite;
+}
+
+@keyframes moonfin-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.moonfin-jellyseerr-sso-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.moonfin-jellyseerr-sso-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #666;
+    flex-shrink: 0;
+}
+
+.moonfin-jellyseerr-sso-indicator.connected {
+    background: #4caf50;
+    box-shadow: 0 0 6px #4caf50;
+}
+
+.moonfin-jellyseerr-sso-indicator.disconnected {
+    background: #f44336;
+}
+
+.moonfin-jellyseerr-sso-text {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.moonfin-jellyseerr-login-error {
+    color: #ef4444;
+    font-size: 12px;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 4px;
+}
+
+@media (max-width: 520px) {
+    .moonfin-settings-panel {
+        width: 100%;
+        max-width: 100vw;
+    }
+
+    .moonfin-settings-header h2 {
+        font-size: 18px;
+    }
+
+    .moonfin-settings-footer {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .moonfin-settings-footer-buttons {
+        justify-content: flex-end;
+    }
+}

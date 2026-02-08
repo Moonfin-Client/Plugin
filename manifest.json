@@ -1,0 +1,22 @@
+[
+  {
+    "guid": "8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b",
+    "name": "Moonfin",
+    "overview": "Custom UI and settings sync for Jellyfin",
+    "description": "Moonfin brings a modern TV-style UI to Jellyfin web. Features include: custom navbar, media bar with featured content, Jellyseerr integration, and cross-device settings synchronization. Works with Android TV, Roku, Tizen, webOS, and Web clients.",
+    "owner": "RadicalMuffinMan",
+    "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/assets/logo.png",
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial release with core features: navbar, media bar, custom details screens, IMDBList integration, Jellyseerr integration, and settings sync.\n Hope you like it!",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/v1.0.0/Moonfin.Server-1.0.0.0.zip",
+        "checksum": "EF79461D478D60B70CDE9AAB4E0C2B6C",
+        "timestamp": "2026-02-08T21:32:41",
+        "dependencies": []
+      }
+    ]
+  }
+]

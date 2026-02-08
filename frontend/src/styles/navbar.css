@@ -1,0 +1,329 @@
+/**
+ * Moonfin Navbar Styles
+ * Matches the Moonfin webOS client NavBar design
+ * Centered pill with expandable icon buttons, user avatar left, clock right
+ */
+
+body.moonfin-navbar-active {
+    padding-top: 80px !important;
+    background: #000 !important;
+}
+
+body.moonfin-navbar-active .skinHeader {
+    display: none !important;
+}
+
+body.moonfin-navbar-active .cardOverlayContainer {
+    --btnMiniPlayBorderColor: #000;
+    --btnMiniPlayColor: #0bb8f0;
+}
+
+.moonfin-navbar.hidden {
+    display: none !important;
+}
+
+.moonfin-navbar {
+    position: fixed;
+    top: 12px;
+    left: 0;
+    right: 0;
+    height: auto;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    padding: 10px 32px;
+    z-index: 9999;
+    box-sizing: border-box;
+}
+
+.moonfin-navbar-left {
+    flex: 0 0 auto;
+    margin-right: auto;
+}
+
+.moonfin-user-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    outline: none;
+}
+
+.moonfin-user-btn:hover {
+    transform: scale(1.08);
+}
+
+.moonfin-user-btn:focus {
+    outline: 2px solid #00a4dc;
+    outline-offset: 2px;
+}
+
+.moonfin-user-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #00a4dc, #0077b6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.moonfin-user-img {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.moonfin-user-initial {
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1;
+}
+
+.moonfin-navbar-center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+}
+
+.moonfin-nav-pill {
+    display: flex;
+    align-items: center;
+    border-radius: 36px;
+    padding: 8px;
+    max-width: 1400px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+}
+
+.moonfin-nav-pill::-webkit-scrollbar {
+    display: none;
+}
+
+.moonfin-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 18px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease-out;
+    outline: none;
+    position: relative;
+    border-radius: 28px;
+    min-height: 48px;
+    min-width: 48px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+.moonfin-nav-btn:first-child {
+    margin-left: 0;
+}
+
+.moonfin-nav-btn:hover,
+.moonfin-nav-btn:focus {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.moonfin-nav-btn.active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.moonfin-nav-btn.hidden {
+    display: none;
+}
+
+.moonfin-nav-icon {
+    width: 28px;
+    height: 28px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+.moonfin-expandable-btn {
+    overflow: hidden;
+}
+
+.moonfin-expand-label {
+    display: none;
+    margin-left: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.moonfin-expandable-btn:hover,
+.moonfin-expandable-btn:focus {
+    padding: 10px 18px;
+}
+
+.moonfin-expandable-btn:hover .moonfin-expand-label,
+.moonfin-expandable-btn:focus .moonfin-expand-label {
+    display: inline;
+}
+
+.moonfin-libraries-group {
+    display: flex;
+    align-items: center;
+    position: relative;
+    margin-left: 4px;
+}
+
+.moonfin-libraries-group.hidden {
+    display: none;
+}
+
+.moonfin-libraries-btn {
+    z-index: 1;
+    margin-left: 0;
+}
+
+.moonfin-libraries-list {
+    display: flex;
+    align-items: center;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-width 0.25s ease-out, opacity 0.2s ease-out;
+}
+
+.moonfin-libraries-group.expanded .moonfin-libraries-list {
+    max-width: 800px;
+    opacity: 1;
+}
+
+@media (min-width: 769px) {
+    .moonfin-libraries-list {
+        position: fixed;
+        flex-direction: column;
+        align-items: stretch;
+        max-width: none;
+        max-height: 0;
+        width: max-content;
+        min-width: 180px;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 12px;
+        padding: 0;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        transition: max-height 0.25s ease-out, opacity 0.2s ease-out, padding 0.25s ease-out;
+        pointer-events: none;
+    }
+
+    .moonfin-libraries-group.expanded .moonfin-libraries-list {
+        max-width: none;
+        max-height: 500px;
+        padding: 6px 0;
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .moonfin-libraries-list .moonfin-library-btn {
+        margin-left: 0;
+        padding: 10px 20px;
+        border-radius: 0;
+        min-height: auto;
+        text-align: left;
+        justify-content: flex-start;
+    }
+
+    .moonfin-libraries-list .moonfin-library-btn:hover,
+    .moonfin-libraries-list .moonfin-library-btn:focus {
+        background: rgba(255, 255, 255, 0.12);
+    }
+}
+
+.moonfin-library-btn {
+    padding: 8px 16px;
+    min-height: 42px;
+    min-width: auto;
+    margin-left: 4px;
+}
+
+.moonfin-library-name {
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.moonfin-navbar-right {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+.moonfin-clock {
+    font-size: 22px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    padding: 0 8px;
+}
+
+.moonfin-clock.hidden {
+    display: none;
+}
+
+@media (max-width: 1200px) {
+    .moonfin-nav-pill {
+        max-width: 80vw;
+    }
+}
+
+@media (max-width: 768px) {
+    body.moonfin-navbar-active {
+        padding-top: 60px !important;
+    }
+
+    .moonfin-navbar {
+        top: 4px;
+        padding: 8px 12px;
+    }
+
+    .moonfin-nav-btn {
+        min-height: 40px;
+        min-width: 40px;
+        padding: 8px 10px;
+    }
+
+    .moonfin-nav-icon {
+        width: 22px;
+        height: 22px;
+    }
+
+    .moonfin-user-avatar {
+        width: 36px;
+        height: 36px;
+    }
+
+    .moonfin-user-img {
+        width: 36px;
+        height: 36px;
+    }
+
+    .moonfin-user-initial {
+        font-size: 18px;
+    }
+
+    .moonfin-navbar-right {
+        display: none !important;
+    }
+}
