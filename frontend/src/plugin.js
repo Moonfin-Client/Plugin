@@ -86,7 +86,7 @@ const Plugin = {
             }
 
             if (settings.mediaBarEnabled) {
-                await MediaBar.init();
+                MediaBar.init();
             }
 
             Genres.init();

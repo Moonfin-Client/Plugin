@@ -19,45 +19,62 @@ const MediaBar = {
 
         console.log('[Moonfin] Initializing media bar...');
 
-        try {
-            await this.waitForApi();
-        } catch (e) {
-            console.error('[Moonfin] MediaBar: Failed to initialize -', e.message);
-            document.body.classList.remove('moonfin-mediabar-active');
-            return;
-        }
-
         this.createMediaBar();
+        this.container.classList.add('loading');
 
-        await this.loadContent();
-
-        if (this.items.length > 0 && Plugin.isHomePage()) {
+        if (Plugin.isHomePage()) {
             document.body.classList.add('moonfin-mediabar-active');
-        } else {
-            document.body.classList.remove('moonfin-mediabar-active');
         }
 
         this.setupEventListeners();
-
-        if (settings.mediaBarAutoAdvance) {
-            this.startAutoAdvance();
-        }
-
         this.initialized = true;
-        console.log('[Moonfin] Media bar initialized with', this.items.length, 'items');
+
+        this._loadContentAsync(settings);
+    },
+
+    _loadContentAsync(settings) {
+        var self = this;
+        this.waitForApi().then(function() {
+            return self.loadContent();
+        }).then(function() {
+            if (self.items.length > 0) {
+                self.container.classList.remove('loading');
+                if (settings.mediaBarAutoAdvance) {
+                    self.startAutoAdvance();
+                }
+            } else {
+                document.body.classList.remove('moonfin-mediabar-active');
+                self.container.classList.add('empty');
+            }
+            console.log('[Moonfin] Media bar loaded with', self.items.length, 'items');
+        }).catch(function(e) {
+            console.error('[Moonfin] MediaBar: Failed to load content -', e.message);
+            document.body.classList.remove('moonfin-mediabar-active');
+            if (self.container) self.container.classList.add('empty');
+        });
     },
 
     waitForApi() {
         return new Promise((resolve, reject) => {
             let attempts = 0;
-            const maxAttempts = 100;
+            const maxAttempts = 50;
             
             const check = () => {
                 const api = API.getApiClient();
-                if (api && api._currentUser && api._currentUser.Id) {
-                    console.log('[Moonfin] MediaBar: API ready with authenticated user');
-                    resolve();
-                } else if (attempts >= maxAttempts) {
+                if (api) {
+                    try {
+                        const userId = api.getCurrentUserId();
+                        if (userId) {
+                            console.log('[Moonfin] MediaBar: API ready with user', userId);
+                            resolve();
+                            return;
+                        }
+                    } catch (e) {
+                        // Not authenticated yet
+                    }
+                }
+                
+                if (attempts >= maxAttempts) {
                     console.warn('[Moonfin] MediaBar: Timeout waiting for API');
                     reject(new Error('API timeout'));
                 } else {
@@ -87,7 +104,6 @@ const MediaBar = {
             </div>
             <div class="moonfin-mediabar-gradient"></div>
             <div class="moonfin-mediabar-content">
-                <!-- Left: Info overlay -->
                 <div class="moonfin-mediabar-info" style="background: ${overlayColor}">
                     <div class="moonfin-mediabar-metadata">
                         <span class="moonfin-mediabar-year"></span>
@@ -97,12 +113,10 @@ const MediaBar = {
                     <div class="moonfin-mediabar-ratings"></div>
                     <div class="moonfin-mediabar-overview"></div>
                 </div>
-                <!-- Right: Logo -->
                 <div class="moonfin-mediabar-logo-container">
                     <img class="moonfin-mediabar-logo" src="" alt="">
                 </div>
             </div>
-            <!-- Navigation -->
             <div class="moonfin-mediabar-nav">
                 <button class="moonfin-mediabar-nav-btn moonfin-mediabar-prev" style="background: ${overlayColor}">
                     <svg viewBox="0 0 24 24">
@@ -115,9 +129,7 @@ const MediaBar = {
                     </svg>
                 </button>
             </div>
-            <!-- Dots indicator -->
             <div class="moonfin-mediabar-dots"></div>
-            <!-- Play/Pause indicator -->
             <div class="moonfin-mediabar-playstate">
                 <svg viewBox="0 0 24 24" class="moonfin-mediabar-play-icon">
                     <path fill="currentColor" d="M8 5v14l11-7z"/>
@@ -128,7 +140,7 @@ const MediaBar = {
             </div>
         `;
 
-        // Insert into document.body so it persists across SPA navigation
+        // Insert into body so it persists across SPA navigation
         document.body.appendChild(this.container);
     },
 
@@ -490,8 +502,6 @@ const MediaBar = {
         window.addEventListener('moonfin-settings-changed', (e) => {
             this.applySettings(e.detail);
         });
-
-        // Note: visibility toggling handled by Plugin.onPageChange()
     },
 
     applySettings(settings) {
@@ -527,14 +537,10 @@ const MediaBar = {
         }
     },
 
-    isHomePage() {
-        return Plugin.isHomePage();
-    },
-
     show() {
         if (this.container) {
             this.container.classList.remove('disabled');
-            if (this.isHomePage()) {
+            if (Plugin.isHomePage()) {
                 document.body.classList.add('moonfin-mediabar-active');
             }
         }

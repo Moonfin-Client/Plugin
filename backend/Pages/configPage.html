@@ -55,15 +55,21 @@
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Web Plugin Status</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
-                            <p>The Moonfin web UI is served from:</p>
-                            <ul style="margin-left: 1.5em;">
-                                <li><code>/Moonfin/Web/plugin.js</code></li>
-                                <li><code>/Moonfin/Web/plugin.css</code></li>
-                            </ul>
-                            <p style="margin-top: 1em;">
-                                <strong>Note:</strong> The web UI must be loaded via 
-                                <a href="https://github.com/n00bcodr/Jellyfin-JavaScript-Injector" target="_blank">JS Injector</a> plugin.
-                                See the Moonfin README for setup instructions.
+                            <p>As of v1.1.0, Moonfin uses the
+                                <a href="https://github.com/IAmParadox27/jellyfin-plugin-file-transformation" target="_blank">File Transformation</a>
+                                plugin to inject its web UI. The JavaScript Injector plugin is no longer needed and can be removed.
+                            </p>
+                            <p style="margin-top: 0.5em;">
+                                <strong>Setup:</strong>
+                            </p>
+                            <ol style="margin-left: 1.5em;">
+                                <li>Install the <strong>File Transformation</strong> plugin (add <code>https://www.iamparadox.dev/jellyfin/plugins/manifest.json</code> to your plugin repositories)</li>
+                                <li>Restart Jellyfin</li>
+                                <li>Force refresh your browser (Ctrl+Shift+R)</li>
+                            </ol>
+                            <p style="margin-top: 0.5em;">
+                                <strong>UI not loading?</strong> Go to <em>Dashboard &gt; Scheduled Tasks</em> and run the
+                                <strong>Moonfin Startup</strong> task once, then refresh your browser.
                             </p>
                         </div>
                     </div>

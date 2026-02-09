@@ -23,7 +23,7 @@
 - **Settings Sync API** - Per-user preference storage with merge/replace modes, synced across all Moonfin clients
 - **Jellyseerr Proxy** - Authenticated reverse proxy that creates browser sessions automatically, so the iframe loads without a separate login
 - **Admin Configuration** - Dashboard page for Jellyseerr URL, enable/disable toggles
-- **Web Injection** - Serves the frontend JS/CSS as embedded resources, loaded via [JS Injector](https://github.com/nicholasgasior/jellyfin-plugin-js-injector)
+- **Web Injection** - Serves the frontend JS/CSS as embedded resources, automatically injected via the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin
 
 ## Screenshots
 
@@ -93,22 +93,15 @@
 
 ### Loading the Web UI
 
-The Moonfin web UI needs to be injected into Jellyfin's frontend using [JS Injector](https://github.com/nicholasgasior/jellyfin-plugin-js-injector):
+As of v1.1.0, Moonfin uses the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin to automatically inject its web UI. The JavaScript Injector plugin is no longer needed.
 
-1. Install the JS Injector plugin
-2. Add this as a custom script:
-   ```javascript
-   (function() {
-       var css = document.createElement('link');
-       css.rel = 'stylesheet';
-       css.href = '/Moonfin/Web/plugin.css';
-       document.head.appendChild(css);
+1. Add the File Transformation plugin repository to Jellyfin:
+   - **URL:** `https://www.iamparadox.dev/jellyfin/plugins/manifest.json`
+2. Install the **File Transformation** plugin from the catalog
+3. Restart Jellyfin
+4. Force refresh your browser (Ctrl+Shift+R)
 
-       var script = document.createElement('script');
-       script.src = '/Moonfin/Web/plugin.js';
-       document.head.appendChild(script);
-   })();
-   ```
+> **UI not loading?** Go to *Dashboard → Scheduled Tasks* and run the **Moonfin Startup** task once, then refresh your browser.
 
 ## Configuration
 
@@ -145,7 +138,7 @@ Both scripts accept optional parameters:
 The build will:
 1. Bundle the frontend JS and CSS
 2. Compile the .NET server plugin
-3. Package `Moonfin.Server.dll` into a ZIP
+3. Package `Moonfin.Server.dll` and `meta.json` into a ZIP
 4. Update `manifest.json` with the new checksum
 
 Output: `Moonfin.Server-{VERSION}.zip` in the repo root.
@@ -157,10 +150,11 @@ Output: `Moonfin.Server-{VERSION}.zip` in the repo root.
 ├── build.ps1           # Build script (Windows PowerShell)
 ├── backend/            # .NET 8 Jellyfin server plugin
 │   ├── Api/            # REST controllers (settings, Jellyseerr proxy)
-│   ├── Models/         # User settings model
-│   ├── Services/       # Startup service, settings persistence
+│   ├── Helpers/        # File Transformation patch callbacks
+│   ├── Models/         # User settings, patch payload models
+│   ├── Services/       # Startup task, settings persistence
 │   ├── Pages/          # Admin config page HTML
-│   └── Web/            # Embedded JS/CSS served to clients
+│   └── Web/            # Embedded JS/CSS/HTML served to clients
 └── frontend/           # Web UI plugin source
     ├── build.js        # JS/CSS bundler
     └── src/

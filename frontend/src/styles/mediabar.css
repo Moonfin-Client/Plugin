@@ -31,6 +31,26 @@ body.moonfin-mediabar-active .homeSectionsContainer {
     display: none;
 }
 
+/* Loading state shimmer */
+.moonfin-mediabar.loading .moonfin-mediabar-backdrop {
+    background: linear-gradient(110deg, #1a1a1a 30%, #2a2a2a 50%, #1a1a1a 70%);
+    background-size: 200% 100%;
+    animation: moonfin-shimmer 1.5s ease-in-out infinite;
+}
+
+.moonfin-mediabar.loading .moonfin-mediabar-info,
+.moonfin-mediabar.loading .moonfin-mediabar-logo-container,
+.moonfin-mediabar.loading .moonfin-mediabar-nav,
+.moonfin-mediabar.loading .moonfin-mediabar-dots,
+.moonfin-mediabar.loading .moonfin-mediabar-playstate {
+    opacity: 0;
+}
+
+@keyframes moonfin-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
 .moonfin-mediabar-backdrop {
     position: absolute;
     top: 0;

@@ -15,10 +15,18 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
     public static MoonfinPlugin? Instance { get; private set; }
 
+    public IServiceProvider? ServiceProvider { get; }
+
     public MoonfinPlugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
+        : this(applicationPaths, xmlSerializer, null)
+    {
+    }
+
+    public MoonfinPlugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, IServiceProvider? serviceProvider)
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
+        ServiceProvider = serviceProvider;
     }
 
     /// <inheritdoc />
@@ -30,9 +38,6 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <inheritdoc />
     public override Guid Id => Guid.Parse("8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b");
 
-    /// <summary>
-    /// Gets the data folder path for storing user settings.
-    /// </summary>
     public new string DataFolderPath => Path.Combine(ApplicationPaths.PluginConfigurationsPath, "Moonfin");
 
     /// <inheritdoc />

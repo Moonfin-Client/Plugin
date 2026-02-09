@@ -20,11 +20,14 @@
     <PackageReference Include="Jellyfin.Model" Version="10.10.0">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Web\plugin.js" />
     <EmbeddedResource Include="Web\plugin.css" />
+    <EmbeddedResource Include="Web\loader.js" />
+    <EmbeddedResource Include="Web\inject.html" />
     <EmbeddedResource Include="Pages\configPage.html" />
     <EmbeddedResource Include="assets\*.png" />
   </ItemGroup>

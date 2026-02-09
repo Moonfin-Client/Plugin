@@ -51,6 +51,27 @@ mkdir -p "$RELEASE_DIR"
 # Copy DLL to release folder
 cp "$BACKEND_DIR/bin/Release/net8.0/Moonfin.Server.dll" "$RELEASE_DIR/"
 
+# Generate meta.json for plugin discovery
+PLUGIN_GUID="8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b"
+TIMESTAMP_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+cat > "$RELEASE_DIR/meta.json" <<EOF
+{
+  "category": "General",
+  "changelog": "",
+  "description": "Moonfin brings a modern TV-style UI to Jellyfin web. Features include: custom navbar, media bar with featured content, Jellyseerr integration, and cross-device settings synchronization.",
+  "guid": "${PLUGIN_GUID}",
+  "name": "Moonfin",
+  "overview": "Custom UI and settings sync for Jellyfin",
+  "owner": "RadicalMuffinMan",
+  "targetAbi": "${TARGET_ABI}.0",
+  "timestamp": "${TIMESTAMP_ISO}",
+  "version": "${VERSION}",
+  "status": "Active",
+  "autoUpdate": true,
+  "assemblies": ["Moonfin.Server.dll"]
+}
+EOF
+
 # Create the ZIP file
 ZIP_NAME="Moonfin.Server-${VERSION}.zip"
 cd "$RELEASE_DIR"
