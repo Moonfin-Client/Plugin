@@ -76,7 +76,7 @@
 1. Jellyfin Dashboard → Administration → Plugins → Repositories
 2. Add repository:
    - **Name:** `Moonfin`
-   - **URL:** `https://raw.githubusercontent.com/Moonfin-Client/Plugin/main/manifest.json`
+   - **URL:** `https://raw.githubusercontent.com/Moonfin-Client/Plugin/refs/heads/master/manifest.json`
 3. Go to Catalog → find **Moonfin** → Install
 4. Restart Jellyfin
 
