@@ -23,6 +23,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public string? JellyseerrUrl { get; set; }
 
     /// <summary>
+    /// Server-wide MDBList API key shared with all users.
+    /// Users who set their own key will use that instead.
+    /// </summary>
+    public string? MdblistApiKey { get; set; }
+
+    /// <summary>
     /// Gets the effective Jellyseerr URL for server-to-server communication.
     /// </summary>
     public string? GetEffectiveJellyseerrUrl()

@@ -17,11 +17,14 @@ var Settings = {
             });
         });
         this.isOpen = true;
+        history.pushState({ moonfinSettings: true }, '');
     },
 
-    hide: function() {
+    hide: function(skipHistoryBack) {
         if (!this.isOpen) return;
         var self = this;
+
+        this.isOpen = false;
 
         this.dialog.classList.remove('open');
         setTimeout(function() {
@@ -30,7 +33,10 @@ var Settings = {
                 self.dialog = null;
             }
         }, 300);
-        this.isOpen = false;
+
+        if (!skipHistoryBack) {
+            try { history.back(); } catch(e) {}
+        }
     },
 
     showToast: function(message) {
@@ -232,9 +238,13 @@ var Settings = {
         var mdblistContent =
             this.createToggleCard('mdblistEnabled', 'Enable MDBList Ratings', 'Show ratings from MDBList (IMDb, Rotten Tomatoes, Metacritic, etc.) on media bar and item details', settings.mdblistEnabled) +
             '<div class="moonfin-mdblist-config" style="' + (settings.mdblistEnabled ? '' : 'display:none') + '">' +
+                (Storage.syncState.mdblistAvailable ?
+                    '<div style="background-color: rgba(0, 180, 0, 0.1); border-left: 4px solid #00b400; border-radius: 4px; padding: 0.8em 1em; margin-bottom: 12px; font-size: 13px; color: rgba(255,255,255,0.8);">' +
+                        'Your server admin has provided a server-wide MDBList API key. You can leave the field below blank to use it, or enter your own key.' +
+                    '</div>' : '') +
                 '<div style="margin-bottom:12px">' +
                     '<label class="moonfin-input-label">MDBList API Key</label>' +
-                    '<input type="password" id="moonfin-mdblistApiKey" class="moonfin-panel-input" placeholder="Enter your mdblist.com API key" value="' + (settings.mdblistApiKey || '') + '">' +
+                    '<input type="password" id="moonfin-mdblistApiKey" class="moonfin-panel-input" placeholder="' + (Storage.syncState.mdblistAvailable ? 'Using server key (optional override)' : 'Enter your mdblist.com API key') + '" value="' + (settings.mdblistApiKey || '') + '">' +
                     '<div class="moonfin-toggle-desc" style="margin-top:4px">Get your free API key at <a href="https://mdblist.com/preferences/" target="_blank" rel="noopener" style="color:#00a4dc">mdblist.com/preferences</a></div>' +
                 '</div>' +
                 '<div style="margin-bottom:8px">' +
@@ -395,12 +405,12 @@ var Settings = {
             syncBtn.disabled = true;
             syncBtn.textContent = 'Syncing...';
 
-            Storage.sync().then(function() {
+            Storage.sync(true).then(function() {
                 return self.updateSyncStatus();
             }).then(function() {
                 syncBtn.disabled = false;
                 syncBtn.textContent = 'Sync';
-                self.showToast('Settings synced');
+                self.showToast('Settings synced from server');
                 self.hide();
                 setTimeout(function() { self.show(); }, 350);
             });

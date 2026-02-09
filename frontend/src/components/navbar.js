@@ -382,6 +382,10 @@ const Navbar = {
             Genres.close();
         }
 
+        if (action !== 'library' && Library.isVisible) {
+            Library.close();
+        }
+
         switch (action) {
             case 'home':
                 API.navigateTo('/home');
@@ -418,8 +422,14 @@ const Navbar = {
             case 'library':
                 var libraryId = btn.dataset.libraryId;
                 var collectionType = btn.dataset.collectionType;
+                var libraryName = btn.getAttribute('title');
                 if (libraryId) {
-                    API.navigateTo(this.getLibraryUrl(libraryId, collectionType));
+                    var type = (collectionType || '').toLowerCase();
+                    if (type === 'movies' || type === 'tvshows' || type === '') {
+                        Library.show(libraryId, libraryName, collectionType);
+                    } else {
+                        API.navigateTo(this.getLibraryUrl(libraryId, collectionType));
+                    }
                 }
                 break;
         }

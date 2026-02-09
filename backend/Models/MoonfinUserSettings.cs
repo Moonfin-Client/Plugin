@@ -52,9 +52,25 @@ public class MoonfinUserSettings
     [JsonPropertyName("tmdbApiKey")]
     public string? TmdbApiKey { get; set; }
 
+    /// <summary>Whether the custom navigation bar is enabled.</summary>
+    [JsonPropertyName("navbarEnabled")]
+    public bool? NavbarEnabled { get; set; }
+
+    /// <summary>Whether the custom details page is enabled.</summary>
+    [JsonPropertyName("detailsPageEnabled")]
+    public bool? DetailsPageEnabled { get; set; }
+
     /// <summary>Navbar position (top, bottom, left, right).</summary>
     [JsonPropertyName("navbarPosition")]
     public string? NavbarPosition { get; set; }
+
+    /// <summary>Show clock in the navigation bar.</summary>
+    [JsonPropertyName("showClock")]
+    public bool? ShowClock { get; set; }
+
+    /// <summary>Use 24-hour time format.</summary>
+    [JsonPropertyName("use24HourClock")]
+    public bool? Use24HourClock { get; set; }
 
     /// <summary>Show shuffle button in toolbar.</summary>
     [JsonPropertyName("showShuffleButton")]
@@ -119,6 +135,22 @@ public class MoonfinUserSettings
     /// <summary>Hex color for media bar overlay.</summary>
     [JsonPropertyName("mediaBarOverlayColor")]
     public string? MediaBarOverlayColor { get; set; }
+
+    /// <summary>Whether media bar auto-advances slides.</summary>
+    [JsonPropertyName("mediaBarAutoAdvance")]
+    public bool? MediaBarAutoAdvance { get; set; }
+
+    /// <summary>Auto-advance interval in milliseconds.</summary>
+    [JsonPropertyName("mediaBarIntervalMs")]
+    public int? MediaBarIntervalMs { get; set; }
+
+    /// <summary>Seasonal visual effect (none, winter, spring, summer, fall, halloween).</summary>
+    [JsonPropertyName("seasonalSurprise")]
+    public string? SeasonalSurprise { get; set; }
+
+    /// <summary>Enable backdrop images.</summary>
+    [JsonPropertyName("backdropEnabled")]
+    public bool? BackdropEnabled { get; set; }
 
     /// <summary>Override default home rows image type.</summary>
     [JsonPropertyName("homeRowsImageTypeOverride")]

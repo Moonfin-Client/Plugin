@@ -191,6 +191,7 @@ const Jellyseerr = {
         this.createContainer();
         this.isOpen = true;
 
+        history.pushState({ moonfinJellyseerr: true }, '');
         document.body.classList.add('moonfin-jellyseerr-open');
 
         requestAnimationFrame(function() {
@@ -230,9 +231,10 @@ const Jellyseerr = {
         }, 8000);
     },
 
-    close() {
+    close(skipHistoryBack) {
         if (!this.isOpen) return;
 
+        this.isOpen = false;
         this.container.classList.remove('open');
         document.body.classList.remove('moonfin-jellyseerr-open');
 
@@ -244,7 +246,9 @@ const Jellyseerr = {
             }
         }, 300);
 
-        this.isOpen = false;
+        if (!skipHistoryBack) {
+            try { history.back(); } catch(e) {}
+        }
     },
 
     toggle() {

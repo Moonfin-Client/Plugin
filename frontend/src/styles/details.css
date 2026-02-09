@@ -601,6 +601,7 @@ body.moonfin-navbar-active .moonfin-details-back {
 }
 
 .moonfin-similar-poster {
+    position: relative;
     width: 180px;
     height: 270px;
     background-color: #1a1a1a;
@@ -633,6 +634,44 @@ body.moonfin-navbar-active .moonfin-details-back {
     text-overflow: ellipsis;
 }
 
+.moonfin-watched-indicator {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    background: rgba(0, 164, 220, 0.9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.moonfin-watched-indicator svg {
+    width: 14px;
+    height: 14px;
+    fill: #fff;
+}
+
+.moonfin-unplayed-count {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    background: rgba(0, 164, 220, 0.9);
+    border-radius: 11px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
 .moonfin-season-card {
     flex-shrink: 0;
     width: 160px;
@@ -648,6 +687,7 @@ body.moonfin-navbar-active .moonfin-details-back {
 }
 
 .moonfin-season-poster {
+    position: relative;
     width: 160px;
     height: 240px;
     background-color: #1a1a1a;

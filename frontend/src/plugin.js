@@ -90,6 +90,7 @@ const Plugin = {
             }
 
             Genres.init();
+            Library.init();
             await Jellyseerr.init();
             Details.init();
             this.initSeasonalEffects();
@@ -911,6 +912,28 @@ const Plugin = {
     },
 
     setupGlobalListeners() {
+        // Centralized back button handler — checks overlays top-down
+        // so only the topmost one closes per press
+        window.addEventListener('popstate', function() {
+            if (Details.isVisible) {
+                Details.hide(true);
+            } else if (Settings.isOpen) {
+                Settings.hide(true);
+            } else if (Jellyseerr.isOpen) {
+                Jellyseerr.close(true);
+                Navbar.updateJellyseerrButtonState();
+            } else if (Library.isVisible) {
+                Library.close();
+            } else if (Genres.isVisible) {
+                if (Genres.currentView === 'browse') {
+                    Genres.showGrid();
+                    history.pushState({ moonfinGenres: true }, '');
+                } else {
+                    Genres.close();
+                }
+            }
+        });
+
         window.addEventListener('viewshow', () => {
             this.onPageChange();
         });
@@ -949,8 +972,20 @@ const Plugin = {
         }
 
         if (Jellyseerr.isOpen) {
-            Jellyseerr.close();
+            Jellyseerr.close(true);
             Navbar.updateJellyseerrButtonState();
+        }
+
+        if (Genres.isVisible) {
+            Genres.close();
+        }
+
+        if (Library.isVisible) {
+            Library.close();
+        }
+
+        if (Settings.isOpen) {
+            Settings.hide(true);
         }
 
         if (this.isAdminPage()) {

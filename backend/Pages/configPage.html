@@ -53,9 +53,22 @@
                     </div>
 
                     <div class="verticalSection">
+                        <h3 class="sectionTitle">MDBList Integration</h3>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MdblistApiKey">Server-wide MDBList API Key</label>
+                            <input type="password" id="MdblistApiKey" is="emby-input" placeholder="Enter your mdblist.com API key" />
+                            <div class="fieldDescription">
+                                Provide a server-wide <a href="https://mdblist.com/preferences/" target="_blank">MDBList API key</a>
+                                that all users can use for ratings (IMDb, Rotten Tomatoes, Metacritic, etc.).
+                                Users who set their own key in their Moonfin client settings will use that instead.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
                         <h3 class="sectionTitle">Web Plugin Status</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
-                            <p>As of v1.1.0, Moonfin uses the
+                            <p>As of v1.1.0, the Moonfin plugin uses the
                                 <a href="https://github.com/IAmParadox27/jellyfin-plugin-file-transformation" target="_blank">File Transformation</a>
                                 plugin to inject its web UI. The JavaScript Injector plugin is no longer needed and can be removed.
                             </p>
@@ -96,6 +109,7 @@
                     document.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
                     document.querySelector('#JellyseerrEnabled').checked = config.JellyseerrEnabled;
                     document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
+                    document.querySelector('#MdblistApiKey').value = config.MdblistApiKey || '';
                     Dashboard.hideLoadingMsg();
                 });
 
@@ -107,6 +121,7 @@
                             config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
                             config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
                             config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
+                            config.MdblistApiKey = document.querySelector('#MdblistApiKey').value || null;
                             ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
                                 Dashboard.processPluginConfigurationUpdateResult(result);
                             });

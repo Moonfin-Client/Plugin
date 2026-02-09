@@ -7,7 +7,8 @@ const Storage = {
         serverAvailable: null,  // null = unknown, true/false
         lastSyncTime: null,
         lastSyncError: null,
-        syncing: false
+        syncing: false,
+        mdblistAvailable: false
     },
 
     defaults: {
@@ -133,6 +134,7 @@ const Storage = {
             if (response.ok) {
                 const data = API.toCamelCase(await response.json());
                 this.syncState.serverAvailable = data.installed && data.settingsSyncEnabled;
+                this.syncState.mdblistAvailable = data.mdblistAvailable || false;
                 console.log('[Moonfin] Server plugin detected:', data);
                 return data;
             }
@@ -224,20 +226,27 @@ const Storage = {
     mapServerToLocal(serverSettings) {
         return {
             navbarEnabled: serverSettings.navbarEnabled ?? this.defaults.navbarEnabled,
+            detailsPageEnabled: serverSettings.detailsPageEnabled ?? this.defaults.detailsPageEnabled,
 
             mediaBarEnabled: serverSettings.mediaBarEnabled ?? this.defaults.mediaBarEnabled,
             mediaBarContentType: serverSettings.mediaBarContentType ?? this.defaults.mediaBarContentType,
             mediaBarItemCount: serverSettings.mediaBarItemCount ?? this.defaults.mediaBarItemCount,
-            mediaBarOverlayOpacity: serverSettings.overlayOpacity ?? this.defaults.mediaBarOverlayOpacity,
-            mediaBarOverlayColor: serverSettings.overlayColor ?? this.defaults.mediaBarOverlayColor,
+            mediaBarOverlayOpacity: serverSettings.mediaBarOpacity ?? this.defaults.mediaBarOverlayOpacity,
+            mediaBarOverlayColor: serverSettings.mediaBarOverlayColor ?? this.defaults.mediaBarOverlayColor,
+            mediaBarAutoAdvance: serverSettings.mediaBarAutoAdvance ?? this.defaults.mediaBarAutoAdvance,
+            mediaBarIntervalMs: serverSettings.mediaBarIntervalMs ?? this.defaults.mediaBarIntervalMs,
 
             showShuffleButton: serverSettings.showShuffleButton ?? this.defaults.showShuffleButton,
             showGenresButton: serverSettings.showGenresButton ?? this.defaults.showGenresButton,
             showFavoritesButton: serverSettings.showFavoritesButton ?? this.defaults.showFavoritesButton,
+            showCastButton: serverSettings.showCastButton ?? this.defaults.showCastButton,
+            showSyncPlayButton: serverSettings.showSyncPlayButton ?? this.defaults.showSyncPlayButton,
             showLibrariesInToolbar: serverSettings.showLibrariesInToolbar ?? this.defaults.showLibrariesInToolbar,
             shuffleContentType: serverSettings.shuffleContentType ?? this.defaults.shuffleContentType,
 
             seasonalSurprise: serverSettings.seasonalSurprise ?? this.defaults.seasonalSurprise,
+            backdropEnabled: serverSettings.backdropEnabled ?? this.defaults.backdropEnabled,
+            confirmExit: serverSettings.confirmExit ?? this.defaults.confirmExit,
 
             navbarPosition: serverSettings.navbarPosition ?? this.defaults.navbarPosition,
             showClock: serverSettings.showClock ?? this.defaults.showClock,
@@ -252,20 +261,27 @@ const Storage = {
     mapLocalToServer(localSettings) {
         return {
             navbarEnabled: localSettings.navbarEnabled,
+            detailsPageEnabled: localSettings.detailsPageEnabled,
 
             mediaBarEnabled: localSettings.mediaBarEnabled,
             mediaBarContentType: localSettings.mediaBarContentType,
             mediaBarItemCount: localSettings.mediaBarItemCount,
-            overlayOpacity: localSettings.mediaBarOverlayOpacity,
-            overlayColor: localSettings.mediaBarOverlayColor,
+            mediaBarOpacity: localSettings.mediaBarOverlayOpacity,
+            mediaBarOverlayColor: localSettings.mediaBarOverlayColor,
+            mediaBarAutoAdvance: localSettings.mediaBarAutoAdvance,
+            mediaBarIntervalMs: localSettings.mediaBarIntervalMs,
 
             showShuffleButton: localSettings.showShuffleButton,
             showGenresButton: localSettings.showGenresButton,
             showFavoritesButton: localSettings.showFavoritesButton,
+            showCastButton: localSettings.showCastButton,
+            showSyncPlayButton: localSettings.showSyncPlayButton,
             showLibrariesInToolbar: localSettings.showLibrariesInToolbar,
             shuffleContentType: localSettings.shuffleContentType,
 
             seasonalSurprise: localSettings.seasonalSurprise,
+            backdropEnabled: localSettings.backdropEnabled,
+            confirmExit: localSettings.confirmExit,
 
             navbarPosition: localSettings.navbarPosition,
             showClock: localSettings.showClock,
@@ -277,8 +293,8 @@ const Storage = {
         };
     },
 
-    async sync() {
-        console.log('[Moonfin] Starting settings sync...');
+    async sync(forceFromServer = false) {
+        console.log('[Moonfin] Starting settings sync...' + (forceFromServer ? ' (server wins)' : ''));
         
         const pingResult = await this.pingServer();
         if (!pingResult?.installed || !pingResult?.settingsSyncEnabled) {
@@ -291,11 +307,16 @@ const Storage = {
 
         const serverSettings = await this.fetchFromServer();
 
-        if (serverSettings && hasLocalSettings) {
-            // Both exist: local wins — user's local changes are most recent
+        if (forceFromServer && serverSettings) {
+            // Manual sync: server wins — apply server settings over local
+            const merged = { ...localSettings, ...serverSettings };
+            this.saveAll(merged, false);
+            await this.saveToServer(merged);
+            console.log('[Moonfin] Applied server settings (manual sync)');
+        } else if (serverSettings && hasLocalSettings) {
+            // Auto-sync: local wins — user's local changes are most recent
             const merged = { ...serverSettings, ...localSettings };
-            this.saveAll(merged, false);  // Don't re-dispatch to server yet
-            // Push merged result to server so it stays in sync
+            this.saveAll(merged, false);
             await this.saveToServer(merged);
             console.log('[Moonfin] Merged settings (local wins), pushed to server');
         } else if (serverSettings && !hasLocalSettings) {

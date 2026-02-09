@@ -201,6 +201,40 @@ const API = {
         }
     },
 
+    async getLibraryItems(parentId, options) {
+        var api = this.getApiClient();
+        if (!api) return { Items: [], TotalRecordCount: 0 };
+
+        try {
+            var userId = api.getCurrentUserId();
+            var params = {
+                userId: userId,
+                parentId: parentId,
+                includeItemTypes: options.includeItemTypes || 'Movie,Series',
+                sortBy: options.sortBy || 'SortName',
+                sortOrder: options.sortOrder || 'Ascending',
+                recursive: true,
+                startIndex: options.startIndex || 0,
+                limit: options.limit || 100,
+                enableTotalRecordCount: true,
+                fields: 'PrimaryImageAspectRatio,ProductionYear,CommunityRating,OfficialRating,RunTimeTicks,Overview,Genres',
+                imageTypeLimit: 1,
+                enableImageTypes: 'Primary,Backdrop'
+            };
+            if (options.nameStartsWith) {
+                params.nameStartsWith = options.nameStartsWith;
+            }
+            if (options.nameLessThan) {
+                params.nameLessThan = options.nameLessThan;
+            }
+            var result = await api.getItems(userId, params);
+            return result;
+        } catch (e) {
+            console.error('[Moonfin] Failed to get library items:', e);
+            return { Items: [], TotalRecordCount: 0 };
+        }
+    },
+
     getPrimaryImageUrl(item, options) {
         var api = this.getApiClient();
         if (!api || !item) return null;

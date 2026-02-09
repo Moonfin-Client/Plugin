@@ -21,6 +21,7 @@ function buildJS() {
         'components/navbar.js',
         'components/mediabar.js',
         'components/genres.js',
+        'components/library.js',
         'components/settings.js',
         'components/jellyseerr.js',
         'components/details.js',

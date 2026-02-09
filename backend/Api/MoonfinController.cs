@@ -42,7 +42,8 @@ public class MoonfinController : ControllerBase
             JellyseerrEnabled = config?.JellyseerrEnabled ?? false,
             JellyseerrUrl = (config?.JellyseerrEnabled == true)
                 ? config.JellyseerrUrl
-                : null
+                : null,
+            MdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey)
         });
     }
 
@@ -309,6 +310,9 @@ public class MoonfinPingResponse
 
     /// <summary>Admin-configured Jellyseerr URL.</summary>
     public string? JellyseerrUrl { get; set; }
+
+    /// <summary>Whether admin has configured a server-wide MDBList API key.</summary>
+    public bool? MdblistAvailable { get; set; }
 }
 
 /// <summary>

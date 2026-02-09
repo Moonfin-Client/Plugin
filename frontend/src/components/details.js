@@ -104,14 +104,6 @@ var Details = {
                 self.hide();
             }
         }, true);
-
-        // Close on mobile physical back button (popstate)
-        window.addEventListener('popstate', function(e) {
-            if (self.isVisible) {
-                e.preventDefault();
-                self.hide(true);
-            }
-        });
     },
 
     getItemIdFromCard: function(card) {
@@ -248,7 +240,7 @@ var Details = {
         return api.getSimilarItems(itemId, {
             userId: userId,
             limit: 12,
-            fields: 'PrimaryImageAspectRatio'
+            fields: 'PrimaryImageAspectRatio,UserData'
         }).then(function(result) {
             return result.Items || [];
         });
@@ -258,7 +250,7 @@ var Details = {
         var userId = api.getCurrentUserId();
         return api.getSeasons(seriesId, {
             userId: userId,
-            fields: 'PrimaryImageAspectRatio'
+            fields: 'PrimaryImageAspectRatio,UserData'
         }).then(function(result) {
             return result.Items || [];
         });
@@ -399,6 +391,18 @@ var Details = {
             '</div>'
         );
         
+        var hasTrailer = (item.RemoteTrailers && item.RemoteTrailers.length > 0) || (item.LocalTrailerCount > 0);
+        if (hasTrailer) {
+            actionBtns.push(
+                '<div class="moonfin-btn-wrapper moonfin-focusable" data-action="trailer" tabindex="0">' +
+                    '<div class="moonfin-btn-circle">' +
+                        '<svg viewBox="0 -960 960 960" fill="currentColor"><path d="M160-120v-720h80v80h80v-80h320v80h80v-80h80v720h-80v-80h-80v80H320v-80h-80v80h-80Zm80-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm400 320h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80ZM400-200h160v-560H400v560Zm0-560h160-160Z"/></svg>' +
+                    '</div>' +
+                    '<span class="moonfin-btn-label">Trailer</span>' +
+                '</div>'
+            );
+        }
+
         if (isSeries) {
             actionBtns.push(
                 '<div class="moonfin-btn-wrapper moonfin-focusable" data-action="shuffle" tabindex="0">' +
@@ -528,9 +532,11 @@ var Details = {
         var similarHtml = similar.slice(0, 12).map(function(sim) {
             var simPosterTag = sim.ImageTags ? sim.ImageTags.Primary : null;
             var simPosterUrl = simPosterTag ? serverUrl + '/Items/' + sim.Id + '/Images/Primary?maxHeight=400&quality=80' : '';
+            var simWatched = sim.UserData && sim.UserData.Played;
             return '<div class="moonfin-similar-card moonfin-focusable" data-item-id="' + sim.Id + '" data-type="' + sim.Type + '" tabindex="0">' +
                 '<div class="moonfin-similar-poster">' +
                     (simPosterUrl ? '<img src="' + simPosterUrl + '" alt="" loading="lazy">' : '') +
+                    (simWatched ? '<div class="moonfin-watched-indicator"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 7L9 19l-5.5-5.5 1.41-1.41L9 16.17 19.59 5.59 21 7z"/></svg></div>' : '') +
                 '</div>' +
                 '<span class="moonfin-similar-title">' + sim.Name + '</span>' +
             '</div>';
@@ -546,9 +552,13 @@ var Details = {
                     seasons.map(function(season) {
                         var seasonPosterTag = season.ImageTags ? season.ImageTags.Primary : null;
                         var seasonPoster = seasonPosterTag ? serverUrl + '/Items/' + season.Id + '/Images/Primary?maxHeight=350&quality=80' : '';
+                        var seasonWatched = season.UserData && season.UserData.Played;
+                        var seasonUnplayed = season.UserData ? season.UserData.UnplayedItemCount : null;
                         return '<div class="moonfin-season-card moonfin-focusable" data-item-id="' + season.Id + '" data-type="Season" tabindex="0">' +
                             '<div class="moonfin-season-poster">' +
                                 (seasonPoster ? '<img src="' + seasonPoster + '" alt="" loading="lazy">' : '<span>' + season.Name + '</span>') +
+                                (seasonWatched ? '<div class="moonfin-watched-indicator"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 7L9 19l-5.5-5.5 1.41-1.41L9 16.17 19.59 5.59 21 7z"/></svg></div>' :
+                                (seasonUnplayed > 0 ? '<div class="moonfin-unplayed-count">' + seasonUnplayed + '</div>' : '')) +
                             '</div>' +
                             '<span class="moonfin-season-name">' + season.Name + '</span>' +
                         '</div>';
@@ -996,6 +1006,46 @@ var Details = {
         });
     },
 
+    playTrailer: function(item) {
+        var self = this;
+        var api = API.getApiClient();
+
+        // Try local trailers first
+        if (item.LocalTrailerCount > 0) {
+            var userId = api.getCurrentUserId();
+            var serverUrl = this.getServerUrl();
+            var headers = this.getAuthHeaders();
+
+            fetch(serverUrl + '/Users/' + userId + '/Items/' + item.Id + '/LocalTrailers', {
+                headers: headers
+            }).then(function(resp) {
+                return resp.json();
+            }).then(function(trailers) {
+                if (trailers && trailers.length > 0) {
+                    self.hide(true);
+                    self.playItem(trailers[0].Id, 0);
+                }
+            }).catch(function(err) {
+                console.error('[Moonfin] Details: Failed to load local trailers', err);
+                // Fall back to remote trailers
+                self.openRemoteTrailer(item);
+            });
+            return;
+        }
+
+        // Fall back to remote trailers
+        this.openRemoteTrailer(item);
+    },
+
+    openRemoteTrailer: function(item) {
+        if (item.RemoteTrailers && item.RemoteTrailers.length > 0) {
+            var url = item.RemoteTrailers[0].Url;
+            if (url) {
+                window.open(url, '_blank', 'noopener');
+            }
+        }
+    },
+
     handleAction: function(action, item) {
         switch (action) {
             case 'play':
@@ -1015,6 +1065,10 @@ var Details = {
 
             case 'subtitle':
                 this.showSubtitlePicker(item);
+                break;
+
+            case 'trailer':
+                this.playTrailer(item);
                 break;
 
             case 'shuffle':

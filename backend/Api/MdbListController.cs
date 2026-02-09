@@ -58,7 +58,7 @@ public class MdbListController : ControllerBase
             return BadRequest(new { Error = "Invalid type. Expected: movie or show" });
         }
 
-        // Get user's API key from their settings
+        // Get user's API key from their settings, fall back to admin's server-wide key
         var userId = this.GetUserIdFromClaims();
         if (userId == null)
         {
@@ -68,12 +68,18 @@ public class MdbListController : ControllerBase
         var userSettings = await _settingsService.GetUserSettingsAsync(userId.Value);
         var apiKey = userSettings?.MdblistApiKey;
 
+        // Fall back to admin-configured server-wide key
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            apiKey = MoonfinPlugin.Instance?.Configuration?.MdblistApiKey;
+        }
+
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             return Ok(new MdbListResponse
             {
                 Success = false,
-                Error = "No MDBList API key configured. Add your key in Moonfin Settings."
+                Error = "No MDBList API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key."
             });
         }
 
