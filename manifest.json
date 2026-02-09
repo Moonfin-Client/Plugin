@@ -16,6 +16,15 @@
         "checksum": "EF79461D478D60B70CDE9AAB4E0C2B6C",
         "timestamp": "2026-02-08T21:32:41",
         "dependencies": []
+      },
+      {
+        "version": "1.1.0.0",
+        "changelog": "- Integrated File Transformation plugin for automatic web UI injection\n- Fixed bug where media bar did not load right away\n- Added server-wide MDBList API key support\n- Updated user settings and UI",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.1.0/Moonfin.Server-1.1.0.0.zip",
+        "checksum": "F5D0C521F363976115BDB45F7584FDE2",
+        "timestamp": "2026-02-09T22:58:42",
+        "dependencies": []
       }
     ]
   }
