@@ -1,6 +1,6 @@
 {
   "name": "moonfin-web-plugin",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Moonfin-style UI plugin for Jellyfin Web. Brings the navbar, featured media bar, and custom settings",
   "main": "dist/plugin.js",
   "scripts": {
