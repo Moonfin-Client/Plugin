@@ -334,6 +334,14 @@ public class JellyseerrProxyController : ControllerBase
             return Content(html, "text/html; charset=utf-8");
         }
 
+        // For CSS responses, rewrite url() and @import references
+        if (result.ContentType.Contains("text/css", StringComparison.OrdinalIgnoreCase))
+        {
+            var css = Encoding.UTF8.GetString(result.Body);
+            css = RewriteCssForProxy(css);
+            return File(Encoding.UTF8.GetBytes(css), result.ContentType);
+        }
+
         return File(result.Body, result.ContentType);
     }
 
@@ -433,12 +441,29 @@ public class JellyseerrProxyController : ControllerBase
         return html;
     }
 
+    private static string RewriteCssForProxy(string css)
+    {
+        // Rewrite absolute url() references: url('/path') → url('/Moonfin/Jellyseerr/Web/path')
+        css = Regex.Replace(css,
+            @"url\(\s*(['""]?)\/(?!\/|Moonfin)",
+            $"url($1{ProxyBasePath}/");
+
+        // Rewrite @import with absolute paths
+        css = Regex.Replace(css,
+            @"@import\s+(['""])\/(?!\/|Moonfin)",
+            $"@import $1{ProxyBasePath}/");
+
+        return css;
+    }
+
     private const string ProxyScript = @"<script data-moonfin-proxy>(function(){
 var b='/Moonfin/Jellyseerr/Web';
 function r(v){return typeof v==='string'&&v[0]==='/'&&v[1]!=='/'&&v.indexOf(b)!==0?b+v:v}
 var F=window.fetch;window.fetch=function(u,o){return F.call(this,typeof u==='string'?r(u):u,o)};
 var X=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(){if(typeof arguments[1]==='string')arguments[1]=r(arguments[1]);return X.apply(this,arguments)};
 var S=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){if(n==='src'||n==='href'||n==='action')v=r(v);return S.call(this,n,v)};
+function P(p,n){var d=Object.getOwnPropertyDescriptor(p,n);if(d&&d.set)Object.defineProperty(p,n,{set:function(v){d.set.call(this,r(v))},get:d.get,configurable:true,enumerable:d.enumerable})}try{P(HTMLScriptElement.prototype,'src');P(HTMLImageElement.prototype,'src');P(HTMLSourceElement.prototype,'src');P(HTMLLinkElement.prototype,'href')}catch(e){}
+document.addEventListener('click',function(e){if(e.defaultPrevented)return;var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var h=a.getAttribute('href');if(h&&h[0]==='/'&&h[1]!=='/'&&h.indexOf(b)!==0){S.call(a,'href',b+h)}});
 new MutationObserver(function(ms){ms.forEach(function(m){m.addedNodes.forEach(function(n){if(n.nodeType!==1)return;var fix=function(e){['src','href'].forEach(function(a){var v=e.getAttribute(a);if(v&&v[0]==='/'&&v[1]!=='/'&&v.indexOf(b)!==0)S.call(e,a,b+v)})};fix(n);if(n.querySelectorAll)n.querySelectorAll('[src],[href]').forEach(fix)})})}).observe(document.documentElement,{childList:true,subtree:true});
 })()</script>";
 }

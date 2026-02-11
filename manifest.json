@@ -9,12 +9,12 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
-        "version": "1.0.0.0",
-        "changelog": "Initial release with core features: navbar, media bar, custom details screens, IMDBList integration, Jellyseerr integration, and settings sync.\n Hope you like it!",
+        "version": "1.1.1.0",
+        "changelog": "- Fixed Jellyseerr 404 when clicking links in iframe\n- Plugin now auto-registers file transformations on load (no manual task needed after updates)",
         "targetAbi": "10.10.0.0",
-        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.0.0/Moonfin.Server-1.0.0.0.zip",
-        "checksum": "EF79461D478D60B70CDE9AAB4E0C2B6C",
-        "timestamp": "2026-02-08T21:32:41",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.1.1/Moonfin.Server-1.1.1.0.zip",
+        "checksum": "6F034F273541D5103C59B85346B275D4",
+        "timestamp": "2026-02-11T08:02:04",
         "dependencies": []
       },
       {
@@ -24,6 +24,15 @@
         "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.1.0/Moonfin.Server-1.1.0.0.zip",
         "checksum": "E635BA9B123DD5C8EB9AA32140FBA43D",
         "timestamp": "2026-02-09T22:58:42",
+        "dependencies": []
+      },
+            {
+        "version": "1.0.0.0",
+        "changelog": "Initial release with core features: navbar, media bar, custom details screens, IMDBList integration, Jellyseerr integration, and settings sync.\n Hope you like it!",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.0.0/Moonfin.Server-1.0.0.0.zip",
+        "checksum": "D96BC4F769AC38BA298258C0EF21F300",
+        "timestamp": "2026-02-11T07:59:01",
         "dependencies": []
       }
     ]

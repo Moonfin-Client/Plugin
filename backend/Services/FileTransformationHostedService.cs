@@ -1,35 +1,47 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using Moonfin.Server.Helpers;
-using MediaBrowser.Model.Tasks;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 
 namespace Moonfin.Server.Services;
 
 /// <summary>
-/// Manual fallback task that registers Moonfin's file transformations with the File Transformation
-/// plugin. Normally this happens automatically via <see cref="FileTransformationHostedService"/>,
-/// but this task can be run manually if the automatic registration didn't work.
+/// Hosted service that automatically registers Moonfin's file transformations
+/// when the plugin is loaded. Unlike the scheduled task variant, this runs
+/// automatically on every plugin load — including after plugin updates —
+/// without requiring a full Jellyfin restart or manual task execution.
 /// </summary>
-public class FileTransformationStartupService : IScheduledTask
+public class FileTransformationHostedService : IHostedService
 {
-    public string Name => "Moonfin Startup";
-    public string Key => "Moonfin.Server.Startup";
-    public string Description => "Manually registers Moonfin's file transformations. Normally runs automatically — use this only if the UI injection didn't load.";
-    public string Category => "Startup Services";
+    private readonly ILogger<FileTransformationHostedService> _logger;
 
-    private readonly ILogger<FileTransformationStartupService> _logger;
-
-    public FileTransformationStartupService(ILogger<FileTransformationStartupService> logger)
+    public FileTransformationHostedService(ILogger<FileTransformationHostedService> logger)
     {
         _logger = logger;
     }
 
-    public Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Moonfin Startup: Registering file transformations.");
+        _logger.LogInformation("Moonfin: Auto-registering file transformations.");
 
+        try
+        {
+            RegisterTransformation();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Moonfin: Failed to auto-register file transformations.");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private void RegisterTransformation()
+    {
         var payload = new JObject
         {
             { "id", "8c5d0e91-0001-4b6d-9e3f-1a7c8d9e0f2b" },
@@ -48,7 +60,7 @@ public class FileTransformationStartupService : IScheduledTask
             _logger.LogWarning(
                 "Moonfin: File Transformation plugin not found. Frontend auto-injection is disabled. " +
                 "Install from https://github.com/IAmParadox27/jellyfin-plugin-file-transformation");
-            return Task.CompletedTask;
+            return;
         }
 
         Type? pluginInterfaceType = ftAssembly
@@ -59,22 +71,12 @@ public class FileTransformationStartupService : IScheduledTask
             _logger.LogWarning(
                 "Moonfin: File Transformation PluginInterface type not available. " +
                 "Ensure File Transformation plugin is v2.2.1.0 or later.");
-            return Task.CompletedTask;
+            return;
         }
 
         pluginInterfaceType.GetMethod("RegisterTransformation")
             ?.Invoke(null, new object?[] { payload });
 
-        _logger.LogInformation("Moonfin: Registered index.html transformation.");
-
-        return Task.CompletedTask;
-    }
-
-    public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
-    {
-        yield return new TaskTriggerInfo
-        {
-            Type = TaskTriggerInfo.TriggerStartup
-        };
+        _logger.LogInformation("Moonfin: Successfully registered index.html transformation.");
     }
 }
