@@ -41,7 +41,10 @@ const Storage = {
 
         mdblistEnabled: false,
         mdblistApiKey: '',
-        mdblistRatingSources: ['imdb', 'tmdb', 'tomatoes', 'metacritic']
+        mdblistRatingSources: ['imdb', 'tmdb', 'tomatoes', 'metacritic'],
+
+        tmdbApiKey: '',
+        tmdbEpisodeRatingsEnabled: false
     },
 
     colorOptions: {
@@ -254,7 +257,10 @@ const Storage = {
 
             mdblistEnabled: serverSettings.mdblistEnabled ?? this.defaults.mdblistEnabled,
             mdblistApiKey: serverSettings.mdblistApiKey ?? this.defaults.mdblistApiKey,
-            mdblistRatingSources: serverSettings.mdblistRatingSources ?? this.defaults.mdblistRatingSources
+            mdblistRatingSources: serverSettings.mdblistRatingSources ?? this.defaults.mdblistRatingSources,
+
+            tmdbApiKey: serverSettings.tmdbApiKey ?? this.defaults.tmdbApiKey,
+            tmdbEpisodeRatingsEnabled: serverSettings.tmdbEpisodeRatingsEnabled ?? this.defaults.tmdbEpisodeRatingsEnabled
         };
     },
 
@@ -289,7 +295,10 @@ const Storage = {
 
             mdblistEnabled: localSettings.mdblistEnabled,
             mdblistApiKey: localSettings.mdblistApiKey,
-            mdblistRatingSources: localSettings.mdblistRatingSources
+            mdblistRatingSources: localSettings.mdblistRatingSources,
+
+            tmdbApiKey: localSettings.tmdbApiKey,
+            tmdbEpisodeRatingsEnabled: localSettings.tmdbEpisodeRatingsEnabled
         };
     },
 

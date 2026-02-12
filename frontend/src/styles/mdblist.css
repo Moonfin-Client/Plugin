@@ -75,37 +75,163 @@
     line-height: 1.2;
 }
 
-.moonfin-mdblist-sources {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px 16px;
+/* Sortable rating sources list */
+.moonfin-sortable-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     margin-top: 8px;
 }
 
-.moonfin-mdblist-source-label {
+.moonfin-sortable-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    cursor: pointer;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    cursor: grab;
+    user-select: none;
+    transition: background 0.15s, opacity 0.15s, border-color 0.15s;
+}
+
+.moonfin-sortable-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.moonfin-sortable-item:not(.moonfin-sortable-item-active) {
+    opacity: 0.4;
+}
+
+.moonfin-sortable-item:not(.moonfin-sortable-item-active):hover {
+    opacity: 0.6;
+}
+
+.moonfin-sortable-item-active {
+    border-color: rgba(0, 164, 220, 0.25);
+}
+
+.moonfin-sortable-dragging {
+    opacity: 0.3 !important;
+}
+
+.moonfin-sortable-placeholder {
+    height: 42px;
+    background: rgba(0, 164, 220, 0.08);
+    border: 2px dashed rgba(0, 164, 220, 0.3);
+    border-radius: 8px;
+    margin: 2px 0;
+}
+
+.moonfin-sortable-handle {
+    display: flex;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.3);
+    flex-shrink: 0;
+    cursor: grab;
+}
+
+.moonfin-sortable-handle:active {
+    cursor: grabbing;
+}
+
+.moonfin-sortable-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    flex-shrink: 0;
+    border-radius: 3px;
+}
+
+.moonfin-sortable-label {
+    flex: 1;
     font-size: 13px;
     color: rgba(255, 255, 255, 0.85);
-    padding: 4px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.moonfin-mdblist-source-label input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: #00a4dc;
+.moonfin-sortable-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
     cursor: pointer;
     flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
 }
 
-.moonfin-mdblist-source-label span {
-    user-select: none;
+.moonfin-sortable-toggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.moonfin-sortable-item-active .moonfin-sortable-toggle {
+    color: #00a4dc;
+}
+
+.moonfin-sortable-item-active .moonfin-sortable-toggle:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.moonfin-sortable-touch-clone {
+    position: fixed;
+    z-index: 10000;
+    pointer-events: none;
+    opacity: 0.85;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    background: rgba(30, 30, 40, 0.95);
+    border-color: rgba(0, 164, 220, 0.4);
 }
 
 .moonfin-mdblist-config {
     padding: 4px 0 0 0;
+}
+
+/* TMDB Episode Ratings */
+
+.moonfin-tmdb-config {
+    padding: 4px 0 0 0;
+}
+
+.moonfin-tmdb-episode-rating {
+    border-left: 2px solid #01D277;
+}
+
+.moonfin-tmdb-ep-rating-compact {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    margin-right: 6px;
+}
+
+.moonfin-tmdb-ep-rating-compact .moonfin-mdblist-icon {
+    height: 14px;
+}
+
+.moonfin-tmdb-ep-rating-compact .moonfin-mdblist-value {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.moonfin-tmdb-scale {
+    font-size: 0.65em;
+    opacity: 0.5;
+    font-weight: 400;
+}
+
+.moonfin-tmdb-scale-sm {
+    font-size: 0.7em;
+    opacity: 0.45;
 }
 
 @media (max-width: 768px) {
@@ -143,7 +269,13 @@
         font-size: 10px;
     }
 
-    .moonfin-mdblist-sources {
-        grid-template-columns: 1fr;
+    .moonfin-sortable-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .moonfin-sortable-item {
+        padding: 6px 8px;
+        gap: 8px;
     }
 }

@@ -61,7 +61,9 @@ public class JellyseerrProxyController : ControllerBase
             return BadRequest(new { error = "Username and password are required" });
         }
 
-        var result = await _sessionService.AuthenticateAsync(userId.Value, request.Username, request.Password);
+        var result = await _sessionService.AuthenticateAsync(
+            userId.Value, request.Username, request.Password,
+            request.AuthType);
 
         if (result == null || !result.Success)
         {
@@ -473,9 +475,15 @@ new MutationObserver(function(ms){ms.forEach(function(m){m.addedNodes.forEach(fu
 /// </summary>
 public class JellyseerrLoginRequest
 {
-    /// <summary>Jellyfin username.</summary>
+    /// <summary>Username (Jellyfin or local Jellyseerr account).</summary>
     public string? Username { get; set; }
 
-    /// <summary>Jellyfin password.</summary>
+    /// <summary>Password.</summary>
     public string? Password { get; set; }
+
+    /// <summary>
+    /// Authentication type: "jellyfin" (default) or "local".
+    /// Determines which Jellyseerr auth endpoint is used.
+    /// </summary>
+    public string? AuthType { get; set; }
 }

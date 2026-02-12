@@ -81,7 +81,7 @@ const Jellyseerr = {
         }
     },
 
-    async ssoLogin(username, password) {
+    async ssoLogin(username, password, authType) {
         try {
             var serverUrl = window.ApiClient?.serverAddress?.() || '';
             var token = window.ApiClient?.accessToken?.();
@@ -96,7 +96,7 @@ const Jellyseerr = {
                     'Content-Type': 'application/json',
                     'Authorization': 'MediaBrowser Token="' + token + '"'
                 },
-                body: JSON.stringify({ username: username, password: password })
+                body: JSON.stringify({ username: username, password: password, authType: authType || 'jellyfin' })
             });
 
             var result = API.toCamelCase(await response.json());

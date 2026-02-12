@@ -17,6 +17,7 @@ function buildJS() {
         'utils/api.js',
         'utils/storage.js',
         'utils/mdblist.js',
+        'utils/tmdb.js',
         'utils/tv-navigation.js',
         'components/navbar.js',
         'components/mediabar.js',

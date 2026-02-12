@@ -54,10 +54,11 @@ public class JellyseerrSessionService
     /// Authenticates a Jellyfin user with Jellyseerr and stores the session.
     /// </summary>
     /// <param name="userId">The Jellyfin user ID.</param>
-    /// <param name="username">The Jellyfin username.</param>
-    /// <param name="password">The Jellyfin password.</param>
+    /// <param name="username">The username.</param>
+    /// <param name="password">The password.</param>
+    /// <param name="authType">Auth type: "jellyfin" (default) or "local" for a native Jellyseerr account.</param>
     /// <returns>The authenticated Jellyseerr user info, or null on failure.</returns>
-    public async Task<JellyseerrAuthResult?> AuthenticateAsync(Guid userId, string username, string password)
+    public async Task<JellyseerrAuthResult?> AuthenticateAsync(Guid userId, string username, string password, string? authType = null)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
         var jellyseerrUrl = config?.GetEffectiveJellyseerrUrl();
@@ -80,19 +81,21 @@ public class JellyseerrSessionService
             using var client = new HttpClient(handler);
             client.Timeout = TimeSpan.FromSeconds(15);
 
-            // Build the auth request to Jellyseerr
-            var authPayload = new
-            {
-                username = username,
-                password = password
-            };
+            var isLocal = string.Equals(authType, "local", StringComparison.OrdinalIgnoreCase);
+            var authEndpoint = isLocal
+                ? $"{jellyseerrUrl}/api/v1/auth/local"
+                : $"{jellyseerrUrl}/api/v1/auth/jellyfin";
+
+            var authPayload = isLocal
+                ? (object)new { email = username, password = password }
+                : new { username = username, password = password };
 
             var content = new StringContent(
                 JsonSerializer.Serialize(authPayload),
                 Encoding.UTF8,
                 "application/json");
 
-            var response = await client.PostAsync($"{jellyseerrUrl}/api/v1/auth/jellyfin", content);
+            var response = await client.PostAsync(authEndpoint, content);
 
             if (!response.IsSuccessStatusCode)
             {

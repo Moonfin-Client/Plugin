@@ -52,6 +52,10 @@ public class MoonfinUserSettings
     [JsonPropertyName("tmdbApiKey")]
     public string? TmdbApiKey { get; set; }
 
+    /// <summary>Whether TMDB episode ratings are enabled.</summary>
+    [JsonPropertyName("tmdbEpisodeRatingsEnabled")]
+    public bool? TmdbEpisodeRatingsEnabled { get; set; }
+
     /// <summary>Whether the custom navigation bar is enabled.</summary>
     [JsonPropertyName("navbarEnabled")]
     public bool? NavbarEnabled { get; set; }

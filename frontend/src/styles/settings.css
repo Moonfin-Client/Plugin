@@ -480,6 +480,38 @@
     border-radius: 4px;
 }
 
+.moonfin-segmented-control {
+    display: flex;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+}
+
+.moonfin-segmented-btn {
+    flex: 1;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.moonfin-segmented-btn:hover {
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.moonfin-segmented-btn-active {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
 @media (max-width: 520px) {
     .moonfin-settings-panel {
         width: 100%;

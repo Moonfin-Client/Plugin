@@ -195,10 +195,16 @@ var Settings = {
                 '</div>' +
             '</div>' +
             '<div class="moonfin-jellyseerr-login-group" style="display:none">' +
-                '<p class="moonfin-toggle-desc" style="margin:0 0 12px 0">Enter your Jellyfin credentials to sign in to Jellyseerr. Your session is stored on the server so all devices stay signed in.</p>' +
+                '<div class="moonfin-jellyseerr-auth-type-group" style="margin-bottom:12px">' +
+                    '<div class="moonfin-segmented-control">' +
+                        '<button type="button" class="moonfin-segmented-btn moonfin-segmented-btn-active" data-auth-type="jellyfin">Jellyfin Account</button>' +
+                        '<button type="button" class="moonfin-segmented-btn" data-auth-type="local">Local Account</button>' +
+                    '</div>' +
+                '</div>' +
+                '<p class="moonfin-toggle-desc moonfin-jellyseerr-login-desc" style="margin:0 0 12px 0">Enter your Jellyfin credentials to sign in to Jellyseerr. Your session is stored on the server so all devices stay signed in.</p>' +
                 '<div class="moonfin-jellyseerr-login-error" style="display:none"></div>' +
                 '<div style="margin-bottom:8px">' +
-                    '<label class="moonfin-input-label">Username</label>' +
+                    '<label class="moonfin-input-label moonfin-jellyseerr-username-label">Username</label>' +
                     '<input type="text" id="jellyseerr-settings-username" autocomplete="username" class="moonfin-panel-input">' +
                 '</div>' +
                 '<div style="margin-bottom:12px">' +
@@ -225,15 +231,56 @@ var Settings = {
             { key: 'anilist',        label: 'AniList' }
         ];
         var selectedSources = settings.mdblistRatingSources || ['imdb', 'tmdb', 'tomatoes', 'metacritic'];
-        var sourcesCheckboxes = '';
-        for (var si = 0; si < mdblistSources.length; si++) {
-            var src = mdblistSources[si];
-            var isChecked = selectedSources.indexOf(src.key) !== -1;
-            sourcesCheckboxes += '<label class="moonfin-mdblist-source-label">' +
-                '<input type="checkbox" class="moonfin-mdblist-source-cb" data-source="' + src.key + '"' + (isChecked ? ' checked' : '') + '>' +
-                '<span>' + src.label + '</span>' +
-            '</label>';
+        var serverUrl = (window.ApiClient && window.ApiClient.serverAddress ? window.ApiClient.serverAddress() : '') || '';
+        var sourceIconFiles = {
+            imdb: 'imdb.png', tmdb: 'tmdb.png', trakt: 'trakt.png',
+            tomatoes: 'rt-fresh.png', popcorn: 'rt-audience-up.png',
+            metacritic: 'metacritic.png', metacriticuser: 'metacritic-user.png',
+            letterboxd: 'letterboxd.png', rogerebert: 'rogerebert.png',
+            myanimelist: 'mal.png', anilist: 'anilist.png'
+        };
+
+        // Build ordered list: enabled sources first (in saved order), then disabled
+        var orderedSources = [];
+        for (var oi = 0; oi < selectedSources.length; oi++) {
+            for (var oj = 0; oj < mdblistSources.length; oj++) {
+                if (mdblistSources[oj].key === selectedSources[oi]) {
+                    orderedSources.push({ key: mdblistSources[oj].key, label: mdblistSources[oj].label, enabled: true });
+                    break;
+                }
+            }
         }
+        for (var uk = 0; uk < mdblistSources.length; uk++) {
+            if (selectedSources.indexOf(mdblistSources[uk].key) === -1) {
+                orderedSources.push({ key: mdblistSources[uk].key, label: mdblistSources[uk].label, enabled: false });
+            }
+        }
+
+        var sourceItems = '';
+        for (var si = 0; si < orderedSources.length; si++) {
+            var src = orderedSources[si];
+            var iconUrl = serverUrl + '/Moonfin/Assets/' + (sourceIconFiles[src.key] || 'imdb.png');
+            sourceItems += '<div class="moonfin-sortable-item' + (src.enabled ? ' moonfin-sortable-item-active' : '') + '" draggable="true" data-source="' + src.key + '">' +
+                '<span class="moonfin-sortable-handle">' +
+                    '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>' +
+                '</span>' +
+                '<img class="moonfin-sortable-icon" src="' + iconUrl + '" alt="' + src.label + '">' +
+                '<span class="moonfin-sortable-label">' + src.label + '</span>' +
+                '<button type="button" class="moonfin-sortable-toggle" title="' + (src.enabled ? 'Disable' : 'Enable') + '">' +
+                    '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="' + (src.enabled ? 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z' : 'M19 13H5v-2h14v2z') + '"/></svg>' +
+                '</button>' +
+            '</div>';
+        }
+
+        var tmdbContent =
+            this.createToggleCard('tmdbEpisodeRatingsEnabled', 'Enable Episode Ratings', 'Show TMDB ratings for individual TV episodes on the details page', settings.tmdbEpisodeRatingsEnabled) +
+            '<div class="moonfin-tmdb-config" style="' + (settings.tmdbEpisodeRatingsEnabled ? '' : 'display:none') + '">' +
+                '<div style="margin-bottom:12px">' +
+                    '<label class="moonfin-input-label">TMDB API Key</label>' +
+                    '<input type="password" id="moonfin-tmdbApiKey" class="moonfin-panel-input" placeholder="Enter your TMDB API key or v4 token" value="' + (settings.tmdbApiKey || '') + '">' +
+                    '<div class="moonfin-toggle-desc" style="margin-top:4px">Get a free API key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener" style="color:#00a4dc">themoviedb.org/settings/api</a></div>' +
+                '</div>' +
+            '</div>';
 
         var mdblistContent =
             this.createToggleCard('mdblistEnabled', 'Enable MDBList Ratings', 'Show ratings from MDBList (IMDb, Rotten Tomatoes, Metacritic, etc.) on media bar and item details', settings.mdblistEnabled) +
@@ -248,8 +295,9 @@ var Settings = {
                     '<div class="moonfin-toggle-desc" style="margin-top:4px">Get your free API key at <a href="https://mdblist.com/preferences/" target="_blank" rel="noopener" style="color:#00a4dc">mdblist.com/preferences</a></div>' +
                 '</div>' +
                 '<div style="margin-bottom:8px">' +
-                    '<label class="moonfin-input-label">Rating Sources to Display</label>' +
-                    '<div class="moonfin-mdblist-sources">' + sourcesCheckboxes + '</div>' +
+                    '<label class="moonfin-input-label">Rating Sources</label>' +
+                    '<p class="moonfin-toggle-desc" style="margin:0 0 8px 0">Drag to reorder. Click the icon on the right to enable or disable a source.</p>' +
+                    '<div class="moonfin-sortable-list" id="moonfin-sources-sortable">' + sourceItems + '</div>' +
                 '</div>' +
             '</div>';
 
@@ -271,6 +319,7 @@ var Settings = {
                     this.createSection('', 'Overlay Appearance', overlayContent) +
                     this.createSection('', 'Toolbar Buttons', toolbarContent) +
                     this.createSection('', 'Display', displayContent) +
+                    this.createSection('', 'TMDB Episode Ratings', tmdbContent) +
                     this.createSection('', 'MDBList Ratings', mdblistContent) +
                     '<div class="moonfin-settings-jellyseerr-wrapper" style="display:none">' +
                         this.createSection('', 'Jellyseerr', jellyseerrContent) +
@@ -429,6 +478,13 @@ var Settings = {
                             configDiv.style.display = cb.checked ? '' : 'none';
                         }
                     }
+
+                    if (cb.name === 'tmdbEpisodeRatingsEnabled') {
+                        var tmdbConfigDiv = self.dialog.querySelector('.moonfin-tmdb-config');
+                        if (tmdbConfigDiv) {
+                            tmdbConfigDiv.style.display = cb.checked ? '' : 'none';
+                        }
+                    }
                 });
             })(checkboxes[i]);
         }
@@ -494,21 +550,156 @@ var Settings = {
             });
         }
 
-        var sourceCheckboxes = this.dialog.querySelectorAll('.moonfin-mdblist-source-cb');
-        for (var sci = 0; sci < sourceCheckboxes.length; sci++) {
-            (function(cb) {
-                cb.addEventListener('change', function() {
-                    var checked = [];
-                    var allCbs = self.dialog.querySelectorAll('.moonfin-mdblist-source-cb');
-                    for (var x = 0; x < allCbs.length; x++) {
-                        if (allCbs[x].checked) {
-                            checked.push(allCbs[x].getAttribute('data-source'));
+        // TMDB API key - save on input with debounce + on blur
+        var tmdbApiKeyInput = this.dialog.querySelector('#moonfin-tmdbApiKey');
+        if (tmdbApiKeyInput) {
+            var tmdbKeyTimer = null;
+            tmdbApiKeyInput.addEventListener('input', function() {
+                if (tmdbKeyTimer) clearTimeout(tmdbKeyTimer);
+                tmdbKeyTimer = setTimeout(function() {
+                    self.saveSetting('tmdbApiKey', tmdbApiKeyInput.value.trim());
+                    self.showToast('TMDB API key saved');
+                }, 800);
+            });
+            tmdbApiKeyInput.addEventListener('blur', function() {
+                if (tmdbKeyTimer) clearTimeout(tmdbKeyTimer);
+                self.saveSetting('tmdbApiKey', tmdbApiKeyInput.value.trim());
+            });
+        }
+
+        // --- Sortable rating sources ---
+        var sortableList = this.dialog.querySelector('#moonfin-sources-sortable');
+        if (sortableList) {
+            var dragItem = null;
+            var dragPlaceholder = document.createElement('div');
+            dragPlaceholder.className = 'moonfin-sortable-placeholder';
+
+            var saveSortableState = function() {
+                var items = sortableList.querySelectorAll('.moonfin-sortable-item');
+                var enabled = [];
+                for (var i = 0; i < items.length; i++) {
+                    if (items[i].classList.contains('moonfin-sortable-item-active')) {
+                        enabled.push(items[i].getAttribute('data-source'));
+                    }
+                }
+                self.saveSetting('mdblistRatingSources', enabled);
+                self.showToast('Rating sources updated');
+            };
+
+            sortableList.addEventListener('dragstart', function(e) {
+                var item = e.target.closest('.moonfin-sortable-item');
+                if (!item) return;
+                dragItem = item;
+                item.classList.add('moonfin-sortable-dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', '');
+            });
+
+            sortableList.addEventListener('dragend', function() {
+                if (dragItem) {
+                    dragItem.classList.remove('moonfin-sortable-dragging');
+                    dragItem = null;
+                }
+                if (dragPlaceholder.parentNode) {
+                    dragPlaceholder.parentNode.removeChild(dragPlaceholder);
+                }
+            });
+
+            sortableList.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                var target = e.target.closest('.moonfin-sortable-item');
+                if (!target || target === dragItem) return;
+
+                var rect = target.getBoundingClientRect();
+                var midY = rect.top + rect.height / 2;
+                if (e.clientY < midY) {
+                    sortableList.insertBefore(dragPlaceholder, target);
+                } else {
+                    sortableList.insertBefore(dragPlaceholder, target.nextSibling);
+                }
+            });
+
+            sortableList.addEventListener('drop', function(e) {
+                e.preventDefault();
+                if (!dragItem) return;
+                if (dragPlaceholder.parentNode) {
+                    sortableList.insertBefore(dragItem, dragPlaceholder);
+                    dragPlaceholder.parentNode.removeChild(dragPlaceholder);
+                }
+                saveSortableState();
+            });
+
+            // Toggle enable/disable
+            sortableList.addEventListener('click', function(e) {
+                var toggleBtn = e.target.closest('.moonfin-sortable-toggle');
+                if (!toggleBtn) return;
+                var item = toggleBtn.closest('.moonfin-sortable-item');
+                if (!item) return;
+                var isActive = item.classList.toggle('moonfin-sortable-item-active');
+                var svg = toggleBtn.querySelector('path');
+                if (svg) {
+                    svg.setAttribute('d', isActive
+                        ? 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'
+                        : 'M19 13H5v-2h14v2z');
+                }
+                toggleBtn.title = isActive ? 'Disable' : 'Enable';
+                saveSortableState();
+            });
+
+            // Touch drag support for mobile / TV
+            (function() {
+                var touchItem = null;
+                var touchClone = null;
+                var touchOffsetY = 0;
+
+                sortableList.addEventListener('touchstart', function(e) {
+                    var handle = e.target.closest('.moonfin-sortable-handle');
+                    if (!handle) return;
+                    var item = handle.closest('.moonfin-sortable-item');
+                    if (!item) return;
+                    touchItem = item;
+                    var rect = item.getBoundingClientRect();
+                    touchOffsetY = e.touches[0].clientY - rect.top;
+                    touchClone = item.cloneNode(true);
+                    touchClone.className = 'moonfin-sortable-item moonfin-sortable-touch-clone';
+                    touchClone.style.width = rect.width + 'px';
+                    touchClone.style.top = rect.top + 'px';
+                    touchClone.style.left = rect.left + 'px';
+                    document.body.appendChild(touchClone);
+                    item.classList.add('moonfin-sortable-dragging');
+                }, { passive: true });
+
+                sortableList.addEventListener('touchmove', function(e) {
+                    if (!touchItem || !touchClone) return;
+                    e.preventDefault();
+                    var y = e.touches[0].clientY;
+                    touchClone.style.top = (y - touchOffsetY) + 'px';
+
+                    var items = sortableList.querySelectorAll('.moonfin-sortable-item:not(.moonfin-sortable-dragging)');
+                    for (var i = 0; i < items.length; i++) {
+                        var rect = items[i].getBoundingClientRect();
+                        var midY = rect.top + rect.height / 2;
+                        if (y < midY) {
+                            sortableList.insertBefore(touchItem, items[i]);
+                            return;
                         }
                     }
-                    self.saveSetting('mdblistRatingSources', checked);
-                    self.showToast('Rating sources updated');
-                });
-            })(sourceCheckboxes[sci]);
+                    sortableList.appendChild(touchItem);
+                }, { passive: false });
+
+                sortableList.addEventListener('touchend', function() {
+                    if (touchItem) {
+                        touchItem.classList.remove('moonfin-sortable-dragging');
+                        touchItem = null;
+                    }
+                    if (touchClone && touchClone.parentNode) {
+                        touchClone.parentNode.removeChild(touchClone);
+                        touchClone = null;
+                    }
+                    saveSortableState();
+                }, { passive: true });
+            })();
         }
 
         var loginBtn = this.dialog.querySelector('.moonfin-jellyseerr-settings-login-btn');
@@ -524,6 +715,24 @@ var Settings = {
                 if (e.key === 'Enter') {
                     self.handleJellyseerrLogin();
                 }
+            });
+        }
+
+        var authTypeBtns = this.dialog.querySelectorAll('.moonfin-segmented-btn[data-auth-type]');
+        for (var ati = 0; ati < authTypeBtns.length; ati++) {
+            authTypeBtns[ati].addEventListener('click', function() {
+                var wrapper = self.dialog.querySelector('.moonfin-settings-jellyseerr-wrapper');
+                if (!wrapper) return;
+                var btns = wrapper.querySelectorAll('.moonfin-segmented-btn[data-auth-type]');
+                for (var j = 0; j < btns.length; j++) btns[j].classList.remove('moonfin-segmented-btn-active');
+                this.classList.add('moonfin-segmented-btn-active');
+                var isLocal = this.getAttribute('data-auth-type') === 'local';
+                var desc = wrapper.querySelector('.moonfin-jellyseerr-login-desc');
+                var usernameLabel = wrapper.querySelector('.moonfin-jellyseerr-username-label');
+                if (desc) desc.textContent = isLocal
+                    ? 'Enter your local Jellyseerr account credentials. Your session is stored on the server so all devices stay signed in.'
+                    : 'Enter your Jellyfin credentials to sign in to Jellyseerr. Your session is stored on the server so all devices stay signed in.';
+                if (usernameLabel) usernameLabel.textContent = isLocal ? 'Email' : 'Username';
             });
         }
 
@@ -563,7 +772,10 @@ var Settings = {
         submitBtn.textContent = 'Signing in...';
         errorEl.style.display = 'none';
 
-        Jellyseerr.ssoLogin(usernameVal, passwordVal).then(function(result) {
+        var activeAuthBtn = wrapper.querySelector('.moonfin-segmented-btn-active[data-auth-type]');
+        var authType = activeAuthBtn ? activeAuthBtn.getAttribute('data-auth-type') : 'jellyfin';
+
+        Jellyseerr.ssoLogin(usernameVal, passwordVal, authType).then(function(result) {
             if (result.success) {
                 self.updateJellyseerrSsoSection();
                 self.showToast('Signed in to Jellyseerr');

@@ -307,6 +307,7 @@ body.moonfin-navbar-active .moonfin-details-back {
     gap: 24px;
     margin-bottom: 48px;
     flex-wrap: wrap;
+    justify-content: center;
 }
 
 .moonfin-btn-wrapper {
@@ -348,21 +349,13 @@ body.moonfin-navbar-active .moonfin-details-back {
 
 .moonfin-btn-wrapper:hover .moonfin-btn-circle,
 .moonfin-btn-wrapper:focus .moonfin-btn-circle {
-    background: rgba(255, 255, 255, 0.18);
-    box-shadow: 0 4px 20px rgba(0, 164, 220, 0.3);
-    border-color: rgba(0, 164, 220, 0.5);
+    background: #fff;
+    border-color: #fff;
 }
 
-.moonfin-btn-primary {
-    background: #00a4dc;
-    border-color: #00a4dc;
-}
-
-.moonfin-btn-wrapper:hover .moonfin-btn-primary,
-.moonfin-btn-wrapper:focus .moonfin-btn-primary {
-    background: #0bb8f0;
-    box-shadow: 0 4px 24px rgba(0, 164, 220, 0.5);
-    border-color: #0bb8f0;
+.moonfin-btn-wrapper:hover .moonfin-btn-circle svg,
+.moonfin-btn-wrapper:focus .moonfin-btn-circle svg {
+    color: #000;
 }
 
 .moonfin-btn-wrapper.active .moonfin-btn-circle {

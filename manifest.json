@@ -9,6 +9,15 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
+        "version": "1.2.0.0",
+        "changelog": "- TMDB episode ratings with server-side caching\n- Drag & drop sortable rating sources\n- Jellyseerr dual login (Jellyfin + local accounts)\n- Edit Metadata/Images/Subtitles/Identify open as native dialogs\n- Create New Playlist from details page\n- Fixed homescreen context menu interception\n- Fixed subtitle picker triggering details overlay during playback",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.2.0/Moonfin.Server-1.2.0.0.zip",
+        "checksum": "FEBE25F651728978B685E8734E8B4953",
+        "timestamp": "2026-02-12T22:27:49",
+        "dependencies": []
+      },
+      {
         "version": "1.1.1.0",
         "changelog": "- Fixed Jellyseerr 404 when clicking links in iframe\n- Plugin now auto-registers file transformations on load (no manual task needed after updates)",
         "targetAbi": "10.10.0.0",
@@ -26,7 +35,7 @@
         "timestamp": "2026-02-09T22:58:42",
         "dependencies": []
       },
-            {
+      {
         "version": "1.0.0.0",
         "changelog": "Initial release with core features: navbar, media bar, custom details screens, IMDBList integration, Jellyseerr integration, and settings sync.\n Hope you like it!",
         "targetAbi": "10.10.0.0",

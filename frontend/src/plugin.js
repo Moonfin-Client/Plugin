@@ -1,5 +1,5 @@
 const Plugin = {
-    version: '1.0.0',
+    version: '1.2.0',
     name: 'Moonfin Web Plugin',
     initialized: false,
 
@@ -914,8 +914,12 @@ const Plugin = {
     setupGlobalListeners() {
         // Centralized back button handler — checks overlays top-down
         // so only the topmost one closes per press
-        window.addEventListener('popstate', function() {
+        window.addEventListener('popstate', function(e) {
+            // If state still has moonfinDetails, a Jellyfin dialog just closed
+            // (dialogHelper pushes/pops its own history entry) — don't close our overlay
+            var state = e.state || history.state || {};
             if (Details.isVisible) {
+                if (state.moonfinDetails) return;
                 Details.hide(true);
             } else if (Settings.isOpen) {
                 Settings.hide(true);

@@ -28,12 +28,21 @@ var Details = {
             return;
         }
         
-        // Use event delegation on document - intercept BEFORE Jellyfin handlers
+        var ignoreSelectors = '.videoOsdBottom, .videoOsdTop, .osdHeader, .videoOsd, .subtitleAppearanceDialog, .subtitleSync, .trackSelections, .playerStats, .dialog, .dialogContainer, .focuscontainer-down, .actionSheetContent, .actionSheet, .actionSheetScroller, .videoPlayerContainer, .upNextContainer, .mediaSelectionMenu, .slideshowButtonContainer, .btnVideoOsd, .osdMediaInfo, .osdControls, .skipSegmentContainer, .itemContextMenu, .popupContainer, .toast, .guide, .recordingFields, .formDialogContent, .formDialog, .promptDialog, .confirmDialog, .withPopup, .multiSelectMenu, .moonfin-more-menu, .moonfin-settings-panel';
+
         document.addEventListener('click', function(e) {
-            var card = e.target.closest('.card, .listItem, [data-id]');
+            if (e.target.closest(ignoreSelectors)) {
+                return;
+            }
+
+            var card = e.target.closest('.card, .listItem');
             if (!card) return;
 
-            if (e.target.closest('.cardOverlayButton, .listItemButton, .btnPlayItem')) {
+            if (e.target.closest('.cardOverlayButton, .listItemButton, .btnPlayItem, .btnMoreCommands, .btnUserItemRating, .btnItemAction, .paper-icon-button-light, .itemAction[data-action]')) {
+                return;
+            }
+
+            if (!card.closest('.homeSection, .section, .itemsContainer, .cardContainer, .listTopPager, .vertical-list, .vertical-wrap, .prefContainer, .libraryPage, .pageTabContent, .sectionTitleContainer, .moonfin-details-panel, .moonfin-mediabar')) {
                 return;
             }
 
@@ -44,17 +53,27 @@ var Details = {
                           (card.querySelector('[data-type]') ? card.querySelector('[data-type]').getAttribute('data-type') : null) ||
                           self.inferCardType(card);
             
-            // Intercept for movies, series, episodes, seasons, or unknown types (API will resolve)
-            if (!cardType || ['Movie', 'Series', 'Episode', 'Season'].indexOf(cardType) !== -1) {
+            if (['Movie', 'Series', 'Episode', 'Season'].indexOf(cardType) !== -1) {
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 self.showDetails(itemId, cardType);
                 return false;
             }
+            if (!cardType && card.classList.contains('card')) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                self.showDetails(itemId, null);
+                return false;
+            }
         }, true);
 
         document.addEventListener('click', function(e) {
+            if (e.target.closest(ignoreSelectors)) {
+                return;
+            }
+
             var link = e.target.closest('a[href*="id="], a[href*="/details"]');
             if (!link) return;
             
@@ -77,6 +96,10 @@ var Details = {
 
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' || e.keyCode === 13) {
+                if (e.target.closest(ignoreSelectors)) {
+                    return;
+                }
+
                 var focused = document.activeElement;
                 var card = (focused ? focused.closest('.card, .listItem') : null) || 
                           (focused && focused.classList.contains('card') ? focused : null);
@@ -217,6 +240,17 @@ var Details = {
                             self.renderMdbListRatings(ratings);
                         }
                     });
+                }
+
+                if (Tmdb.isEnabled() && item.Type === 'Episode') {
+                    Tmdb.fetchRatingForEpisode(item).then(function(rating) {
+                        if (rating && self.currentItem && self.currentItem.Id === item.Id) {
+                            self.renderTmdbEpisodeRating(rating);
+                        }
+                    });
+                    if (item.SeriesId && episodes.length > 0) {
+                        self.fetchTmdbRatingsForEpisodeList(item, episodes);
+                    }
                 }
 
                 setTimeout(function() {
@@ -1105,6 +1139,57 @@ var Details = {
         }
     },
 
+    renderTmdbEpisodeRating: function(rating) {
+        var container = this.container.querySelector('#moonfin-details-mdblist');
+        if (!container) return;
+
+        var html = Tmdb.buildRatingHtml(rating);
+        if (html) {
+            container.insertAdjacentHTML('beforeend', html);
+            container.style.display = '';
+        }
+    },
+
+    fetchTmdbRatingsForEpisodeList: function(item, episodes) {
+        var self = this;
+        if (!item.SeriesId) return;
+
+        Tmdb.resolveSeriesTmdbId(item.SeriesId).then(function(tmdbId) {
+            if (!tmdbId) return;
+            var season = item.ParentIndexNumber;
+            if (season == null) return;
+
+            Tmdb.fetchSeasonRatings(tmdbId, season).then(function(tmdbEpisodes) {
+                if (!tmdbEpisodes || tmdbEpisodes.length === 0) return;
+                if (!self.currentItem || self.currentItem.Id !== item.Id) return;
+
+                var ratingMap = {};
+                for (var i = 0; i < tmdbEpisodes.length; i++) {
+                    if (tmdbEpisodes[i].episodeNumber != null) {
+                        ratingMap[tmdbEpisodes[i].episodeNumber] = tmdbEpisodes[i];
+                    }
+                }
+
+                var epCards = self.container.querySelectorAll('.moonfin-episode-card');
+                for (var j = 0; j < epCards.length; j++) {
+                    var epId = epCards[j].getAttribute('data-item-id');
+                    for (var k = 0; k < episodes.length; k++) {
+                        if (episodes[k].Id === epId && episodes[k].IndexNumber != null) {
+                            var tmdbRating = ratingMap[episodes[k].IndexNumber];
+                            if (tmdbRating) {
+                                var infoEl = epCards[j].querySelector('.moonfin-episode-info');
+                                if (infoEl) {
+                                    infoEl.insertAdjacentHTML('beforeend', Tmdb.buildCompactRatingHtml(tmdbRating));
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            });
+        });
+    },
+
     showMoreMenu: function(item) {
         var self = this;
 
@@ -1313,23 +1398,39 @@ var Details = {
                 break;
 
             case 'editmetadata':
-                this.hide(true);
-                API.navigateTo('/edititemmetadata?id=' + item.Id);
+                API.openMetadataEditor(item.Id).then(function(success) {
+                    if (!success) {
+                        self.hide(true);
+                        API.navigateTo('/details?id=' + item.Id);
+                    }
+                });
                 break;
 
             case 'editimages':
-                this.hide(true);
-                API.navigateTo('/edititemimages?id=' + item.Id);
+                API.openImageEditor(item.Id).then(function(success) {
+                    if (!success) {
+                        self.hide(true);
+                        API.navigateTo('/details?id=' + item.Id);
+                    }
+                });
                 break;
 
             case 'editsubtitles':
-                this.hide(true);
-                API.navigateTo('/edititemsubtitles?id=' + item.Id);
+                API.openSubtitleEditor(item.Id).then(function(success) {
+                    if (!success) {
+                        self.hide(true);
+                        API.navigateTo('/details?id=' + item.Id);
+                    }
+                });
                 break;
 
             case 'identify':
-                this.hide(true);
-                API.navigateTo('/itemidentify?id=' + item.Id);
+                API.openItemIdentifier(item.Id).then(function(success) {
+                    if (!success) {
+                        self.hide(true);
+                        API.navigateTo('/details?id=' + item.Id);
+                    }
+                });
                 break;
 
             case 'opennative':
@@ -1547,10 +1648,6 @@ var Details = {
             return resp.json();
         }).then(function(result) {
             var playlists = result.Items || [];
-            if (playlists.length === 0) {
-                self.showToast('No playlists found');
-                return;
-            }
 
             var overlay = document.createElement('div');
             overlay.className = 'moonfin-more-overlay';
@@ -1558,6 +1655,15 @@ var Details = {
             var menuHtml = '<div class="moonfin-more-menu">' +
                 '<h3 class="moonfin-more-title">Add to Playlist</h3>' +
                 '<div class="moonfin-more-items">';
+
+            menuHtml += '<button class="moonfin-more-item moonfin-focusable moonfin-playlist-create" tabindex="0">' +
+                '<span class="moonfin-more-item-icon"><svg viewBox="0 -960 960 960" fill="currentColor"><path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z"/></svg></span>' +
+                '<span class="moonfin-more-item-text">New Playlist</span>' +
+            '</button>';
+
+            if (playlists.length > 0) {
+                menuHtml += '<div style="border-top:1px solid rgba(255,255,255,0.1);margin:4px 0"></div>';
+            }
 
             for (var i = 0; i < playlists.length; i++) {
                 menuHtml += '<button class="moonfin-more-item moonfin-focusable" data-playlist-id="' + playlists[i].Id + '" tabindex="0">' +
@@ -1569,22 +1675,31 @@ var Details = {
             menuHtml += '</div></div>';
             overlay.innerHTML = menuHtml;
 
+            var closeOverlay = function() {
+                if (overlay._escHandler) document.removeEventListener('keydown', overlay._escHandler, true);
+                overlay.remove();
+            };
+
             overlay.addEventListener('click', function(e) {
-                if (e.target === overlay) {
-                    if (overlay._escHandler) document.removeEventListener('keydown', overlay._escHandler, true);
-                    overlay.remove();
-                }
+                if (e.target === overlay) closeOverlay();
             });
 
             overlay._escHandler = function(e) {
                 if (e.key === 'Escape' || e.keyCode === 27 || e.keyCode === 461 || e.keyCode === 10009) {
                     e.preventDefault();
                     e.stopPropagation();
-                    document.removeEventListener('keydown', overlay._escHandler, true);
-                    overlay.remove();
+                    closeOverlay();
                 }
             };
             document.addEventListener('keydown', overlay._escHandler, true);
+
+            var createBtn = overlay.querySelector('.moonfin-playlist-create');
+            if (createBtn) {
+                createBtn.addEventListener('click', function() {
+                    closeOverlay();
+                    self.showCreatePlaylistDialog(item);
+                });
+            }
 
             var playlistBtns = overlay.querySelectorAll('[data-playlist-id]');
             for (var j = 0; j < playlistBtns.length; j++) {
@@ -1615,6 +1730,99 @@ var Details = {
             console.error('[Moonfin] Details: Failed to fetch playlists', err);
             self.showToast('Failed to load playlists');
         });
+    },
+
+    showCreatePlaylistDialog: function(item) {
+        var self = this;
+        var serverUrl = this.getServerUrl();
+        var headers = this.getAuthHeaders();
+        var api = API.getApiClient();
+        var userId = api.getCurrentUserId();
+
+        var overlay = document.createElement('div');
+        overlay.className = 'moonfin-more-overlay';
+        overlay.innerHTML = '<div class="moonfin-more-menu">' +
+            '<h3 class="moonfin-more-title">New Playlist</h3>' +
+            '<div style="padding:0 8px">' +
+                '<input type="text" class="moonfin-playlist-name-input" placeholder="Playlist name" style="' +
+                    'width:100%;box-sizing:border-box;padding:10px 14px;margin:8px 0 16px;' +
+                    'background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;' +
+                    'color:#fff;font-size:15px;outline:none;font-family:inherit' +
+                '" />' +
+                '<div style="display:flex;gap:12px;justify-content:flex-end">' +
+                    '<button class="moonfin-more-item moonfin-focusable moonfin-playlist-cancel" tabindex="0" style="flex:none;width:auto;padding:8px 20px">' +
+                        '<span class="moonfin-more-item-text">Cancel</span>' +
+                    '</button>' +
+                    '<button class="moonfin-more-item moonfin-focusable moonfin-playlist-confirm" tabindex="0" style="flex:none;width:auto;padding:8px 20px">' +
+                        '<span class="moonfin-more-item-text">Create</span>' +
+                    '</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
+        var closeOverlay = function() {
+            if (overlay._escHandler) document.removeEventListener('keydown', overlay._escHandler, true);
+            overlay.remove();
+        };
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) closeOverlay();
+        });
+
+        overlay._escHandler = function(e) {
+            if (e.key === 'Escape' || e.keyCode === 27 || e.keyCode === 461 || e.keyCode === 10009) {
+                e.preventDefault();
+                e.stopPropagation();
+                closeOverlay();
+            }
+        };
+        document.addEventListener('keydown', overlay._escHandler, true);
+
+        overlay.querySelector('.moonfin-playlist-cancel').addEventListener('click', closeOverlay);
+
+        overlay.querySelector('.moonfin-playlist-confirm').addEventListener('click', function() {
+            var nameInput = overlay.querySelector('.moonfin-playlist-name-input');
+            var playlistName = (nameInput.value || '').trim();
+            if (!playlistName) {
+                nameInput.style.borderColor = '#ff6b6b';
+                nameInput.focus();
+                return;
+            }
+
+            var mediaType = item.MediaType || 'Video';
+            var createHeaders = Object.assign({}, headers, { 'Content-Type': 'application/json' });
+
+            fetch(serverUrl + '/Playlists', {
+                method: 'POST',
+                headers: createHeaders,
+                body: JSON.stringify({
+                    Name: playlistName,
+                    Ids: [item.Id],
+                    UserId: userId,
+                    MediaType: mediaType
+                })
+            }).then(function(resp) {
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                return resp.json();
+            }).then(function() {
+                self.showToast('Created playlist & added item');
+                closeOverlay();
+            }).catch(function(err) {
+                console.error('[Moonfin] Details: Failed to create playlist', err);
+                self.showToast('Failed to create playlist');
+            });
+        });
+
+        var nameInput = overlay.querySelector('.moonfin-playlist-name-input');
+        nameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                overlay.querySelector('.moonfin-playlist-confirm').click();
+            }
+        });
+
+        document.body.appendChild(overlay);
+        setTimeout(function() { nameInput.focus(); }, 50);
     },
 
     showCollectionPicker: function(item) {
@@ -1905,6 +2113,48 @@ var Details = {
             '</div>';
 
         this.setupSeasonPanelListeners(panel, item, episodes);
+
+        if (Tmdb.isEnabled() && item.SeriesId) {
+            this.fetchTmdbRatingsForSeasonView(item, episodes);
+        }
+    },
+
+    fetchTmdbRatingsForSeasonView: function(item, episodes) {
+        var self = this;
+        Tmdb.resolveSeriesTmdbId(item.SeriesId).then(function(tmdbId) {
+            if (!tmdbId) return;
+            var season = item.IndexNumber;
+            if (season == null) return;
+
+            Tmdb.fetchSeasonRatings(tmdbId, season).then(function(tmdbEpisodes) {
+                if (!tmdbEpisodes || tmdbEpisodes.length === 0) return;
+                if (!self.currentItem || self.currentItem.Id !== item.Id) return;
+
+                var ratingMap = {};
+                for (var i = 0; i < tmdbEpisodes.length; i++) {
+                    if (tmdbEpisodes[i].episodeNumber != null) {
+                        ratingMap[tmdbEpisodes[i].episodeNumber] = tmdbEpisodes[i];
+                    }
+                }
+
+                var epCards = self.container.querySelectorAll('.moonfin-season-ep');
+                for (var j = 0; j < epCards.length; j++) {
+                    var epId = epCards[j].getAttribute('data-item-id');
+                    for (var k = 0; k < episodes.length; k++) {
+                        if (episodes[k].Id === epId && episodes[k].IndexNumber != null) {
+                            var tmdbRating = ratingMap[episodes[k].IndexNumber];
+                            if (tmdbRating) {
+                                var metaEl = epCards[j].querySelector('.moonfin-season-ep-meta');
+                                if (metaEl) {
+                                    metaEl.insertAdjacentHTML('afterbegin', Tmdb.buildCompactRatingHtml(tmdbRating));
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            });
+        });
     },
 
     setupSeasonPanelListeners: function(panel, item, episodes) {

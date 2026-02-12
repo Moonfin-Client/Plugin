@@ -280,5 +280,287 @@ const API = {
             });
         }
         return null;
+    },
+
+    // ===== Webpack Interop for Jellyfin Web Editor Dialogs =====
+    // Editor modules (metadataEditor, imageeditor, subtitleeditor, itemidentifier) are in
+    // separate lazy-loaded webpack chunks. We capture __webpack_require__ via the chunk push
+    // trick, find the shortcuts.js + itemContextMenu.js modules by their unique strings,
+    // extract the chunk IDs from their compiled source, load those chunks, then find the
+    // editor modules by their export shapes.
+
+    getServerId: function() {
+        var api = this.getApiClient();
+        if (!api) return null;
+        try {
+            if (api.serverInfo && typeof api.serverInfo === 'function') return api.serverInfo().Id;
+            if (api._serverInfo) return api._serverInfo.Id;
+            if (api.serverId && typeof api.serverId === 'function') return api.serverId();
+        } catch(e) {}
+        return null;
+    },
+
+    _initWebpackRequire: function() {
+        if (window.__moonfin_wp_require) return true;
+        // Auto-detect: the compiled global varies by build config
+        // Production jellyfin-web uses just 'webpackChunk' (no suffix)
+        var chunkArr = window.webpackChunk
+            || window.webpackChunkjellyfin_web
+            || window['webpackChunk_jellyfin_web'];
+        if (!chunkArr) {
+            // Scan window for any webpackChunk* array
+            var keys = Object.keys(window);
+            for (var i = 0; i < keys.length; i++) {
+                if (keys[i].indexOf('webpackChunk') === 0 && Array.isArray(window[keys[i]])) {
+                    chunkArr = window[keys[i]];
+                    break;
+                }
+            }
+        }
+        if (!chunkArr) {
+            console.warn('[Moonfin] No webpackChunk array found');
+            return false;
+        }
+        chunkArr.push([['moonfin'], {}, function(__webpack_require__) {
+            window.__moonfin_wp_require = __webpack_require__;
+        }]);
+        return !!window.__moonfin_wp_require;
+    },
+
+    _extractChunkIds: function(factorySource) {
+        var ids = [];
+        // Match numeric chunk IDs: .e(12345)
+        var regex = /\.e\((\d+)\)/g;
+        var match;
+        while ((match = regex.exec(factorySource)) !== null) {
+            var id = parseInt(match[1]);
+            if (ids.indexOf(id) === -1) ids.push(id);
+        }
+        // Match string chunk IDs: .e("chunk-name")
+        regex = /\.e\("([^"]+)"\)/g;
+        while ((match = regex.exec(factorySource)) !== null) {
+            if (ids.indexOf(match[1]) === -1) ids.push(match[1]);
+        }
+        return ids;
+    },
+
+    _loadChunks: function(req, chunkIds) {
+        var loads = [];
+        for (var i = 0; i < chunkIds.length; i++) {
+            loads.push(req.e(chunkIds[i]).catch(function() {}));
+        }
+        return Promise.all(loads);
+    },
+
+    _findFactoryByHint: function(req, hint) {
+        var factories = req.m || {};
+        var keys = Object.keys(factories);
+        for (var i = 0; i < keys.length; i++) {
+            try {
+                if (factories[keys[i]].toString().indexOf(hint) !== -1) {
+                    return keys[i];
+                }
+            } catch(e) {}
+        }
+        return null;
+    },
+
+    _findFactoryByHints: function(req, hints) {
+        var factories = req.m || {};
+        var keys = Object.keys(factories);
+        for (var i = 0; i < keys.length; i++) {
+            try {
+                var src = factories[keys[i]].toString();
+                var allMatch = true;
+                for (var h = 0; h < hints.length; h++) {
+                    if (src.indexOf(hints[h]) === -1) { allMatch = false; break; }
+                }
+                if (allMatch) return keys[i];
+            } catch(e) {}
+        }
+        return null;
+    },
+
+    _editorModulesPromise: null,
+
+    _loadEditorModules: function() {
+        if (this._editorModulesPromise) return this._editorModulesPromise;
+        if (window.__moonfin_editors && Object.keys(window.__moonfin_editors).length >= 4) {
+            return Promise.resolve(true);
+        }
+
+        var apiSelf = this;
+        this._editorModulesPromise = new Promise(function(resolve) {
+            if (!apiSelf._initWebpackRequire()) {
+                resolve(false);
+                return;
+            }
+
+            var req = window.__moonfin_wp_require;
+
+            // Step 1: Find shortcuts.js module by its unique 'playAllFromHere' export
+            var shortcutsId = apiSelf._findFactoryByHint(req, 'playAllFromHere');
+            if (!shortcutsId) {
+                console.warn('[Moonfin] Could not find shortcuts module in webpack factories');
+                resolve(false);
+                return;
+            }
+
+            // Step 2: Extract chunk IDs from shortcuts factory and load them
+            var shortcutChunkIds = apiSelf._extractChunkIds(req.m[shortcutsId].toString());
+            console.log('[Moonfin] Loading shortcuts chunks:', shortcutChunkIds);
+
+            apiSelf._loadChunks(req, shortcutChunkIds).then(function() {
+                // Step 3: Find itemContextMenu module by its unique command strings
+                var icmId = apiSelf._findFactoryByHints(req, ['editimages', 'editsubtitles', 'identify']);
+                if (icmId) {
+                    // Step 4: Extract and load itemContextMenu's chunks (editor modules)
+                    var icmChunkIds = apiSelf._extractChunkIds(req.m[icmId].toString());
+                    console.log('[Moonfin] Loading itemContextMenu chunks:', icmChunkIds);
+                    return apiSelf._loadChunks(req, icmChunkIds);
+                }
+            }).then(function() {
+                // Step 5: All editor chunks loaded. Find editor modules by export shape.
+                var editors = {};
+                var factories = req.m;
+                var cache = req.c || {};
+                var fkeys = Object.keys(factories);
+
+                // Source hints to narrow down which factories to try instantiating
+                var editorHints = [
+                    'editItemMetadataForm', 'MessageItemSaved',
+                    'imageType', 'hasChanges',
+                    'subtitleList', 'btnOpenUploadMenu',
+                    'showFindNew', 'identifyResults'
+                ];
+
+                for (var i = 0; i < fkeys.length; i++) {
+                    var id = fkeys[i];
+                    var mod;
+
+                    // Check cache first (no side effects)
+                    if (cache[id]) {
+                        mod = cache[id].exports;
+                    } else {
+                        // Only try modules whose factory contains editor-related strings
+                        var src;
+                        try { src = factories[id].toString(); } catch(e) { continue; }
+                        var isEditor = false;
+                        for (var h = 0; h < editorHints.length; h++) {
+                            if (src.indexOf(editorHints[h]) !== -1) { isEditor = true; break; }
+                        }
+                        if (!isEditor) continue;
+
+                        try { mod = req(id); } catch(e) { continue; }
+                    }
+
+                    if (!mod) continue;
+                    apiSelf._matchEditorExports(mod, editors);
+
+                    if (editors.metadata && editors.identifier && editors.image && editors.subtitle) break;
+                }
+
+                window.__moonfin_editors = editors;
+                var found = Object.keys(editors);
+                console.log('[Moonfin] Found editor modules:', found.join(', ') || 'none');
+                resolve(found.length > 0);
+            }).catch(function(e) {
+                console.error('[Moonfin] Error loading editor chunks:', e);
+                resolve(false);
+            });
+        });
+
+        // Allow retry on failure
+        this._editorModulesPromise.then(function(success) {
+            if (!success) apiSelf._editorModulesPromise = null;
+        });
+
+        return this._editorModulesPromise;
+    },
+
+    _matchEditorExports: function(mod, editors) {
+        if (!mod) return;
+        var d = mod.default || mod;
+
+        // metadataEditor: default export with show() + embed() — unique shape
+        if (!editors.metadata && d && typeof d.show === 'function' && typeof d.embed === 'function') {
+            editors.metadata = d;
+            return;
+        }
+
+        // itemIdentifier: named exports show() + showFindNew() — unique shape
+        if (!editors.identifier && typeof mod.show === 'function' && typeof mod.showFindNew === 'function') {
+            editors.identifier = mod;
+            return;
+        }
+
+        // imageeditor: named export show(options), length <= 1, no showFindNew/embed
+        if (!editors.image && typeof mod.show === 'function' && !mod.showFindNew &&
+            !(d && typeof d.embed === 'function') && mod.show.length <= 1 &&
+            mod !== (editors.identifier || null)) {
+            editors.image = mod;
+            return;
+        }
+
+        // subtitleeditor: default export with show(itemId, serverId), no embed
+        if (!editors.subtitle && d && d !== mod && typeof d.show === 'function' &&
+            !d.embed && d.show.length >= 2) {
+            editors.subtitle = d;
+            return;
+        }
+    },
+
+    openMetadataEditor: function(itemId) {
+        var serverId = this.getServerId();
+        return this._loadEditorModules().then(function(loaded) {
+            var ed = window.__moonfin_editors && window.__moonfin_editors.metadata;
+            if (!ed) return false;
+            ed.show(itemId, serverId);
+            return true;
+        }).catch(function(e) {
+            console.warn('[Moonfin] Failed to open metadata editor:', e);
+            return false;
+        });
+    },
+
+    openImageEditor: function(itemId) {
+        var serverId = this.getServerId();
+        return this._loadEditorModules().then(function(loaded) {
+            var ed = window.__moonfin_editors && window.__moonfin_editors.image;
+            if (!ed) return false;
+            var showFn = ed.show || (ed.default && ed.default.show);
+            if (!showFn) return false;
+            showFn({ itemId: itemId, serverId: serverId });
+            return true;
+        }).catch(function(e) {
+            console.warn('[Moonfin] Failed to open image editor:', e);
+            return false;
+        });
+    },
+
+    openSubtitleEditor: function(itemId) {
+        var serverId = this.getServerId();
+        return this._loadEditorModules().then(function(loaded) {
+            var ed = window.__moonfin_editors && window.__moonfin_editors.subtitle;
+            if (!ed) return false;
+            ed.show(itemId, serverId);
+            return true;
+        }).catch(function(e) {
+            console.warn('[Moonfin] Failed to open subtitle editor:', e);
+            return false;
+        });
+    },
+
+    openItemIdentifier: function(itemId) {
+        var serverId = this.getServerId();
+        return this._loadEditorModules().then(function(loaded) {
+            var ed = window.__moonfin_editors && window.__moonfin_editors.identifier;
+            if (!ed) return false;
+            ed.show(itemId, serverId);
+            return true;
+        }).catch(function(e) {
+            console.warn('[Moonfin] Failed to open item identifier:', e);
+            return false;
+        });
     }
 };
