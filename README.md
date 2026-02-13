@@ -24,8 +24,8 @@
 - **Jellyseerr Proxy** - Authenticated reverse proxy that creates browser sessions automatically, so the iframe loads without a separate login
 - **Admin Configuration** - Dashboard page for Jellyseerr URL, enable/disable toggles
 - **Web Injection** - Serves the frontend JS/CSS as embedded resources, automatically injected via the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin
-
-## Screenshots
+----
+# Screenshots
 
 <details>
 <summary><strong>Web UI</strong> (click to expand)</summary>
