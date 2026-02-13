@@ -91,6 +91,7 @@ const Plugin = {
 
             Genres.init();
             Library.init();
+            MdbList.init();
             await Jellyseerr.init();
             Details.init();
             this.initSeasonalEffects();

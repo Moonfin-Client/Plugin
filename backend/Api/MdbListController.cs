@@ -83,68 +83,105 @@ public class MdbListController : ControllerBase
             });
         }
 
-        // Check cache
+        // Check cache (stores all ratings unfiltered, shared across users)
         var cacheKey = $"{type}:{tmdbId.Trim()}";
+        List<MdbListRating> allRatings;
+
         if (_cache.TryGetValue(cacheKey, out var cached) && DateTimeOffset.UtcNow - cached.CachedAt < CacheTtl)
         {
-            return Ok(cached.Response);
+            allRatings = cached.Response.Ratings;
         }
-
-        // Fetch from MDBList
-        try
+        else
         {
-            var url = $"https://api.mdblist.com/{Uri.EscapeDataString("tmdb")}/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(tmdbId.Trim())}?apikey={Uri.EscapeDataString(apiKey)}";
+            // Fetch from MDBList
+            try
+            {
+                var url = $"https://api.mdblist.com/{Uri.EscapeDataString("tmdb")}/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(tmdbId.Trim())}?apikey={Uri.EscapeDataString(apiKey)}";
 
-            var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(15);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
+                var client = _httpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(15);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
 
-            using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
 
-            if ((int)response.StatusCode == 429)
+                if ((int)response.StatusCode == 429)
+                {
+                    return Ok(new MdbListResponse
+                    {
+                        Success = false,
+                        Error = "MDBList rate limit reached. Try again later."
+                    });
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return Ok(new MdbListResponse
+                    {
+                        Success = false,
+                        Error = $"MDBList returned status {(int)response.StatusCode}"
+                    });
+                }
+
+                var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                var data = JsonSerializer.Deserialize<MdbListApiResponse>(json, JsonOptions);
+
+                allRatings = data?.Ratings ?? new List<MdbListRating>();
+
+                // Cache unfiltered ratings
+                _cache[cacheKey] = (new MdbListResponse { Success = true, Ratings = allRatings }, DateTimeOffset.UtcNow);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
             {
                 return Ok(new MdbListResponse
                 {
                     Success = false,
-                    Error = "MDBList rate limit reached. Try again later."
+                    Error = $"Failed to fetch from MDBList: {ex.Message}"
                 });
             }
+        }
 
-            if (!response.IsSuccessStatusCode)
+        // Filter and order ratings based on user's selected sources
+        var filteredRatings = FilterAndOrderRatings(allRatings, userSettings?.MdblistRatingSources);
+
+        return Ok(new MdbListResponse
+        {
+            Success = true,
+            Ratings = filteredRatings
+        });
+    }
+
+    private static readonly string[] DefaultRatingSources = ["imdb", "tmdb", "tomatoes", "metacritic"];
+
+    /// <summary>
+    /// Filters and orders ratings to match the user's selected sources.
+    /// </summary>
+    private static List<MdbListRating> FilterAndOrderRatings(List<MdbListRating> allRatings, List<string>? selectedSources)
+    {
+        var sources = (selectedSources is { Count: > 0 }) ? (IReadOnlyList<string>)selectedSources : DefaultRatingSources;
+
+        var ratingsBySource = new Dictionary<string, MdbListRating>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rating in allRatings)
+        {
+            if (!string.IsNullOrEmpty(rating.Source))
             {
-                return Ok(new MdbListResponse
-                {
-                    Success = false,
-                    Error = $"MDBList returned status {(int)response.StatusCode}"
-                });
+                ratingsBySource[rating.Source] = rating;
             }
-
-            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            var data = JsonSerializer.Deserialize<MdbListApiResponse>(json, JsonOptions);
-
-            var result = new MdbListResponse
-            {
-                Success = true,
-                Ratings = data?.Ratings ?? new List<MdbListRating>()
-            };
-
-            // Cache the result
-            _cache[cacheKey] = (result, DateTimeOffset.UtcNow);
-
-            return Ok(result);
         }
-        catch (OperationCanceledException)
+
+        var result = new List<MdbListRating>();
+        foreach (var source in sources)
         {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return Ok(new MdbListResponse
+            if (ratingsBySource.TryGetValue(source, out var rating))
             {
-                Success = false,
-                Error = $"Failed to fetch from MDBList: {ex.Message}"
-            });
+                result.Add(rating);
+            }
         }
+
+        return result;
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()

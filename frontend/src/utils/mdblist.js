@@ -1,7 +1,13 @@
 var MdbList = {
-    // In-memory cache: key = "type:tmdbId" => { ratings, fetchedAt }
     _cache: {},
-    _cacheTtlMs: 30 * 60 * 1000, // 30 minutes client-side cache
+    _cacheTtlMs: 30 * 60 * 1000,
+
+    init: function() {
+        var self = this;
+        window.addEventListener('moonfin-settings-changed', function() {
+            self.clearCache();
+        });
+    },
 
     // Rating source metadata with icon filenames served from Moonfin/Assets/
     sources: {
@@ -51,16 +57,6 @@ var MdbList = {
     isEnabled: function() {
         var settings = Storage.getAll();
         return settings.mdblistEnabled === true;
-    },
-
-    getSelectedSources: function() {
-        var settings = Storage.getAll();
-        var selected = settings.mdblistRatingSources;
-        if (selected && selected.length > 0) {
-            return selected;
-        }
-        // Default: show the most common ones
-        return ['imdb', 'tmdb', 'tomatoes', 'metacritic'];
     },
 
     // Returns 'movie' or 'show', or null if unsupported
@@ -188,25 +184,20 @@ var MdbList = {
         return this.sources[source] || { name: source, icon: source, color: '#666', textColor: '#fff' };
     },
 
+    clearCache: function() {
+        this._cache = {};
+    },
+
     buildRatingsHtml: function(ratings, mode) {
         if (!ratings || ratings.length === 0) return '';
 
-        var selectedSources = this.getSelectedSources();
         var html = '';
 
-        for (var i = 0; i < selectedSources.length; i++) {
-            var source = selectedSources[i];
-            // Find this source in the ratings
-            var rating = null;
-            for (var j = 0; j < ratings.length; j++) {
-                if (ratings[j].source && ratings[j].source.toLowerCase() === source) {
-                    rating = ratings[j];
-                    break;
-                }
-            }
+        for (var i = 0; i < ratings.length; i++) {
+            var rating = ratings[i];
+            if (!rating || !rating.source) continue;
 
-            if (!rating) continue;
-
+            var source = rating.source.toLowerCase();
             var formatted = this.formatRating(rating);
             if (!formatted) continue;
 
