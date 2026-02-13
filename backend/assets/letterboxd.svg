@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="113.49695"
+   height="42.019863"
+   viewBox="0 0 113.49695 42.019863"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="letterboxd.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:zoom="2.14"
+     inkscape:cx="255.37383"
+     inkscape:cy="20.794393"
+     inkscape:window-width="1920"
+     inkscape:window-height="1017"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="Horizontal-Lockup" />
+  <!-- Generator: Sketch 51.3 (57544) - http://www.bohemiancoding.com/sketch -->
+  <title
+     id="title32">letterboxd-logo-h-pos-rgb</title>
+  <desc
+     id="desc34">Created with Sketch.</desc>
+  <defs
+     id="defs36" />
+  <g
+     id="letterboxd-logo-h-pos-rgb"
+     stroke="none"
+     stroke-width="1"
+     fill="none"
+     fill-rule="evenodd"
+     transform="matrix(1.1672184,0,0,1.1672184,-36.65106,-41.781188)">
+    <g
+       id="Horizontal-Lockup"
+       transform="translate(31,30)">
+      <g
+         id="Dots"
+         transform="translate(0.40034472,5.7955187)">
+        <ellipse
+           id="Blue"
+           fill="#40bcf4"
+           cx="79.210007"
+           cy="18"
+           rx="18.027105"
+           ry="18" />
+        <ellipse
+           id="Green"
+           fill="#00e054"
+           cx="48.618557"
+           cy="18"
+           rx="18.027105"
+           ry="18" />
+        <ellipse
+           id="Orange"
+           fill="#ff8000"
+           cx="18.027105"
+           cy="18"
+           rx="18.027105"
+           ry="18" />
+        <path
+           d="M 33.322831,27.530513 C 31.591899,24.766696 30.591451,21.500006 30.591451,18 c 0,-3.500006 1.000448,-6.766696 2.73138,-9.5305134 1.730932,2.7638174 2.73138,6.0305074 2.73138,9.5305134 0,3.500006 -1.000448,6.766696 -2.73138,9.530513 z"
+           id="Overlap"
+           fill="#556677" />
+        <path
+           d="m 63.914282,8.4694866 c 1.730932,2.7638174 2.73138,6.0305074 2.73138,9.5305134 0,3.500006 -1.000448,6.766696 -2.73138,9.530513 C 62.18335,24.766696 61.182903,21.500006 61.182903,18 c 0,-3.500006 1.000447,-6.766696 2.731379,-9.5305134 z"
+           id="path42"
+           fill="#556677" />
+      </g>
+    </g>
+  </g>
+</svg>

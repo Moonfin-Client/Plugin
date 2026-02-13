@@ -11,17 +11,17 @@ var MdbList = {
 
     // Rating source metadata with icon filenames served from Moonfin/Assets/
     sources: {
-        imdb:           { name: 'IMDb',            iconFile: 'imdb.png',            color: '#F5C518', textColor: '#000' },
-        tmdb:           { name: 'TMDb',            iconFile: 'tmdb.png',            color: '#01D277', textColor: '#fff' },
-        trakt:          { name: 'Trakt',           iconFile: 'trakt.png',           color: '#ED1C24', textColor: '#fff' },
-        tomatoes:       { name: 'Rotten Tomatoes', iconFile: 'rt-fresh.png',        color: '#FA320A', textColor: '#fff' },
-        popcorn:        { name: 'RT Audience',     iconFile: 'rt-audience-up.png',  color: '#FA320A', textColor: '#fff' },
-        metacritic:     { name: 'Metacritic',      iconFile: 'metacritic.png',      color: '#FFCC34', textColor: '#000' },
-        metacriticuser: { name: 'Metacritic User', iconFile: 'metacritic-user.png', color: '#00CE7A', textColor: '#000' },
-        letterboxd:     { name: 'Letterboxd',      iconFile: 'letterboxd.png',      color: '#00E054', textColor: '#fff' },
-        rogerebert:     { name: 'RogerEbert',      iconFile: 'rogerebert.png',      color: '#E50914', textColor: '#fff' },
-        myanimelist:    { name: 'MyAnimeList',     iconFile: 'mal.png',             color: '#2E51A2', textColor: '#fff' },
-        anilist:        { name: 'AniList',         iconFile: 'anilist.png',         color: '#02A9FF', textColor: '#fff' }
+        imdb:           { name: 'IMDb',            iconFile: 'imdb.svg',            color: '#F5C518', textColor: '#000' },
+        tmdb:           { name: 'TMDb',            iconFile: 'tmdb.svg',            color: '#01D277', textColor: '#fff' },
+        trakt:          { name: 'Trakt',           iconFile: 'trakt.svg',           color: '#ED1C24', textColor: '#fff' },
+        tomatoes:       { name: 'Rotten Tomatoes', iconFile: 'rt-fresh.svg',        color: '#FA320A', textColor: '#fff' },
+        popcorn:        { name: 'RT Audience',     iconFile: 'rt-audience-up.svg',  color: '#FA320A', textColor: '#fff' },
+        metacritic:     { name: 'Metacritic',      iconFile: 'metacritic.svg',      color: '#FFCC34', textColor: '#000' },
+        metacriticuser: { name: 'Metacritic User', iconFile: 'metacritic-user.svg', color: '#00CE7A', textColor: '#000' },
+        letterboxd:     { name: 'Letterboxd',      iconFile: 'letterboxd.svg',      color: '#00E054', textColor: '#fff' },
+        rogerebert:     { name: 'RogerEbert',      iconFile: 'rogerebert.svg',      color: '#E50914', textColor: '#fff' },
+        myanimelist:    { name: 'MyAnimeList',     iconFile: 'mal.svg',             color: '#2E51A2', textColor: '#fff' },
+        anilist:        { name: 'AniList',         iconFile: 'anilist.svg',         color: '#02A9FF', textColor: '#fff' }
     },
 
     getIconUrl: function(source, rating) {
@@ -36,19 +36,19 @@ var MdbList = {
 
         // Rotten Tomatoes tomatometer: Certified Fresh >= 75, Fresh >= 60, Rotten < 60
         if (source === 'tomatoes' && score != null && score > 0) {
-            if (score >= 75) return serverUrl + '/Moonfin/Assets/rt-certified.png';
-            if (score < 60) return serverUrl + '/Moonfin/Assets/rt-rotten.png';
+            if (score >= 75) return serverUrl + '/Moonfin/Assets/rt-certified.svg';
+            if (score < 60) return serverUrl + '/Moonfin/Assets/rt-rotten.svg';
         }
 
         // RT Audience: Verified Hot >= 90, upright popcorn >= 60, spilled < 60
         if (source === 'popcorn' && score != null && score > 0) {
-            if (score >= 90) return serverUrl + '/Moonfin/Assets/rt-verified.png';
-            if (score < 60) return serverUrl + '/Moonfin/Assets/rt-audience-down.png';
+            if (score >= 90) return serverUrl + '/Moonfin/Assets/rt-verified.svg';
+            if (score < 60) return serverUrl + '/Moonfin/Assets/rt-audience-down.svg';
         }
 
         // Metacritic: Must-play/Must-see badge >= 81
         if (source === 'metacritic' && score != null && score >= 81) {
-            return serverUrl + '/Moonfin/Assets/metacritic-score.png';
+            return serverUrl + '/Moonfin/Assets/metacritic-score.svg';
         }
 
         return serverUrl + '/Moonfin/Assets/' + info.iconFile;
