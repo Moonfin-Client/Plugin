@@ -1,10 +1,11 @@
 const Storage = {
     STORAGE_KEY: 'moonfin_settings',
+    SNAPSHOT_KEY: 'moonfin_sync_snapshot',
     SYNC_STATUS_KEY: 'moonfin_sync_status',
     CLIENT_ID: 'moonfin-web',
 
     syncState: {
-        serverAvailable: null,  // null = unknown, true/false
+        serverAvailable: null,
         lastSyncTime: null,
         lastSyncError: null,
         syncing: false,
@@ -16,10 +17,10 @@ const Storage = {
         detailsPageEnabled: false,
 
         mediaBarEnabled: false,
-        mediaBarContentType: 'both',     // 'movies', 'tv', 'both'
+        mediaBarContentType: 'both',
         mediaBarItemCount: 10,
-        mediaBarOverlayOpacity: 50,      // 0-100
-        mediaBarOverlayColor: 'gray',    // color key
+        mediaBarOverlayOpacity: 50,
+        mediaBarOverlayColor: 'gray',
         mediaBarAutoAdvance: true,
         mediaBarIntervalMs: 7000,
 
@@ -29,13 +30,13 @@ const Storage = {
         showCastButton: true,
         showSyncPlayButton: true,
         showLibrariesInToolbar: true,
-        shuffleContentType: 'both',      // 'movies', 'tv', 'both'
+        shuffleContentType: 'both',
 
-        seasonalSurprise: 'none',        // 'none', 'winter', 'spring', 'summer', 'fall', 'halloween'
+        seasonalSurprise: 'none',
         backdropEnabled: true,
         confirmExit: true,
 
-        navbarPosition: 'top',           // 'top', 'side'
+        navbarPosition: 'top',
         showClock: true,
         use24HourClock: false,
 
@@ -264,6 +265,78 @@ const Storage = {
         };
     },
 
+    getSnapshot() {
+        try {
+            const stored = localStorage.getItem(this.SNAPSHOT_KEY);
+            if (stored) {
+                return JSON.parse(stored);
+            }
+        } catch (e) {
+            console.error('[Moonfin] Failed to read sync snapshot:', e);
+        }
+        return null;
+    },
+
+    saveSnapshot(settings) {
+        try {
+            localStorage.setItem(this.SNAPSHOT_KEY, JSON.stringify(settings));
+        } catch (e) {
+            console.error('[Moonfin] Failed to save sync snapshot:', e);
+        }
+    },
+
+    /**
+     * Three-way merge using last-synced snapshot as common ancestor.
+     * Changed locally only → local; server only → server; both → local wins.
+     */
+    threeWayMerge(local, server, snapshot) {
+        const merged = {};
+        const allKeys = Object.keys(this.defaults);
+
+        for (const key of allKeys) {
+            const localVal = local[key];
+            const serverVal = server[key];
+            const snapVal = snapshot[key];
+
+            const localChanged = !this._deepEqual(localVal, snapVal);
+            const serverChanged = !this._deepEqual(serverVal, snapVal);
+
+            if (localChanged && !serverChanged) {
+                merged[key] = localVal;
+            } else if (serverChanged && !localChanged) {
+                merged[key] = serverVal;
+            } else if (localChanged && serverChanged) {
+                merged[key] = localVal;
+                console.log('[Moonfin] Merge conflict on "' + key + '" — local wins');
+            } else {
+                merged[key] = localVal;
+            }
+        }
+
+        return merged;
+    },
+
+    _deepEqual(a, b) {
+        if (a === b) return true;
+        if (a == null || b == null) return a == b;
+        if (Array.isArray(a) && Array.isArray(b)) {
+            if (a.length !== b.length) return false;
+            for (let i = 0; i < a.length; i++) {
+                if (!this._deepEqual(a[i], b[i])) return false;
+            }
+            return true;
+        }
+        if (typeof a === 'object' && typeof b === 'object') {
+            const ka = Object.keys(a), kb = Object.keys(b);
+            if (ka.length !== kb.length) return false;
+            for (const k of ka) {
+                if (!this._deepEqual(a[k], b[k])) return false;
+            }
+            return true;
+        }
+        return false;
+    },
+
     mapLocalToServer(localSettings) {
         return {
             navbarEnabled: localSettings.navbarEnabled,
@@ -313,35 +386,36 @@ const Storage = {
 
         const hasLocalSettings = localStorage.getItem(this.STORAGE_KEY) !== null;
         const localSettings = this.getAll();
-
         const serverSettings = await this.fetchFromServer();
+        const snapshot = this.getSnapshot();
+
+        let merged;
 
         if (forceFromServer && serverSettings) {
-            // Manual sync: server wins — apply server settings over local
-            const merged = { ...localSettings, ...serverSettings };
-            this.saveAll(merged, false);
-            await this.saveToServer(merged);
+            merged = { ...localSettings, ...serverSettings };
             console.log('[Moonfin] Applied server settings (manual sync)');
-        } else if (serverSettings && hasLocalSettings) {
-            // Auto-sync: local wins — user's local changes are most recent
-            const merged = { ...serverSettings, ...localSettings };
-            this.saveAll(merged, false);
-            await this.saveToServer(merged);
-            console.log('[Moonfin] Merged settings (local wins), pushed to server');
+        } else if (serverSettings && hasLocalSettings && snapshot) {
+            merged = this.threeWayMerge(localSettings, serverSettings, snapshot);
+            console.log('[Moonfin] Three-way merged settings');
+        } else if (serverSettings && hasLocalSettings && !snapshot) {
+            merged = { ...serverSettings, ...localSettings };
+            console.log('[Moonfin] First sync — local wins, pushed to server');
         } else if (serverSettings && !hasLocalSettings) {
-            // Fresh install: restore from server
-            this.saveAll(serverSettings, false);
+            merged = serverSettings;
             console.log('[Moonfin] Restored settings from server (fresh install)');
         } else if (hasLocalSettings) {
-            // No server settings, but we have local - push to server
-            await this.saveToServer(localSettings);
+            merged = localSettings;
             console.log('[Moonfin] Pushed local settings to server');
+        } else {
+            return;
         }
+
+        this.saveAll(merged, false);
+        await this.saveToServer(merged);
+        this.saveSnapshot(merged);
     },
 
     initSync() {
-        // Only sync once on initial load — repeated syncs on every viewshow
-        // can overwrite local changes with stale server data
         if (this._initialSyncDone) return;
         this._initialSyncDone = true;
 
