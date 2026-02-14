@@ -82,7 +82,11 @@ const Plugin = {
             var settings = Storage.getAll();
 
             if (settings.navbarEnabled) {
-                await Navbar.init();
+                if (settings.navbarPosition === 'left') {
+                    await Sidebar.init();
+                } else {
+                    await Navbar.init();
+                }
             }
 
             if (settings.mediaBarEnabled) {
@@ -950,17 +954,28 @@ const Plugin = {
         this.setupDOMObserver();
 
         window.addEventListener('moonfin-settings-preview', (e) => {
-            Navbar.applySettings(e.detail);
+            if (Navbar.initialized) Navbar.applySettings(e.detail);
+            if (Sidebar.initialized) Sidebar.applySettings(e.detail);
             MediaBar.applySettings(e.detail);
         });
 
         window.addEventListener('moonfin-settings-changed', (e) => {
             console.log('[Moonfin] Settings changed:', e.detail);
 
-            if (e.detail.navbarEnabled && !Navbar.initialized) {
-                Navbar.init();
-            } else if (!e.detail.navbarEnabled && Navbar.initialized) {
-                Navbar.destroy();
+            var navEnabled = e.detail.navbarEnabled;
+            var navPosition = e.detail.navbarPosition || 'top';
+
+            if (navEnabled) {
+                if (navPosition === 'left') {
+                    if (Navbar.initialized) Navbar.destroy();
+                    if (!Sidebar.initialized) Sidebar.init();
+                } else {
+                    if (Sidebar.initialized) Sidebar.destroy();
+                    if (!Navbar.initialized) Navbar.init();
+                }
+            } else {
+                if (Navbar.initialized) Navbar.destroy();
+                if (Sidebar.initialized) Sidebar.destroy();
             }
 
             if (e.detail.mediaBarEnabled && !MediaBar.initialized) {
@@ -978,7 +993,8 @@ const Plugin = {
 
         if (Jellyseerr.isOpen) {
             Jellyseerr.close(true);
-            Navbar.updateJellyseerrButtonState();
+            if (Navbar.initialized) Navbar.updateJellyseerrButtonState();
+            if (Sidebar.initialized) Sidebar.updateJellyseerrButtonState();
         }
 
         if (Genres.isVisible) {
@@ -995,17 +1011,23 @@ const Plugin = {
 
         if (this.isAdminPage()) {
             if (Navbar.container) Navbar.container.classList.add('hidden');
+            if (Sidebar.container) Sidebar.container.classList.add('hidden');
+            if (Sidebar.mobileTrigger) Sidebar.mobileTrigger.classList.add('hidden');
             if (MediaBar.container) MediaBar.container.classList.add('hidden');
             document.querySelectorAll('.moonfin-seasonal-effect').forEach(el => el.style.display = 'none');
             document.body.classList.remove('moonfin-navbar-active');
+            document.body.classList.remove('moonfin-sidebar-active');
             return;
         }
 
         var hash = window.location.hash || '';
         if (hash.includes('#/video')) {
             if (Navbar.container) Navbar.container.classList.add('hidden');
+            if (Sidebar.container) Sidebar.container.classList.add('hidden');
+            if (Sidebar.mobileTrigger) Sidebar.mobileTrigger.classList.add('hidden');
             if (MediaBar.container) MediaBar.container.classList.add('hidden');
             document.body.classList.remove('moonfin-navbar-active');
+            document.body.classList.remove('moonfin-sidebar-active');
             document.body.classList.remove('moonfin-mediabar-active');
             return;
         }
@@ -1016,9 +1038,16 @@ const Plugin = {
         }
 
         if (Navbar.container) {
-            var navbarEnabled = Storage.get('navbarEnabled');
+            var navbarEnabled = Storage.get('navbarEnabled') && Storage.get('navbarPosition') !== 'left';
             Navbar.container.classList.toggle('hidden', !navbarEnabled);
             document.body.classList.toggle('moonfin-navbar-active', !!navbarEnabled);
+        }
+
+        if (Sidebar.container) {
+            var sidebarEnabled = Storage.get('navbarEnabled') && Storage.get('navbarPosition') === 'left';
+            Sidebar.container.classList.toggle('hidden', !sidebarEnabled);
+            if (Sidebar.mobileTrigger) Sidebar.mobileTrigger.classList.toggle('hidden', !sidebarEnabled);
+            document.body.classList.toggle('moonfin-sidebar-active', !!sidebarEnabled);
         }
 
         document.querySelectorAll('.moonfin-seasonal-effect').forEach(el => el.style.display = '');
@@ -1038,6 +1067,7 @@ const Plugin = {
         }
 
         Navbar.updateActiveState();
+        if (Sidebar.initialized) Sidebar.updateActiveState();
 
         if ((window.location.hash || '').toLowerCase().includes('mypreferencesmenu')) {
             var self = this;

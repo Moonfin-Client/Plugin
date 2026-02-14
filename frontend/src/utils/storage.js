@@ -37,6 +37,7 @@ const Storage = {
         confirmExit: true,
 
         navbarPosition: 'top',
+        hideDefaultNavbar: false,
         showClock: true,
         use24HourClock: false,
 
@@ -253,6 +254,7 @@ const Storage = {
             confirmExit: serverSettings.confirmExit ?? this.defaults.confirmExit,
 
             navbarPosition: serverSettings.navbarPosition ?? this.defaults.navbarPosition,
+            hideDefaultNavbar: serverSettings.hideDefaultNavbar ?? this.defaults.hideDefaultNavbar,
             showClock: serverSettings.showClock ?? this.defaults.showClock,
             use24HourClock: serverSettings.use24HourClock ?? this.defaults.use24HourClock,
 
@@ -363,6 +365,7 @@ const Storage = {
             confirmExit: localSettings.confirmExit,
 
             navbarPosition: localSettings.navbarPosition,
+            hideDefaultNavbar: localSettings.hideDefaultNavbar,
             showClock: localSettings.showClock,
             use24HourClock: localSettings.use24HourClock,
 

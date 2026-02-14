@@ -1,5 +1,6 @@
 const Navbar = {
     container: null,
+    clockInterval: null,
     initialized: false,
     libraries: [],
     currentUser: null,
@@ -42,10 +43,8 @@ const Navbar = {
             var check = function() {
                 var api = API.getApiClient();
                 if (api && api._currentUser && api._currentUser.Id) {
-                    console.log('[Moonfin] Navbar: API ready with authenticated user');
                     resolve();
                 } else if (attempts >= maxAttempts) {
-                    console.warn('[Moonfin] Navbar: Timeout waiting for API');
                     reject(new Error('API timeout'));
                 } else {
                     attempts++;
@@ -445,20 +444,14 @@ const Navbar = {
     showCastMenu() {
         var nativeCastBtn = document.querySelector('.headerCastButton, .castButton');
         if (nativeCastBtn) {
-            console.log('[Moonfin] Triggering Cast menu via native button');
             nativeCastBtn.click();
-        } else {
-            console.warn('[Moonfin] Cast button not found');
         }
     },
 
     showSyncPlayMenu() {
         var nativeSyncBtn = document.querySelector('.headerSyncButton, .syncButton');
         if (nativeSyncBtn) {
-            console.log('[Moonfin] Triggering SyncPlay menu via native button');
             nativeSyncBtn.click();
-        } else {
-            console.warn('[Moonfin] SyncPlay button not found');
         }
     },
 
@@ -528,7 +521,7 @@ const Navbar = {
         };
 
         updateClock();
-        setInterval(updateClock, 1000);
+        this.clockInterval = setInterval(updateClock, 1000);
     },
 
     applySettings(settings) {
@@ -558,6 +551,10 @@ const Navbar = {
     },
 
     destroy() {
+        if (this.clockInterval) {
+            clearInterval(this.clockInterval);
+            this.clockInterval = null;
+        }
         if (this.librariesTimeout) {
             clearTimeout(this.librariesTimeout);
             this.librariesTimeout = null;

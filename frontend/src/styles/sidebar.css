@@ -1,0 +1,378 @@
+/**
+ * Moonfin Sidebar Styles
+ * Left sidebar navigation matching the AndroidTV Moonfin client
+ * Collapsed: 56px icon strip, Expanded: 240px with labels on hover
+ */
+
+body.moonfin-sidebar-active {
+    padding-left: 56px !important;
+    padding-top: 0 !important;
+    background: #000 !important;
+    transition: padding-left 0.2s ease;
+}
+
+body.moonfin-sidebar-active .skinHeader {
+    display: none !important;
+}
+
+body.moonfin-sidebar-active .cardOverlayContainer {
+    --btnMiniPlayBorderColor: #000;
+    --btnMiniPlayColor: #0bb8f0;
+}
+
+.moonfin-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 56px;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    z-index: 9999;
+    transition: width 0.2s ease;
+    overflow: hidden;
+}
+
+.moonfin-sidebar.hidden {
+    display: none !important;
+}
+
+.moonfin-sidebar:hover,
+.moonfin-sidebar.expanded {
+    width: 240px;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.75), transparent);
+}
+
+/* --- User Section (top) --- */
+
+.moonfin-sidebar-user {
+    flex: 0 0 auto;
+    padding: 16px 8px 8px;
+    display: flex;
+    align-items: center;
+}
+
+.moonfin-sidebar-user-btn {
+    background: transparent;
+    border: none;
+    padding: 6px;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    outline: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.moonfin-sidebar-user-btn:hover {
+    transform: scale(1.05);
+}
+
+.moonfin-sidebar-user-btn:focus-visible {
+    outline: 2px solid #00a4dc;
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+
+.moonfin-sidebar-avatar {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #00a4dc, #0077b6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.moonfin-sidebar-avatar img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.moonfin-sidebar-avatar .moonfin-sidebar-initial {
+    font-size: 20px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1;
+}
+
+.moonfin-sidebar-username {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.moonfin-sidebar:hover .moonfin-sidebar-username,
+.moonfin-sidebar.expanded .moonfin-sidebar-username {
+    opacity: 1;
+}
+
+/* --- Navigation Items (center, scrollable) --- */
+
+.moonfin-sidebar-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+}
+
+.moonfin-sidebar-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.moonfin-sidebar-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    margin: 1px 0;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    outline: none;
+    border-radius: 8px;
+    min-height: 40px;
+    width: 100%;
+    text-align: left;
+    gap: 12px;
+}
+
+.moonfin-sidebar-item:hover,
+.moonfin-sidebar-item:focus-visible {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.moonfin-sidebar-item.active {
+    color: #00a4dc;
+    background: rgba(0, 164, 220, 0.15);
+}
+
+.moonfin-sidebar-item.hidden {
+    display: none;
+}
+
+.moonfin-sidebar-icon {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    fill: currentColor;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+.moonfin-sidebar-label {
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.moonfin-sidebar:hover .moonfin-sidebar-label,
+.moonfin-sidebar.expanded .moonfin-sidebar-label {
+    opacity: 1;
+}
+
+/* --- Separator --- */
+
+.moonfin-sidebar-separator {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 6px 12px;
+}
+
+/* --- Libraries collapsible section --- */
+
+.moonfin-sidebar-libraries {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+
+.moonfin-sidebar-libraries.expanded {
+    max-height: 500px;
+}
+
+.moonfin-sidebar-library-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px 8px 50px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    outline: none;
+    border-radius: 8px;
+    width: 100%;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.moonfin-sidebar-library-item:hover,
+.moonfin-sidebar-library-item:focus-visible {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* --- Footer (settings) --- */
+
+.moonfin-sidebar-footer {
+    flex: 0 0 auto;
+    padding: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* --- Clock --- */
+
+.moonfin-sidebar-clock {
+    padding: 4px 10px 8px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.moonfin-sidebar:hover .moonfin-sidebar-clock,
+.moonfin-sidebar.expanded .moonfin-sidebar-clock {
+    opacity: 1;
+}
+
+.moonfin-sidebar-clock.hidden {
+    display: none;
+}
+
+/* --- Chevron indicator for libraries toggle --- */
+
+.moonfin-sidebar-chevron {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    margin-left: auto;
+    transition: transform 0.2s ease;
+    opacity: 0;
+    flex-shrink: 0;
+}
+
+.moonfin-sidebar:hover .moonfin-sidebar-chevron,
+.moonfin-sidebar.expanded .moonfin-sidebar-chevron {
+    opacity: 0.5;
+}
+
+.moonfin-sidebar-item.libraries-expanded .moonfin-sidebar-chevron {
+    transform: rotate(180deg);
+}
+
+/* --- Mobile: sidebar as slide-over drawer --- */
+
+@media (max-width: 768px) {
+    body.moonfin-sidebar-active {
+        padding-left: 0 !important;
+    }
+
+    .moonfin-sidebar {
+        width: 0;
+        background: rgba(0, 0, 0, 0.95);
+        transition: width 0.25s ease;
+    }
+
+    .moonfin-sidebar.expanded {
+        width: 260px;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.6);
+    }
+
+    .moonfin-sidebar .moonfin-sidebar-label,
+    .moonfin-sidebar .moonfin-sidebar-username,
+    .moonfin-sidebar .moonfin-sidebar-clock,
+    .moonfin-sidebar .moonfin-sidebar-chevron {
+        opacity: 0;
+    }
+
+    .moonfin-sidebar.expanded .moonfin-sidebar-label,
+    .moonfin-sidebar.expanded .moonfin-sidebar-username,
+    .moonfin-sidebar.expanded .moonfin-sidebar-clock,
+    .moonfin-sidebar.expanded .moonfin-sidebar-chevron {
+        opacity: 1;
+    }
+
+    .moonfin-sidebar:hover {
+        width: 0;
+        background: rgba(0, 0, 0, 0.95);
+    }
+
+    .moonfin-sidebar:hover .moonfin-sidebar-label,
+    .moonfin-sidebar:hover .moonfin-sidebar-username,
+    .moonfin-sidebar:hover .moonfin-sidebar-clock,
+    .moonfin-sidebar:hover .moonfin-sidebar-chevron {
+        opacity: 0;
+    }
+
+    .moonfin-sidebar-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9998;
+    }
+
+    .moonfin-sidebar-overlay.visible {
+        display: block;
+    }
+
+    .moonfin-sidebar-mobile-trigger {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 9997;
+        background: rgba(0, 0, 0, 0.4);
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+
+    .moonfin-sidebar-mobile-trigger svg {
+        width: 22px;
+        height: 22px;
+        fill: currentColor;
+    }
+
+    .moonfin-sidebar-mobile-trigger:hover {
+        color: #fff;
+        background: rgba(0, 0, 0, 0.6);
+    }
+}

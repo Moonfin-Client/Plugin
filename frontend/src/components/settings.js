@@ -127,6 +127,11 @@ var Settings = {
 
         var uiContent =
             this.createToggleCard('navbarEnabled', 'Navigation Bar', 'Show the custom navigation bar with quick access buttons', settings.navbarEnabled) +
+            this.createSelectCard('navbarPosition', 'Navbar Position', 'Show the navigation bar at the top or as a left sidebar', [
+                { value: 'top', label: 'Top' },
+                { value: 'left', label: 'Left (Sidebar)' }
+            ], settings.navbarPosition) +
+            this.createToggleCard('hideDefaultNavbar', 'Hide Default Navbar', 'Hide the default Jellyfin header even when the Moonfin navbar is disabled', settings.hideDefaultNavbar) +
             this.createToggleCard('mediaBarEnabled', 'Media Bar', 'Show the featured media carousel on the home page', settings.mediaBarEnabled) +
             this.createToggleCard('detailsPageEnabled', 'Details Page', 'Use the custom Moonfin details page instead of the default Jellyfin one', settings.detailsPageEnabled);
 

@@ -68,6 +68,10 @@ public class MoonfinUserSettings
     [JsonPropertyName("navbarPosition")]
     public string? NavbarPosition { get; set; }
 
+    /// <summary>Whether to hide the default Jellyfin header/navbar.</summary>
+    [JsonPropertyName("hideDefaultNavbar")]
+    public bool? HideDefaultNavbar { get; set; }
+
     /// <summary>Show clock in the navigation bar.</summary>
     [JsonPropertyName("showClock")]
     public bool? ShowClock { get; set; }

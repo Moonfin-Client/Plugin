@@ -38,7 +38,7 @@ var Details = {
             var card = e.target.closest('.card, .listItem');
             if (!card) return;
 
-            if (e.target.closest('.cardOverlayButton, .listItemButton, .btnPlayItem, .btnMoreCommands, .btnUserItemRating, .btnItemAction, .paper-icon-button-light, .itemAction[data-action]')) {
+            if (e.target.closest('.cardOverlayButton, .listItemButton, .btnPlayItem, .btnMoreCommands, .btnUserItemRating, .btnItemAction, .paper-icon-button-light, .itemAction[data-action]:not([data-action="link"])')) {
                 return;
             }
 
