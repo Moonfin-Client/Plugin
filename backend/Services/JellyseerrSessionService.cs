@@ -257,6 +257,9 @@ public class JellyseerrSessionService
 
             if (response.IsSuccessStatusCode)
             {
+                // Check if Jellyseerr rotated the session cookie
+                await CheckForRotatedCookieAsync(session, response, cookieContainer, jellyseerrUrl);
+
                 // Update last validated timestamp
                 session.LastValidated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 await SaveSessionAsync(session);
@@ -269,6 +272,41 @@ public class JellyseerrSessionService
         {
             _logger.LogWarning(ex, "Failed to validate Jellyseerr session for user {UserId}", session.JellyfinUserId);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks if Jellyseerr rotated the connect.sid cookie and updates the session if so.
+    /// Express.js with rolling sessions may issue a new cookie on every response.
+    /// </summary>
+    private async Task CheckForRotatedCookieAsync(
+        JellyseerrSession session,
+        HttpResponseMessage response,
+        CookieContainer cookieContainer,
+        string jellyseerrUrl)
+    {
+        var updatedCookie = cookieContainer.GetCookies(new Uri(jellyseerrUrl))["connect.sid"]?.Value;
+        if (string.IsNullOrEmpty(updatedCookie) &&
+            response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders))
+        {
+            foreach (var header in setCookieHeaders)
+            {
+                if (header.StartsWith("connect.sid=", StringComparison.OrdinalIgnoreCase))
+                {
+                    var value = header.Substring("connect.sid=".Length);
+                    var semicolonIdx = value.IndexOf(';');
+                    if (semicolonIdx > 0) value = value.Substring(0, semicolonIdx);
+                    updatedCookie = Uri.UnescapeDataString(value);
+                    break;
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(updatedCookie) && updatedCookie != session.SessionCookie)
+        {
+            _logger.LogInformation("Jellyseerr rotated session cookie for user {UserId}, updating", session.JellyfinUserId);
+            session.SessionCookie = updatedCookie;
+            await SaveSessionAsync(session);
         }
     }
 
@@ -381,6 +419,12 @@ public class JellyseerrSessionService
                 };
             }
 
+            // Check if Jellyseerr rotated the session cookie
+            if (response.IsSuccessStatusCode)
+            {
+                await CheckForRotatedCookieAsync(session, response, cookieContainer, jellyseerrUrl);
+            }
+
             return new JellyseerrProxyResponse
             {
                 StatusCode = (int)response.StatusCode,
@@ -474,6 +518,12 @@ public class JellyseerrSessionService
             var response = await client.SendAsync(request);
             var responseBody = await response.Content.ReadAsByteArrayAsync();
             var responseContentType = response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+
+            // Check if Jellyseerr rotated the session cookie
+            if (session != null && response.IsSuccessStatusCode)
+            {
+                await CheckForRotatedCookieAsync(session, response, cookieContainer, jellyseerrUrl);
+            }
 
             return new JellyseerrProxyResponse
             {
