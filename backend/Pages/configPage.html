@@ -34,7 +34,7 @@
                                 <span>Enable Jellyseerr</span>
                             </label>
                             <div class="fieldDescription">
-                                Enable Jellyseerr integration for all users. Users can configure their own API keys in their client settings.
+                                Enable Jellyseerr integration for all users. Users can configure their own authentication method in their client settings.
                             </div>
                         </div>
                         <div class="inputContainer">
@@ -47,7 +47,7 @@
                         <div style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 1em 1.5em; margin: 1em 0;">
                             <strong>SSO Proxy:</strong> When Jellyseerr is enabled, Moonfin provides single sign-on.
                             Users authenticate once with their Jellyfin credentials, and the session is stored server-side.
-                            All Moonfin clients (web, webOS, Tizen) can access Jellyseerr through <code>/Moonfin/Jellyseerr/Api/</code>
+                            All Moonfin clients (web, Android, Roku, webOS, Tizen, etc) can access Jellyseerr through <code>/Moonfin/Jellyseerr/Api/</code>
                             without re-authenticating.
                         </div>
                     </div>
@@ -61,6 +61,20 @@
                                 Provide a server-wide <a href="https://mdblist.com/preferences/" target="_blank">MDBList API key</a>
                                 that all users can use for ratings (IMDb, Rotten Tomatoes, Metacritic, etc.).
                                 Users who set their own key in their Moonfin client settings will use that instead.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">TMDB Integration</h3>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="TmdbApiKey">Server-wide TMDB API Key</label>
+                            <input type="password" id="TmdbApiKey" is="emby-input" placeholder="Enter your TMDB API key or v4 token" />
+                            <div class="fieldDescription">
+                                Provide a server-wide <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB API key</a>
+                                that all users can use for episode ratings.
+                                Users who set their own key in their Moonfin client settings will use that instead.
+                                Supports both v3 API keys and v4 Bearer tokens.
                             </div>
                         </div>
                     </div>
@@ -110,6 +124,7 @@
                     document.querySelector('#JellyseerrEnabled').checked = config.JellyseerrEnabled;
                     document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
                     document.querySelector('#MdblistApiKey').value = config.MdblistApiKey || '';
+                    document.querySelector('#TmdbApiKey').value = config.TmdbApiKey || '';
                     Dashboard.hideLoadingMsg();
                 });
 
@@ -122,6 +137,7 @@
                             config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
                             config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
                             config.MdblistApiKey = document.querySelector('#MdblistApiKey').value || null;
+                            config.TmdbApiKey = document.querySelector('#TmdbApiKey').value || null;
                             ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
                                 Dashboard.processPluginConfigurationUpdateResult(result);
                             });

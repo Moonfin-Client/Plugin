@@ -8,7 +8,7 @@ namespace Moonfin.Server.Services;
 
 /// <summary>
 /// Manages per-user Jellyseerr session cookies for SSO.
-/// Sessions are stored server-side so any Moonfin client (web, webOS, Tizen)
+/// Sessions are stored server-side so any Moonfin client
 /// can access Jellyseerr through the Jellyfin plugin without re-authenticating.
 /// </summary>
 public class JellyseerrSessionService
