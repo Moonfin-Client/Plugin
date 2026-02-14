@@ -27,41 +27,23 @@
 ----
 # Screenshots
 
-<details>
-<summary><strong>Web UI</strong> (click to expand)</summary>
-<br>
-<p>
+## Web UI
 <img width="48%" alt="Home" src="https://github.com/user-attachments/assets/e71a5447-31c2-47e9-bfa8-3bd902ca7a50" />
 <img width="48%" alt="Media Bar" src="https://github.com/user-attachments/assets/3dffe616-829c-4b2e-9275-d24506b6481d" />
-</p>
-<p>
 <img width="48%" alt="Details" src="https://github.com/user-attachments/assets/bf9fd6df-d0b5-4eff-9557-5a9ec2acc0ad" />
 <img width="48%" alt="Jellyseerr" src="https://github.com/user-attachments/assets/cf3f371b-0ad0-43c0-ba98-4ddce67950d3" />
-</p>
-<p>
 <img width="48%" alt="Navbar" src="https://github.com/user-attachments/assets/bad74e17-e5f6-4654-b0bb-fed10d3b46ae" />
 <img width="48%" alt="Settings" src="https://github.com/user-attachments/assets/e31f1f15-b754-415c-a1fd-46f729964b79" />
-</p>
-<p>
 <img width="48%" alt="Genres" src="https://github.com/user-attachments/assets/8683d2e8-a096-4f5a-be74-9c0eea922e4e" />
-</p>
-</details>
 
-<details>
-<summary><strong>Mobile UI</strong> (click to expand)</summary>
-<br>
-<p>
+## Mobile UI
 <img width="23%" alt="Mobile Home" src="https://github.com/user-attachments/assets/ffdc52ea-b153-4518-9c3b-22870b463a83" />
 <img width="23%" alt="Mobile Details" src="https://github.com/user-attachments/assets/e0da8bc2-13ea-4c3c-86fc-7dadfa7be529" />
 <img width="23%" alt="Mobile Browse" src="https://github.com/user-attachments/assets/e33b196f-7ba5-469e-bc09-da7612b22f96" />
 <img width="23%" alt="Mobile Player" src="https://github.com/user-attachments/assets/4ff4292f-c4b3-409f-8dfd-0d97d9eff45e" />
-</p>
-<p>
 <img width="23%" alt="Mobile Settings" src="https://github.com/user-attachments/assets/3da56213-3c8b-4b9a-b736-4055acb10714" />
 <img width="23%" alt="Mobile Jellyseerr" src="https://github.com/user-attachments/assets/3cc8f260-e1f9-4cb9-bc7a-8e2359f473cf" />
 <img width="23%" alt="Mobile Navbar" src="https://github.com/user-attachments/assets/df6408d7-3883-4838-8228-f97d989f15d6" />
-</p>
-</details>
 
 ---
 
@@ -93,7 +75,7 @@
 
 ### Loading the Web UI
 
-As of v1.1.0, Moonfin uses the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin to automatically inject its web UI. The JavaScript Injector plugin is no longer needed.
+Moonfin uses the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin to automatically inject its web UI.
 
 1. Add the File Transformation plugin repository to Jellyfin:
    - **URL:** `https://www.iamparadox.dev/jellyfin/plugins/manifest.json`
@@ -194,7 +176,7 @@ Settings stored on the server per-user and shared across all Moonfin clients.
 | Setting | Type | Description |
 |---------|------|-------------|
 | `navbarEnabled` | bool | Enable custom navbar |
-| `navbarPosition` | string | Navbar position (`top`, `side`) |
+| `navbarPosition` | string | Navbar position (`top`, `left`) |
 | `showClock` | bool | Show clock in navbar |
 | `use24HourClock` | bool | Use 24-hour time format |
 | `showShuffleButton` | bool | Show shuffle button in toolbar |
@@ -227,6 +209,7 @@ Settings stored on the server per-user and shared across all Moonfin clients.
 | `jellyseerrApiKey` | string | Jellyseerr API key |
 | `jellyseerrRows` | object | Jellyseerr discovery row configuration |
 | `tmdbApiKey` | string | TMDB API key for episode ratings |
+| `tmdbEpisodeRatingsEnabled` | bool | Enable TMDB episode ratings |
 
 ### Web-Only Settings (Not Synced)
 
@@ -243,10 +226,13 @@ These settings are stored in localStorage only and do not sync across clients:
 
 - Pings `GET /Moonfin/Ping` to check if the server plugin is installed and sync is enabled
 - Fetches server settings via `GET /Moonfin/Settings`
-- **Three scenarios:**
-  - **Both local & server exist:** Merges with local wins (`{ ...server, ...local }`), then pushes the merged result back to the server
+- A **snapshot** of the last-synced settings is stored in localStorage as a common ancestor for three-way merges
+- **Sync scenarios:**
+  - **Both local & server exist (with snapshot):** Three-way merge using the snapshot as the common ancestor. For each setting: changed locally only → keep local; changed on server only → accept server; both changed → local wins
+  - **Both local & server exist (no snapshot):** First sync on this client — local wins (`{ ...server, ...local }`), then pushes the merged result to the server
   - **Server only (fresh install/new browser):** Restores server settings to localStorage. This is how settings carry over to a new client
   - **Local only (no server data yet):** Pushes local settings to the server
+- After merging, the result is saved as the new snapshot for the next sync
 
 ### On Every Settings Change
 
@@ -261,7 +247,7 @@ These settings are stored in localStorage only and do not sync across clients:
 
 ### Limitations
 
-- No conflict resolution beyond "local wins". If you change different settings on two clients without refreshing, the last one to refresh will overwrite the other's server-side changes
+- Three-way merge resolves most conflicts, but when both clients change the **same** setting, local wins. If you change different settings on two clients, the merge picks up both changes correctly
 - No real-time push between clients (no WebSocket/polling)
 - Sensitive data like `mdblistApiKey` is synced to the server (stored per-user)
 
