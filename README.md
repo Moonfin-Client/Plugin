@@ -113,6 +113,10 @@ Jellyfin Dashboard → Administration → Plugins → **Moonfin** to configure s
 
 Once the web UI is loaded, click your **user avatar** in the top right to open the Settings panel and click Moonfin. From there you can customize the navbar, media bar, details screen, seasonal effects, ratings, and more. Settings are saved per-user and synced across all your Moonfin clients.
 
+### Reverse Proxy
+
+If you run Jellyfin behind a reverse proxy (e.g., Nginx, Caddy, Traefik), make sure your proxy is configured to forward all `/Moonfin/` paths to Jellyfin. Jellyseerr loads inside Jellyfin through a special path (`/Moonfin/Jellyseerr/Web/`). If your reverse proxy isn't set up to pass those paths through, the page can't load and you'll just see a black screen. Some proxies also add security headers that block embedded content from showing up.
+
 ## Building from Source
 
 ### Prerequisites

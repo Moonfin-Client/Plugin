@@ -1398,38 +1398,30 @@ var Details = {
                 break;
 
             case 'editmetadata':
+                self.hide(true);
                 API.openMetadataEditor(item.Id).then(function(success) {
-                    if (!success) {
-                        self.hide(true);
-                        API.navigateTo('/details?id=' + item.Id);
-                    }
+                    if (!success) API.navigateTo('/details?id=' + item.Id);
                 });
                 break;
 
             case 'editimages':
+                self.hide(true);
                 API.openImageEditor(item.Id).then(function(success) {
-                    if (!success) {
-                        self.hide(true);
-                        API.navigateTo('/details?id=' + item.Id);
-                    }
+                    if (!success) API.navigateTo('/details?id=' + item.Id);
                 });
                 break;
 
             case 'editsubtitles':
+                self.hide(true);
                 API.openSubtitleEditor(item.Id).then(function(success) {
-                    if (!success) {
-                        self.hide(true);
-                        API.navigateTo('/details?id=' + item.Id);
-                    }
+                    if (!success) API.navigateTo('/details?id=' + item.Id);
                 });
                 break;
 
             case 'identify':
+                self.hide(true);
                 API.openItemIdentifier(item.Id).then(function(success) {
-                    if (!success) {
-                        self.hide(true);
-                        API.navigateTo('/details?id=' + item.Id);
-                    }
+                    if (!success) API.navigateTo('/details?id=' + item.Id);
                 });
                 break;
 
