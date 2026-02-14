@@ -261,6 +261,10 @@ body.moonfin-mediabar-active .homeSectionsContainer {
     outline-offset: 2px;
 }
 
+body.moonfin-sidebar-active .moonfin-mediabar-prev {
+    display: none;
+}
+
 .moonfin-mediabar-dots {
     position: absolute;
     bottom: 12px;

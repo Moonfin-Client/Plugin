@@ -319,15 +319,15 @@ body.moonfin-sidebar-active .cardOverlayContainer {
         opacity: 1;
     }
 
-    .moonfin-sidebar:hover {
+    .moonfin-sidebar:hover:not(.expanded) {
         width: 0;
         background: rgba(0, 0, 0, 0.95);
     }
 
-    .moonfin-sidebar:hover .moonfin-sidebar-label,
-    .moonfin-sidebar:hover .moonfin-sidebar-username,
-    .moonfin-sidebar:hover .moonfin-sidebar-clock,
-    .moonfin-sidebar:hover .moonfin-sidebar-chevron {
+    .moonfin-sidebar:hover:not(.expanded) .moonfin-sidebar-label,
+    .moonfin-sidebar:hover:not(.expanded) .moonfin-sidebar-username,
+    .moonfin-sidebar:hover:not(.expanded) .moonfin-sidebar-clock,
+    .moonfin-sidebar:hover:not(.expanded) .moonfin-sidebar-chevron {
         opacity: 0;
     }
 

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace Moonfin.Server.Services;
@@ -33,7 +34,8 @@ public class JellyseerrSessionService
         _jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true
         };
 
         EnsureDirectory();
@@ -183,7 +185,14 @@ public class JellyseerrSessionService
     public async Task<JellyseerrSession?> GetSessionAsync(Guid userId, bool validate = false)
     {
         var session = await LoadSessionAsync(userId);
-        if (session == null) return null;
+        if (session == null || string.IsNullOrEmpty(session.SessionCookie))
+        {
+            if (session != null)
+            {
+                _logger.LogWarning("Jellyseerr session for user {UserId} has empty cookie, treating as invalid", userId);
+            }
+            return null;
+        }
 
         if (validate)
         {
@@ -517,30 +526,39 @@ public class JellyseerrSessionService
 public class JellyseerrSession
 {
     /// <summary>The Jellyfin user ID this session belongs to.</summary>
+    [JsonPropertyName("jellyfinUserId")]
     public Guid JellyfinUserId { get; set; }
 
     /// <summary>The Jellyseerr connect.sid session cookie value.</summary>
+    [JsonPropertyName("sessionCookie")]
     public string SessionCookie { get; set; } = string.Empty;
 
     /// <summary>The Jellyseerr internal user ID.</summary>
+    [JsonPropertyName("jellyseerrUserId")]
     public int JellyseerrUserId { get; set; }
 
     /// <summary>The username used to authenticate.</summary>
+    [JsonPropertyName("username")]
     public string Username { get; set; } = string.Empty;
 
     /// <summary>Display name from Jellyseerr.</summary>
+    [JsonPropertyName("displayName")]
     public string? DisplayName { get; set; }
 
     /// <summary>Avatar URL from Jellyseerr.</summary>
+    [JsonPropertyName("avatar")]
     public string? Avatar { get; set; }
 
     /// <summary>Jellyseerr permission bitmask.</summary>
+    [JsonPropertyName("permissions")]
     public int Permissions { get; set; }
 
     /// <summary>When the session was created (unix ms).</summary>
+    [JsonPropertyName("createdAt")]
     public long CreatedAt { get; set; }
 
     /// <summary>When the session was last validated (unix ms).</summary>
+    [JsonPropertyName("lastValidated")]
     public long LastValidated { get; set; }
 }
 
