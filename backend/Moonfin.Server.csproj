@@ -30,6 +30,7 @@
     <EmbeddedResource Include="Web\inject.html" />
     <EmbeddedResource Include="Pages\configPage.html" />
     <EmbeddedResource Include="assets\*.png" />
+    <EmbeddedResource Include="assets\*.svg" />
   </ItemGroup>
 
 </Project>
