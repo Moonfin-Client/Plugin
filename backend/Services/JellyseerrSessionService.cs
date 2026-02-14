@@ -114,8 +114,30 @@ public class JellyseerrSessionService
             }
 
             // Extract session cookie
+            // CookieContainer.GetCookies() can fail with IP-based URLs, so
+            // fall back to parsing the Set-Cookie header directly.
             var cookies = cookieContainer.GetCookies(new Uri(jellyseerrUrl));
             var sessionCookie = cookies["connect.sid"]?.Value;
+
+            if (string.IsNullOrEmpty(sessionCookie) &&
+                response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders))
+            {
+                foreach (var header in setCookieHeaders)
+                {
+                    if (header.StartsWith("connect.sid=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var value = header.Substring("connect.sid=".Length);
+                        var semicolonIdx = value.IndexOf(';');
+                        if (semicolonIdx > 0)
+                        {
+                            value = value.Substring(0, semicolonIdx);
+                        }
+                        sessionCookie = Uri.UnescapeDataString(value);
+                        _logger.LogInformation("Extracted connect.sid from Set-Cookie header (CookieContainer fallback)");
+                        break;
+                    }
+                }
+            }
 
             if (string.IsNullOrEmpty(sessionCookie))
             {
