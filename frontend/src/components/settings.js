@@ -233,11 +233,11 @@ var Settings = {
         var selectedSources = settings.mdblistRatingSources || ['imdb', 'tmdb', 'tomatoes', 'metacritic'];
         var serverUrl = (window.ApiClient && window.ApiClient.serverAddress ? window.ApiClient.serverAddress() : '') || '';
         var sourceIconFiles = {
-            imdb: 'imdb.png', tmdb: 'tmdb.png', trakt: 'trakt.png',
-            tomatoes: 'rt-fresh.png', popcorn: 'rt-audience-up.png',
-            metacritic: 'metacritic.png', metacriticuser: 'metacritic-user.png',
-            letterboxd: 'letterboxd.png', rogerebert: 'rogerebert.png',
-            myanimelist: 'mal.png', anilist: 'anilist.png'
+            imdb: 'imdb.svg', tmdb: 'tmdb.svg', trakt: 'trakt.svg',
+            tomatoes: 'rt-fresh.svg', popcorn: 'rt-audience-up.svg',
+            metacritic: 'metacritic.svg', metacriticuser: 'metacritic-user.svg',
+            letterboxd: 'letterboxd.svg', rogerebert: 'rogerebert.svg',
+            myanimelist: 'mal.svg', anilist: 'anilist.svg'
         };
 
         // Build ordered list: enabled sources first (in saved order), then disabled
@@ -259,7 +259,7 @@ var Settings = {
         var sourceItems = '';
         for (var si = 0; si < orderedSources.length; si++) {
             var src = orderedSources[si];
-            var iconUrl = serverUrl + '/Moonfin/Assets/' + (sourceIconFiles[src.key] || 'imdb.png');
+            var iconUrl = serverUrl + '/Moonfin/Assets/' + (sourceIconFiles[src.key] || 'imdb.svg');
             sourceItems += '<div class="moonfin-sortable-item' + (src.enabled ? ' moonfin-sortable-item-active' : '') + '" draggable="true" data-source="' + src.key + '">' +
                 '<span class="moonfin-sortable-handle">' +
                     '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>' +

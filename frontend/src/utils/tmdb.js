@@ -17,7 +17,7 @@ var Tmdb = {
         var api = API.getApiClient();
         if (!api) return '';
         var serverUrl = api._serverAddress || '';
-        return serverUrl + '/Moonfin/Assets/tmdb.png';
+        return serverUrl + '/Moonfin/Assets/tmdb.svg';
     },
 
     /**
