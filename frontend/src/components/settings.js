@@ -279,9 +279,13 @@ var Settings = {
         var tmdbContent =
             this.createToggleCard('tmdbEpisodeRatingsEnabled', 'Enable Episode Ratings', 'Show TMDB ratings for individual TV episodes on the details page', settings.tmdbEpisodeRatingsEnabled) +
             '<div class="moonfin-tmdb-config" style="' + (settings.tmdbEpisodeRatingsEnabled ? '' : 'display:none') + '">' +
+                (Storage.syncState.tmdbAvailable ?
+                    '<div style="background-color: rgba(0, 180, 0, 0.1); border-left: 4px solid #00b400; border-radius: 4px; padding: 0.8em 1em; margin-bottom: 12px; font-size: 13px; color: rgba(255,255,255,0.8);">' +
+                        'Your server admin has provided a server-wide TMDB API key. You can leave the field below blank to use it, or enter your own key.' +
+                    '</div>' : '') +
                 '<div style="margin-bottom:12px">' +
                     '<label class="moonfin-input-label">TMDB API Key</label>' +
-                    '<input type="password" id="moonfin-tmdbApiKey" class="moonfin-panel-input" placeholder="Enter your TMDB API key or v4 token" value="' + (settings.tmdbApiKey || '') + '">' +
+                    '<input type="password" id="moonfin-tmdbApiKey" class="moonfin-panel-input" placeholder="' + (Storage.syncState.tmdbAvailable ? 'Using server key (optional override)' : 'Enter your TMDB API key or v4 token') + '" value="' + (settings.tmdbApiKey || '') + '">' +
                     '<div class="moonfin-toggle-desc" style="margin-top:4px">Get a free API key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener" style="color:#00a4dc">themoviedb.org/settings/api</a></div>' +
                 '</div>' +
             '</div>';

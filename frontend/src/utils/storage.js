@@ -9,7 +9,8 @@ const Storage = {
         lastSyncTime: null,
         lastSyncError: null,
         syncing: false,
-        mdblistAvailable: false
+        mdblistAvailable: false,
+        tmdbAvailable: false
     },
 
     defaults: {
@@ -139,6 +140,7 @@ const Storage = {
                 const data = API.toCamelCase(await response.json());
                 this.syncState.serverAvailable = data.installed && data.settingsSyncEnabled;
                 this.syncState.mdblistAvailable = data.mdblistAvailable || false;
+                this.syncState.tmdbAvailable = data.tmdbAvailable || false;
                 console.log('[Moonfin] Server plugin detected:', data);
                 return data;
             }

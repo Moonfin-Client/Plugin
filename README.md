@@ -1,5 +1,5 @@
 <h1 align="center">Moonfin for Jellyfin Web and Mobile</h1>
-<h3 align="center">A Jellyfin server plugin that adds a custom UI layer to Jellyfin Web and the Mobile App and cross-client settings synchronization. Includes an optional Jellyseerr integration with seamless authenticated proxy support.</h3>
+<h3 align="center">A Jellyfin server plugin that adds a custom UI layer to Jellyfin Web and the Mobile App and cross-client settings synchronization. Includes an optional Jellyseerr/Seerr integration with seamless authenticated proxy support.</h3>
 
 ---
 
@@ -15,14 +15,14 @@
 - **Custom Details Screen** - Full-screen overlay with backdrop, logos, metadata, and a permission-aware context menu matching jellyfin-web's behavior
 - **Navigation Bar** - Pill-shaped toolbar with Home, Search, Shuffle, Genres, Favorites, Library buttons, and user avatar
 - **Featured Media Bar** - Hero slideshow with Ken Burns animation, content logos, and metadata overlay
-- **Jellyseerr Panel** - Embedded Jellyseerr iframe with automatic session-based authentication via the server proxy
+- **Jellyseerr/Seerr Panel** - Embedded Jellyseerr or Seerr iframe with automatic session-based authentication via the server proxy
 - **Settings Panel** - Per-user settings for all features, synced across clients
 - **TV Support** - Spatial navigation and remote-friendly focus management for webOS/Tizen
 
 ### Server Plugin (`backend/`)
 - **Settings Sync API** - Per-user preference storage with merge/replace modes, synced across all Moonfin clients
-- **Jellyseerr Proxy** - Authenticated reverse proxy that creates browser sessions automatically, so the iframe loads without a separate login
-- **Admin Configuration** - Dashboard page for Jellyseerr URL, enable/disable toggles
+- **Jellyseerr/Seerr Proxy** - Authenticated reverse proxy that creates browser sessions automatically, so the iframe loads without a separate login (supports both Jellyseerr and Seerr v3)
+- **Admin Configuration** - Dashboard page for Jellyseerr/Seerr URL, display name, enable/disable toggles
 - **Web Injection** - Serves the frontend JS/CSS as embedded resources, automatically injected via the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin
 ----
 # Screenshots
@@ -99,6 +99,16 @@ Once the web UI is loaded, click your **user avatar** in the top right to open t
 
 If you run Jellyfin behind a reverse proxy (e.g., Nginx, Caddy, Traefik), make sure your proxy is configured to forward all `/Moonfin/` paths to Jellyfin. Jellyseerr loads inside Jellyfin through a special path (`/Moonfin/Jellyseerr/Web/`). If your reverse proxy isn't set up to pass those paths through, the page can't load and you'll just see a black screen. Some proxies also add security headers that block embedded content from showing up.
 
+#### Seerr v3 (Next.js) Users
+
+Seerr v3 is built on Next.js, which can have issues when proxied through subpaths due to hardcoded asset paths and hydration mismatches. If you're experiencing problems with Seerr v3 loading through the proxy (blank screen, 404 errors on chunks, navigation issues), you can configure a **Direct Iframe URL** in the admin settings:
+
+1. Go to *Jellyfin Dashboard → Administration → Plugins → Moonfin*
+2. Set the **Jellyseerr URL** to your Seerr instance (used for API proxying)
+3. Set the **Direct Iframe URL** to your public Seerr URL (e.g., `https://seerr.yourdomain.com`)
+
+When the Direct Iframe URL is set, the iframe loads directly from that URL instead of through the Moonfin proxy. SSO API calls still go through the Jellyfin server, but the web UI comes directly from Seerr.
+
 ## Building from Source
 
 ### Prerequisites
@@ -159,9 +169,38 @@ Output: `Moonfin.Server-{VERSION}.zip` in the repo root.
 | `/Moonfin/Settings` | POST | Yes | Save settings (merge or replace) |
 | `/Moonfin/Settings` | HEAD | Yes | Check if user has saved settings |
 | `/Moonfin/Settings` | DELETE | Yes | Delete user's settings |
-| `/Moonfin/Jellyseerr/Config` | GET | Yes | Get Jellyseerr configuration |
-| `/Moonfin/Jellyseerr/Proxy/*` | * | Session | Reverse proxy to Jellyseerr |
+| `/Moonfin/Jellyseerr/Config` | GET | Yes | Get Jellyseerr/Seerr configuration (auto-detects variant) |
+| `/Moonfin/Jellyseerr/Login` | POST | Yes | Authenticate with Jellyseerr/Seerr via Jellyfin credentials |
+| `/Moonfin/Jellyseerr/Status` | GET | Yes | Check current user's SSO session status |
+| `/Moonfin/Jellyseerr/Logout` | DELETE | Yes | Clear SSO session |
+| `/Moonfin/Jellyseerr/Api/*` | * | Session | Authenticated API proxy to Jellyseerr/Seerr |
+| `/Moonfin/Jellyseerr/Web/*` | GET | Yes | Proxied web UI with injected session |
 | `/Moonfin/Assets/{fileName}` | GET | Yes | Serve embedded rating icons |
+| `/Moonfin/MDBList/Batch` | POST | Yes | Batch fetch ratings for multiple items |
+| `/Moonfin/MDBList/{imdbId}` | GET | Yes | Get MDBList ratings for a single item |
+| `/Moonfin/TMDB/Episode/{seriesId}/{seasonNumber}/{episodeNumber}` | GET | Yes | Get TMDB episode rating |
+
+### Jellyseerr/Seerr Config Response
+
+```json
+{
+  "enabled": true,
+  "url": "https://seerr.example.com",
+  "directUrl": null,
+  "displayName": "Seerr",
+  "variant": "seerr",
+  "userEnabled": true
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Whether Jellyseerr/Seerr is enabled by admin |
+| `url` | string | Server URL (used for API proxying) |
+| `directUrl` | string? | Optional direct iframe URL for Seerr v3 subpath issues |
+| `displayName` | string | UI display name (admin override or auto: "Jellyseerr"/"Seerr") |
+| `variant` | string | Auto-detected: `"jellyseerr"` (version < 3.0) or `"seerr"` (version ≥ 3.0) |
+| `userEnabled` | bool | Whether enabled in user's personal settings |
 
 ## Settings Sync
 

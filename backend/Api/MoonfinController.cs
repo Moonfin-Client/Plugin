@@ -1,4 +1,5 @@
 using System.Net.Mime;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -16,10 +17,18 @@ namespace Moonfin.Server.Api;
 public class MoonfinController : ControllerBase
 {
     private readonly MoonfinSettingsService _settingsService;
+    private readonly IHttpClientFactory _httpClientFactory;
+    
+    // Cache for auto-detected variant
+    private static string? _cachedVariant;
+    private static string? _cachedVariantUrl;
+    private static DateTime _variantCacheExpiry = DateTime.MinValue;
+    private static readonly SemaphoreSlim _variantLock = new(1, 1);
 
-    public MoonfinController(MoonfinSettingsService settingsService)
+    public MoonfinController(MoonfinSettingsService settingsService, IHttpClientFactory httpClientFactory)
     {
         _settingsService = settingsService;
+        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -43,7 +52,8 @@ public class MoonfinController : ControllerBase
             JellyseerrUrl = (config?.JellyseerrEnabled == true)
                 ? config.JellyseerrUrl
                 : null,
-            MdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey)
+            MdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey),
+            TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey)
         });
     }
 
@@ -279,12 +289,107 @@ public class MoonfinController : ControllerBase
             userSettings = await _settingsService.GetUserSettingsAsync(userId.Value);
         }
 
+        // Auto-detect variant from the API
+        var jellyseerrUrl = config?.GetEffectiveJellyseerrUrl();
+        var variant = await DetectVariantAsync(jellyseerrUrl);
+        
+        // Use admin display name if set, otherwise auto-generate from variant
+        var displayName = config?.JellyseerrDisplayName;
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            displayName = variant == "seerr" ? "Seerr" : "Jellyseerr";
+        }
+
         return Ok(new JellyseerrConfigResponse
         {
             Enabled = config?.JellyseerrEnabled ?? false,
             Url = config?.JellyseerrUrl,
+            DirectUrl = config?.JellyseerrDirectUrl,
+            DisplayName = displayName,
+            Variant = variant,
             UserEnabled = userSettings?.JellyseerrEnabled ?? true
         });
+    }
+    
+    /// <summary>
+    /// Auto-detect whether the configured URL is Jellyseerr or Seerr by calling the status API.
+    /// Results are cached for 1 hour or until the URL changes.
+    /// </summary>
+    private async Task<string> DetectVariantAsync(string? jellyseerrUrl)
+    {
+        if (string.IsNullOrEmpty(jellyseerrUrl))
+        {
+            return "jellyseerr";
+        }
+        
+        if (_cachedVariant != null && 
+            _cachedVariantUrl == jellyseerrUrl && 
+            DateTime.UtcNow < _variantCacheExpiry)
+        {
+            return _cachedVariant;
+        }
+        
+        await _variantLock.WaitAsync();
+        try
+        {
+            // Double-check cache after acquiring lock
+            if (_cachedVariant != null && 
+                _cachedVariantUrl == jellyseerrUrl && 
+                DateTime.UtcNow < _variantCacheExpiry)
+            {
+                return _cachedVariant;
+            }
+            
+            var variant = "jellyseerr";
+            
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(5);
+                
+                var response = await client.GetAsync($"{jellyseerrUrl}/api/v1/status");
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    
+                    // Seerr uses version >= 3.0.0, Jellyseerr uses version < 3.0.0
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(json);
+                        if (doc.RootElement.TryGetProperty("version", out var versionEl))
+                        {
+                            var versionStr = versionEl.GetString();
+                            if (!string.IsNullOrEmpty(versionStr))
+                            {
+                                var parts = versionStr.Split('.');
+                                if (parts.Length >= 1 && int.TryParse(parts[0], out var major) && major >= 3)
+                                {
+                                    variant = "seerr";
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // JSON parse error - use default
+                    }
+                }
+            }
+            catch
+            {
+                // Network error - use default
+            }
+            
+            _cachedVariant = variant;
+            _cachedVariantUrl = jellyseerrUrl;
+            _variantCacheExpiry = DateTime.UtcNow.AddHours(1);
+            
+            return variant;
+        }
+        finally
+        {
+            _variantLock.Release();
+        }
     }
 }
 
@@ -313,6 +418,9 @@ public class MoonfinPingResponse
 
     /// <summary>Whether admin has configured a server-wide MDBList API key.</summary>
     public bool? MdblistAvailable { get; set; }
+
+    /// <summary>Whether admin has configured a server-wide TMDB API key.</summary>
+    public bool? TmdbAvailable { get; set; }
 }
 
 /// <summary>
@@ -323,8 +431,20 @@ public class JellyseerrConfigResponse
     /// <summary>Whether Jellyseerr is enabled by admin.</summary>
     public bool Enabled { get; set; }
 
-    /// <summary>Admin-configured Jellyseerr URL.</summary>
+    /// <summary>Admin-configured Jellyseerr URL (used for API proxying).</summary>
     public string? Url { get; set; }
+
+    /// <summary>
+    /// Direct URL for loading Jellyseerr/Seerr in iframe (optional).
+    /// When set, the iframe loads directly from this URL instead of through the proxy.
+    /// </summary>
+    public string? DirectUrl { get; set; }
+
+    /// <summary>Display name shown in the UI (e.g., "Jellyseerr" or "Seerr").</summary>
+    public string DisplayName { get; set; } = "Jellyseerr";
+
+    /// <summary>UI variant for icon selection: "jellyseerr" or "seerr".</summary>
+    public string Variant { get; set; } = "jellyseerr";
 
     /// <summary>Whether Jellyseerr is enabled in user settings.</summary>
     public bool UserEnabled { get; set; }

@@ -308,6 +308,20 @@ const Sidebar = {
                 label.textContent = config.displayName || 'Jellyseerr';
             }
             btn.title = config.displayName || 'Jellyseerr';
+            
+            // Swap icon based on variant
+            var iconEl = btn.querySelector('.moonfin-sidebar-icon');
+            if (iconEl && Jellyseerr.icons) {
+                var variant = config.variant || 'jellyseerr';
+                var tempDiv = document.createElement('div');
+                tempDiv.innerHTML = Jellyseerr.getIcon(variant);
+                var newIcon = tempDiv.querySelector('svg');
+                if (newIcon) {
+                    newIcon.classList.add('moonfin-sidebar-icon');
+                    newIcon.classList.remove('moonfin-jellyseerr-icon');
+                    iconEl.replaceWith(newIcon);
+                }
+            }
         } else {
             btn.classList.add('hidden');
         }
