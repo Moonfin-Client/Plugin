@@ -9,6 +9,15 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
+        "version": "1.3.1.0",
+        "changelog": "- Seerr v3 support with auto-detection (version-based)\n- Direct iframe URL option for Seerr behind reverse proxies\n- Server-wide TMDB API key with user notifications\n- Removed Rotten Tomatoes rating from details page\n- Added dynamic icon swapping for Jellyseerr/Seerr\n- Updated README with Seerr v3 reverse proxy documentation",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.3.1/Moonfin.Server-1.3.1.0.zip",
+        "checksum": "CAEF64ED665CD3C324F83B3EA490D281",
+        "timestamp": "2026-02-15T12:50:46",
+        "dependencies": []
+      },
+      {
         "version": "1.3.0.0",
         "changelog": "- Left sidebar navigation (configurable via navbarPosition)\n- Three-way settings merge with snapshot-based conflict resolution\n- MDBList server-side caching and batch pre-fetching\n\nImprovements:\n- PNG to SVG migration for all rating icons\n- Updated README and admin config page\n\nBug Fixes:\n- Fixed Jellyseerr session persistence (JSON deserialization)\n- Fixed Jellyseerr sessions on local IP addresses\n- Fixed Jellyseerr cookie rotation causing unexpected logouts\n- Fixed mobile media bar overlapping first library row",
         "targetAbi": "10.10.0.0",
