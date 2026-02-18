@@ -190,6 +190,8 @@ var Details = {
 
         if (!wasAlreadyVisible) {
             history.pushState({ moonfinDetails: true }, '');
+            if (window.Moonfin && window.Moonfin.Plugin) window.Moonfin.Plugin._overlayHistoryDepth++;
+            else if (typeof Plugin !== 'undefined') Plugin._overlayHistoryDepth++;
         }
 
         var panel = this.container.querySelector('.moonfin-details-panel');

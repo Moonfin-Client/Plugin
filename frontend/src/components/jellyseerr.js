@@ -208,6 +208,8 @@ const Jellyseerr = {
         this.isOpen = true;
 
         history.pushState({ moonfinJellyseerr: true }, '');
+        if (window.Moonfin && window.Moonfin.Plugin) window.Moonfin.Plugin._overlayHistoryDepth++;
+        else if (typeof Plugin !== 'undefined') Plugin._overlayHistoryDepth++;
         document.body.classList.add('moonfin-jellyseerr-open');
 
         requestAnimationFrame(function() {

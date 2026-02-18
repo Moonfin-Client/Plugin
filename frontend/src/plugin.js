@@ -923,32 +923,64 @@ const Plugin = {
         };
     },
 
+    // Tracks how many overlay history entries Moonfin has pushed onto the stack.
+    // Used to clean up orphaned entries when overlays are closed via navigation
+    // rather than via the back button.
+    _overlayHistoryDepth: 0,
+
     setupGlobalListeners() {
-        // Centralized back button handler — checks overlays top-down
-        // so only the topmost one closes per press
+        var plugin = this;
+
+        // Centralized back button handler — uses capture phase so it fires
+        // before Jellyfin's router, preventing a "double back" where the
+        // overlay closes AND the page navigates backward simultaneously.
         window.addEventListener('popstate', function(e) {
             // If state still has moonfinDetails, a Jellyfin dialog just closed
             // (dialogHelper pushes/pops its own history entry) — don't close our overlay
             var state = e.state || history.state || {};
             if (Details.isVisible) {
                 if (state.moonfinDetails) return;
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                 Details.hide(true);
             } else if (Settings.isOpen) {
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                 Settings.hide(true);
             } else if (Jellyseerr.isOpen) {
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                 Jellyseerr.close(true);
                 Navbar.updateJellyseerrButtonState();
             } else if (Library.isVisible) {
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                 Library.close();
             } else if (Genres.isVisible) {
+                e.stopImmediatePropagation();
                 if (Genres.currentView === 'browse') {
                     Genres.showGrid();
                     history.pushState({ moonfinGenres: true }, '');
+                    plugin._overlayHistoryDepth++;
                 } else {
+                    plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                     Genres.close();
                 }
+            } else {
+                // No overlay is open — check if this is an orphaned moonfin
+                // state entry left over from an overlay that was closed via
+                // navigation instead of the back button. Skip past it so the
+                // user doesn't hit a phantom "dead" back press.
+                var isMoonfinState = state.moonfinDetails || state.moonfinSettings ||
+                                     state.moonfinJellyseerr || state.moonfinLibrary ||
+                                     state.moonfinGenres;
+                if (isMoonfinState) {
+                    e.stopImmediatePropagation();
+                    history.back();
+                    return;
+                }
             }
-        });
+        }, true);
 
         window.addEventListener('viewshow', () => {
             this.onPageChange();
@@ -994,26 +1026,39 @@ const Plugin = {
     },
 
     onPageChange() {
+        var hadOverlay = false;
+
         if (Details.isVisible) {
             Details.hide(true);
+            hadOverlay = true;
         }
 
         if (Jellyseerr.isOpen) {
             Jellyseerr.close(true);
             if (Navbar.initialized) Navbar.updateJellyseerrButtonState();
             if (Sidebar.initialized) Sidebar.updateJellyseerrButtonState();
+            hadOverlay = true;
         }
 
         if (Genres.isVisible) {
             Genres.close();
+            hadOverlay = true;
         }
 
         if (Library.isVisible) {
             Library.close();
+            hadOverlay = true;
         }
 
         if (Settings.isOpen) {
             Settings.hide(true);
+            hadOverlay = true;
+        }
+
+        // Reset depth counter — orphaned entries will be skipped
+        // automatically by the popstate handler when the user presses back
+        if (hadOverlay) {
+            this._overlayHistoryDepth = 0;
         }
 
         if (this.isAdminPage()) {

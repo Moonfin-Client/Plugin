@@ -55,6 +55,8 @@ var Genres = {
         this.container.classList.add('visible');
         document.body.style.overflow = 'hidden';
         history.pushState({ moonfinGenres: true }, '');
+        if (window.Moonfin && window.Moonfin.Plugin) window.Moonfin.Plugin._overlayHistoryDepth++;
+        else if (typeof Plugin !== 'undefined') Plugin._overlayHistoryDepth++;
 
         this.loadGenres();
     },
