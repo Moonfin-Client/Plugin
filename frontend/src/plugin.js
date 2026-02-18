@@ -14,40 +14,47 @@ const Plugin = {
     },
 
     isAdminPage() {
-        const path = window.location.pathname.toLowerCase();
         const hash = window.location.hash.toLowerCase();
-        
-        const isUserPage = hash === '' ||
-                          hash.includes('#/home') ||
-                          hash.includes('#/movies') ||
-                          hash.includes('#/tvshows') ||
-                          hash.includes('#/music') ||
-                          hash.includes('#/livetv') ||
-                          hash.includes('#/details') ||
-                          hash.includes('#/search') ||
-                          hash.includes('#/favorites') ||
-                          hash.includes('#/list') ||
-                          hash.includes('#/mypreferencesmenu') ||
-                          hash.includes('#/mypreferencesdisplay') ||
-                          hash.includes('#/mypreferenceshome') ||
-                          hash.includes('#/mypreferencesplayback') ||
-                          hash.includes('#/mypreferencessubtitles') ||
-                          hash.includes('#/mypreferencescontrol') ||
-                          hash.includes('#/mypreferencesquickconnect') ||
-                          hash.includes('#/video');
-        
-        if (isUserPage) {
+
+        // Whitelist of known user-facing routes.
+        // Everything else (dashboard pages, plugin config, user management,
+        // scheduled tasks, networking, etc.) is treated as admin so the
+        // plugin stays out of the way and never blocks the admin panel.
+        const userRoutes = [
+            '#/home',
+            '#/movies',
+            '#/tvshows',
+            '#/music',
+            '#/livetv',
+            '#/details',
+            '#/search',
+            '#/favorites',
+            '#/list',
+            '#/mypreferencesmenu',
+            '#/mypreferencesdisplay',
+            '#/mypreferenceshome',
+            '#/mypreferencesplayback',
+            '#/mypreferencessubtitles',
+            '#/mypreferencescontrol',
+            '#/mypreferencesquickconnect',
+            '#/video'
+        ];
+
+        // Empty hash (root) is a user page
+        if (hash === '' || hash === '#' || hash === '#/') {
             return false;
         }
-        
-        return path.includes('/dashboard') ||
-               path.includes('/configurationpage') ||
-               path.includes('/admin') ||
-               hash.includes('configurationpage') ||
-               hash.includes('dashboard') ||
-               hash.includes('plugincatalog') ||
-               document.querySelector('.dashboardDocument') !== null ||
-               document.querySelector('.type-interior.pluginConfigurationPage') !== null;
+
+        // Check if the current hash starts with any known user route
+        for (const route of userRoutes) {
+            if (hash === route || hash.startsWith(route + '.html') ||
+                hash.startsWith(route + '?') || hash.startsWith(route + '/')) {
+                return false;
+            }
+        }
+
+        // Any page not in the user whitelist is treated as admin
+        return true;
     },
 
     async init() {
