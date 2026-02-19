@@ -24,6 +24,7 @@ const Storage = {
         mediaBarOverlayColor: 'gray',
         mediaBarAutoAdvance: true,
         mediaBarIntervalMs: 7000,
+        mediaBarTrailerPreview: true,
 
         showShuffleButton: true,
         showGenresButton: true,
@@ -177,7 +178,7 @@ const Storage = {
 
             if (response.ok) {
                 const serverSettings = API.toCamelCase(await response.json());
-                console.log('[Moonfin] Fetched settings from server:', serverSettings);
+                console.log('[Moonfin] Fetched settings from server');
                 return this.mapServerToLocal(serverSettings);
             } else if (response.status === 404) {
                 console.log('[Moonfin] No settings found on server');

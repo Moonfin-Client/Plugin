@@ -65,7 +65,8 @@ var Settings = {
         var current = Storage.getAll();
         current[name] = value;
         Storage.saveAll(current);
-        console.log('[Moonfin] Setting saved:', name, '=', value);
+        var safeValue = name.toLowerCase().indexOf('apikey') !== -1 || name.toLowerCase().indexOf('token') !== -1 ? '***' : value;
+        console.log('[Moonfin] Setting saved:', name, '=', safeValue);
     },
 
     createToggleCard: function(id, title, description, checked) {
@@ -150,13 +151,7 @@ var Settings = {
                 { value: '20', label: '20' }
             ], settings.mediaBarItemCount) +
 
-            this.createSelectCard('mediaBarIntervalMs', 'Auto-advance Interval', 'Time between automatic slide changes', [
-                { value: '5000', label: '5 seconds' },
-                { value: '7000', label: '7 seconds' },
-                { value: '10000', label: '10 seconds' },
-                { value: '15000', label: '15 seconds' },
-                { value: '20000', label: '20 seconds' }
-            ], settings.mediaBarIntervalMs);
+            this.createToggleCard('mediaBarTrailerPreview', 'Trailer Preview', 'Automatically play muted trailer previews in the media bar background', settings.mediaBarTrailerPreview);
 
         var colorOptions = [];
         var colorKeys = Object.keys(Storage.colorOptions);

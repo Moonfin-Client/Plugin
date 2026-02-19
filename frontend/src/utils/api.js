@@ -67,7 +67,7 @@ const API = {
                 recursive: true,
                 hasThemeSong: false,
                 hasThemeVideo: false,
-                fields: 'Overview,Genres,CommunityRating,CriticRating,OfficialRating,RunTimeTicks,ProductionYear,ProviderIds',
+                fields: 'Overview,Genres,CommunityRating,CriticRating,OfficialRating,RunTimeTicks,ProductionYear,ProviderIds,RemoteTrailers',
                 imageTypeLimit: 1,
                 enableImageTypes: 'Backdrop,Logo,Primary'
             };

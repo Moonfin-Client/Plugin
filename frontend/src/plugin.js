@@ -999,7 +999,7 @@ const Plugin = {
         });
 
         window.addEventListener('moonfin-settings-changed', (e) => {
-            console.log('[Moonfin] Settings changed:', e.detail);
+            console.log('[Moonfin] Settings changed');
 
             var navEnabled = e.detail.navbarEnabled;
             var navPosition = e.detail.navbarPosition || 'top';
