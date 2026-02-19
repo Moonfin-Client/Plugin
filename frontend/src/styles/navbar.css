@@ -6,7 +6,7 @@
 
 body.moonfin-navbar-active {
     padding-top: 80px !important;
-    background: #000 !important;
+    background: linear-gradient(to bottom, black 60%, transparent) !important;
 }
 
 body.moonfin-navbar-active .skinHeader {
