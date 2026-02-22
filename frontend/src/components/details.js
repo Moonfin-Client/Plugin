@@ -586,7 +586,11 @@ var Details = {
                 '<div class="moonfin-section-scroll">' +
                     seasons.map(function(season) {
                         var seasonPosterTag = season.ImageTags ? season.ImageTags.Primary : null;
-                        var seasonPoster = seasonPosterTag ? serverUrl + '/Items/' + season.Id + '/Images/Primary?maxHeight=350&quality=80' : '';
+                        var seasonPoster = seasonPosterTag
+                            ? serverUrl + '/Items/' + season.Id + '/Images/Primary?maxHeight=350&quality=80'
+                            : (item.ImageTags && item.ImageTags.Primary
+                                ? serverUrl + '/Items/' + item.Id + '/Images/Primary?maxHeight=350&quality=80'
+                                : '');
                         var seasonWatched = season.UserData && season.UserData.Played;
                         var seasonUnplayed = season.UserData ? season.UserData.UnplayedItemCount : null;
                         return '<div class="moonfin-season-card moonfin-focusable" data-item-id="' + season.Id + '" data-type="Season" tabindex="0">' +
@@ -2000,7 +2004,11 @@ var Details = {
         var backdropUrl = serverUrl + '/Items/' + backdropId + '/Images/Backdrop?maxWidth=1920&quality=90';
 
         var posterTag = item.ImageTags ? item.ImageTags.Primary : null;
-        var posterUrl = posterTag ? serverUrl + '/Items/' + item.Id + '/Images/Primary?maxHeight=500&quality=90' : '';
+        var posterUrl = posterTag
+            ? serverUrl + '/Items/' + item.Id + '/Images/Primary?maxHeight=500&quality=90'
+            : (item.SeriesId && item.SeriesPrimaryImageTag
+                ? serverUrl + '/Items/' + item.SeriesId + '/Images/Primary?maxHeight=500&quality=90'
+                : '');
 
         var isPlayed = item.UserData && item.UserData.Played;
         var isFavorite = item.UserData && item.UserData.IsFavorite;
