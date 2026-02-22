@@ -9,9 +9,9 @@
 
 [![License](https://img.shields.io/github/license/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin) [![Release](https://img.shields.io/github/release/Moonfin-Client/Pluginsvg)](https://github.com/Moonfin-Client/Plugin/releases)
 
-## What is Moonfin?
+## What is this?
 
-Moonfin is a server plugin that redesigns the Jellyfin Web and Mobile UI without modifying Jellyfin itself. It injects a custom frontend on top of the stock interface, adding a featured media bar, a redesigned details screen, a quick-access navigation bar, embedded Jellyseerr/Seerr media requests, MDBList and TMDB ratings, and more. Every feature is optional and toggled per-user from a built-in settings panel.
+This is a server plugin that redesigns the Jellyfin Web and Mobile UI to match the UI of the Moonfin clients without modifying Jellyfin itself. It injects a custom frontend on top of the stock interface, adding a featured media bar, a redesigned details screen, a quick-access navigation bar, embedded Jellyseerr/Seerr media requests, MDBList and TMDB ratings, and more. Every feature is optional and toggled per-user from a built-in settings panel.
 
 All user preferences sync across devices through the plugin's server-side API, so your settings follow you from desktop to phone to TV. Admins can set server-wide defaults and provide shared API keys for MDBList and TMDB so individual users don't need their own.
 
