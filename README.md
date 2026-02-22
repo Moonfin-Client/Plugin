@@ -9,6 +9,14 @@
 
 [![License](https://img.shields.io/github/license/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin) [![Release](https://img.shields.io/github/release/Moonfin-Client/Pluginsvg)](https://github.com/Moonfin-Client/Plugin/releases)
 
+## What is Moonfin?
+
+Moonfin is a server plugin that redesigns the Jellyfin Web and Mobile UI without modifying Jellyfin itself. It injects a custom frontend on top of the stock interface, adding a featured media bar, a redesigned details screen, a quick-access navigation bar, embedded Jellyseerr/Seerr media requests, MDBList and TMDB ratings, and more. Every feature is optional and toggled per-user from a built-in settings panel.
+
+All user preferences sync across devices through the plugin's server-side API, so your settings follow you from desktop to phone to TV. Admins can set server-wide defaults and provide shared API keys for MDBList and TMDB so individual users don't need their own.
+
+Moonfin requires the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin to inject its web UI into Jellyfin's pages.
+
 ## Features
 
 ### Web UI (`frontend/`)
@@ -16,13 +24,16 @@
 - **Navigation Bar** - Pill-shaped toolbar with Home, Search, Shuffle, Genres, Favorites, Library buttons, and user avatar
 - **Featured Media Bar** - Hero slideshow with Ken Burns animation, content logos, and metadata overlay
 - **Jellyseerr/Seerr Panel** - Embedded Jellyseerr or Seerr iframe with automatic session-based authentication via the server proxy
-- **Settings Panel** - Per-user settings for all features, synced across clients
+- **Settings Panel** - Per-user settings for all features, with device profiles and cross-client sync
+- **Device Profiles** - Separate setting overrides for desktop, mobile, and TV; each profile inherits from a shared global base so you only configure what differs per device
 - **TV Support** - Spatial navigation and remote-friendly focus management for webOS/Tizen
 
 ### Server Plugin (`backend/`)
-- **Settings Sync API** - Per-user preference storage with merge/replace modes, synced across all Moonfin clients
+- **Settings Sync API** - Per-user preference storage with device profiles, three-way merge, and admin-configurable defaults
+- **Device Profile Architecture** - v2 settings envelope with a global base profile and sparse desktop/mobile/TV overrides; device profiles only store values that differ from global
+- **Admin Default Settings** - Admins can set server-wide default values for every user setting; users who haven't customized a setting inherit the admin default
 - **Jellyseerr/Seerr Proxy** - Authenticated reverse proxy that creates browser sessions automatically, so the iframe loads without a separate login (supports both Jellyseerr and Seerr v3)
-- **Admin Configuration** - Dashboard page for Jellyseerr/Seerr URL, display name, enable/disable toggles
+- **Admin Configuration** - Dashboard page for Jellyseerr/Seerr URL, display name, enable/disable toggles, shared API keys, and default user settings
 - **Web Injection** - Serves the frontend JS/CSS as embedded resources, automatically injected via the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin
 ----
 # Screenshots
@@ -89,11 +100,17 @@ Moonfin uses the [File Transformation](https://github.com/IAmParadox27/jellyfin-
 
 ### Admin Settings
 
-Jellyfin Dashboard → Administration → Plugins → **Moonfin** to configure server-wide options like the Jellyseerr URL.
+Jellyfin Dashboard → Administration → Plugins → **Moonfin** to configure:
+- Jellyseerr/Seerr URL, display name, and direct iframe URL
+- Shared MDBList and TMDB API keys (so individual users don't need their own)
+- **Default user settings** — set server-wide defaults for any user-facing setting; users who haven't customized a value inherit the admin default
+- Enable/disable settings sync globally
 
-### User Settings
+# User Settings
 
-Once the web UI is loaded, click your **user avatar** in the top right to open the Settings panel and click Moonfin. From there you can customize the navbar, media bar, details screen, seasonal effects, ratings, and more. Settings are saved per-user and synced across all your Moonfin clients.
+Once the web UI is loaded, click your **user avatar** in the top right to open the Settings panel and click Moonfin. From there you can customize the navbar, media bar, details screen, seasonal effects, ratings, and more.
+
+Settings support **device profiles**: a shared global profile plus optional overrides for desktop, mobile, and TV. Device profiles only store values that differ from global, so changes to global automatically flow to all devices unless explicitly overridden. A sync toggle lets you enable or disable server synchronization per-user.
 
 ### Reverse Proxy
 
@@ -206,11 +223,32 @@ Output: `Moonfin.Server-{VERSION}.zip` in the repo root.
 
 **Direction:** Bidirectional, local-wins
 
+### Settings Envelope (v2)
+
+User settings are stored in a **profiled envelope** with a schema version, sync metadata, and per-device profiles:
+
+```json
+{
+  "schemaVersion": 2,
+  "lastUpdated": 1740200000000,
+  "lastUpdatedBy": "desktop",
+  "syncEnabled": true,
+  "global": { /* base settings — all devices inherit from here */ },
+  "desktop": { /* sparse overrides for desktop only */ },
+  "mobile": { /* sparse overrides for mobile only */ },
+  "tv": { /* sparse overrides for TV only */ }
+}
+```
+
+**Resolution chain** (first non-null wins): device profile → global profile → admin defaults → built-in defaults.
+
+Device profiles only contain fields the user has explicitly customized for that device. Everything else falls through to global, then to admin defaults.
+
 > **Note:** Not all settings listed below have been integrated into every client yet. The server model defines the full set of syncable settings. Each client only reads and writes the ones it currently supports. Unsupported fields are preserved on the server and ignored by clients that don't use them.
 
 ### Synced Settings
 
-Settings stored on the server per-user and shared across all Moonfin clients.
+Settings stored on the server per-user and shared across all Moonfin clients. Each setting can be set at the global level and optionally overridden per device profile.
 
 | Setting | Type | Description |
 |---------|------|-------------|
@@ -247,6 +285,7 @@ Settings stored on the server per-user and shared across all Moonfin clients.
 | `jellyseerrEnabled` | bool | Enable Jellyseerr integration |
 | `jellyseerrApiKey` | string | Jellyseerr API key |
 | `jellyseerrRows` | object | Jellyseerr discovery row configuration |
+| `mediaBarTrailerPreview` | bool | Enable trailer previews in media bar |
 | `tmdbApiKey` | string | TMDB API key for episode ratings |
 | `tmdbEpisodeRatingsEnabled` | bool | Enable TMDB episode ratings |
 
