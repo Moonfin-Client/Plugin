@@ -239,14 +239,31 @@ var MediaBar = {
         this.updateActiveDot();
 
         var settings = Storage.getAll();
-        var videoId = this.extractYouTubeId(item);
-        if (settings.mediaBarTrailerPreview && videoId) {
+        if (settings.mediaBarTrailerPreview) {
+            var currentIdx = this.currentIndex;
+            this.fetchAndPlayTrailer(item, currentIdx);
+        }
+    },
+
+    async fetchAndPlayTrailer(item, expectedIndex) {
+        if (item.RemoteTrailers) {
+            var videoId = this.extractYouTubeId(item.RemoteTrailers);
+            if (videoId && this.currentIndex === expectedIndex) {
+                this.startTrailerPreview(videoId);
+            }
+            return;
+        }
+
+        var trailers = await API.getItemTrailers(item.Id);
+        if (this.currentIndex !== expectedIndex) return;
+        item.RemoteTrailers = trailers;
+        var videoId = this.extractYouTubeId(trailers);
+        if (videoId) {
             this.startTrailerPreview(videoId);
         }
     },
 
-    extractYouTubeId(item) {
-        var trailers = item.RemoteTrailers;
+    extractYouTubeId(trailers) {
         if (!trailers || trailers.length === 0) return null;
 
         for (var i = 0; i < trailers.length; i++) {

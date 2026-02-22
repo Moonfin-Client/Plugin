@@ -67,7 +67,7 @@ const API = {
                 recursive: true,
                 hasThemeSong: false,
                 hasThemeVideo: false,
-                fields: 'Overview,Genres,CommunityRating,CriticRating,OfficialRating,RunTimeTicks,ProductionYear,ProviderIds,RemoteTrailers',
+                fields: 'Overview,Genres,CommunityRating,CriticRating,OfficialRating,RunTimeTicks,ProductionYear,ProviderIds',
                 imageTypeLimit: 1,
                 enableImageTypes: 'Backdrop,Logo,Primary'
             };
@@ -76,6 +76,25 @@ const API = {
             return result.Items || [];
         } catch (e) {
             console.error('[Moonfin] Failed to get random items:', e);
+            return [];
+        }
+    },
+
+    async getItemTrailers(itemId) {
+        const api = this.getApiClient();
+        if (!api || !itemId) return [];
+
+        try {
+            const userId = api.getCurrentUserId();
+            const result = await api.getItems(userId, {
+                ids: itemId,
+                userId: userId,
+                fields: 'RemoteTrailers',
+                limit: 1
+            });
+            const item = result.Items && result.Items[0];
+            return (item && item.RemoteTrailers) || [];
+        } catch (e) {
             return [];
         }
     },
