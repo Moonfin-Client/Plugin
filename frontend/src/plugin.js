@@ -1066,9 +1066,12 @@ const Plugin = {
             if (Sidebar.container) Sidebar.container.classList.add('hidden');
             if (Sidebar.mobileTrigger) Sidebar.mobileTrigger.classList.add('hidden');
             if (MediaBar.container) MediaBar.container.classList.add('hidden');
+            MediaBar.stopAutoAdvance();
+            MediaBar.stopTrailer();
             document.querySelectorAll('.moonfin-seasonal-effect').forEach(el => el.style.display = 'none');
             document.body.classList.remove('moonfin-navbar-active');
             document.body.classList.remove('moonfin-sidebar-active');
+            document.body.classList.remove('moonfin-mediabar-active');
             return;
         }
 
@@ -1078,6 +1081,8 @@ const Plugin = {
             if (Sidebar.container) Sidebar.container.classList.add('hidden');
             if (Sidebar.mobileTrigger) Sidebar.mobileTrigger.classList.add('hidden');
             if (MediaBar.container) MediaBar.container.classList.add('hidden');
+            MediaBar.stopAutoAdvance();
+            MediaBar.stopTrailer();
             document.body.classList.remove('moonfin-navbar-active');
             document.body.classList.remove('moonfin-sidebar-active');
             document.body.classList.remove('moonfin-mediabar-active');
@@ -1109,10 +1114,17 @@ const Plugin = {
 
             var showMediaBar = this.isHomePage();
             MediaBar.container.classList.toggle('hidden', !showMediaBar);
-            if (MediaBar.items && MediaBar.items.length > 0) {
-                document.body.classList.toggle('moonfin-mediabar-active', showMediaBar);
+            if (showMediaBar) {
+                if (MediaBar.items && MediaBar.items.length > 0) {
+                    document.body.classList.add('moonfin-mediabar-active');
+                    if (!MediaBar.isPaused && !MediaBar.autoAdvanceTimer) {
+                        MediaBar.startAutoAdvance();
+                    }
+                }
             } else {
                 document.body.classList.remove('moonfin-mediabar-active');
+                MediaBar.stopAutoAdvance();
+                MediaBar.stopTrailer();
             }
         } else {
             document.body.classList.remove('moonfin-mediabar-active');
