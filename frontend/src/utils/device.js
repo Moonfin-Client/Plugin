@@ -47,5 +47,12 @@ const Device = {
 
     getInfo() {
         return this.detect();
+    },
+
+    getProfileName() {
+        const info = this.detect();
+        if (info.isTV) return 'tv';
+        if (info.isMobile) return 'mobile';
+        return 'desktop';
     }
 };

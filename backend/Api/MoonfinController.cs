@@ -34,7 +34,7 @@ public class MoonfinController : ControllerBase
     /// <summary>
     /// Ping endpoint to check if Moonfin plugin is installed.
     /// </summary>
-    /// <returns>Plugin status information.</returns>
+    /// <returns>Plugin status information including admin defaults.</returns>
     [HttpGet("Ping")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -53,7 +53,8 @@ public class MoonfinController : ControllerBase
                 ? config.JellyseerrUrl
                 : null,
             MdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey),
-            TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey)
+            TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
+            DefaultSettings = config?.DefaultUserSettings
         });
     }
 
@@ -240,6 +241,151 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
+    /// Gets the resolved settings for the current user for a specific device profile.
+    /// Resolution order: device overrides → global → admin defaults.
+    /// </summary>
+    /// <param name="profile">Device profile name: desktop, mobile, tv, or global.</param>
+    /// <returns>Flat resolved settings profile.</returns>
+    [HttpGet("Settings/Resolved/{profile}")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<MoonfinSettingsProfile>> GetResolvedProfile([FromRoute] string profile)
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+        
+        if (config?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "Settings sync is disabled" });
+        }
+
+        var userId = this.GetUserIdFromClaims();
+        if (userId == null)
+        {
+            return Unauthorized(new { Error = "User not authenticated" });
+        }
+
+        if (!MoonfinUserSettings.ValidProfiles.Contains(profile.ToLowerInvariant()))
+        {
+            return BadRequest(new { Error = $"Invalid profile: {profile}. Valid profiles: {string.Join(", ", MoonfinUserSettings.ValidProfiles)}" });
+        }
+
+        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
+        if (resolved == null)
+        {
+            // No user settings at all — return admin defaults if available
+            var adminDefaults = config?.DefaultUserSettings;
+            return adminDefaults != null ? Ok(adminDefaults) : NotFound(new { Error = "No settings found" });
+        }
+
+        return Ok(resolved);
+    }
+
+    /// <summary>
+    /// Saves settings for a specific device profile for the current user.
+    /// </summary>
+    /// <param name="profile">Device profile name: desktop, mobile, tv, or global.</param>
+    /// <param name="request">The profile save request.</param>
+    /// <returns>Success status.</returns>
+    [HttpPost("Settings/Profile/{profile}")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<MoonfinSaveResponse>> SaveMyProfile(
+        [FromRoute] string profile, 
+        [FromBody] MoonfinProfileSaveRequest request)
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+        
+        if (config?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "Settings sync is disabled" });
+        }
+
+        var userId = this.GetUserIdFromClaims();
+        if (userId == null)
+        {
+            return Unauthorized(new { Error = "User not authenticated" });
+        }
+
+        if (!MoonfinUserSettings.ValidProfiles.Contains(profile.ToLowerInvariant()))
+        {
+            return BadRequest(new { Error = $"Invalid profile: {profile}" });
+        }
+
+        if (request.Profile == null)
+        {
+            return BadRequest(new { Error = "Profile settings are required" });
+        }
+
+        var existed = _settingsService.UserSettingsExist(userId.Value);
+
+        await _settingsService.SaveProfileAsync(userId.Value, profile, request.Profile, request.ClientId);
+
+        return Ok(new MoonfinSaveResponse
+        {
+            Success = true,
+            Created = !existed,
+            UserId = userId.Value
+        });
+    }
+
+    /// <summary>
+    /// Deletes a device profile for the current user (resets to global).
+    /// </summary>
+    /// <param name="profile">Device profile name: desktop, mobile, or tv.</param>
+    /// <returns>Success status.</returns>
+    [HttpDelete("Settings/Profile/{profile}")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult> DeleteMyProfile([FromRoute] string profile)
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+        
+        if (config?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "Settings sync is disabled" });
+        }
+
+        var userId = this.GetUserIdFromClaims();
+        if (userId == null)
+        {
+            return Unauthorized(new { Error = "User not authenticated" });
+        }
+
+        var lower = profile.ToLowerInvariant();
+        if (lower == "global")
+        {
+            return BadRequest(new { Error = "Cannot delete the global profile. Use DELETE /Settings to remove all settings." });
+        }
+
+        if (!MoonfinUserSettings.ValidProfiles.Contains(lower))
+        {
+            return BadRequest(new { Error = $"Invalid profile: {profile}" });
+        }
+
+        await _settingsService.DeleteProfileAsync(userId.Value, profile);
+        return Ok(new { Success = true, Message = $"Profile '{profile}' deleted" });
+    }
+
+    /// <summary>
+    /// Gets the admin-configured default user settings.
+    /// </summary>
+    /// <returns>Default settings profile or empty object.</returns>
+    [HttpGet("Defaults")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<MoonfinSettingsProfile> GetDefaults()
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+        return Ok(config?.DefaultUserSettings ?? new MoonfinSettingsProfile());
+    }
+
+    /// <summary>
     /// Checks if the current user has settings stored.
     /// </summary>
     /// <returns>Whether settings exist.</returns>
@@ -300,6 +446,11 @@ public class MoonfinController : ControllerBase
             displayName = variant == "seerr" ? "Seerr" : "Jellyseerr";
         }
 
+        // Resolve Jellyseerr enabled from user's global profile
+        var userJellyseerrEnabled = userSettings?.Global?.JellyseerrEnabled 
+            ?? userSettings?.JellyseerrEnabled  // legacy v1
+            ?? true;
+
         return Ok(new JellyseerrConfigResponse
         {
             Enabled = config?.JellyseerrEnabled ?? false,
@@ -307,7 +458,7 @@ public class MoonfinController : ControllerBase
             DirectUrl = config?.JellyseerrDirectUrl,
             DisplayName = displayName,
             Variant = variant,
-            UserEnabled = userSettings?.JellyseerrEnabled ?? true
+            UserEnabled = userJellyseerrEnabled
         });
     }
     
@@ -398,29 +549,15 @@ public class MoonfinController : ControllerBase
 /// </summary>
 public class MoonfinPingResponse
 {
-    /// <summary>Indicates the plugin is installed.</summary>
     public bool Installed { get; set; }
-
-    /// <summary>Plugin version.</summary>
     public string Version { get; set; } = string.Empty;
-
-    /// <summary>Whether settings sync is enabled by admin.</summary>
     public bool? SettingsSyncEnabled { get; set; }
-
-    /// <summary>Jellyfin server name.</summary>
     public string? ServerName { get; set; }
-
-    /// <summary>Whether Jellyseerr is enabled by admin.</summary>
     public bool? JellyseerrEnabled { get; set; }
-
-    /// <summary>Admin-configured Jellyseerr URL.</summary>
     public string? JellyseerrUrl { get; set; }
-
-    /// <summary>Whether admin has configured a server-wide MDBList API key.</summary>
     public bool? MdblistAvailable { get; set; }
-
-    /// <summary>Whether admin has configured a server-wide TMDB API key.</summary>
     public bool? TmdbAvailable { get; set; }
+    public MoonfinSettingsProfile? DefaultSettings { get; set; }
 }
 
 /// <summary>
@@ -428,41 +565,31 @@ public class MoonfinPingResponse
 /// </summary>
 public class JellyseerrConfigResponse
 {
-    /// <summary>Whether Jellyseerr is enabled by admin.</summary>
     public bool Enabled { get; set; }
-
-    /// <summary>Admin-configured Jellyseerr URL (used for API proxying).</summary>
     public string? Url { get; set; }
-
-    /// <summary>
-    /// Direct URL for loading Jellyseerr/Seerr in iframe (optional).
-    /// When set, the iframe loads directly from this URL instead of through the proxy.
-    /// </summary>
     public string? DirectUrl { get; set; }
-
-    /// <summary>Display name shown in the UI (e.g., "Jellyseerr" or "Seerr").</summary>
     public string DisplayName { get; set; } = "Jellyseerr";
-
-    /// <summary>UI variant for icon selection: "jellyseerr" or "seerr".</summary>
     public string Variant { get; set; } = "jellyseerr";
-
-    /// <summary>Whether Jellyseerr is enabled in user settings.</summary>
     public bool UserEnabled { get; set; }
 }
 
 /// <summary>
-/// Request for saving settings.
+/// Request for saving the full settings envelope.
 /// </summary>
 public class MoonfinSaveRequest
 {
-    /// <summary>User settings to save.</summary>
     public MoonfinUserSettings? Settings { get; set; }
-
-    /// <summary>Client identifier for tracking.</summary>
     public string? ClientId { get; set; }
-
-    /// <summary>Merge strategy (replace, merge, client).</summary>
     public string? MergeMode { get; set; }
+}
+
+/// <summary>
+/// Request for saving a single device profile.
+/// </summary>
+public class MoonfinProfileSaveRequest
+{
+    public MoonfinSettingsProfile? Profile { get; set; }
+    public string? ClientId { get; set; }
 }
 
 /// <summary>
@@ -470,12 +597,7 @@ public class MoonfinSaveRequest
 /// </summary>
 public class MoonfinSaveResponse
 {
-    /// <summary>Whether the save was successful.</summary>
     public bool Success { get; set; }
-
-    /// <summary>Whether new settings were created (vs updated).</summary>
     public bool Created { get; set; }
-
-    /// <summary>User ID the settings were saved for.</summary>
     public Guid UserId { get; set; }
 }

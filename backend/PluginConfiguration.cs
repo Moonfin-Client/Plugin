@@ -1,4 +1,5 @@
 using MediaBrowser.Model.Plugins;
+using Moonfin.Server.Models;
 
 namespace Moonfin.Server;
 
@@ -47,6 +48,13 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Users who set their own key will use that instead.
     /// </summary>
     public string? TmdbApiKey { get; set; }
+
+    /// <summary>
+    /// Admin-configured default settings for all users.
+    /// Users who haven't customized a setting will inherit this value.
+    /// Users can override any default in their own Moonfin settings.
+    /// </summary>
+    public MoonfinSettingsProfile? DefaultUserSettings { get; set; }
 
     /// <summary>
     /// Gets the effective Jellyseerr URL for server-to-server communication.

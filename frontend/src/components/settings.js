@@ -62,11 +62,12 @@ var Settings = {
     },
 
     saveSetting: function(name, value) {
-        var current = Storage.getAll();
-        current[name] = value;
-        Storage.saveAll(current);
+        var profileName = Storage.getActiveEditProfile();
+        var profile = Storage.getProfile(profileName);
+        profile[name] = value;
+        Storage.saveProfile(profileName, profile);
         var safeValue = name.toLowerCase().indexOf('apikey') !== -1 || name.toLowerCase().indexOf('token') !== -1 ? '***' : value;
-        console.log('[Moonfin] Setting saved:', name, '=', safeValue);
+        console.log('[Moonfin] Setting saved to profile "' + profileName + '":', name, '=', safeValue);
     },
 
     createToggleCard: function(id, title, description, checked) {
@@ -306,6 +307,25 @@ var Settings = {
                 '</div>' +
             '</div>';
 
+        var currentDeviceProfile = Device.getProfileName();
+        var profileLabels = { global: 'All Devices', desktop: 'Desktop', mobile: 'Mobile', tv: 'TV' };
+        var profileTabsHtml = '<div class="moonfin-profile-tabs">';
+        var profileNames = ['global', 'desktop', 'mobile', 'tv'];
+        for (var pi = 0; pi < profileNames.length; pi++) {
+            var pn = profileNames[pi];
+            var isActive = pn === 'global';
+            var isCurrent = pn === currentDeviceProfile;
+            profileTabsHtml += '<button type="button" class="moonfin-profile-tab' + (isActive ? ' moonfin-profile-tab-active' : '') + '" data-profile="' + pn + '">' +
+                profileLabels[pn] +
+                (isCurrent ? ' <span class="moonfin-profile-current-badge" title="Current device">●</span>' : '') +
+            '</button>';
+        }
+        profileTabsHtml += '</div>';
+        var profileInfoHtml = '<div class="moonfin-profile-info">' +
+            '<span class="moonfin-profile-info-icon">ℹ</span> ' +
+            '<span class="moonfin-profile-info-text">"All Devices" settings apply everywhere. Device profiles override only the settings you change.</span>' +
+        '</div>';
+
         this.dialog.innerHTML =
             '<div class="moonfin-settings-overlay"></div>' +
             '<div class="moonfin-settings-panel">' +
@@ -318,6 +338,8 @@ var Settings = {
                         '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
                     '</button>' +
                 '</div>' +
+                profileTabsHtml +
+                profileInfoHtml +
                 '<div class="moonfin-settings-content">' +
                     this.createSection('', 'Moonfin UI', uiContent, true) +
                     this.createSection('', 'Media Bar', mediaBarContent) +
@@ -334,6 +356,10 @@ var Settings = {
                     '<div class="moonfin-sync-status" id="moonfinSyncStatus">' +
                         '<span class="moonfin-sync-indicator"></span>' +
                         '<span class="moonfin-sync-text">Checking sync...</span>' +
+                        '<label class="moonfin-sync-toggle-label" title="Enable or disable settings sync to server">' +
+                            '<input type="checkbox" id="moonfin-sync-toggle"' + (Storage.isSyncEnabled() ? ' checked' : '') + '>' +
+                            '<span class="moonfin-sync-toggle-text">Sync</span>' +
+                        '</label>' +
                     '</div>' +
                     '<div class="moonfin-settings-footer-buttons">' +
                         '<button class="moonfin-panel-btn moonfin-panel-btn-ghost moonfin-settings-reset">Reset</button>' +
@@ -344,9 +370,88 @@ var Settings = {
             '</div>';
 
         document.body.appendChild(this.dialog);
+        Storage.setActiveEditProfile('global');
         this.setupEventListeners();
         this.updateSyncStatus();
         this.updateJellyseerrSsoSection();
+    },
+
+    refreshFormValues: function(profileName) {
+        if (!this.dialog) return;
+        var resolved = Storage.resolveSettings(profileName);
+        var raw = (profileName !== 'global') ? Storage.getProfile(profileName) : null;
+
+        // Update checkboxes
+        var checkboxes = this.dialog.querySelectorAll('input[type="checkbox"][name]');
+        for (var i = 0; i < checkboxes.length; i++) {
+            var name = checkboxes[i].name;
+            if (name in resolved) {
+                checkboxes[i].checked = resolved[name];
+                // Visual indicator: dim if inherited from global/defaults on a device profile
+                var isInherited = raw !== null && (raw[name] === undefined || raw[name] === null);
+                var card = checkboxes[i].closest('.moonfin-toggle-card');
+                if (card) {
+                    card.classList.toggle('moonfin-inherited', isInherited);
+                }
+            }
+        }
+
+        // Update selects
+        var selects = this.dialog.querySelectorAll('select[name]');
+        for (var j = 0; j < selects.length; j++) {
+            var sName = selects[j].name;
+            if (sName in resolved) {
+                selects[j].value = String(resolved[sName]);
+                var sCard = selects[j].closest('.moonfin-select-card');
+                if (sCard && raw !== null) {
+                    sCard.classList.toggle('moonfin-inherited', raw[sName] === undefined || raw[sName] === null);
+                }
+            }
+        }
+
+        // Update ranges
+        var ranges = this.dialog.querySelectorAll('input[type="range"][name]');
+        for (var k = 0; k < ranges.length; k++) {
+            var rName = ranges[k].name;
+            if (rName in resolved) {
+                ranges[k].value = resolved[rName];
+                var valueSpan = this.dialog.querySelector('.moonfin-range-value[data-for="' + rName + '"]');
+                if (valueSpan) valueSpan.textContent = resolved[rName] + '%';
+            }
+        }
+
+        // Update text/password inputs
+        var textInputs = [
+            { id: 'moonfin-mdblistApiKey', key: 'mdblistApiKey' },
+            { id: 'moonfin-tmdbApiKey', key: 'tmdbApiKey' }
+        ];
+        for (var ti = 0; ti < textInputs.length; ti++) {
+            var inp = this.dialog.querySelector('#' + textInputs[ti].id);
+            if (inp) inp.value = resolved[textInputs[ti].key] || '';
+        }
+
+        // Update color preview
+        var colorPreview = this.dialog.querySelector('#moonfin-color-preview');
+        if (colorPreview) {
+            colorPreview.style.background = Storage.getColorHex(resolved.mediaBarOverlayColor);
+        }
+
+        // Toggle config sub-sections
+        var mdblistConfig = this.dialog.querySelector('.moonfin-mdblist-config');
+        if (mdblistConfig) mdblistConfig.style.display = resolved.mdblistEnabled ? '' : 'none';
+        var tmdbConfig = this.dialog.querySelector('.moonfin-tmdb-config');
+        if (tmdbConfig) tmdbConfig.style.display = resolved.tmdbEpisodeRatingsEnabled ? '' : 'none';
+
+        // Update profile info text
+        var infoText = this.dialog.querySelector('.moonfin-profile-info-text');
+        if (infoText) {
+            if (profileName === 'global') {
+                infoText.textContent = '"All Devices" settings apply everywhere. Device profiles override only the settings you change.';
+            } else {
+                var label = profileName.charAt(0).toUpperCase() + profileName.slice(1);
+                infoText.textContent = 'Editing ' + label + ' overrides. Dimmed settings are inherited from "All Devices". Changes here only affect ' + label + ' devices.';
+            }
+        }
     },
 
     updateJellyseerrSsoSection: function() {
@@ -446,11 +551,21 @@ var Settings = {
         });
 
         this.dialog.querySelector('.moonfin-settings-reset').addEventListener('click', function() {
-            if (confirm('Reset all Moonfin settings to defaults?')) {
-                Storage.reset();
-                self.showToast('Settings reset to defaults');
-                self.hide();
-                setTimeout(function() { self.show(); }, 350);
+            var activeProfile = Storage.getActiveEditProfile();
+            if (activeProfile !== 'global') {
+                if (confirm('Reset "' + activeProfile + '" device profile? This will remove all overrides for this device.')) {
+                    Storage.deleteProfile(activeProfile);
+                    self.showToast('Device profile reset');
+                    self.hide();
+                    setTimeout(function() { self.show(); }, 350);
+                }
+            } else {
+                if (confirm('Reset all Moonfin settings to defaults?')) {
+                    Storage.reset();
+                    self.showToast('Settings reset to defaults');
+                    self.hide();
+                    setTimeout(function() { self.show(); }, 350);
+                }
             }
         });
 
@@ -469,6 +584,31 @@ var Settings = {
                 setTimeout(function() { self.show(); }, 350);
             });
         });
+
+        // Profile tab switching
+        var profileTabs = this.dialog.querySelectorAll('.moonfin-profile-tab');
+        for (var pti = 0; pti < profileTabs.length; pti++) {
+            profileTabs[pti].addEventListener('click', function() {
+                var profileName = this.getAttribute('data-profile');
+                for (var pt = 0; pt < profileTabs.length; pt++) {
+                    profileTabs[pt].classList.remove('moonfin-profile-tab-active');
+                }
+                this.classList.add('moonfin-profile-tab-active');
+                Storage.setActiveEditProfile(profileName);
+                self.refreshFormValues(profileName);
+                self.showToast('Editing: ' + (profileName === 'global' ? 'All Devices' : profileName.charAt(0).toUpperCase() + profileName.slice(1)));
+            });
+        }
+
+        // Sync toggle
+        var syncToggle = this.dialog.querySelector('#moonfin-sync-toggle');
+        if (syncToggle) {
+            syncToggle.addEventListener('change', function() {
+                Storage.setSyncEnabled(syncToggle.checked);
+                self.showToast(syncToggle.checked ? 'Sync enabled' : 'Sync disabled');
+                self.updateSyncStatus();
+            });
+        }
 
         var checkboxes = this.dialog.querySelectorAll('input[type="checkbox"][name]');
         for (var i = 0; i < checkboxes.length; i++) {
