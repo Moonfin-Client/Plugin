@@ -9,6 +9,15 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
+        "version": "1.5.0.0",
+        "changelog": "Features:\n- Device-specific settings profiles (global, desktop, mobile, TV) with inheritance and sync\n- Admin-configurable default user settings with per-user overrides\n- Sync toggle for enabling/disabling server settings synchronization\n\nImprovements:\n- Season posters fall back to series poster when unavailable (#15)\n- Lazy trailer fetching per displayed item instead of bulk RemoteTrailers query\n\nBug Fixes:\n- Fixed media bar auto-advance and trailer playback continuing after navigating away from home\n- Fixed media bar not stopping on admin pages and video player",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.5.0/Moonfin.Server-1.5.0.0.zip",
+        "checksum": "43D12A1CC3EBF5CDED1BC974BC925492",
+        "timestamp": "2026-02-22T18:33:27",
+        "dependencies": []
+      },
+      {
         "version": "1.4.0.0",
         "changelog": "Features:\n- Media bar trailer previews using YouTube IFrame API with SponsorBlock integration\n- Media bar redesign with logos, rating badges, and genre pills\n\nImprovements:\n- Seerr v3 support with auto-detection and direct iframe URL option\n- Server-wide TMDB API key with user notifications\n- Dynamic icon swapping for Jellyseerr/Seerr\n- Sidebar: settings moved under libraries with separator\n- Admin panel no longer blocked by plugin (whitelist-based route detection)\n- Sensitive data masked in console logs",
         "targetAbi": "10.10.0.0",
