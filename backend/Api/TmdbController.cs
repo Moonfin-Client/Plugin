@@ -257,8 +257,9 @@ public class TmdbController : ControllerBase
         var userId = this.GetUserIdFromClaims();
         if (userId == null) return null;
 
-        var userSettings = await _settingsService.GetUserSettingsAsync(userId.Value);
-        var apiKey = userSettings?.TmdbApiKey;
+        // Resolve the full profile (device → global → admin defaults) to get user settings
+        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, "global");
+        var apiKey = resolved?.TmdbApiKey;
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {

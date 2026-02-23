@@ -59,8 +59,9 @@ public class MdbListController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        var userSettings = await _settingsService.GetUserSettingsAsync(userId.Value);
-        var apiKey = userSettings?.MdblistApiKey;
+        // Resolve the full profile (device → global → admin defaults) to get user settings
+        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, "global");
+        var apiKey = resolved?.MdblistApiKey;
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -130,7 +131,7 @@ public class MdbListController : ControllerBase
             }
         }
 
-        var filteredRatings = FilterAndOrderRatings(allRatings, userSettings?.MdblistRatingSources);
+        var filteredRatings = FilterAndOrderRatings(allRatings, resolved?.MdblistRatingSources);
 
         return Ok(new MdbListResponse
         {

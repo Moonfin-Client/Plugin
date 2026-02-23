@@ -9,6 +9,15 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
+        "version": "1.5.1.0",
+        "changelog": "Bug Fixes:\n- Fixed MDBList and TMDB user API keys not being read from v2 settings profiles (only admin keys worked)\n- Fixed user-selected MDBList rating sources being ignored after v1-to-v2 settings migration (only default 4 sources were returned)",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.5.1/Moonfin.Server-1.5.1.0.zip",
+        "checksum": "14CAC55434728A5E92CD2481E85DE152",
+        "timestamp": "2026-02-23T04:33:48",
+        "dependencies": []
+      },
+      {
         "version": "1.5.0.0",
         "changelog": "Features:\n- Device-specific settings profiles (global, desktop, mobile, TV) with inheritance and sync\n- Admin-configurable default user settings with per-user overrides\n- Sync toggle for enabling/disabling server settings synchronization\n\nImprovements:\n- Season posters fall back to series poster when unavailable (#15)\n- Lazy trailer fetching per displayed item instead of bulk RemoteTrailers query\n\nBug Fixes:\n- Fixed media bar auto-advance and trailer playback continuing after navigating away from home\n- Fixed media bar not stopping on admin pages and video player",
         "targetAbi": "10.10.0.0",
