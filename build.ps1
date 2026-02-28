@@ -3,7 +3,7 @@
 # Usage: .\build.ps1 [-Version "1.1.0.0"] [-TargetAbi "10.10.0"]
 
 param(
-    [string]$Version = "1.5.1.0",
+    [string]$Version = "1.5.2.0",
     [string]$TargetAbi = "10.10.0"
 )
 
