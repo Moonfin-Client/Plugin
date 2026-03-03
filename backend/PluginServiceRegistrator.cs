@@ -15,6 +15,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     {
         serviceCollection.AddSingleton<MoonfinSettingsService>();
         serviceCollection.AddSingleton<JellyseerrSessionService>();
+        serviceCollection.AddSingleton<MdbListCacheService>();
         serviceCollection.AddHttpClient();
 
         // Auto-register file transformations on plugin load (no manual task needed)

@@ -132,9 +132,18 @@ body.moonfin-jellyseerr-open {
     opacity: 1;
 }
 
+body.moonfin-sidebar-active .moonfin-jellyseerr-container {
+    top: 0;
+    left: 56px;
+}
+
 @media (max-width: 768px) {
     .moonfin-jellyseerr-container {
         top: 50px;
+    }
+
+    body.moonfin-sidebar-active .moonfin-jellyseerr-container {
+        left: 0;
     }
 
     .moonfin-jellyseerr-header {

@@ -96,6 +96,108 @@
     color: white;
 }
 
+/* Profile Tabs */
+.moonfin-profile-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 10px 16px 0;
+    background: rgba(15, 15, 20, 0.6);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.moonfin-profile-tab {
+    flex: 1;
+    padding: 8px 4px;
+    border: none;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+    transition: background 0.2s ease, color 0.2s ease;
+    text-align: center;
+    white-space: nowrap;
+    position: relative;
+}
+
+.moonfin-profile-tab:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.moonfin-profile-tab-active {
+    background: rgba(0, 164, 220, 0.15);
+    color: #00a4dc;
+    font-weight: 600;
+}
+
+.moonfin-profile-tab-active:hover {
+    background: rgba(0, 164, 220, 0.2);
+    color: #00a4dc;
+}
+
+.moonfin-profile-current-badge {
+    color: #4caf50;
+    font-size: 8px;
+    vertical-align: super;
+}
+
+.moonfin-profile-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 16px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+    background: rgba(0, 164, 220, 0.04);
+    line-height: 1.4;
+}
+
+.moonfin-profile-info-icon {
+    color: rgba(0, 164, 220, 0.6);
+    flex-shrink: 0;
+    font-size: 12px;
+}
+
+/* Inherited setting indicator for device profiles */
+.moonfin-toggle-card.moonfin-inherited,
+.moonfin-select-card.moonfin-inherited {
+    opacity: 0.55;
+    border-left: 2px solid rgba(255, 255, 255, 0.1);
+    padding-left: 10px;
+    transition: opacity 0.2s ease;
+}
+
+.moonfin-toggle-card.moonfin-inherited:hover,
+.moonfin-select-card.moonfin-inherited:hover {
+    opacity: 0.85;
+}
+
+/* Sync toggle in footer */
+.moonfin-sync-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 10px;
+    cursor: pointer;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    user-select: none;
+}
+
+.moonfin-sync-toggle-label input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: #00a4dc;
+}
+
+.moonfin-sync-toggle-text {
+    font-weight: 500;
+}
+
 .moonfin-settings-content {
     flex: 1;
     overflow-y: auto;

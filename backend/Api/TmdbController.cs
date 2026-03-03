@@ -62,7 +62,7 @@ public class TmdbController : ControllerBase
             return Ok(new TmdbEpisodeRatingResponse
             {
                 Success = false,
-                Error = "No TMDB API key configured. Add your key in Moonfin Settings."
+                Error = "No TMDB API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key."
             });
         }
 
@@ -160,7 +160,7 @@ public class TmdbController : ControllerBase
             return Ok(new TmdbSeasonRatingsResponse
             {
                 Success = false,
-                Error = "No TMDB API key configured. Add your key in Moonfin Settings."
+                Error = "No TMDB API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key."
             });
         }
 
@@ -257,8 +257,16 @@ public class TmdbController : ControllerBase
         var userId = this.GetUserIdFromClaims();
         if (userId == null) return null;
 
-        var userSettings = await _settingsService.GetUserSettingsAsync(userId.Value);
-        return userSettings?.TmdbApiKey;
+        // Resolve the full profile (device → global → admin defaults) to get user settings
+        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, "global");
+        var apiKey = resolved?.TmdbApiKey;
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            apiKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
+        }
+
+        return apiKey;
     }
 
     private HttpClient CreateClient()

@@ -58,6 +58,8 @@ var Library = {
         this.container.classList.add('visible');
         document.body.style.overflow = 'hidden';
         history.pushState({ moonfinLibrary: true }, '');
+        if (window.Moonfin && window.Moonfin.Plugin) window.Moonfin.Plugin._overlayHistoryDepth++;
+        else if (typeof Plugin !== 'undefined') Plugin._overlayHistoryDepth++;
 
         this.loadItems(true);
     },

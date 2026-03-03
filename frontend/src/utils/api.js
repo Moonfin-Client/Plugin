@@ -80,6 +80,25 @@ const API = {
         }
     },
 
+    async getItemTrailers(itemId) {
+        const api = this.getApiClient();
+        if (!api || !itemId) return [];
+
+        try {
+            const userId = api.getCurrentUserId();
+            const result = await api.getItems(userId, {
+                ids: itemId,
+                userId: userId,
+                fields: 'RemoteTrailers',
+                limit: 1
+            });
+            const item = result.Items && result.Items[0];
+            return (item && item.RemoteTrailers) || [];
+        } catch (e) {
+            return [];
+        }
+    },
+
     getImageUrl(item, imageType = 'Backdrop', options = {}) {
         const api = this.getApiClient();
         if (!api || !item) return null;

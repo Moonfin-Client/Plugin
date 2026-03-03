@@ -20,6 +20,7 @@ function buildJS() {
         'utils/tmdb.js',
         'utils/tv-navigation.js',
         'components/navbar.js',
+        'components/sidebar.js',
         'components/mediabar.js',
         'components/genres.js',
         'components/library.js',
@@ -60,6 +61,7 @@ function buildJS() {
 function buildCSS() {
     const cssFiles = [
         'styles/navbar.css',
+        'styles/sidebar.css',
         'styles/mediabar.css',
         'styles/mdblist.css',
         'styles/genres.css',

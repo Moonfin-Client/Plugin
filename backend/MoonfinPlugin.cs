@@ -48,7 +48,8 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
             new PluginPageInfo
             {
                 Name = Name,
-                EmbeddedResourcePath = GetType().Namespace + ".Pages.configPage.html"
+                EmbeddedResourcePath = GetType().Namespace + ".Pages.configPage.html",
+                EnableInMainMenu = true
             }
         };
     }

@@ -1,13 +1,14 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace Moonfin.Server.Services;
 
 /// <summary>
 /// Manages per-user Jellyseerr session cookies for SSO.
-/// Sessions are stored server-side so any Moonfin client (web, webOS, Tizen)
+/// Sessions are stored server-side so any Moonfin client
 /// can access Jellyseerr through the Jellyfin plugin without re-authenticating.
 /// </summary>
 public class JellyseerrSessionService
@@ -33,7 +34,8 @@ public class JellyseerrSessionService
         _jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true
         };
 
         EnsureDirectory();
@@ -112,8 +114,30 @@ public class JellyseerrSessionService
             }
 
             // Extract session cookie
+            // CookieContainer.GetCookies() can fail with IP-based URLs, so
+            // fall back to parsing the Set-Cookie header directly.
             var cookies = cookieContainer.GetCookies(new Uri(jellyseerrUrl));
             var sessionCookie = cookies["connect.sid"]?.Value;
+
+            if (string.IsNullOrEmpty(sessionCookie) &&
+                response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders))
+            {
+                foreach (var header in setCookieHeaders)
+                {
+                    if (header.StartsWith("connect.sid=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var value = header.Substring("connect.sid=".Length);
+                        var semicolonIdx = value.IndexOf(';');
+                        if (semicolonIdx > 0)
+                        {
+                            value = value.Substring(0, semicolonIdx);
+                        }
+                        sessionCookie = Uri.UnescapeDataString(value);
+                        _logger.LogInformation("Extracted connect.sid from Set-Cookie header (CookieContainer fallback)");
+                        break;
+                    }
+                }
+            }
 
             if (string.IsNullOrEmpty(sessionCookie))
             {
@@ -183,7 +207,14 @@ public class JellyseerrSessionService
     public async Task<JellyseerrSession?> GetSessionAsync(Guid userId, bool validate = false)
     {
         var session = await LoadSessionAsync(userId);
-        if (session == null) return null;
+        if (session == null || string.IsNullOrEmpty(session.SessionCookie))
+        {
+            if (session != null)
+            {
+                _logger.LogWarning("Jellyseerr session for user {UserId} has empty cookie, treating as invalid", userId);
+            }
+            return null;
+        }
 
         if (validate)
         {
@@ -226,6 +257,9 @@ public class JellyseerrSessionService
 
             if (response.IsSuccessStatusCode)
             {
+                // Check if Jellyseerr rotated the session cookie
+                await CheckForRotatedCookieAsync(session, response, cookieContainer, jellyseerrUrl);
+
                 // Update last validated timestamp
                 session.LastValidated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 await SaveSessionAsync(session);
@@ -238,6 +272,41 @@ public class JellyseerrSessionService
         {
             _logger.LogWarning(ex, "Failed to validate Jellyseerr session for user {UserId}", session.JellyfinUserId);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks if Jellyseerr rotated the connect.sid cookie and updates the session if so.
+    /// Express.js with rolling sessions may issue a new cookie on every response.
+    /// </summary>
+    private async Task CheckForRotatedCookieAsync(
+        JellyseerrSession session,
+        HttpResponseMessage response,
+        CookieContainer cookieContainer,
+        string jellyseerrUrl)
+    {
+        var updatedCookie = cookieContainer.GetCookies(new Uri(jellyseerrUrl))["connect.sid"]?.Value;
+        if (string.IsNullOrEmpty(updatedCookie) &&
+            response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders))
+        {
+            foreach (var header in setCookieHeaders)
+            {
+                if (header.StartsWith("connect.sid=", StringComparison.OrdinalIgnoreCase))
+                {
+                    var value = header.Substring("connect.sid=".Length);
+                    var semicolonIdx = value.IndexOf(';');
+                    if (semicolonIdx > 0) value = value.Substring(0, semicolonIdx);
+                    updatedCookie = Uri.UnescapeDataString(value);
+                    break;
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(updatedCookie) && updatedCookie != session.SessionCookie)
+        {
+            _logger.LogInformation("Jellyseerr rotated session cookie for user {UserId}, updating", session.JellyfinUserId);
+            session.SessionCookie = updatedCookie;
+            await SaveSessionAsync(session);
         }
     }
 
@@ -350,6 +419,12 @@ public class JellyseerrSessionService
                 };
             }
 
+            // Check if Jellyseerr rotated the session cookie
+            if (response.IsSuccessStatusCode)
+            {
+                await CheckForRotatedCookieAsync(session, response, cookieContainer, jellyseerrUrl);
+            }
+
             return new JellyseerrProxyResponse
             {
                 StatusCode = (int)response.StatusCode,
@@ -444,6 +519,12 @@ public class JellyseerrSessionService
             var responseBody = await response.Content.ReadAsByteArrayAsync();
             var responseContentType = response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
 
+            // Check if Jellyseerr rotated the session cookie
+            if (session != null && response.IsSuccessStatusCode)
+            {
+                await CheckForRotatedCookieAsync(session, response, cookieContainer, jellyseerrUrl);
+            }
+
             return new JellyseerrProxyResponse
             {
                 StatusCode = (int)response.StatusCode,
@@ -517,30 +598,39 @@ public class JellyseerrSessionService
 public class JellyseerrSession
 {
     /// <summary>The Jellyfin user ID this session belongs to.</summary>
+    [JsonPropertyName("jellyfinUserId")]
     public Guid JellyfinUserId { get; set; }
 
     /// <summary>The Jellyseerr connect.sid session cookie value.</summary>
+    [JsonPropertyName("sessionCookie")]
     public string SessionCookie { get; set; } = string.Empty;
 
     /// <summary>The Jellyseerr internal user ID.</summary>
+    [JsonPropertyName("jellyseerrUserId")]
     public int JellyseerrUserId { get; set; }
 
     /// <summary>The username used to authenticate.</summary>
+    [JsonPropertyName("username")]
     public string Username { get; set; } = string.Empty;
 
     /// <summary>Display name from Jellyseerr.</summary>
+    [JsonPropertyName("displayName")]
     public string? DisplayName { get; set; }
 
     /// <summary>Avatar URL from Jellyseerr.</summary>
+    [JsonPropertyName("avatar")]
     public string? Avatar { get; set; }
 
     /// <summary>Jellyseerr permission bitmask.</summary>
+    [JsonPropertyName("permissions")]
     public int Permissions { get; set; }
 
     /// <summary>When the session was created (unix ms).</summary>
+    [JsonPropertyName("createdAt")]
     public long CreatedAt { get; set; }
 
     /// <summary>When the session was last validated (unix ms).</summary>
+    [JsonPropertyName("lastValidated")]
     public long LastValidated { get; set; }
 }
 

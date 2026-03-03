@@ -38,7 +38,7 @@ var Details = {
             var card = e.target.closest('.card, .listItem');
             if (!card) return;
 
-            if (e.target.closest('.cardOverlayButton, .listItemButton, .btnPlayItem, .btnMoreCommands, .btnUserItemRating, .btnItemAction, .paper-icon-button-light, .itemAction[data-action]')) {
+            if (e.target.closest('.cardOverlayButton, .listItemButton, .btnPlayItem, .btnMoreCommands, .btnUserItemRating, .btnItemAction, .paper-icon-button-light, .itemAction[data-action]:not([data-action="link"])')) {
                 return;
             }
 
@@ -190,6 +190,8 @@ var Details = {
 
         if (!wasAlreadyVisible) {
             history.pushState({ moonfinDetails: true }, '');
+            if (window.Moonfin && window.Moonfin.Plugin) window.Moonfin.Plugin._overlayHistoryDepth++;
+            else if (typeof Plugin !== 'undefined') Plugin._overlayHistoryDepth++;
         }
 
         var panel = this.container.querySelector('.moonfin-details-panel');
@@ -380,9 +382,8 @@ var Details = {
         var infoItems = [];
         if (year) infoItems.push('<span class="moonfin-info-item">' + year + '</span>');
         if (rating) infoItems.push('<span class="moonfin-info-pill">' + rating + '</span>');
-        if (communityRating) infoItems.push('<span class="moonfin-info-item moonfin-star-rating"><svg viewBox="0 -960 960 960" fill="currentColor" width="16" height="16"><path d="m354-287 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z"/></svg> ' + communityRating + '</span>');
-        if (criticRating) infoItems.push('<span class="moonfin-info-item moonfin-critic-rating">' + criticRating + '%</span>');
         if (runtime && item.Type !== 'Series') infoItems.push('<span class="moonfin-info-item">' + runtime + '</span>');
+        if (communityRating) infoItems.push('<span class="moonfin-info-item moonfin-star-rating"><svg viewBox="0 -960 960 960" fill="currentColor" width="16" height="16"><path d="m354-287 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Z"/></svg> ' + communityRating + '</span>');
         if (isSeries && seasonCount > 0) {
             infoItems.push('<span class="moonfin-info-item">' + seasonCount + ' Season' + (seasonCount !== 1 ? 's' : '') + '</span>');
         }
@@ -585,7 +586,11 @@ var Details = {
                 '<div class="moonfin-section-scroll">' +
                     seasons.map(function(season) {
                         var seasonPosterTag = season.ImageTags ? season.ImageTags.Primary : null;
-                        var seasonPoster = seasonPosterTag ? serverUrl + '/Items/' + season.Id + '/Images/Primary?maxHeight=350&quality=80' : '';
+                        var seasonPoster = seasonPosterTag
+                            ? serverUrl + '/Items/' + season.Id + '/Images/Primary?maxHeight=350&quality=80'
+                            : (item.ImageTags && item.ImageTags.Primary
+                                ? serverUrl + '/Items/' + item.Id + '/Images/Primary?maxHeight=350&quality=80'
+                                : '');
                         var seasonWatched = season.UserData && season.UserData.Played;
                         var seasonUnplayed = season.UserData ? season.UserData.UnplayedItemCount : null;
                         return '<div class="moonfin-season-card moonfin-focusable" data-item-id="' + season.Id + '" data-type="Season" tabindex="0">' +
@@ -1398,38 +1403,30 @@ var Details = {
                 break;
 
             case 'editmetadata':
+                self.hide(true);
                 API.openMetadataEditor(item.Id).then(function(success) {
-                    if (!success) {
-                        self.hide(true);
-                        API.navigateTo('/details?id=' + item.Id);
-                    }
+                    if (!success) API.navigateTo('/details?id=' + item.Id);
                 });
                 break;
 
             case 'editimages':
+                self.hide(true);
                 API.openImageEditor(item.Id).then(function(success) {
-                    if (!success) {
-                        self.hide(true);
-                        API.navigateTo('/details?id=' + item.Id);
-                    }
+                    if (!success) API.navigateTo('/details?id=' + item.Id);
                 });
                 break;
 
             case 'editsubtitles':
+                self.hide(true);
                 API.openSubtitleEditor(item.Id).then(function(success) {
-                    if (!success) {
-                        self.hide(true);
-                        API.navigateTo('/details?id=' + item.Id);
-                    }
+                    if (!success) API.navigateTo('/details?id=' + item.Id);
                 });
                 break;
 
             case 'identify':
+                self.hide(true);
                 API.openItemIdentifier(item.Id).then(function(success) {
-                    if (!success) {
-                        self.hide(true);
-                        API.navigateTo('/details?id=' + item.Id);
-                    }
+                    if (!success) API.navigateTo('/details?id=' + item.Id);
                 });
                 break;
 
@@ -2007,7 +2004,11 @@ var Details = {
         var backdropUrl = serverUrl + '/Items/' + backdropId + '/Images/Backdrop?maxWidth=1920&quality=90';
 
         var posterTag = item.ImageTags ? item.ImageTags.Primary : null;
-        var posterUrl = posterTag ? serverUrl + '/Items/' + item.Id + '/Images/Primary?maxHeight=500&quality=90' : '';
+        var posterUrl = posterTag
+            ? serverUrl + '/Items/' + item.Id + '/Images/Primary?maxHeight=500&quality=90'
+            : (item.SeriesId && item.SeriesPrimaryImageTag
+                ? serverUrl + '/Items/' + item.SeriesId + '/Images/Primary?maxHeight=500&quality=90'
+                : '');
 
         var isPlayed = item.UserData && item.UserData.Played;
         var isFavorite = item.UserData && item.UserData.IsFavorite;

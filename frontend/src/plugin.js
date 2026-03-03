@@ -1,5 +1,5 @@
 const Plugin = {
-    version: '1.2.0',
+    version: '1.5.1',
     name: 'Moonfin Web Plugin',
     initialized: false,
 
@@ -14,40 +14,47 @@ const Plugin = {
     },
 
     isAdminPage() {
-        const path = window.location.pathname.toLowerCase();
         const hash = window.location.hash.toLowerCase();
-        
-        const isUserPage = hash === '' ||
-                          hash.includes('#/home') ||
-                          hash.includes('#/movies') ||
-                          hash.includes('#/tvshows') ||
-                          hash.includes('#/music') ||
-                          hash.includes('#/livetv') ||
-                          hash.includes('#/details') ||
-                          hash.includes('#/search') ||
-                          hash.includes('#/favorites') ||
-                          hash.includes('#/list') ||
-                          hash.includes('#/mypreferencesmenu') ||
-                          hash.includes('#/mypreferencesdisplay') ||
-                          hash.includes('#/mypreferenceshome') ||
-                          hash.includes('#/mypreferencesplayback') ||
-                          hash.includes('#/mypreferencessubtitles') ||
-                          hash.includes('#/mypreferencescontrol') ||
-                          hash.includes('#/mypreferencesquickconnect') ||
-                          hash.includes('#/video');
-        
-        if (isUserPage) {
+
+        // Whitelist of known user-facing routes.
+        // Everything else (dashboard pages, plugin config, user management,
+        // scheduled tasks, networking, etc.) is treated as admin so the
+        // plugin stays out of the way and never blocks the admin panel.
+        const userRoutes = [
+            '#/home',
+            '#/movies',
+            '#/tvshows',
+            '#/music',
+            '#/livetv',
+            '#/details',
+            '#/search',
+            '#/favorites',
+            '#/list',
+            '#/mypreferencesmenu',
+            '#/mypreferencesdisplay',
+            '#/mypreferenceshome',
+            '#/mypreferencesplayback',
+            '#/mypreferencessubtitles',
+            '#/mypreferencescontrol',
+            '#/mypreferencesquickconnect',
+            '#/video'
+        ];
+
+        // Empty hash (root) is a user page
+        if (hash === '' || hash === '#' || hash === '#/') {
             return false;
         }
-        
-        return path.includes('/dashboard') ||
-               path.includes('/configurationpage') ||
-               path.includes('/admin') ||
-               hash.includes('configurationpage') ||
-               hash.includes('dashboard') ||
-               hash.includes('plugincatalog') ||
-               document.querySelector('.dashboardDocument') !== null ||
-               document.querySelector('.type-interior.pluginConfigurationPage') !== null;
+
+        // Check if the current hash starts with any known user route
+        for (const route of userRoutes) {
+            if (hash === route || hash.startsWith(route + '.html') ||
+                hash.startsWith(route + '?') || hash.startsWith(route + '/')) {
+                return false;
+            }
+        }
+
+        // Any page not in the user whitelist is treated as admin
+        return true;
     },
 
     async init() {
@@ -82,7 +89,11 @@ const Plugin = {
             var settings = Storage.getAll();
 
             if (settings.navbarEnabled) {
-                await Navbar.init();
+                if (settings.navbarPosition === 'left') {
+                    await Sidebar.init();
+                } else {
+                    await Navbar.init();
+                }
             }
 
             if (settings.mediaBarEnabled) {
@@ -91,6 +102,7 @@ const Plugin = {
 
             Genres.init();
             Library.init();
+            MdbList.init();
             await Jellyseerr.init();
             Details.init();
             this.initSeasonalEffects();
@@ -911,32 +923,64 @@ const Plugin = {
         };
     },
 
+    // Tracks how many overlay history entries Moonfin has pushed onto the stack.
+    // Used to clean up orphaned entries when overlays are closed via navigation
+    // rather than via the back button.
+    _overlayHistoryDepth: 0,
+
     setupGlobalListeners() {
-        // Centralized back button handler — checks overlays top-down
-        // so only the topmost one closes per press
+        var plugin = this;
+
+        // Centralized back button handler — uses capture phase so it fires
+        // before Jellyfin's router, preventing a "double back" where the
+        // overlay closes AND the page navigates backward simultaneously.
         window.addEventListener('popstate', function(e) {
             // If state still has moonfinDetails, a Jellyfin dialog just closed
             // (dialogHelper pushes/pops its own history entry) — don't close our overlay
             var state = e.state || history.state || {};
             if (Details.isVisible) {
                 if (state.moonfinDetails) return;
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                 Details.hide(true);
             } else if (Settings.isOpen) {
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                 Settings.hide(true);
             } else if (Jellyseerr.isOpen) {
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                 Jellyseerr.close(true);
                 Navbar.updateJellyseerrButtonState();
             } else if (Library.isVisible) {
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                 Library.close();
             } else if (Genres.isVisible) {
+                e.stopImmediatePropagation();
                 if (Genres.currentView === 'browse') {
                     Genres.showGrid();
                     history.pushState({ moonfinGenres: true }, '');
+                    plugin._overlayHistoryDepth++;
                 } else {
+                    plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                     Genres.close();
                 }
+            } else {
+                // No overlay is open — check if this is an orphaned moonfin
+                // state entry left over from an overlay that was closed via
+                // navigation instead of the back button. Skip past it so the
+                // user doesn't hit a phantom "dead" back press.
+                var isMoonfinState = state.moonfinDetails || state.moonfinSettings ||
+                                     state.moonfinJellyseerr || state.moonfinLibrary ||
+                                     state.moonfinGenres;
+                if (isMoonfinState) {
+                    e.stopImmediatePropagation();
+                    history.back();
+                    return;
+                }
             }
-        });
+        }, true);
 
         window.addEventListener('viewshow', () => {
             this.onPageChange();
@@ -949,17 +993,28 @@ const Plugin = {
         this.setupDOMObserver();
 
         window.addEventListener('moonfin-settings-preview', (e) => {
-            Navbar.applySettings(e.detail);
+            if (Navbar.initialized) Navbar.applySettings(e.detail);
+            if (Sidebar.initialized) Sidebar.applySettings(e.detail);
             MediaBar.applySettings(e.detail);
         });
 
         window.addEventListener('moonfin-settings-changed', (e) => {
-            console.log('[Moonfin] Settings changed:', e.detail);
+            console.log('[Moonfin] Settings changed');
 
-            if (e.detail.navbarEnabled && !Navbar.initialized) {
-                Navbar.init();
-            } else if (!e.detail.navbarEnabled && Navbar.initialized) {
-                Navbar.destroy();
+            var navEnabled = e.detail.navbarEnabled;
+            var navPosition = e.detail.navbarPosition || 'top';
+
+            if (navEnabled) {
+                if (navPosition === 'left') {
+                    if (Navbar.initialized) Navbar.destroy();
+                    if (!Sidebar.initialized) Sidebar.init();
+                } else {
+                    if (Sidebar.initialized) Sidebar.destroy();
+                    if (!Navbar.initialized) Navbar.init();
+                }
+            } else {
+                if (Navbar.initialized) Navbar.destroy();
+                if (Sidebar.initialized) Sidebar.destroy();
             }
 
             if (e.detail.mediaBarEnabled && !MediaBar.initialized) {
@@ -971,40 +1026,65 @@ const Plugin = {
     },
 
     onPageChange() {
+        var hadOverlay = false;
+
         if (Details.isVisible) {
             Details.hide(true);
+            hadOverlay = true;
         }
 
         if (Jellyseerr.isOpen) {
             Jellyseerr.close(true);
-            Navbar.updateJellyseerrButtonState();
+            if (Navbar.initialized) Navbar.updateJellyseerrButtonState();
+            if (Sidebar.initialized) Sidebar.updateJellyseerrButtonState();
+            hadOverlay = true;
         }
 
         if (Genres.isVisible) {
             Genres.close();
+            hadOverlay = true;
         }
 
         if (Library.isVisible) {
             Library.close();
+            hadOverlay = true;
         }
 
         if (Settings.isOpen) {
             Settings.hide(true);
+            hadOverlay = true;
+        }
+
+        // Reset depth counter — orphaned entries will be skipped
+        // automatically by the popstate handler when the user presses back
+        if (hadOverlay) {
+            this._overlayHistoryDepth = 0;
         }
 
         if (this.isAdminPage()) {
             if (Navbar.container) Navbar.container.classList.add('hidden');
+            if (Sidebar.container) Sidebar.container.classList.add('hidden');
+            if (Sidebar.mobileTrigger) Sidebar.mobileTrigger.classList.add('hidden');
             if (MediaBar.container) MediaBar.container.classList.add('hidden');
+            MediaBar.stopAutoAdvance();
+            MediaBar.stopTrailer();
             document.querySelectorAll('.moonfin-seasonal-effect').forEach(el => el.style.display = 'none');
             document.body.classList.remove('moonfin-navbar-active');
+            document.body.classList.remove('moonfin-sidebar-active');
+            document.body.classList.remove('moonfin-mediabar-active');
             return;
         }
 
         var hash = window.location.hash || '';
         if (hash.includes('#/video')) {
             if (Navbar.container) Navbar.container.classList.add('hidden');
+            if (Sidebar.container) Sidebar.container.classList.add('hidden');
+            if (Sidebar.mobileTrigger) Sidebar.mobileTrigger.classList.add('hidden');
             if (MediaBar.container) MediaBar.container.classList.add('hidden');
+            MediaBar.stopAutoAdvance();
+            MediaBar.stopTrailer();
             document.body.classList.remove('moonfin-navbar-active');
+            document.body.classList.remove('moonfin-sidebar-active');
             document.body.classList.remove('moonfin-mediabar-active');
             return;
         }
@@ -1015,9 +1095,16 @@ const Plugin = {
         }
 
         if (Navbar.container) {
-            var navbarEnabled = Storage.get('navbarEnabled');
+            var navbarEnabled = Storage.get('navbarEnabled') && Storage.get('navbarPosition') !== 'left';
             Navbar.container.classList.toggle('hidden', !navbarEnabled);
             document.body.classList.toggle('moonfin-navbar-active', !!navbarEnabled);
+        }
+
+        if (Sidebar.container) {
+            var sidebarEnabled = Storage.get('navbarEnabled') && Storage.get('navbarPosition') === 'left';
+            Sidebar.container.classList.toggle('hidden', !sidebarEnabled);
+            if (Sidebar.mobileTrigger) Sidebar.mobileTrigger.classList.toggle('hidden', !sidebarEnabled);
+            document.body.classList.toggle('moonfin-sidebar-active', !!sidebarEnabled);
         }
 
         document.querySelectorAll('.moonfin-seasonal-effect').forEach(el => el.style.display = '');
@@ -1027,16 +1114,24 @@ const Plugin = {
 
             var showMediaBar = this.isHomePage();
             MediaBar.container.classList.toggle('hidden', !showMediaBar);
-            if (MediaBar.items && MediaBar.items.length > 0) {
-                document.body.classList.toggle('moonfin-mediabar-active', showMediaBar);
+            if (showMediaBar) {
+                if (MediaBar.items && MediaBar.items.length > 0) {
+                    document.body.classList.add('moonfin-mediabar-active');
+                    if (!MediaBar.isPaused && !MediaBar.autoAdvanceTimer) {
+                        MediaBar.startAutoAdvance();
+                    }
+                }
             } else {
                 document.body.classList.remove('moonfin-mediabar-active');
+                MediaBar.stopAutoAdvance();
+                MediaBar.stopTrailer();
             }
         } else {
             document.body.classList.remove('moonfin-mediabar-active');
         }
 
         Navbar.updateActiveState();
+        if (Sidebar.initialized) Sidebar.updateActiveState();
 
         if ((window.location.hash || '').toLowerCase().includes('mypreferencesmenu')) {
             var self = this;

@@ -1,7 +1,6 @@
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -18,25 +17,21 @@ namespace Moonfin.Server.Api;
 public class MdbListController : ControllerBase
 {
     private readonly MoonfinSettingsService _settingsService;
+    private readonly MdbListCacheService _cacheService;
     private readonly IHttpClientFactory _httpClientFactory;
 
-    // Simple in-memory cache: key = "type:tmdbId", value = (response, timestamp)
-    private static readonly ConcurrentDictionary<string, (MdbListResponse Response, DateTimeOffset CachedAt)> _cache = new();
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromDays(7);
 
-    public MdbListController(MoonfinSettingsService settingsService, IHttpClientFactory httpClientFactory)
+    public MdbListController(MoonfinSettingsService settingsService, MdbListCacheService cacheService, IHttpClientFactory httpClientFactory)
     {
         _settingsService = settingsService;
+        _cacheService = cacheService;
         _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
     /// Fetches ratings from MDBList for a given TMDb ID.
-    /// Uses the authenticated user's API key from their settings.
     /// </summary>
-    /// <param name="type">Content type: movie or show.</param>
-    /// <param name="tmdbId">TMDb ID of the item.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("Ratings")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -58,17 +53,16 @@ public class MdbListController : ControllerBase
             return BadRequest(new { Error = "Invalid type. Expected: movie or show" });
         }
 
-        // Get user's API key from their settings, fall back to admin's server-wide key
         var userId = this.GetUserIdFromClaims();
         if (userId == null)
         {
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        var userSettings = await _settingsService.GetUserSettingsAsync(userId.Value);
-        var apiKey = userSettings?.MdblistApiKey;
+        // Resolve the full profile (device → global → admin defaults) to get user settings
+        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, "global");
+        var apiKey = resolved?.MdblistApiKey;
 
-        // Fall back to admin-configured server-wide key
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             apiKey = MoonfinPlugin.Instance?.Configuration?.MdblistApiKey;
@@ -83,78 +77,102 @@ public class MdbListController : ControllerBase
             });
         }
 
-        // Check cache
         var cacheKey = $"{type}:{tmdbId.Trim()}";
-        if (_cache.TryGetValue(cacheKey, out var cached) && DateTimeOffset.UtcNow - cached.CachedAt < CacheTtl)
+        var allRatings = _cacheService.TryGet(cacheKey, CacheTtl);
+
+        if (allRatings == null)
         {
-            return Ok(cached.Response);
-        }
+            // On-demand fallback: fetch single item from MDBList
+            try
+            {
+                var url = $"https://api.mdblist.com/tmdb/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(tmdbId.Trim())}?apikey={Uri.EscapeDataString(apiKey)}";
 
-        // Fetch from MDBList
-        try
-        {
-            var url = $"https://api.mdblist.com/{Uri.EscapeDataString("tmdb")}/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(tmdbId.Trim())}?apikey={Uri.EscapeDataString(apiKey)}";
+                var client = _httpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(15);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
 
-            var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(15);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
+                using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
 
-            using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                if ((int)response.StatusCode == 429)
+                {
+                    return Ok(new MdbListResponse
+                    {
+                        Success = false,
+                        Error = "MDBList rate limit reached. Try again later."
+                    });
+                }
 
-            if ((int)response.StatusCode == 429)
+                if (!response.IsSuccessStatusCode)
+                {
+                    return Ok(new MdbListResponse
+                    {
+                        Success = false,
+                        Error = $"MDBList returned status {(int)response.StatusCode}"
+                    });
+                }
+
+                var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                var data = JsonSerializer.Deserialize<MdbListApiResponse>(json, JsonOptions);
+
+                allRatings = data?.Ratings ?? new List<MdbListRating>();
+                _cacheService.Set(cacheKey, allRatings);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
             {
                 return Ok(new MdbListResponse
                 {
                     Success = false,
-                    Error = "MDBList rate limit reached. Try again later."
+                    Error = $"Failed to fetch from MDBList: {ex.Message}"
                 });
             }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return Ok(new MdbListResponse
-                {
-                    Success = false,
-                    Error = $"MDBList returned status {(int)response.StatusCode}"
-                });
-            }
-
-            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            var data = JsonSerializer.Deserialize<MdbListApiResponse>(json, JsonOptions);
-
-            var result = new MdbListResponse
-            {
-                Success = true,
-                Ratings = data?.Ratings ?? new List<MdbListRating>()
-            };
-
-            // Cache the result
-            _cache[cacheKey] = (result, DateTimeOffset.UtcNow);
-
-            return Ok(result);
         }
-        catch (OperationCanceledException)
+
+        var filteredRatings = FilterAndOrderRatings(allRatings, resolved?.MdblistRatingSources);
+
+        return Ok(new MdbListResponse
         {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return Ok(new MdbListResponse
-            {
-                Success = false,
-                Error = $"Failed to fetch from MDBList: {ex.Message}"
-            });
-        }
+            Success = true,
+            Ratings = filteredRatings
+        });
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly string[] DefaultRatingSources = ["imdb", "tmdb", "tomatoes", "metacritic"];
+
+    private static List<MdbListRating> FilterAndOrderRatings(List<MdbListRating> allRatings, List<string>? selectedSources)
+    {
+        var sources = (selectedSources is { Count: > 0 }) ? (IReadOnlyList<string>)selectedSources : DefaultRatingSources;
+
+        var ratingsBySource = new Dictionary<string, MdbListRating>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rating in allRatings)
+        {
+            if (!string.IsNullOrEmpty(rating.Source))
+            {
+                ratingsBySource[rating.Source] = rating;
+            }
+        }
+
+        var result = new List<MdbListRating>();
+        foreach (var source in sources)
+        {
+            if (ratingsBySource.TryGetValue(source, out var rating))
+            {
+                result.Add(rating);
+            }
+        }
+
+        return result;
+    }
+
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 }
-
-// ===== Converters =====
 
 /// <summary>
 /// Tolerant string converter that handles non-string JSON values (e.g. false, 0)
@@ -190,32 +208,21 @@ public class TolerantStringConverter : JsonConverter<string?>
     }
 }
 
-// ===== Models =====
-
-/// <summary>
-/// Response returned to the client.
-/// </summary>
 public class MdbListResponse
 {
-    /// <summary>Whether the request was successful.</summary>
     [JsonPropertyName("success")]
     public bool Success { get; set; }
 
-    /// <summary>Error message if the request failed.</summary>
     [JsonPropertyName("error")]
     public string? Error { get; set; }
 
-    /// <summary>Array of ratings from different sources.</summary>
     [JsonPropertyName("ratings")]
     public List<MdbListRating> Ratings { get; set; } = new();
 }
 
-/// <summary>
-/// A single rating from MDBList.
-/// </summary>
 public class MdbListRating
 {
-    /// <summary>Rating source name (e.g. imdb, tmdb, tomatoes).</summary>
+    /// <summary>Rating source (e.g. imdb, tmdb, tomatoes).</summary>
     [JsonPropertyName("source")]
     public string? Source { get; set; }
 
@@ -227,26 +234,19 @@ public class MdbListRating
     [JsonPropertyName("score")]
     public double? Score { get; set; }
 
-    /// <summary>Number of votes.</summary>
     [JsonPropertyName("votes")]
     public int? Votes { get; set; }
 
-    /// <summary>Provider URL for this item.</summary>
     [JsonPropertyName("url")]
     [JsonConverter(typeof(TolerantStringConverter))]
     public string? Url { get; set; }
 }
 
-/// <summary>
-/// Raw MDBList API response.
-/// </summary>
 internal class MdbListApiResponse
 {
-    /// <summary>Content type.</summary>
     [JsonPropertyName("type")]
     public string? Type { get; set; }
 
-    /// <summary>Array of ratings from different sources.</summary>
     [JsonPropertyName("ratings")]
     public List<MdbListRating>? Ratings { get; set; }
 }
