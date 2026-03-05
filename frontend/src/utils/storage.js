@@ -426,36 +426,47 @@ const Storage = {
 
     _mapProfileFromServer(serverProfile) {
         if (!serverProfile) return {};
-        return {
-            navbarEnabled: serverProfile.navbarEnabled,
-            detailsPageEnabled: serverProfile.detailsPageEnabled,
-            mediaBarEnabled: serverProfile.mediaBarEnabled,
-            mediaBarContentType: serverProfile.mediaBarContentType,
-            mediaBarItemCount: serverProfile.mediaBarItemCount,
-            mediaBarOverlayOpacity: serverProfile.mediaBarOpacity,
-            mediaBarOverlayColor: serverProfile.mediaBarOverlayColor,
-            mediaBarAutoAdvance: serverProfile.mediaBarAutoAdvance,
-            mediaBarIntervalMs: serverProfile.mediaBarIntervalMs,
-            mediaBarTrailerPreview: serverProfile.mediaBarTrailerPreview,
-            showShuffleButton: serverProfile.showShuffleButton,
-            showGenresButton: serverProfile.showGenresButton,
-            showFavoritesButton: serverProfile.showFavoritesButton,
-            showCastButton: serverProfile.showCastButton,
-            showSyncPlayButton: serverProfile.showSyncPlayButton,
-            showLibrariesInToolbar: serverProfile.showLibrariesInToolbar,
-            shuffleContentType: serverProfile.shuffleContentType,
-            seasonalSurprise: serverProfile.seasonalSurprise,
-            backdropEnabled: serverProfile.backdropEnabled,
-            confirmExit: serverProfile.confirmExit,
-            navbarPosition: serverProfile.navbarPosition,
-            showClock: serverProfile.showClock,
-            use24HourClock: serverProfile.use24HourClock,
-            mdblistEnabled: serverProfile.mdblistEnabled,
-            mdblistApiKey: serverProfile.mdblistApiKey,
-            mdblistRatingSources: serverProfile.mdblistRatingSources,
-            tmdbApiKey: serverProfile.tmdbApiKey,
-            tmdbEpisodeRatingsEnabled: serverProfile.tmdbEpisodeRatingsEnabled
+        var mapping = {
+            navbarEnabled: 'navbarEnabled',
+            detailsPageEnabled: 'detailsPageEnabled',
+            mediaBarEnabled: 'mediaBarEnabled',
+            mediaBarContentType: 'mediaBarContentType',
+            mediaBarItemCount: 'mediaBarItemCount',
+            mediaBarOverlayOpacity: 'mediaBarOpacity',
+            mediaBarOverlayColor: 'mediaBarOverlayColor',
+            mediaBarAutoAdvance: 'mediaBarAutoAdvance',
+            mediaBarIntervalMs: 'mediaBarIntervalMs',
+            mediaBarTrailerPreview: 'mediaBarTrailerPreview',
+            showShuffleButton: 'showShuffleButton',
+            showGenresButton: 'showGenresButton',
+            showFavoritesButton: 'showFavoritesButton',
+            showCastButton: 'showCastButton',
+            showSyncPlayButton: 'showSyncPlayButton',
+            showLibrariesInToolbar: 'showLibrariesInToolbar',
+            shuffleContentType: 'shuffleContentType',
+            seasonalSurprise: 'seasonalSurprise',
+            backdropEnabled: 'backdropEnabled',
+            confirmExit: 'confirmExit',
+            navbarPosition: 'navbarPosition',
+            showClock: 'showClock',
+            use24HourClock: 'use24HourClock',
+            mdblistEnabled: 'mdblistEnabled',
+            mdblistApiKey: 'mdblistApiKey',
+            mdblistRatingSources: 'mdblistRatingSources',
+            tmdbApiKey: 'tmdbApiKey',
+            tmdbEpisodeRatingsEnabled: 'tmdbEpisodeRatingsEnabled'
         };
+        // Only include properties that have actual values — prevents undefined/null
+        // from polluting merge operations and overwriting valid false values
+        var result = {};
+        for (var localKey in mapping) {
+            var serverKey = mapping[localKey];
+            var val = serverProfile[serverKey];
+            if (val !== undefined && val !== null) {
+                result[localKey] = val;
+            }
+        }
+        return result;
     },
 
     _mapProfileToServer(localProfile) {

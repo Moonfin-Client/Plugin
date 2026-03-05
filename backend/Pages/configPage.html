@@ -257,19 +257,19 @@
 
                     // Load default user settings
                     var defaults = config.DefaultUserSettings || {};
-                    document.querySelector('#DefaultNavbarEnabled').checked = !!defaults.NavbarEnabled;
-                    document.querySelector('#DefaultNavbarPosition').value = defaults.NavbarPosition || '';
-                    document.querySelector('#DefaultMediaBarEnabled').checked = !!defaults.MediaBarEnabled;
-                    document.querySelector('#DefaultDetailsPageEnabled').checked = !!defaults.DetailsPageEnabled;
-                    document.querySelector('#DefaultShowClock').checked = !!defaults.ShowClock;
-                    document.querySelector('#DefaultShowShuffleButton').checked = !!defaults.ShowShuffleButton;
-                    document.querySelector('#DefaultShowGenresButton').checked = !!defaults.ShowGenresButton;
-                    document.querySelector('#DefaultShowFavoritesButton').checked = !!defaults.ShowFavoritesButton;
-                    document.querySelector('#DefaultShowCastButton').checked = !!defaults.ShowCastButton;
-                    document.querySelector('#DefaultShowSyncPlayButton').checked = !!defaults.ShowSyncPlayButton;
-                    document.querySelector('#DefaultShowLibrariesInToolbar').checked = !!defaults.ShowLibrariesInToolbar;
-                    document.querySelector('#DefaultMdblistEnabled').checked = !!defaults.MdblistEnabled;
-                    document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked = !!defaults.TmdbEpisodeRatingsEnabled;
+                    document.querySelector('#DefaultNavbarEnabled').checked = !!defaults.navbarEnabled;
+                    document.querySelector('#DefaultNavbarPosition').value = defaults.navbarPosition || '';
+                    document.querySelector('#DefaultMediaBarEnabled').checked = !!defaults.mediaBarEnabled;
+                    document.querySelector('#DefaultDetailsPageEnabled').checked = !!defaults.detailsPageEnabled;
+                    document.querySelector('#DefaultShowClock').checked = !!defaults.showClock;
+                    document.querySelector('#DefaultShowShuffleButton').checked = !!defaults.showShuffleButton;
+                    document.querySelector('#DefaultShowGenresButton').checked = !!defaults.showGenresButton;
+                    document.querySelector('#DefaultShowFavoritesButton').checked = !!defaults.showFavoritesButton;
+                    document.querySelector('#DefaultShowCastButton').checked = !!defaults.showCastButton;
+                    document.querySelector('#DefaultShowSyncPlayButton').checked = !!defaults.showSyncPlayButton;
+                    document.querySelector('#DefaultShowLibrariesInToolbar').checked = !!defaults.showLibrariesInToolbar;
+                    document.querySelector('#DefaultMdblistEnabled').checked = !!defaults.mdblistEnabled;
+                    document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked = !!defaults.tmdbEpisodeRatingsEnabled;
 
                     Dashboard.hideLoadingMsg();
                 });
@@ -289,19 +289,19 @@
 
                             // Save default user settings
                             config.DefaultUserSettings = config.DefaultUserSettings || {};
-                            config.DefaultUserSettings.NavbarEnabled = document.querySelector('#DefaultNavbarEnabled').checked;
-                            config.DefaultUserSettings.NavbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
-                            config.DefaultUserSettings.MediaBarEnabled = document.querySelector('#DefaultMediaBarEnabled').checked;
-                            config.DefaultUserSettings.DetailsPageEnabled = document.querySelector('#DefaultDetailsPageEnabled').checked;
-                            config.DefaultUserSettings.ShowClock = document.querySelector('#DefaultShowClock').checked;
-                            config.DefaultUserSettings.ShowShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;
-                            config.DefaultUserSettings.ShowGenresButton = document.querySelector('#DefaultShowGenresButton').checked;
-                            config.DefaultUserSettings.ShowFavoritesButton = document.querySelector('#DefaultShowFavoritesButton').checked;
-                            config.DefaultUserSettings.ShowCastButton = document.querySelector('#DefaultShowCastButton').checked;
-                            config.DefaultUserSettings.ShowSyncPlayButton = document.querySelector('#DefaultShowSyncPlayButton').checked;
-                            config.DefaultUserSettings.ShowLibrariesInToolbar = document.querySelector('#DefaultShowLibrariesInToolbar').checked;
-                            config.DefaultUserSettings.MdblistEnabled = document.querySelector('#DefaultMdblistEnabled').checked;
-                            config.DefaultUserSettings.TmdbEpisodeRatingsEnabled = document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
+                            config.DefaultUserSettings.navbarEnabled = document.querySelector('#DefaultNavbarEnabled').checked;
+                            config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
+                            config.DefaultUserSettings.mediaBarEnabled = document.querySelector('#DefaultMediaBarEnabled').checked;
+                            config.DefaultUserSettings.detailsPageEnabled = document.querySelector('#DefaultDetailsPageEnabled').checked;
+                            config.DefaultUserSettings.showClock = document.querySelector('#DefaultShowClock').checked;
+                            config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;
+                            config.DefaultUserSettings.showGenresButton = document.querySelector('#DefaultShowGenresButton').checked;
+                            config.DefaultUserSettings.showFavoritesButton = document.querySelector('#DefaultShowFavoritesButton').checked;
+                            config.DefaultUserSettings.showCastButton = document.querySelector('#DefaultShowCastButton').checked;
+                            config.DefaultUserSettings.showSyncPlayButton = document.querySelector('#DefaultShowSyncPlayButton').checked;
+                            config.DefaultUserSettings.showLibrariesInToolbar = document.querySelector('#DefaultShowLibrariesInToolbar').checked;
+                            config.DefaultUserSettings.mdblistEnabled = document.querySelector('#DefaultMdblistEnabled').checked;
+                            config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
 
                             ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
                                 Dashboard.processPluginConfigurationUpdateResult(result);
