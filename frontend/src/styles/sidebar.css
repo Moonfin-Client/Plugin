@@ -7,7 +7,7 @@
 body.moonfin-sidebar-active {
     padding-left: 56px !important;
     padding-top: 0 !important;
-    background: #000 !important;
+    background: linear-gradient(to bottom, black 60%, transparent) !important;
     transition: padding-left 0.2s ease;
 }
 
