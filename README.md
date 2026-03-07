@@ -4,10 +4,10 @@
 ---
 
 <p align="center">
-   <img width="4305" height="2659" alt="splash-background" src="https://github.com/user-attachments/assets/8618363e-d982-4828-8274-a2c3c7623ddb" />
+   <img width="1920" height="1080" alt="Moonfin Logo" src="https://github.com/user-attachments/assets/8a22192b-1481-4d96-a832-0579a348943c" />
 </p>
 
-[![License](https://img.shields.io/github/license/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin) [![Release](https://img.shields.io/github/release/Moonfin-Client/Pluginsvg)](https://github.com/Moonfin-Client/Plugin/releases)
+[![License](https://img.shields.io/github/license/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin) [![Release](https://img.shields.io/github/release/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin/releases)
 
 ## What is this?
 
@@ -95,6 +95,16 @@ Moonfin uses the [File Transformation](https://github.com/IAmParadox27/jellyfin-
 4. Force refresh your browser (Ctrl+Shift+R)
 
 > **UI not loading?** Go to *Dashboard → Scheduled Tasks* and run the **Moonfin Startup** task once, then refresh your browser.
+
+### Enabling the UI
+
+All Moonfin features are **disabled by default** after installation. To activate them:
+
+1. Click the **☰ hamburger menu** (top-left corner)
+2. Select **Moonfin** to open the settings panel
+3. Enable the features you want — **Navbar**, **Details Page**, **Media Bar**, etc.
+
+> **Tip for admins:** You can pre-enable features for all users from *Dashboard → Plugins → Moonfin* by setting **Default User Settings**. Users who haven't customized a setting will inherit the admin default, so new users get the full UI out of the box.
 
 ## Configuration
 
