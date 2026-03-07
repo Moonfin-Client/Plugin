@@ -9,6 +9,15 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
+        "version": "1.6.0.0",
+        "changelog": "Bug Fixes:\n- Fixed Seerr/Jellyseerr proxy navigation - search, sidebar links, and in-app navigation no longer load indefinitely\n- Fixed user settings not saving correctly - refactored settings mapping for consistency\n- Fixed navbar background to use a gradient\n- Fixed admin config page not appearing in Jellyfin admin sidebar\n\nImprovements:\n- Media version/quality information now displayed on details overlay\n- Authentication now requires only a username for passwordless Jellyfin users\n- MDBList batch task refactored for better memory management with stream-based JSON I/O",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.6.0.0/Moonfin.Server-1.6.0.0.zip",
+        "checksum": "50FFD98FA41B59F66827B12A2863D7A3",
+        "timestamp": "2026-03-07T18:38:04",
+        "dependencies": []
+      },
+      {
         "version": "1.5.1.0",
         "changelog": "Bug Fixes:\n- Fixed MDBList and TMDB user API keys not being read from v2 settings profiles (only admin keys worked)\n- Fixed user-selected MDBList rating sources being ignored after v1-to-v2 settings migration (only default 4 sources were returned)",
         "targetAbi": "10.10.0.0",
