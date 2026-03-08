@@ -45,7 +45,7 @@ jobs:
           RELEASE_ASSETS: ${{ toJSON(github.event.release.assets) }}
         run: |
           # Find the first .zip asset attached to the release
-          ASSET_URL=$(echo "$RELEASE_ASSETS" | jq -r '.[] | select(.name | endswith(".zip")) | .browser_download_url' | head -1)
+          ASSET_URL=$(echo "$RELEASE_ASSETS" | jq -r '.[] | select(.name | startswith("Moonfin.Server-") and endswith(".zip")) | .browser_download_url' | head -1)
 
           if [ -z "$ASSET_URL" ]; then
             echo "::error::No .zip asset found on this release"
