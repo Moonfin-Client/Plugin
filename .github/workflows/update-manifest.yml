@@ -1,0 +1,107 @@
+name: Update manifest.json on release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from release tag
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          # Strip leading 'v' if present
+          VERSION="${TAG#v}"
+          # Ensure four-part version (append .0 if needed)
+          DOTS=$(echo "$VERSION" | tr -cd '.' | wc -c | tr -d ' ')
+          if [ "$DOTS" -eq 2 ]; then
+            VERSION="${VERSION}.0"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Extract targetAbi from .csproj
+        id: abi
+        run: |
+          # Pull the Jellyfin.Controller PackageReference version from the .csproj
+          ABI=$(grep -oP 'Jellyfin\.Controller"[^>]*Version="\K[^"]+' backend/Moonfin.Server.csproj)
+          echo "targetAbi=${ABI}.0" >> "$GITHUB_OUTPUT"
+          echo "Target ABI: ${ABI}.0"
+
+      - name: Download release zip asset
+        id: asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ASSETS: ${{ toJSON(github.event.release.assets) }}
+        run: |
+          # Find the first .zip asset attached to the release
+          ASSET_URL=$(echo "$RELEASE_ASSETS" | jq -r '.[] | select(.name | endswith(".zip")) | .browser_download_url' | head -1)
+
+          if [ -z "$ASSET_URL" ]; then
+            echo "::error::No .zip asset found on this release"
+            exit 1
+          fi
+
+          ASSET_NAME=$(basename "$ASSET_URL")
+          echo "Downloading $ASSET_NAME from $ASSET_URL"
+          curl -fSL -o "$ASSET_NAME" "$ASSET_URL"
+
+          echo "asset_name=$ASSET_NAME" >> "$GITHUB_OUTPUT"
+          echo "source_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Compute MD5 checksum
+        id: checksum
+        run: |
+          CHECKSUM=$(md5sum "${{ steps.asset.outputs.asset_name }}" | awk '{print toupper($1)}')
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+          echo "MD5: $CHECKSUM"
+
+      - name: Format timestamp
+        id: timestamp
+        env:
+          RELEASE_CREATED_AT: ${{ github.event.release.created_at }}
+        run: |
+          # Convert release created_at to YYYY-MM-DDTHH:MM:SS (no timezone suffix)
+          TIMESTAMP=$(date -u -d "$RELEASE_CREATED_AT" +"%Y-%m-%dT%H:%M:%S")
+          echo "timestamp=$TIMESTAMP" >> "$GITHUB_OUTPUT"
+          echo "Timestamp: $TIMESTAMP"
+
+      - name: Update manifest.json
+        env:
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          jq --arg ver "${{ steps.version.outputs.version }}" \
+             --arg abi "${{ steps.abi.outputs.targetAbi }}" \
+             --arg url "${{ steps.asset.outputs.source_url }}" \
+             --arg sum "${{ steps.checksum.outputs.checksum }}" \
+             --arg time "${{ steps.timestamp.outputs.timestamp }}" \
+             --arg log "$RELEASE_BODY" \
+             '.[0].versions = [{
+                version: $ver,
+                changelog: $log,
+                targetAbi: $abi,
+                sourceUrl: $url,
+                checksum: $sum,
+                timestamp: $time,
+                dependencies: []
+              }] + .[0].versions' \
+             manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+
+          echo "Updated manifest.json — new version ${{ steps.version.outputs.version }} prepended"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: update manifest.json for v${{ steps.version.outputs.version }}"
+          git push
