@@ -1,0 +1,168 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build:
+    name: Build Plugin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # ── Frontend ──────────────────────────────────────────────
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: node build.js
+
+      # ── Sync web files into backend ───────────────────────────
+      - name: Sync web files
+        run: |
+          mkdir -p backend/Web
+          cp frontend/dist/plugin.js backend/Web/plugin.js
+          cp frontend/dist/plugin.css backend/Web/plugin.css
+
+      # ── Backend ───────────────────────────────────────────────
+      - name: Build backend
+        run: dotnet build backend/Moonfin.Server.csproj -c Release
+
+      # ── Package (master only) ─────────────────────────────────
+      - name: Read version from csproj
+        if: github.event_name == 'push'
+        id: version
+        run: |
+          VERSION=$(grep -oPm1 '(?<=<AssemblyVersion>)[^<]+' backend/Moonfin.Server.csproj)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Read target ABI from csproj
+        if: github.event_name == 'push'
+        id: abi
+        run: |
+          ABI=$(grep -oPm1 '(?<=<Version>)[^<]+' backend/Moonfin.Server.csproj | sed 's/\.[0-9]*$//')
+          # Fallback to Jellyfin package version
+          ABI=$(grep 'Jellyfin.Controller' backend/Moonfin.Server.csproj | grep -oP 'Version="\K[^"]+')
+          echo "abi=${ABI}.0" >> "$GITHUB_OUTPUT"
+
+      - name: Package release ZIP
+        if: github.event_name == 'push'
+        id: package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TARGET_ABI="${{ steps.abi.outputs.abi }}"
+          PLUGIN_GUID="8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          mkdir -p release
+          cp backend/bin/Release/net8.0/Moonfin.Server.dll release/
+
+          cat > release/meta.json <<EOF
+          {
+            "category": "General",
+            "changelog": "",
+            "description": "Moonfin brings a modern TV-style UI to Jellyfin web. Features include: custom navbar, media bar with featured content, Jellyseerr integration, and cross-device settings synchronization.",
+            "guid": "${PLUGIN_GUID}",
+            "name": "Moonfin",
+            "overview": "Custom UI and settings sync for Jellyfin",
+            "owner": "RadicalMuffinMan",
+            "targetAbi": "${TARGET_ABI}",
+            "timestamp": "${TIMESTAMP}",
+            "version": "${VERSION}",
+            "status": "Active",
+            "autoUpdate": true,
+            "assemblies": ["Moonfin.Server.dll"]
+          }
+          EOF
+
+          ZIP_NAME="Moonfin.Server-${VERSION}.zip"
+          cd release && zip -r "../${ZIP_NAME}" . && cd ..
+
+          CHECKSUM=$(md5sum "$ZIP_NAME" | awk '{print toupper($1)}')
+
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.zip_name }}
+          path: ${{ steps.package.outputs.zip_name }}
+
+      - name: Build summary (master)
+        if: github.event_name == 'push'
+        run: |
+          echo "## ✅ Build Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Checksum (MD5)** | \`${{ steps.package.outputs.checksum }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Artifact** | \`${{ steps.package.outputs.zip_name }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      # ── PR comment ────────────────────────────────────────────
+      - name: Comment build results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- moonfin-build-result -->';
+            const body = [
+              marker,
+              '## ✅ Build Successful',
+              '',
+              'The plugin compiled successfully against **.NET 8** / **Jellyfin 10.10.0**.',
+              '',
+              `| Property | Value |`,
+              `|---|---|`,
+              `| **Commit** | \`${context.sha.substring(0, 7)}\` |`,
+              `| **Workflow** | [${context.workflow} #${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) |`,
+            ].join('\n');
+
+            // Find existing comment to update
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
