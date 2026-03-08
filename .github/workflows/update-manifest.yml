@@ -2,7 +2,7 @@ name: Update manifest.json on release
 
 on:
   release:
-    types: [published]
+    types: [published, edited, deleted]
 
 permissions:
   contents: write
@@ -30,25 +30,38 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
 
+      # ── Delete: remove the version entry ──────────────────────────────
+
+      - name: Remove version from manifest.json
+        if: github.event.action == 'deleted'
+        run: |
+          jq --arg ver "${{ steps.version.outputs.version }}" \
+             '.[0].versions |= map(select(.version != $ver))' \
+             manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+
+          echo "Removed version ${{ steps.version.outputs.version }} from manifest.json"
+
+      # ── Published / Edited: upsert the version entry ──────────────────
+
       - name: Extract targetAbi from .csproj
+        if: github.event.action != 'deleted'
         id: abi
         run: |
-          # Pull the Jellyfin.Controller PackageReference version from the .csproj
           ABI=$(grep -oP 'Jellyfin\.Controller"[^>]*Version="\K[^"]+' backend/Moonfin.Server.csproj)
           echo "targetAbi=${ABI}.0" >> "$GITHUB_OUTPUT"
           echo "Target ABI: ${ABI}.0"
 
       - name: Download release zip asset
+        if: github.event.action != 'deleted'
         id: asset
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ASSETS: ${{ toJSON(github.event.release.assets) }}
         run: |
-          # Find the first .zip asset attached to the release
           ASSET_URL=$(echo "$RELEASE_ASSETS" | jq -r '.[] | select(.name | startswith("Moonfin.Server-") and endswith(".zip")) | .browser_download_url' | head -1)
 
           if [ -z "$ASSET_URL" ]; then
-            echo "::error::No .zip asset found on this release"
+            echo "::error::No Moonfin.Server-*.zip asset found on this release"
             exit 1
           fi
 
@@ -60,6 +73,7 @@ jobs:
           echo "source_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
 
       - name: Compute MD5 checksum
+        if: github.event.action != 'deleted'
         id: checksum
         run: |
           CHECKSUM=$(md5sum "${{ steps.asset.outputs.asset_name }}" | awk '{print toupper($1)}')
@@ -67,16 +81,17 @@ jobs:
           echo "MD5: $CHECKSUM"
 
       - name: Format timestamp
+        if: github.event.action != 'deleted'
         id: timestamp
         env:
           RELEASE_CREATED_AT: ${{ github.event.release.created_at }}
         run: |
-          # Convert release created_at to YYYY-MM-DDTHH:MM:SS (no timezone suffix)
           TIMESTAMP=$(date -u -d "$RELEASE_CREATED_AT" +"%Y-%m-%dT%H:%M:%S")
           echo "timestamp=$TIMESTAMP" >> "$GITHUB_OUTPUT"
           echo "Timestamp: $TIMESTAMP"
 
-      - name: Update manifest.json
+      - name: Upsert version in manifest.json
+        if: github.event.action != 'deleted'
         env:
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
@@ -86,24 +101,39 @@ jobs:
              --arg sum "${{ steps.checksum.outputs.checksum }}" \
              --arg time "${{ steps.timestamp.outputs.timestamp }}" \
              --arg log "$RELEASE_BODY" \
-             '.[0].versions = [{
-                version: $ver,
-                changelog: $log,
-                targetAbi: $abi,
-                sourceUrl: $url,
-                checksum: $sum,
-                timestamp: $time,
-                dependencies: []
-              }] + .[0].versions' \
+             '.[0].versions |= (
+                map(select(.version != $ver)) |
+                [{
+                  version: $ver,
+                  changelog: $log,
+                  targetAbi: $abi,
+                  sourceUrl: $url,
+                  checksum: $sum,
+                  timestamp: $time,
+                  dependencies: []
+                }] + .
+              )' \
              manifest.json > manifest.tmp && mv manifest.tmp manifest.json
 
-          echo "Updated manifest.json — new version ${{ steps.version.outputs.version }} prepended"
+          echo "Upserted version ${{ steps.version.outputs.version }} in manifest.json"
+
+      # ── Commit ────────────────────────────────────────────────────────
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add manifest.json
+
+          ACTION="${{ github.event.action }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          if [ "$ACTION" = "deleted" ]; then
+            MSG="chore: remove v${VERSION} from manifest.json"
+          else
+            MSG="chore: update manifest.json for v${VERSION}"
+          fi
+
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore: update manifest.json for v${{ steps.version.outputs.version }}"
+          git commit -m "$MSG"
           git push
