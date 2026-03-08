@@ -1,316 +1,425 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="utf-8">
-    <title>Moonfin</title>
+  <meta charset="utf-8">
+  <title>Moonfin</title>
 </head>
+
 <body>
-    <div id="MoonfinConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
-        <div data-role="content">
-            <div class="content-primary">
-                <form id="MoonfinConfigForm">
-                    <div class="sectionTitleContainer flex align-items-center">
-                        <h2 class="sectionTitle">Moonfin Settings</h2>
-                    </div>
+  <div id="MoonfinConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+    data-require="emby-input,emby-button,emby-checkbox">
+    <div data-role="content">
+      <div class="content-primary">
+        <form id="MoonfinConfigForm">
+          <div class="sectionTitleContainer flex align-items-center">
+            <h2 class="sectionTitle">Moonfin Settings</h2>
+          </div>
 
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">General</h3>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
-                                <span>Enable Settings Sync</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Allow Moonfin clients to sync their settings across devices via this server.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">Jellyseerr / Seerr Integration</h3>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="JellyseerrEnabled" is="emby-checkbox" />
-                                <span>Enable Jellyseerr / Seerr</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Enable Jellyseerr or Seerr integration for all users. Users can configure their own authentication method in their client settings.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="JellyseerrUrl">Jellyseerr/Seerr URL</label>
-                            <input type="url" id="JellyseerrUrl" is="emby-input" placeholder="https://jellyseerr.example.com" />
-                            <div class="fieldDescription">
-                                The URL of your Jellyseerr or Seerr instance. This URL is used for server-to-server API proxying.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="JellyseerrDisplayName">Display Name (Optional)</label>
-                            <input type="text" id="JellyseerrDisplayName" is="emby-input" placeholder="Auto-detected" />
-                            <div class="fieldDescription">
-                                <strong>Optional override.</strong> The name shown in the UI (e.g., "Requests", "Media Requests").
-                                Leave blank to auto-detect "Jellyseerr" or "Seerr" based on the configured URL.
-                                The icon is always auto-detected regardless of this setting.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="JellyseerrDirectUrl">Direct Iframe URL (Advanced)</label>
-                            <input type="url" id="JellyseerrDirectUrl" is="emby-input" placeholder="https://jellyseerr.yourdomain.com" />
-                            <div class="fieldDescription">
-                                <strong>Optional:</strong> When set, the client-side iframe loads directly from this URL
-                                instead of through the proxy. Use this if you're running Seerr v3 (Next.js) behind a reverse proxy
-                                and experiencing issues with the default proxy mode.
-                                <br><br>
-                                <strong>When to use:</strong> If Seerr works when accessed directly but not through Moonfin's proxy,
-                                set this to your public Seerr URL (e.g., <code>https://seerr.yourdomain.com</code>).
-                                SSO API calls will still go through the Jellyfin server.
-                            </div>
-                        </div>
-                        <div style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 1em 1.5em; margin: 1em 0;">
-                            <strong>SSO Proxy:</strong> When Jellyseerr is enabled, Moonfin provides single sign-on.
-                            Users authenticate once with their Jellyfin credentials, and the session is stored server-side.
-                            All Moonfin clients (web, Android, Roku, webOS, Tizen, etc) can access Jellyseerr through <code>/Moonfin/Jellyseerr/Api/</code>
-                            without re-authenticating.
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">MDBList Integration</h3>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="MdblistApiKey">Server-wide MDBList API Key</label>
-                            <input type="password" id="MdblistApiKey" is="emby-input" placeholder="Enter your mdblist.com API key" />
-                            <div class="fieldDescription">
-                                Provide a server-wide <a href="https://mdblist.com/preferences/" target="_blank">MDBList API key</a>
-                                that all users can use for ratings (IMDb, Rotten Tomatoes, Metacritic, etc.).
-                                Users who set their own key in their Moonfin client settings will use that instead.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">TMDB Integration</h3>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="TmdbApiKey">Server-wide TMDB API Key</label>
-                            <input type="password" id="TmdbApiKey" is="emby-input" placeholder="Enter your TMDB API key or v4 token" />
-                            <div class="fieldDescription">
-                                Provide a server-wide <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB API key</a>
-                                that all users can use for episode ratings.
-                                Users who set their own key in their Moonfin client settings will use that instead.
-                                Supports both v3 API keys and v4 Bearer tokens.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">Default User Settings</h3>
-                        <div class="fieldDescription" style="margin-bottom: 1em;">
-                            Configure default Moonfin settings for all users. New users and users who haven't customized
-                            a setting will see these values. Users can always override defaults in their own Moonfin settings panel.
-                        </div>
-
-                        <div style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 0.8em 1.2em; margin-bottom: 1.2em; font-size: 0.9em;">
-                            <strong>How it works:</strong> These are the lowest-priority fallback. Resolution order:
-                            User's device profile &rarr; User's global settings &rarr; <strong>These admin defaults</strong> &rarr; Built-in defaults.
-                        </div>
-
-                        <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">UI Features</h4>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultNavbarEnabled" is="emby-checkbox" />
-                                <span>Navigation Bar</span>
-                            </label>
-                            <div class="fieldDescription">Enable the custom Moonfin navigation bar by default.</div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultNavbarPosition">Default Navbar Position</label>
-                            <select id="DefaultNavbarPosition" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="top">Top</option>
-                                <option value="left">Left (Sidebar)</option>
-                            </select>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultMediaBarEnabled" is="emby-checkbox" />
-                                <span>Media Bar</span>
-                            </label>
-                            <div class="fieldDescription">Enable the featured media carousel on the home page by default.</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultDetailsPageEnabled" is="emby-checkbox" />
-                                <span>Details Page</span>
-                            </label>
-                            <div class="fieldDescription">Use the custom Moonfin details page by default.</div>
-                        </div>
-
-                        <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Toolbar Buttons</h4>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultShowClock" is="emby-checkbox" />
-                                <span>Clock</span>
-                            </label>
-                            <div class="fieldDescription">Show clock in navigation bar by default.</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultShowShuffleButton" is="emby-checkbox" />
-                                <span>Shuffle Button</span>
-                            </label>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultShowGenresButton" is="emby-checkbox" />
-                                <span>Genres Button</span>
-                            </label>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultShowFavoritesButton" is="emby-checkbox" />
-                                <span>Favorites Button</span>
-                            </label>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultShowCastButton" is="emby-checkbox" />
-                                <span>Cast Button</span>
-                            </label>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultShowSyncPlayButton" is="emby-checkbox" />
-                                <span>SyncPlay Button</span>
-                            </label>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultShowLibrariesInToolbar" is="emby-checkbox" />
-                                <span>Library Shortcuts</span>
-                            </label>
-                        </div>
-
-                        <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Integrations</h4>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultMdblistEnabled" is="emby-checkbox" />
-                                <span>MDBList Ratings</span>
-                            </label>
-                            <div class="fieldDescription">Enable MDBList ratings by default (requires server-wide or user API key).</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultTmdbEpisodeRatingsEnabled" is="emby-checkbox" />
-                                <span>TMDB Episode Ratings</span>
-                            </label>
-                            <div class="fieldDescription">Enable TMDB episode ratings by default (requires server-wide or user API key).</div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">Web Plugin Status</h3>
-                        <div class="fieldDescription" style="margin-bottom: 1em;">
-                            <p>Moonfin uses the
-                                <a href="https://github.com/IAmParadox27/jellyfin-plugin-file-transformation" target="_blank">File Transformation</a>
-                                plugin to inject its web UI.
-                            </p>
-                            <p style="margin-top: 0.5em;">
-                                <strong>Setup:</strong>
-                            </p>
-                            <ol style="margin-left: 1.5em;">
-                                <li>Install the <strong>File Transformation</strong> plugin (add <code>https://www.iamparadox.dev/jellyfin/plugins/manifest.json</code> to your plugin repositories)</li>
-                                <li>Restart Jellyfin</li>
-                                <li>Force refresh your browser (Ctrl+Shift+R)</li>
-                            </ol>
-                            <p style="margin-top: 0.5em;">
-                                <strong>UI not loading?</strong> Go to <em>Dashboard &gt; Scheduled Tasks</em> and run the
-                                <strong>Moonfin Startup</strong> task once, then refresh your browser.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div>
-                        <button is="emby-button" type="submit" class="raised button-submit block">
-                            <span>Save</span>
-                        </button>
-                    </div>
-                </form>
+          <div class="verticalSection">
+            <h3 class="sectionTitle">General</h3>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
+                <span>Enable Settings Sync</span>
+              </label>
+              <div class="fieldDescription">
+                Allow Moonfin clients to sync their settings across devices via this server.
+              </div>
             </div>
-        </div>
+          </div>
 
-        <script type="text/javascript">
-            var MoonfinConfig = {
-                pluginUniqueId: '8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b'
-            };
+          <div class="verticalSection">
+            <h3 class="sectionTitle">Jellyseerr / Seerr Integration</h3>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="JellyseerrEnabled" is="emby-checkbox" />
+                <span>Enable Jellyseerr / Seerr</span>
+              </label>
+              <div class="fieldDescription">
+                Enable Jellyseerr or Seerr integration for all users. Users can configure their own authentication
+                method in their client settings.
+              </div>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="JellyseerrUrl">Jellyseerr/Seerr URL</label>
+              <input type="url" id="JellyseerrUrl" is="emby-input" placeholder="https://jellyseerr.example.com" />
+              <div class="fieldDescription">
+                The URL of your Jellyseerr or Seerr instance. This URL is used for server-to-server API proxying.
+              </div>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="JellyseerrDisplayName">Display Name (Optional)</label>
+              <input type="text" id="JellyseerrDisplayName" is="emby-input" placeholder="Auto-detected" />
+              <div class="fieldDescription">
+                <strong>Optional override.</strong> The name shown in the UI (e.g., "Requests", "Media Requests").
+                Leave blank to auto-detect "Jellyseerr" or "Seerr" based on the configured URL.
+                The icon is always auto-detected regardless of this setting.
+              </div>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="JellyseerrDirectUrl">Direct Iframe URL
+                (Advanced)</label>
+              <input type="url" id="JellyseerrDirectUrl" is="emby-input"
+                placeholder="https://jellyseerr.yourdomain.com" />
+              <div class="fieldDescription">
+                <strong>Optional:</strong> When set, the client-side iframe loads directly from this URL
+                instead of through the proxy. Use this if you're running Seerr v3 (Next.js) behind a reverse proxy
+                and experiencing issues with the default proxy mode.
+                <br><br>
+                <strong>When to use:</strong> If Seerr works when accessed directly but not through Moonfin's proxy,
+                set this to your public Seerr URL (e.g., <code>https://seerr.yourdomain.com</code>).
+                SSO API calls will still go through the Jellyfin server.
+              </div>
+            </div>
+            <div
+              style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 1em 1.5em; margin: 1em 0;">
+              <strong>SSO Proxy:</strong> When Jellyseerr is enabled, Moonfin provides single sign-on.
+              Users authenticate once with their Jellyfin credentials, and the session is stored server-side.
+              All Moonfin clients (web, Android, Roku, webOS, Tizen, etc) can access Jellyseerr through
+              <code>/Moonfin/Jellyseerr/Api/</code>
+              without re-authenticating.
+            </div>
+          </div>
 
-            document.addEventListener('pageshow', function(e) {
-                if (e.target.id !== 'MoonfinConfigPage') return;
+          <div class="verticalSection">
+            <h3 class="sectionTitle">MDBList Integration</h3>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="MdblistApiKey">Server-wide MDBList API Key</label>
+              <input type="password" id="MdblistApiKey" is="emby-input" placeholder="Enter your mdblist.com API key" />
+              <div class="fieldDescription">
+                Provide a server-wide <a href="https://mdblist.com/preferences/" target="_blank">MDBList API key</a>
+                that all users can use for ratings (IMDb, Rotten Tomatoes, Metacritic, etc.).
+                Users who set their own key in their Moonfin client settings will use that instead.
+              </div>
+            </div>
+          </div>
 
-                Dashboard.showLoadingMsg();
-                ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
-                    document.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
-                    document.querySelector('#JellyseerrEnabled').checked = config.JellyseerrEnabled;
-                    document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
-                    document.querySelector('#JellyseerrDirectUrl').value = config.JellyseerrDirectUrl || '';
-                    document.querySelector('#JellyseerrDisplayName').value = config.JellyseerrDisplayName || '';
-                    document.querySelector('#MdblistApiKey').value = config.MdblistApiKey || '';
-                    document.querySelector('#TmdbApiKey').value = config.TmdbApiKey || '';
+          <div class="verticalSection">
+            <h3 class="sectionTitle">TMDB Integration</h3>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="TmdbApiKey">Server-wide TMDB API Key</label>
+              <input type="password" id="TmdbApiKey" is="emby-input"
+                placeholder="Enter your TMDB API key or v4 token" />
+              <div class="fieldDescription">
+                Provide a server-wide <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB API key</a>
+                that all users can use for episode ratings.
+                Users who set their own key in their Moonfin client settings will use that instead.
+                Supports both v3 API keys and v4 Bearer tokens.
+              </div>
+            </div>
+          </div>
 
-                    // Load default user settings
-                    var defaults = config.DefaultUserSettings || {};
-                    document.querySelector('#DefaultNavbarEnabled').checked = !!defaults.navbarEnabled;
-                    document.querySelector('#DefaultNavbarPosition').value = defaults.navbarPosition || '';
-                    document.querySelector('#DefaultMediaBarEnabled').checked = !!defaults.mediaBarEnabled;
-                    document.querySelector('#DefaultDetailsPageEnabled').checked = !!defaults.detailsPageEnabled;
-                    document.querySelector('#DefaultShowClock').checked = !!defaults.showClock;
-                    document.querySelector('#DefaultShowShuffleButton').checked = !!defaults.showShuffleButton;
-                    document.querySelector('#DefaultShowGenresButton').checked = !!defaults.showGenresButton;
-                    document.querySelector('#DefaultShowFavoritesButton').checked = !!defaults.showFavoritesButton;
-                    document.querySelector('#DefaultShowCastButton').checked = !!defaults.showCastButton;
-                    document.querySelector('#DefaultShowSyncPlayButton').checked = !!defaults.showSyncPlayButton;
-                    document.querySelector('#DefaultShowLibrariesInToolbar').checked = !!defaults.showLibrariesInToolbar;
-                    document.querySelector('#DefaultMdblistEnabled').checked = !!defaults.mdblistEnabled;
-                    document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked = !!defaults.tmdbEpisodeRatingsEnabled;
+          <div class="verticalSection">
+            <h3 class="sectionTitle">Default User Settings</h3>
+            <div class="fieldDescription" style="margin-bottom: 1em;">
+              Configure default Moonfin settings for all users. New users and users who haven't customized
+              a setting will see these values. Users can always override defaults in their own Moonfin settings panel.
+            </div>
 
-                    Dashboard.hideLoadingMsg();
-                });
+            <div
+              style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 0.8em 1.2em; margin-bottom: 1.2em; font-size: 0.9em;">
+              <strong>How it works:</strong> These are the lowest-priority fallback. Resolution order:
+              User's device profile &rarr; User's global settings &rarr; <strong>These admin defaults</strong> &rarr;
+              Built-in defaults.
+            </div>
 
-                document.querySelector('#MoonfinConfigForm')
-                    .addEventListener('submit', function(ev) {
-                        ev.preventDefault();
-                        Dashboard.showLoadingMsg();
-                        ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
-                            config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
-                            config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
-                            config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
-                            config.JellyseerrDirectUrl = document.querySelector('#JellyseerrDirectUrl').value || null;
-                            config.JellyseerrDisplayName = document.querySelector('#JellyseerrDisplayName').value || null;
-                            config.MdblistApiKey = document.querySelector('#MdblistApiKey').value || null;
-                            config.TmdbApiKey = document.querySelector('#TmdbApiKey').value || null;
+            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">UI Features</h4>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultNavbarEnabled" is="emby-checkbox" />
+                <span>Navigation Bar</span>
+              </label>
+              <div class="fieldDescription">Enable the custom Moonfin navigation bar by default.</div>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="DefaultNavbarPosition">Default Navbar Position</label>
+              <select id="DefaultNavbarPosition" is="emby-select">
+                <option value="">Not set (user decides)</option>
+                <option value="top">Top</option>
+                <option value="left">Left (Sidebar)</option>
+              </select>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultMediaBarEnabled" is="emby-checkbox" />
+                <span>Media Bar</span>
+              </label>
+              <div class="fieldDescription">Enable the featured media carousel on the home page by default.</div>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarSourceType">Media Bar Content
+                Source</label>
+              <select id="DefaultMediaBarSourceType" is="emby-select">
+                <option value="">Not set (user decides)</option>
+                <option value="library">Library (Random)</option>
+                <option value="collection">Collections / Playlists</option>
+              </select>
+              <div class="fieldDescription">Default content source for the media bar. Users can override this.</div>
+            </div>
+            <div id="DefaultCollectionPickerSection" style="display:none;">
+              <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused">Default Collections / Playlists</label>
+                <div class="fieldDescription" style="margin-bottom:0.5em;">Select which collections or playlists to show
+                  in the media bar by default. Users can override this in their own settings. Note: users who don't have
+                  access to a selected collection will simply not see those items.</div>
+                <div id="DefaultCollectionPicker"
+                  style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;">
+                </div>
+              </div>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultMediaBarShuffleItems" is="emby-checkbox" />
+                <span>Shuffle Media Bar Items</span>
+              </label>
+              <div class="fieldDescription">Randomize the order of items from collections/playlists by default.</div>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultDetailsPageEnabled" is="emby-checkbox" />
+                <span>Details Page</span>
+              </label>
+              <div class="fieldDescription">Use the custom Moonfin details page by default.</div>
+            </div>
 
-                            // Save default user settings
-                            config.DefaultUserSettings = config.DefaultUserSettings || {};
-                            config.DefaultUserSettings.navbarEnabled = document.querySelector('#DefaultNavbarEnabled').checked;
-                            config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
-                            config.DefaultUserSettings.mediaBarEnabled = document.querySelector('#DefaultMediaBarEnabled').checked;
-                            config.DefaultUserSettings.detailsPageEnabled = document.querySelector('#DefaultDetailsPageEnabled').checked;
-                            config.DefaultUserSettings.showClock = document.querySelector('#DefaultShowClock').checked;
-                            config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;
-                            config.DefaultUserSettings.showGenresButton = document.querySelector('#DefaultShowGenresButton').checked;
-                            config.DefaultUserSettings.showFavoritesButton = document.querySelector('#DefaultShowFavoritesButton').checked;
-                            config.DefaultUserSettings.showCastButton = document.querySelector('#DefaultShowCastButton').checked;
-                            config.DefaultUserSettings.showSyncPlayButton = document.querySelector('#DefaultShowSyncPlayButton').checked;
-                            config.DefaultUserSettings.showLibrariesInToolbar = document.querySelector('#DefaultShowLibrariesInToolbar').checked;
-                            config.DefaultUserSettings.mdblistEnabled = document.querySelector('#DefaultMdblistEnabled').checked;
-                            config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
+            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Toolbar Buttons</h4>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultShowClock" is="emby-checkbox" />
+                <span>Clock</span>
+              </label>
+              <div class="fieldDescription">Show clock in navigation bar by default.</div>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultShowShuffleButton" is="emby-checkbox" />
+                <span>Shuffle Button</span>
+              </label>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultShowGenresButton" is="emby-checkbox" />
+                <span>Genres Button</span>
+              </label>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultShowFavoritesButton" is="emby-checkbox" />
+                <span>Favorites Button</span>
+              </label>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultShowCastButton" is="emby-checkbox" />
+                <span>Cast Button</span>
+              </label>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultShowSyncPlayButton" is="emby-checkbox" />
+                <span>SyncPlay Button</span>
+              </label>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultShowLibrariesInToolbar" is="emby-checkbox" />
+                <span>Library Shortcuts</span>
+              </label>
+            </div>
 
-                            ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
-                                Dashboard.processPluginConfigurationUpdateResult(result);
-                            });
-                        });
-                        return false;
-                    });
-            });
-        </script>
+            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Integrations</h4>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultMdblistEnabled" is="emby-checkbox" />
+                <span>MDBList Ratings</span>
+              </label>
+              <div class="fieldDescription">Enable MDBList ratings by default (requires server-wide or user API key).
+              </div>
+            </div>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input type="checkbox" id="DefaultTmdbEpisodeRatingsEnabled" is="emby-checkbox" />
+                <span>TMDB Episode Ratings</span>
+              </label>
+              <div class="fieldDescription">Enable TMDB episode ratings by default (requires server-wide or user API
+                key).</div>
+            </div>
+          </div>
+
+          <div class="verticalSection">
+            <h3 class="sectionTitle">Web Plugin Status</h3>
+            <div class="fieldDescription" style="margin-bottom: 1em;">
+              <p>Moonfin uses the
+                <a href="https://github.com/IAmParadox27/jellyfin-plugin-file-transformation" target="_blank">File
+                  Transformation</a>
+                plugin to inject its web UI.
+              </p>
+              <p style="margin-top: 0.5em;">
+                <strong>Setup:</strong>
+              </p>
+              <ol style="margin-left: 1.5em;">
+                <li>Install the <strong>File Transformation</strong> plugin (add
+                  <code>https://www.iamparadox.dev/jellyfin/plugins/manifest.json</code> to your plugin repositories)
+                </li>
+                <li>Restart Jellyfin</li>
+                <li>Force refresh your browser (Ctrl+Shift+R)</li>
+              </ol>
+              <p style="margin-top: 0.5em;">
+                <strong>UI not loading?</strong> Go to <em>Dashboard &gt; Scheduled Tasks</em> and run the
+                <strong>Moonfin Startup</strong> task once, then refresh your browser.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <button is="emby-button" type="submit" class="raised button-submit block">
+              <span>Save</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
+
+    <script type="text/javascript">
+      var MoonfinConfig = {
+        pluginUniqueId: '8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b'
+      };
+
+      document.addEventListener('pageshow', function (e) {
+        if (e.target.id !== 'MoonfinConfigPage') return;
+
+        Dashboard.showLoadingMsg();
+        ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function (config) {
+          document.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
+          document.querySelector('#JellyseerrEnabled').checked = config.JellyseerrEnabled;
+          document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
+          document.querySelector('#JellyseerrDirectUrl').value = config.JellyseerrDirectUrl || '';
+          document.querySelector('#JellyseerrDisplayName').value = config.JellyseerrDisplayName || '';
+          document.querySelector('#MdblistApiKey').value = config.MdblistApiKey || '';
+          document.querySelector('#TmdbApiKey').value = config.TmdbApiKey || '';
+
+          // Load default user settings
+          var defaults = config.DefaultUserSettings || {};
+          document.querySelector('#DefaultNavbarEnabled').checked = !!defaults.navbarEnabled;
+          document.querySelector('#DefaultNavbarPosition').value = defaults.navbarPosition || '';
+          document.querySelector('#DefaultMediaBarEnabled').checked = !!defaults.mediaBarEnabled;
+          document.querySelector('#DefaultMediaBarSourceType').value = defaults.mediaBarSourceType || '';
+          document.querySelector('#DefaultMediaBarShuffleItems').checked = defaults.mediaBarShuffleItems !== false;
+          document.querySelector('#DefaultDetailsPageEnabled').checked = !!defaults.detailsPageEnabled;
+          document.querySelector('#DefaultShowClock').checked = !!defaults.showClock;
+          document.querySelector('#DefaultShowShuffleButton').checked = !!defaults.showShuffleButton;
+          document.querySelector('#DefaultShowGenresButton').checked = !!defaults.showGenresButton;
+          document.querySelector('#DefaultShowFavoritesButton').checked = !!defaults.showFavoritesButton;
+          document.querySelector('#DefaultShowCastButton').checked = !!defaults.showCastButton;
+          document.querySelector('#DefaultShowSyncPlayButton').checked = !!defaults.showSyncPlayButton;
+          document.querySelector('#DefaultShowLibrariesInToolbar').checked = !!defaults.showLibrariesInToolbar;
+          document.querySelector('#DefaultMdblistEnabled').checked = !!defaults.mdblistEnabled;
+          document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked = !!defaults.tmdbEpisodeRatingsEnabled;
+
+          // Collection picker visibility and loading
+          var sourceSelect = document.querySelector('#DefaultMediaBarSourceType');
+          var pickerSection = document.querySelector('#DefaultCollectionPickerSection');
+          function togglePickerVisibility() {
+            pickerSection.style.display = sourceSelect.value === 'collection' ? '' : 'none';
+            if (sourceSelect.value === 'collection') {
+              loadAdminCollectionPicker(defaults.mediaBarCollectionIds || []);
+            }
+          }
+          sourceSelect.addEventListener('change', togglePickerVisibility);
+          togglePickerVisibility();
+
+          Dashboard.hideLoadingMsg();
+        });
+
+        function loadAdminCollectionPicker(selectedIds) {
+          var picker = document.querySelector('#DefaultCollectionPicker');
+          if (!picker) return;
+          picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
+
+          var userId = ApiClient.getCurrentUserId();
+          ApiClient.getItems(userId, {
+            userId: userId,
+            includeItemTypes: 'BoxSet,Playlist',
+            sortBy: 'SortName',
+            sortOrder: 'Ascending',
+            recursive: true,
+            fields: 'PrimaryImageAspectRatio',
+            imageTypeLimit: 1,
+            enableImageTypes: 'Primary'
+          }).then(function (result) {
+            var items = result.Items || [];
+            if (items.length === 0) {
+              picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No collections or playlists found.</div>';
+              return;
+            }
+            var html = '';
+            var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+            for (var i = 0; i < items.length; i++) {
+              var item = items[i];
+              var isChecked = selectedIds.indexOf(item.Id) !== -1;
+              var typeBadge = item.Type === 'BoxSet' ? 'Collection' : 'Playlist';
+              var posterUrl = '';
+              if (item.ImageTags && item.ImageTags.Primary) {
+                posterUrl = serverUrl + '/Items/' + item.Id + '/Images/Primary?maxWidth=40&quality=80&tag=' + item.ImageTags.Primary;
+              }
+              html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
+                '<input type="checkbox" class="adminCollectionCb" data-id="' + item.Id + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                (posterUrl ? '<img src="' + posterUrl + '" style="width:32px;height:32px;border-radius:3px;object-fit:cover;">' : '<div style="width:32px;height:32px;border-radius:3px;background:rgba(255,255,255,0.08);"></div>') +
+                '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.Name || 'Untitled') + '</div>' +
+                '<div style="font-size:0.78em;color:rgba(255,255,255,0.4);">' + typeBadge + '</div></div></label>';
+            }
+            picker.innerHTML = html;
+          });
+        }
+
+        document.querySelector('#MoonfinConfigForm')
+          .addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            Dashboard.showLoadingMsg();
+            ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function (config) {
+              config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
+              config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
+              config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
+              config.JellyseerrDirectUrl = document.querySelector('#JellyseerrDirectUrl').value || null;
+              config.JellyseerrDisplayName = document.querySelector('#JellyseerrDisplayName').value || null;
+              config.MdblistApiKey = document.querySelector('#MdblistApiKey').value || null;
+              config.TmdbApiKey = document.querySelector('#TmdbApiKey').value || null;
+
+              // Save default user settings
+              config.DefaultUserSettings = config.DefaultUserSettings || {};
+              config.DefaultUserSettings.navbarEnabled = document.querySelector('#DefaultNavbarEnabled').checked;
+              config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
+              config.DefaultUserSettings.mediaBarEnabled = document.querySelector('#DefaultMediaBarEnabled').checked;
+              config.DefaultUserSettings.mediaBarSourceType = document.querySelector('#DefaultMediaBarSourceType').value || null;
+              config.DefaultUserSettings.mediaBarShuffleItems = document.querySelector('#DefaultMediaBarShuffleItems').checked;
+              // Collect selected collection IDs
+              var collectionCbs = document.querySelectorAll('.adminCollectionCb:checked');
+              var collectionIds = [];
+              for (var ci = 0; ci < collectionCbs.length; ci++) {
+                collectionIds.push(collectionCbs[ci].dataset.id);
+              }
+              config.DefaultUserSettings.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
+              config.DefaultUserSettings.detailsPageEnabled = document.querySelector('#DefaultDetailsPageEnabled').checked;
+              config.DefaultUserSettings.showClock = document.querySelector('#DefaultShowClock').checked;
+              config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;
+              config.DefaultUserSettings.showGenresButton = document.querySelector('#DefaultShowGenresButton').checked;
+              config.DefaultUserSettings.showFavoritesButton = document.querySelector('#DefaultShowFavoritesButton').checked;
+              config.DefaultUserSettings.showCastButton = document.querySelector('#DefaultShowCastButton').checked;
+              config.DefaultUserSettings.showSyncPlayButton = document.querySelector('#DefaultShowSyncPlayButton').checked;
+              config.DefaultUserSettings.showLibrariesInToolbar = document.querySelector('#DefaultShowLibrariesInToolbar').checked;
+              config.DefaultUserSettings.mdblistEnabled = document.querySelector('#DefaultMdblistEnabled').checked;
+              config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
+
+              ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function (result) {
+                Dashboard.processPluginConfigurationUpdateResult(result);
+              });
+            });
+            return false;
+          });
+      });
+    </script>
+  </div>
 </body>
+
 </html>

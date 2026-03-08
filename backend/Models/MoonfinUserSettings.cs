@@ -100,6 +100,12 @@ public class MoonfinUserSettings
     public int? MediaBarIntervalMs { get; set; }
     [JsonPropertyName("mediaBarTrailerPreview")]
     public bool? MediaBarTrailerPreview { get; set; }
+    [JsonPropertyName("mediaBarSourceType")]
+    public string? MediaBarSourceType { get; set; }
+    [JsonPropertyName("mediaBarCollectionIds")]
+    public List<string>? MediaBarCollectionIds { get; set; }
+    [JsonPropertyName("mediaBarShuffleItems")]
+    public bool? MediaBarShuffleItems { get; set; }
     [JsonPropertyName("seasonalSurprise")]
     public string? SeasonalSurprise { get; set; }
     [JsonPropertyName("backdropEnabled")]
