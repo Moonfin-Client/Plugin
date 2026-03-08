@@ -96,23 +96,35 @@ jobs:
         env:
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
-          # Convert markdown release body to clean plain text for Jellyfin manifest
-          CHANGELOG=$(echo "$RELEASE_BODY" | sed -E \
-            -e 's/\[!\[[^]]*\]\([^)]*\)\]\([^)]*\)//g' \
-            -e 's/!\[[^]]*\]\([^)]*\)//g' \
-            -e 's/\[([^]]*)\]\([^)]*\)/\1/g' \
-            -e 's/\*\*([^*]*)\*\*/\1/g' \
-            -e 's/`([^`]*)`/\1/g' \
-            -e 's/^#{1,6} +//' \
-            -e 's/[[:space:]]+$//' \
-            -e '/^---$/d' \
-            -e '/^[[:space:]]*$/{ N; /^\n[[:space:]]*$/d; }' \
-          )
-          # Remove leading/trailing blank lines
-          CHANGELOG=$(echo "$CHANGELOG" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+          # Write release body to file to preserve multi-line content
+          printf '%s' "$RELEASE_BODY" > /tmp/raw_changelog.txt
 
-          # Write to file to safely pass multi-line content
-          echo "$CHANGELOG" > /tmp/changelog.txt
+          # Convert markdown release body to clean plain text for Jellyfin manifest:
+          #   1. Strip carriage returns
+          #   2. Remove badge images: [![alt](img)](url)
+          #   3. Remove inline images: ![alt](url)
+          #   4. Convert links to text: [text](url) → text
+          #   5. Strip bold markers: **text** → text
+          #   6. Strip inline code: `text` → text
+          #   7. Strip header prefixes: ## Title → Title
+          #   8. Remove horizontal rules: ---
+          #   9. Trim trailing whitespace
+          #  10. Remove leading/trailing blank lines
+          #  11. Collapse consecutive blank lines
+          sed -i 's/\r$//' /tmp/raw_changelog.txt
+          cat /tmp/raw_changelog.txt \
+            | sed -E 's/\[!\[[^]]*\]\([^)]*\)\]\([^)]*\)//g' \
+            | sed -E 's/!\[[^]]*\]\([^)]*\)//g' \
+            | sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g' \
+            | sed -E 's/\*\*([^*]*)\*\*/\1/g' \
+            | sed -E 's/`([^`]*)`/\1/g' \
+            | sed -E 's/^#{1,6} +//' \
+            | sed -E 's/[[:space:]]+$//' \
+            | sed -E '/^---$/d' \
+            | sed -E '/^$/N;/^\n$/d' \
+            | sed '/./,$!d' \
+            > /tmp/changelog.txt
+
           echo "Sanitized changelog:"
           cat /tmp/changelog.txt
 
