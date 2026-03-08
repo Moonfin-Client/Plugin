@@ -90,17 +90,43 @@ jobs:
           echo "timestamp=$TIMESTAMP" >> "$GITHUB_OUTPUT"
           echo "Timestamp: $TIMESTAMP"
 
-      - name: Upsert version in manifest.json
+      - name: Sanitize changelog
         if: github.event.action != 'deleted'
+        id: changelog
         env:
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
+          # Convert markdown release body to clean plain text for Jellyfin manifest
+          CHANGELOG=$(echo "$RELEASE_BODY" | sed -E \
+            -e 's/\[!\[[^]]*\]\([^)]*\)\]\([^)]*\)//g' \
+            -e 's/!\[[^]]*\]\([^)]*\)//g' \
+            -e 's/\[([^]]*)\]\([^)]*\)/\1/g' \
+            -e 's/\*\*([^*]*)\*\*/\1/g' \
+            -e 's/`([^`]*)`/\1/g' \
+            -e 's/^#{1,6} +//' \
+            -e 's/[[:space:]]+$//' \
+            -e '/^---$/d' \
+            -e '/^[[:space:]]*$/{ N; /^\n[[:space:]]*$/d; }' \
+          )
+          # Remove leading/trailing blank lines
+          CHANGELOG=$(echo "$CHANGELOG" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+
+          # Write to file to safely pass multi-line content
+          echo "$CHANGELOG" > /tmp/changelog.txt
+          echo "Sanitized changelog:"
+          cat /tmp/changelog.txt
+
+      - name: Upsert version in manifest.json
+        if: github.event.action != 'deleted'
+        run: |
+          CHANGELOG=$(cat /tmp/changelog.txt)
+
           jq --arg ver "${{ steps.version.outputs.version }}" \
              --arg abi "${{ steps.abi.outputs.targetAbi }}" \
              --arg url "${{ steps.asset.outputs.source_url }}" \
              --arg sum "${{ steps.checksum.outputs.checksum }}" \
              --arg time "${{ steps.timestamp.outputs.timestamp }}" \
-             --arg log "$RELEASE_BODY" \
+             --arg log "$CHANGELOG" \
              '.[0].versions |= (
                 map(select(.version != $ver)) |
                 [{
