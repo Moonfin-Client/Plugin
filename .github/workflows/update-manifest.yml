@@ -162,4 +162,5 @@ jobs:
 
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "$MSG"
+          git pull --rebase
           git push
