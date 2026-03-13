@@ -1,0 +1,144 @@
+# ─────────────────────────────────────────────────────────────
+# Moonfin Plugin — PR Comment Workflow
+# ─────────────────────────────────────────────────────────────
+#
+# Triggered by: workflow_run (after the Build workflow completes)
+#
+# Security:
+#   This workflow runs in the context of the base repo and has
+#   write access to PRs. It NEVER checks out or executes code
+#   from the PR — it only reads the build-results artifact
+#   uploaded by the (read-only) build workflow.
+# ─────────────────────────────────────────────────────────────
+
+name: PR Comment
+
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  comment:
+    name: Post Build Results
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+
+    steps:
+      - name: Download build results
+        uses: actions/download-artifact@v4
+        with:
+          name: build-results
+          path: build-results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Read outcomes metadata
+            const outcomes = JSON.parse(fs.readFileSync('build-results/outcomes.json', 'utf8'));
+            const prNumber = outcomes.pr_number;
+            const sha = outcomes.sha;
+
+            const marker = '<!-- moonfin-build-result -->';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.payload.workflow_run.id}`;
+
+            const steps = {
+              'Frontend Install': outcomes.frontend_install,
+              'Frontend Build':   outcomes.frontend_build,
+              'Backend Build':    outcomes.backend_build,
+            };
+            const failed  = Object.entries(steps).filter(([, v]) => v === 'failure');
+            const skipped = Object.entries(steps).filter(([, v]) => v === 'skipped');
+            const success = failed.length === 0 && skipped.length === 0;
+
+            const lines = [marker];
+
+            if (success) {
+              lines.push(
+                '## ✅ Build Successful',
+                '',
+                'The plugin compiled successfully against **.NET 8** / **Jellyfin 10.10.0**.',
+              );
+            } else {
+              lines.push(
+                '## ❌ Build Failed',
+                '',
+                `The following step(s) failed: **${failed.map(([k]) => k).join('**, **')}**`,
+              );
+
+              if (skipped.length > 0) {
+                lines.push(`Skipped due to earlier failure: ${skipped.map(([k]) => k).join(', ')}`);
+              }
+
+              // Append collapsible log for each failed step
+              const logFiles = {
+                'Frontend Install': 'frontend-install.log',
+                'Frontend Build':   'frontend-build.log',
+                'Backend Build':    'backend-build.log',
+              };
+
+              for (const [name] of failed) {
+                const logPath = `build-results/${logFiles[name]}`;
+                let log = '';
+                try {
+                  const full = fs.readFileSync(logPath, 'utf8');
+                  const logLines = full.split('\n');
+                  log = logLines.slice(-50).join('\n');
+                } catch { log = '_Log file not available._'; }
+
+                lines.push(
+                  '',
+                  `<details><summary>📋 ${name} log (last 50 lines)</summary>`,
+                  '',
+                  '```',
+                  log,
+                  '```',
+                  '',
+                  '</details>',
+                );
+              }
+            }
+
+            lines.push(
+              '',
+              `| Property | Value |`,
+              `|---|---|`,
+              `| **Commit** | \`${sha.substring(0, 7)}\` |`,
+              `| **Workflow** | [Build #${context.payload.workflow_run.run_number}](${runUrl}) |`,
+            );
+
+            const body = lines.join('\n');
+
+            // Find existing comment to update
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
