@@ -162,7 +162,7 @@ var MdbList = {
                 return score != null ? score.toFixed(0) + '%' : (value != null ? value.toFixed(0) + '%' : null);
             case 'letterboxd':
                 // Letterboxd: 0-5 scale (value), score is 0-100
-                return value != null ? value.toFixed(1) : (score != null ? (score / 20).toFixed(1) : null);
+                return value != null ? value.toFixed(1) + '/5' : (score != null ? (score / 20).toFixed(1) + '/5' : null);
             case 'trakt':
                 // Trakt: percentage
                 return score != null ? score.toFixed(0) + '%' : null;
@@ -191,6 +191,8 @@ var MdbList = {
     buildRatingsHtml: function(ratings, mode) {
         if (!ratings || ratings.length === 0) return '';
 
+        var settings = Storage.getAll();
+        var showNames = settings.mdblistShowRatingNames !== false;
         var html = '';
 
         for (var i = 0; i < ratings.length; i++) {
@@ -214,7 +216,7 @@ var MdbList = {
                     '<img class="moonfin-mdblist-icon-lg" src="' + iconUrl + '" alt="' + info.name + '" title="' + info.name + '" loading="lazy">' +
                     '<div class="moonfin-mdblist-rating-info">' +
                         '<span class="moonfin-mdblist-rating-value">' + formatted + '</span>' +
-                        '<span class="moonfin-mdblist-rating-name">' + info.name + '</span>' +
+                        (showNames ? '<span class="moonfin-mdblist-rating-name">' + info.name + '</span>' : '') +
                     '</div>' +
                 '</div>';
             }

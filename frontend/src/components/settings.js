@@ -580,6 +580,12 @@ var Settings = {
       '<div class="moonfin-mdblist-config" style="' +
       (settings.mdblistEnabled ? "" : "display:none") +
       '">' +
+      this.createToggleCard(
+        "mdblistShowRatingNames",
+        "Show Rating Source Names",
+        "Display the name of each rating source below its score",
+        settings.mdblistShowRatingNames,
+      ) +
       (Storage.syncState.mdblistAvailable
         ? '<div style="background-color: rgba(0, 180, 0, 0.1); border-left: 4px solid #00b400; border-radius: 4px; padding: 0.8em 1em; margin-bottom: 12px; font-size: 13px; color: rgba(255,255,255,0.8);">' +
           "Your server admin has provided a server-wide MDBList API key. You can leave the field below blank to use it, or enter your own key." +

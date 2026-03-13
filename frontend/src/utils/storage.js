@@ -50,6 +50,7 @@ const Storage = {
     mdblistEnabled: false,
     mdblistApiKey: "",
     mdblistRatingSources: ["imdb", "tmdb", "tomatoes", "metacritic"],
+    mdblistShowRatingNames: true,
 
     tmdbApiKey: "",
     tmdbEpisodeRatingsEnabled: false,
@@ -477,6 +478,7 @@ const Storage = {
       mdblistEnabled: "mdblistEnabled",
       mdblistApiKey: "mdblistApiKey",
       mdblistRatingSources: "mdblistRatingSources",
+      mdblistShowRatingNames: "mdblistShowRatingNames",
       tmdbApiKey: "tmdbApiKey",
       tmdbEpisodeRatingsEnabled: "tmdbEpisodeRatingsEnabled",
     };
@@ -525,6 +527,7 @@ const Storage = {
       mdblistEnabled: localProfile.mdblistEnabled,
       mdblistApiKey: localProfile.mdblistApiKey,
       mdblistRatingSources: localProfile.mdblistRatingSources,
+      mdblistShowRatingNames: localProfile.mdblistShowRatingNames,
       tmdbApiKey: localProfile.tmdbApiKey,
       tmdbEpisodeRatingsEnabled: localProfile.tmdbEpisodeRatingsEnabled,
     };
@@ -791,5 +794,19 @@ const Storage = {
       error: this.syncState.lastSyncError,
       syncing: this.syncState.syncing,
     };
+  },
+
+  resetForNewUser() {
+    localStorage.removeItem(this.PROFILES_KEY);
+    localStorage.removeItem(this.STORAGE_KEY);
+    localStorage.removeItem(this.SNAPSHOT_KEY);
+    this._initialSyncDone = false;
+    this.syncState.serverAvailable = null;
+    this.syncState.lastSyncTime = null;
+    this.syncState.lastSyncError = null;
+    this.syncState.syncing = false;
+    this.syncState.mdblistAvailable = false;
+    this.syncState.tmdbAvailable = false;
+    this.syncState.adminDefaults = null;
   },
 };

@@ -27,6 +27,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mdblistRatingSources")]
     public List<string>? MdblistRatingSources { get; set; }
 
+    [JsonPropertyName("mdblistShowRatingNames")]
+    public bool? MdblistShowRatingNames { get; set; }
+
     [JsonPropertyName("tmdbApiKey")]
     public string? TmdbApiKey { get; set; }
 
