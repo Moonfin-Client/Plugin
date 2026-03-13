@@ -49,7 +49,7 @@ const API = {
     const api = this.getApiClient();
     if (!api) return [];
 
-    const { contentType = "both", limit = 10 } = options;
+    const { contentType = "both", limit = 10, libraryIds = [] } = options;
 
     try {
       const userId = api.getCurrentUserId();
@@ -62,11 +62,10 @@ const API = {
         includeItemTypes.push("Series");
       }
 
-      const params = {
+      const baseParams = {
         userId: userId,
         includeItemTypes: includeItemTypes.join(","),
         sortBy: "Random",
-        limit: limit,
         recursive: true,
         hasThemeSong: false,
         hasThemeVideo: false,
@@ -76,7 +75,40 @@ const API = {
         enableImageTypes: "Backdrop,Logo,Primary",
       };
 
-      const result = await api.getItems(userId, params);
+      // When specific libraries are selected, query each and merge
+      if (libraryIds && libraryIds.length > 0) {
+        var allItems = [];
+        var seenIds = {};
+
+        for (var i = 0; i < libraryIds.length; i++) {
+          var params = Object.assign({}, baseParams, {
+            parentId: libraryIds[i],
+            limit: limit,
+          });
+          var libResult = await api.getItems(userId, params);
+          var items = libResult.Items || [];
+          for (var j = 0; j < items.length; j++) {
+            if (!seenIds[items[j].Id]) {
+              seenIds[items[j].Id] = true;
+              allItems.push(items[j]);
+            }
+          }
+        }
+
+        // Shuffle the merged results
+        for (var k = allItems.length - 1; k > 0; k--) {
+          var r = Math.floor(Math.random() * (k + 1));
+          var temp = allItems[k];
+          allItems[k] = allItems[r];
+          allItems[r] = temp;
+        }
+
+        return allItems.slice(0, limit);
+      }
+
+      // Default: all libraries
+      baseParams.limit = limit;
+      const result = await api.getItems(userId, baseParams);
       return result.Items || [];
     } catch (e) {
       console.error("[Moonfin] Failed to get random items:", e);

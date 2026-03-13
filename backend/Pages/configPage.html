@@ -168,6 +168,16 @@
                 </div>
               </div>
             </div>
+            <div id="DefaultLibraryPickerSection" style="display:none;">
+              <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused">Default Libraries</label>
+                <div class="fieldDescription" style="margin-bottom:0.5em;">Optionally select specific libraries for the
+                  media bar. Leave all unchecked to use all libraries. Users can override this.</div>
+                <div id="DefaultLibraryPicker"
+                  style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;">
+                </div>
+              </div>
+            </div>
             <div class="checkboxContainer checkboxContainer-withDescription">
               <label class="emby-checkbox-label">
                 <input type="checkbox" id="DefaultMediaBarShuffleItems" is="emby-checkbox" />
@@ -317,13 +327,20 @@
           document.querySelector('#DefaultMdblistEnabled').checked = !!defaults.mdblistEnabled;
           document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked = !!defaults.tmdbEpisodeRatingsEnabled;
 
-          // Collection picker visibility and loading
+          // Collection/Library picker visibility and loading
           var sourceSelect = document.querySelector('#DefaultMediaBarSourceType');
-          var pickerSection = document.querySelector('#DefaultCollectionPickerSection');
+          var collectionPickerSection = document.querySelector('#DefaultCollectionPickerSection');
+          var libraryPickerSection = document.querySelector('#DefaultLibraryPickerSection');
           function togglePickerVisibility() {
-            pickerSection.style.display = sourceSelect.value === 'collection' ? '' : 'none';
-            if (sourceSelect.value === 'collection') {
+            var isCollection = sourceSelect.value === 'collection';
+            var isLibrary = sourceSelect.value === 'library';
+            collectionPickerSection.style.display = isCollection ? '' : 'none';
+            libraryPickerSection.style.display = isLibrary ? '' : 'none';
+            if (isCollection) {
               loadAdminCollectionPicker(defaults.mediaBarCollectionIds || []);
+            }
+            if (isLibrary) {
+              loadAdminLibraryPicker(defaults.mediaBarLibraryIds || []);
             }
           }
           sourceSelect.addEventListener('change', togglePickerVisibility);
@@ -373,6 +390,37 @@
           });
         }
 
+        function loadAdminLibraryPicker(selectedIds) {
+          var picker = document.querySelector('#DefaultLibraryPicker');
+          if (!picker) return;
+          picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
+
+          var userId = ApiClient.getCurrentUserId();
+          ApiClient.getUserViews(userId).then(function (result) {
+            var items = (result.Items || []).filter(function (item) {
+              var ct = item.CollectionType;
+              return ct === 'movies' || ct === 'tvshows' || ct === 'music' || ct === 'mixed';
+            });
+            if (items.length === 0) {
+              picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No media libraries found.</div>';
+              return;
+            }
+            var html = '';
+            for (var i = 0; i < items.length; i++) {
+              var item = items[i];
+              var isChecked = selectedIds.indexOf(item.Id) !== -1;
+              var typeBadge = (item.CollectionType || 'library').charAt(0).toUpperCase() + (item.CollectionType || 'library').slice(1);
+              var emoji = item.CollectionType === 'movies' ? '🎬' : item.CollectionType === 'tvshows' ? '📺' : item.CollectionType === 'music' ? '🎵' : '📁';
+              html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
+                '<input type="checkbox" class="adminLibraryCb" data-id="' + item.Id + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                '<span style="font-size:18px;">' + emoji + '</span>' +
+                '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.Name || 'Untitled') + '</div>' +
+                '<div style="font-size:0.78em;color:rgba(255,255,255,0.4);">' + typeBadge + '</div></div></label>';
+            }
+            picker.innerHTML = html;
+          });
+        }
+
         document.querySelector('#MoonfinConfigForm')
           .addEventListener('submit', function (ev) {
             ev.preventDefault();
@@ -400,6 +448,13 @@
                 collectionIds.push(collectionCbs[ci].dataset.id);
               }
               config.DefaultUserSettings.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
+              // Collect selected library IDs
+              var libraryCbs = document.querySelectorAll('.adminLibraryCb:checked');
+              var libraryIds = [];
+              for (var li = 0; li < libraryCbs.length; li++) {
+                libraryIds.push(libraryCbs[li].dataset.id);
+              }
+              config.DefaultUserSettings.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
               config.DefaultUserSettings.detailsPageEnabled = document.querySelector('#DefaultDetailsPageEnabled').checked;
               config.DefaultUserSettings.showClock = document.querySelector('#DefaultShowClock').checked;
               config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;

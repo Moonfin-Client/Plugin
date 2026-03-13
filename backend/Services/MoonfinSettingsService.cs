@@ -282,6 +282,7 @@ public class MoonfinSettingsService
         settings.MediaBarSourceType = null;
         settings.MediaBarCollectionIds = null;
         settings.MediaBarShuffleItems = null;
+        settings.MediaBarLibraryIds = null;
         settings.SeasonalSurprise = null;
         settings.BackdropEnabled = null;
         settings.HomeRowsImageTypeOverride = null;

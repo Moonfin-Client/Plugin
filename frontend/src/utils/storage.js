@@ -30,6 +30,7 @@ const Storage = {
     mediaBarSourceType: "library",
     mediaBarCollectionIds: [],
     mediaBarShuffleItems: true,
+    mediaBarLibraryIds: [],
 
     showShuffleButton: true,
     showGenresButton: true,
@@ -462,6 +463,7 @@ const Storage = {
       mediaBarSourceType: "mediaBarSourceType",
       mediaBarCollectionIds: "mediaBarCollectionIds",
       mediaBarShuffleItems: "mediaBarShuffleItems",
+      mediaBarLibraryIds: "mediaBarLibraryIds",
       showShuffleButton: "showShuffleButton",
       showGenresButton: "showGenresButton",
       showFavoritesButton: "showFavoritesButton",
@@ -511,6 +513,7 @@ const Storage = {
       mediaBarSourceType: localProfile.mediaBarSourceType,
       mediaBarCollectionIds: localProfile.mediaBarCollectionIds,
       mediaBarShuffleItems: localProfile.mediaBarShuffleItems,
+      mediaBarLibraryIds: localProfile.mediaBarLibraryIds,
       showShuffleButton: localProfile.showShuffleButton,
       showGenresButton: localProfile.showGenresButton,
       showFavoritesButton: localProfile.showFavoritesButton,

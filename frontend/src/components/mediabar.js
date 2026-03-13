@@ -173,6 +173,7 @@ var MediaBar = {
       this.items = await API.getRandomItems({
         contentType: settings.mediaBarContentType,
         limit: settings.mediaBarItemCount,
+        libraryIds: settings.mediaBarLibraryIds || [],
       });
     }
 
