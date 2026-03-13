@@ -47,6 +47,7 @@ const Storage = {
         mdblistEnabled: false,
         mdblistApiKey: '',
         mdblistRatingSources: ['imdb', 'tmdb', 'tomatoes', 'metacritic'],
+        mdblistShowRatingNames: true,
 
         tmdbApiKey: '',
         tmdbEpisodeRatingsEnabled: false
@@ -453,6 +454,7 @@ const Storage = {
             mdblistEnabled: 'mdblistEnabled',
             mdblistApiKey: 'mdblistApiKey',
             mdblistRatingSources: 'mdblistRatingSources',
+            mdblistShowRatingNames: 'mdblistShowRatingNames',
             tmdbApiKey: 'tmdbApiKey',
             tmdbEpisodeRatingsEnabled: 'tmdbEpisodeRatingsEnabled'
         };
@@ -498,6 +500,7 @@ const Storage = {
             mdblistEnabled: localProfile.mdblistEnabled,
             mdblistApiKey: localProfile.mdblistApiKey,
             mdblistRatingSources: localProfile.mdblistRatingSources,
+            mdblistShowRatingNames: localProfile.mdblistShowRatingNames,
             tmdbApiKey: localProfile.tmdbApiKey,
             tmdbEpisodeRatingsEnabled: localProfile.tmdbEpisodeRatingsEnabled
         };
