@@ -35,6 +35,10 @@ var Details = {
                 return;
             }
 
+            if (document.querySelector('.selectionCommandsPanel')) {
+                return;
+            }
+
             var card = e.target.closest('.card, .listItem');
             if (!card) return;
 
@@ -71,6 +75,10 @@ var Details = {
 
         document.addEventListener('click', function(e) {
             if (e.target.closest(ignoreSelectors)) {
+                return;
+            }
+
+            if (document.querySelector('.selectionCommandsPanel')) {
                 return;
             }
 
