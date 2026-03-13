@@ -287,17 +287,19 @@ const Sidebar = {
             });
         }
 
-        window.addEventListener('moonfin-settings-changed', function(e) {
+        this._onSettingsChanged = function(e) {
             self.applySettings(e.detail);
-        });
-
-        window.addEventListener('viewshow', function() {
+        };
+        this._onViewShow = function() {
             self.updateActiveState();
-        });
-
-        window.addEventListener('moonfin-jellyseerr-config', function(e) {
+        };
+        this._onJellyseerrConfig = function(e) {
             self.updateJellyseerrButton(e.detail);
-        });
+        };
+
+        window.addEventListener('moonfin-settings-changed', this._onSettingsChanged);
+        window.addEventListener('viewshow', this._onViewShow);
+        window.addEventListener('moonfin-jellyseerr-config', this._onJellyseerrConfig);
     },
 
     updateJellyseerrButton(config) {
@@ -542,6 +544,18 @@ const Sidebar = {
         if (this.mobileTrigger) {
             this.mobileTrigger.remove();
             this.mobileTrigger = null;
+        }
+        if (this._onSettingsChanged) {
+            window.removeEventListener('moonfin-settings-changed', this._onSettingsChanged);
+            this._onSettingsChanged = null;
+        }
+        if (this._onViewShow) {
+            window.removeEventListener('viewshow', this._onViewShow);
+            this._onViewShow = null;
+        }
+        if (this._onJellyseerrConfig) {
+            window.removeEventListener('moonfin-jellyseerr-config', this._onJellyseerrConfig);
+            this._onJellyseerrConfig = null;
         }
         document.body.classList.remove('moonfin-sidebar-active');
         this.librariesExpanded = false;
