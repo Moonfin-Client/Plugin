@@ -434,9 +434,14 @@ const Sidebar = {
     },
 
     showSyncPlayMenu() {
-        var nativeSyncBtn = document.querySelector('.headerSyncButton, .syncButton');
-        if (nativeSyncBtn) {
-            nativeSyncBtn.click();
+        if (Device.isTV()) return;
+        if (typeof SyncPlay !== 'undefined') {
+            SyncPlay.toggle();
+        } else {
+            var nativeSyncBtn = document.querySelector('.headerSyncButton, .syncButton');
+            if (nativeSyncBtn) {
+                nativeSyncBtn.click();
+            }
         }
     },
 

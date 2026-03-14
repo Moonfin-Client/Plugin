@@ -920,28 +920,45 @@ var Details = {
         });
     },
 
-    // Uses ApiClient.sendPlayCommand first, falls back to REST Sessions API
     playItem: function(itemId, startPositionTicks, audioStreamIndex, subtitleStreamIndex, mediaSourceId) {
         var self = this;
-        var api = API.getApiClient();
 
-        var playBody = {
-            ItemIds: [itemId],
-            PlayCommand: 'PlayNow',
-            StartPositionTicks: startPositionTicks || 0
-        };
-        if (mediaSourceId) playBody.MediaSourceId = mediaSourceId;
-        if (audioStreamIndex != null) playBody.AudioStreamIndex = audioStreamIndex;
-        if (subtitleStreamIndex != null && subtitleStreamIndex !== -1) {
-            playBody.SubtitleStreamIndex = subtitleStreamIndex;
+        var pm = API.getPlaybackManager();
+        if (pm) {
+            var opts = {
+                ids: [itemId],
+                startPositionTicks: startPositionTicks || 0,
+                serverId: API.getServerId()
+            };
+            if (mediaSourceId) opts.mediaSourceId = mediaSourceId;
+            if (audioStreamIndex != null) opts.audioStreamIndex = audioStreamIndex;
+            if (subtitleStreamIndex != null && subtitleStreamIndex !== -1) {
+                opts.subtitleStreamIndex = subtitleStreamIndex;
+            }
+            try {
+                pm.play(opts).catch(function(e) {
+                    console.error('[Moonfin] Details: playback failed', e);
+                });
+            } catch(e) {
+                console.error('[Moonfin] Details: playbackManager.play() failed', e);
+                self._playViaSession(itemId, startPositionTicks, audioStreamIndex, subtitleStreamIndex, mediaSourceId);
+            }
+            return;
         }
 
-        // Method 1: Try ApiClient.sendPlayCommand if available
+        var api = API.getApiClient();
         if (api && typeof api.sendPlayCommand === 'function') {
             var deviceId = api.deviceId();
             api.getSessions({ DeviceId: deviceId }).then(function(sessions) {
                 if (sessions && sessions.length > 0) {
-                    return api.sendPlayCommand(sessions[0].Id, playBody);
+                    return api.sendPlayCommand(sessions[0].Id, {
+                        ItemIds: [itemId],
+                        PlayCommand: 'PlayNow',
+                        StartPositionTicks: startPositionTicks || 0,
+                        MediaSourceId: mediaSourceId || undefined,
+                        AudioStreamIndex: audioStreamIndex != null ? audioStreamIndex : undefined,
+                        SubtitleStreamIndex: (subtitleStreamIndex != null && subtitleStreamIndex !== -1) ? subtitleStreamIndex : undefined
+                    });
                 }
                 throw new Error('No session');
             }).catch(function() {
@@ -950,7 +967,6 @@ var Details = {
             return;
         }
 
-        // Method 2: Try REST Sessions API
         self._playViaSession(itemId, startPositionTicks, audioStreamIndex, subtitleStreamIndex, mediaSourceId);
     },
 
@@ -964,21 +980,17 @@ var Details = {
                 throw new Error('No session found');
             }
 
-            var body = {
-                ItemIds: [itemId],
-                StartPositionTicks: startPositionTicks || 0,
-                PlayCommand: 'PlayNow'
-            };
-            if (mediaSourceId) body.MediaSourceId = mediaSourceId;
-            if (audioStreamIndex != null) body.AudioStreamIndex = audioStreamIndex;
+            var params = 'PlayCommand=PlayNow&ItemIds=' + encodeURIComponent(itemId) +
+                '&StartPositionTicks=' + (startPositionTicks || 0);
+            if (mediaSourceId) params += '&MediaSourceId=' + encodeURIComponent(mediaSourceId);
+            if (audioStreamIndex != null) params += '&AudioStreamIndex=' + audioStreamIndex;
             if (subtitleStreamIndex != null && subtitleStreamIndex !== -1) {
-                body.SubtitleStreamIndex = subtitleStreamIndex;
+                params += '&SubtitleStreamIndex=' + subtitleStreamIndex;
             }
 
-            return fetch(serverUrl + '/Sessions/' + sessionId + '/Playing', {
+            return fetch(serverUrl + '/Sessions/' + sessionId + '/Playing?' + params, {
                 method: 'POST',
-                headers: headers,
-                body: JSON.stringify(body)
+                headers: headers
             }).then(function(resp) {
                 if (!resp.ok) throw new Error('Play command failed: ' + resp.status);
             });
@@ -1020,7 +1032,6 @@ var Details = {
             var items = result.Items || [];
             if (items.length === 0) return;
 
-            // Fisher-Yates shuffle
             var ids = items.map(function(i) { return i.Id; });
             for (var i = ids.length - 1; i > 0; i--) {
                 var j = Math.floor(Math.random() * (i + 1));
@@ -1029,7 +1040,18 @@ var Details = {
                 ids[j] = temp;
             }
 
-            // Try ApiClient.sendPlayCommand first
+            var pm = API.getPlaybackManager();
+            if (pm) {
+                try {
+                    pm.play({ ids: ids, startPositionTicks: 0, serverId: API.getServerId() }).catch(function(e) {
+                        console.error('[Moonfin] Details: shuffle playback failed', e);
+                    });
+                    return;
+                } catch(e) {
+                    console.error('[Moonfin] Details: playbackManager.play() failed for shuffle', e);
+                }
+            }
+
             if (typeof api.sendPlayCommand === 'function') {
                 var deviceId = api.deviceId();
                 return api.getSessions({ DeviceId: deviceId }).then(function(sessions) {
@@ -1053,21 +1075,18 @@ var Details = {
     },
 
     _shuffleViaSession: function(ids) {
-        var self = this;
         var serverUrl = this.getServerUrl();
         var headers = this.getAuthHeaders();
 
         return this.getSessionId().then(function(sessionId) {
             if (!sessionId) return;
 
-            return fetch(serverUrl + '/Sessions/' + sessionId + '/Playing', {
+            var params = 'PlayCommand=PlayNow&ItemIds=' + encodeURIComponent(ids.join(',')) +
+                '&StartPositionTicks=0';
+
+            return fetch(serverUrl + '/Sessions/' + sessionId + '/Playing?' + params, {
                 method: 'POST',
-                headers: headers,
-                body: JSON.stringify({
-                    ItemIds: ids,
-                    StartPositionTicks: 0,
-                    PlayCommand: 'PlayNow'
-                })
+                headers: headers
             });
         });
     },

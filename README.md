@@ -26,6 +26,7 @@ Moonfin requires the [File Transformation](https://github.com/IAmParadox27/jelly
 - **Jellyseerr/Seerr Panel** - Embedded Jellyseerr or Seerr iframe with automatic session-based authentication via the server proxy
 - **Settings Panel** - Per-user settings for all features, with device profiles and cross-client sync
 - **Device Profiles** - Separate setting overrides for desktop, mobile, and TV; each profile inherits from a shared global base so you only configure what differs per device
+- **SyncPlay Integration** - Group watch UI with lobby, group management, and real-time state sync via WebSocket; modal dialog on desktop/mobile web, API-only on TV (native clients use their own dialog)
 - **TV Support** - Spatial navigation and remote-friendly focus management for webOS/Tizen
 
 ### Server Plugin (`backend/`)
@@ -207,6 +208,11 @@ Output: `Moonfin.Server-{VERSION}.zip` in the repo root.
 | `/Moonfin/MDBList/{imdbId}` | GET | Yes | Get MDBList ratings for a single item |
 | `/Moonfin/MediaBar` | GET | Yes | Get resolved media bar content for the current user |
 | `/Moonfin/TMDB/Episode/{seriesId}/{seasonNumber}/{episodeNumber}` | GET | Yes | Get TMDB episode rating |
+| `/SyncPlay/List` | GET | Yes | List available SyncPlay groups |
+| `/SyncPlay/New` | POST | Yes | Create a new SyncPlay group |
+| `/SyncPlay/Join` | POST | Yes | Join an existing SyncPlay group |
+| `/SyncPlay/Leave` | POST | Yes | Leave the current SyncPlay group |
+| `/SyncPlay/{groupId}` | GET | Yes | Get details for a specific SyncPlay group |
 
 ### Jellyseerr/Seerr Config Response
 

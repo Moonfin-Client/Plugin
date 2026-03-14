@@ -108,6 +108,7 @@ const Plugin = {
             MdbList.init();
             await Jellyseerr.init();
             Details.init();
+            SyncPlay.init();
             this.initSeasonalEffects();
 
             if (Device.isTV()) {
@@ -969,6 +970,10 @@ const Plugin = {
                     plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
                     Genres.close();
                 }
+            } else if (SyncPlay.isOpen) {
+                e.stopImmediatePropagation();
+                plugin._overlayHistoryDepth = Math.max(0, plugin._overlayHistoryDepth - 1);
+                SyncPlay.close(true);
             } else {
                 // No overlay is open — check if this is an orphaned moonfin
                 // state entry left over from an overlay that was closed via
@@ -976,7 +981,7 @@ const Plugin = {
                 // user doesn't hit a phantom "dead" back press.
                 var isMoonfinState = state.moonfinDetails || state.moonfinSettings ||
                                      state.moonfinJellyseerr || state.moonfinLibrary ||
-                                     state.moonfinGenres;
+                                     state.moonfinGenres || state.moonfinSyncPlay;
                 if (isMoonfinState) {
                     e.stopImmediatePropagation();
                     history.back();

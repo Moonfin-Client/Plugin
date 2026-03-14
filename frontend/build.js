@@ -25,6 +25,7 @@ function buildJS() {
         'components/genres.js',
         'components/library.js',
         'components/settings.js',
+        'components/syncplay.js',
         'components/jellyseerr.js',
         'components/details.js',
         'plugin.js'
@@ -68,6 +69,7 @@ function buildCSS() {
         'styles/settings.css',
         'styles/jellyseerr.css',
         'styles/animations.css',
+        'styles/syncplay.css',
         'styles/tv-mode.css',
         'styles/details.css'
     ];
