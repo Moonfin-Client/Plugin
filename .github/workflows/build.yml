@@ -4,7 +4,12 @@
 #
 # Triggers:
 #   • Push to master  → build + package ZIP artifact
-#   • PR to master    → build + post result comment on the PR
+#   • PR to master    → build + upload result artifact
+#
+# Security:
+#   Uses pull_request (not pull_request_target) so untrusted fork
+#   code never runs with write access. PR comments are posted by
+#   a separate workflow (comment.yml) triggered via workflow_run.
 #
 # Build flow:
 #   1. Frontend install  (npm ci)
@@ -17,10 +22,8 @@
 #   Build steps (1), (2), (4) use continue-on-error so the job keeps
 #   running even on failure. Their output is captured to log files via
 #   tee. The gate step (5) re-fails the job so the overall status is
-#   correct. On PRs, a comment is always posted (via if: always()):
-#     • ✅ on success
-#     • ❌ on failure — with a collapsible <details> block containing
-#       the last 50 lines of each failed step's build log
+#   correct. On PRs, build results (outcomes + logs) are uploaded as
+#   an artifact for the comment.yml workflow to pick up.
 #
 # Packaging (master only, after successful build):
 #   Reads version + ABI from the .csproj, creates a release ZIP with
@@ -37,7 +40,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   build:
@@ -59,8 +61,8 @@ jobs:
           dotnet-version: 8.0.x
 
       # ── Frontend ──────────────────────────────────────────────
-      # continue-on-error: lets the job continue so we can post a
-      #   PR comment with the build log even when a step fails.
+      # continue-on-error: lets the job continue so we can upload
+      #   build results even when a step fails.
       # set -o pipefail: ensures the pipe returns the command's exit
       #   code, not tee's (which always succeeds).
       # 2>&1 | tee: captures stdout+stderr to a log file for the
@@ -103,8 +105,6 @@ jobs:
       # continue-on-error masks failures from the job status. This
       # gate step re-fails the job when any build step didn't
       # succeed (covers both 'failure' and 'skipped' outcomes).
-      # The PR comment step still runs after this because it uses
-      # if: always().
       - name: Fail if build failed
         id: build_gate
         if: |
@@ -112,6 +112,37 @@ jobs:
           steps.frontend_build.outcome != 'success' ||
           steps.backend_build.outcome != 'success'
         run: exit 1
+
+      # ── Upload build results for PR comment workflow ──────────
+      # Always runs on PRs so the comment.yml workflow can post
+      # results even on failure. Writes step outcomes + PR number
+      # to a metadata file alongside the log files.
+      - name: Save build results
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          mkdir -p "${{ runner.temp }}/build-results"
+
+          cat > "${{ runner.temp }}/build-results/outcomes.json" <<EOF
+          {
+            "pr_number": ${{ github.event.pull_request.number }},
+            "sha": "${{ github.event.pull_request.head.sha }}",
+            "frontend_install": "${{ steps.frontend_install.outcome }}",
+            "frontend_build": "${{ steps.frontend_build.outcome }}",
+            "backend_build": "${{ steps.backend_build.outcome }}"
+          }
+          EOF
+
+          # Copy any log files that exist
+          for f in frontend-install.log frontend-build.log backend-build.log; do
+            [ -f "${{ runner.temp }}/$f" ] && cp "${{ runner.temp }}/$f" "${{ runner.temp }}/build-results/"
+          done
+
+      - name: Upload build results
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-results
+          path: ${{ runner.temp }}/build-results/
 
       # ── Package (master only) ─────────────────────────────────
       - name: Read version from csproj
@@ -184,109 +215,3 @@ jobs:
           echo "| **Version** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Checksum (MD5)** | \`${{ steps.package.outputs.checksum }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Artifact** | \`${{ steps.package.outputs.zip_name }}\` |" >> $GITHUB_STEP_SUMMARY
-
-      # ── PR comment ────────────────────────────────────────────
-      - name: Comment build results on PR
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        env:
-          FRONTEND_INSTALL: ${{ steps.frontend_install.outcome }}
-          FRONTEND_BUILD: ${{ steps.frontend_build.outcome }}
-          BACKEND_BUILD: ${{ steps.backend_build.outcome }}
-        with:
-          script: |
-            const fs = require('fs');
-            const marker = '<!-- moonfin-build-result -->';
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-
-            const outcomes = {
-              'Frontend Install': process.env.FRONTEND_INSTALL,
-              'Frontend Build':   process.env.FRONTEND_BUILD,
-              'Backend Build':    process.env.BACKEND_BUILD,
-            };
-            const failed  = Object.entries(outcomes).filter(([, v]) => v === 'failure');
-            const skipped = Object.entries(outcomes).filter(([, v]) => v === 'skipped');
-            const success = failed.length === 0 && skipped.length === 0;
-
-            const lines = [marker];
-
-            if (success) {
-              lines.push(
-                '## ✅ Build Successful',
-                '',
-                'The plugin compiled successfully against **.NET 8** / **Jellyfin 10.10.0**.',
-              );
-            } else {
-              lines.push(
-                '## ❌ Build Failed',
-                '',
-                `The following step(s) failed: **${failed.map(([k]) => k).join('**, **')}**`,
-              );
-
-              if (skipped.length > 0) {
-                lines.push(`Skipped due to earlier failure: ${skipped.map(([k]) => k).join(', ')}`);
-              }
-
-              // Append collapsible log for each failed step
-              const logFiles = {
-                'Frontend Install': 'frontend-install.log',
-                'Frontend Build':   'frontend-build.log',
-                'Backend Build':    'backend-build.log',
-              };
-
-              for (const [name] of failed) {
-                const logPath = `${process.env.RUNNER_TEMP}/${logFiles[name]}`;
-                let log = '';
-                try {
-                  const full = fs.readFileSync(logPath, 'utf8');
-                  const logLines = full.split('\n');
-                  log = logLines.slice(-50).join('\n');
-                } catch { log = '_Log file not available._'; }
-
-                lines.push(
-                  '',
-                  `<details><summary>📋 ${name} log (last 50 lines)</summary>`,
-                  '',
-                  '```',
-                  log,
-                  '```',
-                  '',
-                  '</details>',
-                );
-              }
-            }
-
-            lines.push(
-              '',
-              `| Property | Value |`,
-              `|---|---|`,
-              `| **Commit** | \`${context.sha.substring(0, 7)}\` |`,
-              `| **Workflow** | [${context.workflow} #${context.runNumber}](${runUrl}) |`,
-            );
-
-            const body = lines.join('\n');
-
-            // Find existing comment to update
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const existing = comments.find(c => c.body?.includes(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
