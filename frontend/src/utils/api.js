@@ -45,26 +45,47 @@ const API = {
     }
   },
 
+  async getMediaBarItems(profile) {
+    const api = this.getApiClient();
+    if (!api) return null;
+
+    try {
+      const serverUrl = api.serverAddress?.() || "";
+      const token = api.accessToken?.();
+      const headers = token
+        ? { Authorization: 'MediaBrowser Token="' + token + '"' }
+        : {};
+
+      const profileParam = profile || "global";
+      const response = await fetch(
+        serverUrl + "/Moonfin/MediaBar?profile=" + encodeURIComponent(profileParam),
+        { method: "GET", headers: headers },
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.Items || data.items || [];
+      }
+
+      return null;
+    } catch (e) {
+      console.warn("[Moonfin] MediaBar endpoint not available, falling back:", e);
+      return null;
+    }
+  },
+
   async getRandomItems(options = {}) {
     const api = this.getApiClient();
     if (!api) return [];
 
-    const { contentType = "both", limit = 10, libraryIds = [] } = options;
+    const { limit = 10, libraryIds = [] } = options;
 
     try {
       const userId = api.getCurrentUserId();
 
-      let includeItemTypes = [];
-      if (contentType === "movies" || contentType === "both") {
-        includeItemTypes.push("Movie");
-      }
-      if (contentType === "tv" || contentType === "both") {
-        includeItemTypes.push("Series");
-      }
-
       const baseParams = {
         userId: userId,
-        includeItemTypes: includeItemTypes.join(","),
+        includeItemTypes: "Movie,Series",
         sortBy: "Random",
         recursive: true,
         hasThemeSong: false,

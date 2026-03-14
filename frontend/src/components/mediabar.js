@@ -35,6 +35,13 @@ var MediaBar = {
     this.setupEventListeners();
     this.initialized = true;
 
+    // Track current content settings to avoid redundant reloads
+    this._lastItemCount = settings.mediaBarItemCount;
+    this._lastSourceType = settings.mediaBarSourceType;
+    this._lastCollectionIds = settings.mediaBarCollectionIds;
+    this._lastShuffleItems = settings.mediaBarShuffleItems;
+    this._lastLibraryIds = settings.mediaBarLibraryIds;
+
     this._loadContentAsync(settings);
   },
 
@@ -157,11 +164,16 @@ var MediaBar = {
   async loadContent() {
     var settings = Storage.getAll();
 
-    if (
+    // Try the unified server-side endpoint first
+    var serverItems = await API.getMediaBarItems(Device.getProfileName());
+    if (serverItems) {
+      this.items = serverItems;
+    } else if (
       settings.mediaBarSourceType === "collection" &&
       settings.mediaBarCollectionIds &&
       settings.mediaBarCollectionIds.length > 0
     ) {
+      // Fallback: client-side collection fetching
       this.items = await API.getCollectionItems(
         settings.mediaBarCollectionIds,
         {
@@ -170,8 +182,8 @@ var MediaBar = {
         },
       );
     } else {
+      // Fallback: client-side random items
       this.items = await API.getRandomItems({
-        contentType: settings.mediaBarContentType,
         limit: settings.mediaBarItemCount,
         libraryIds: settings.mediaBarLibraryIds || [],
       });
@@ -847,18 +859,19 @@ var MediaBar = {
     }
 
     if (
-      this._lastContentType !== settings.mediaBarContentType ||
       this._lastItemCount !== settings.mediaBarItemCount ||
       this._lastSourceType !== settings.mediaBarSourceType ||
       this._lastShuffleItems !== settings.mediaBarShuffleItems ||
       JSON.stringify(this._lastCollectionIds) !==
-        JSON.stringify(settings.mediaBarCollectionIds)
+        JSON.stringify(settings.mediaBarCollectionIds) ||
+      JSON.stringify(this._lastLibraryIds) !==
+        JSON.stringify(settings.mediaBarLibraryIds)
     ) {
-      this._lastContentType = settings.mediaBarContentType;
       this._lastItemCount = settings.mediaBarItemCount;
       this._lastSourceType = settings.mediaBarSourceType;
       this._lastCollectionIds = settings.mediaBarCollectionIds;
       this._lastShuffleItems = settings.mediaBarShuffleItems;
+      this._lastLibraryIds = settings.mediaBarLibraryIds;
       this.loadContent();
     }
   },

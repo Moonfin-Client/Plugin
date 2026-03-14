@@ -20,7 +20,6 @@ const Storage = {
     detailsPageEnabled: false,
 
     mediaBarEnabled: false,
-    mediaBarContentType: "both",
     mediaBarItemCount: 10,
     mediaBarOverlayOpacity: 50,
     mediaBarOverlayColor: "gray",
@@ -453,7 +452,6 @@ const Storage = {
       navbarEnabled: "navbarEnabled",
       detailsPageEnabled: "detailsPageEnabled",
       mediaBarEnabled: "mediaBarEnabled",
-      mediaBarContentType: "mediaBarContentType",
       mediaBarItemCount: "mediaBarItemCount",
       mediaBarOverlayOpacity: "mediaBarOpacity",
       mediaBarOverlayColor: "mediaBarOverlayColor",
@@ -503,7 +501,6 @@ const Storage = {
       navbarEnabled: localProfile.navbarEnabled,
       detailsPageEnabled: localProfile.detailsPageEnabled,
       mediaBarEnabled: localProfile.mediaBarEnabled,
-      mediaBarContentType: localProfile.mediaBarContentType,
       mediaBarItemCount: localProfile.mediaBarItemCount,
       mediaBarOpacity: localProfile.mediaBarOverlayOpacity,
       mediaBarOverlayColor: localProfile.mediaBarOverlayColor,

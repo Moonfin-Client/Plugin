@@ -86,8 +86,7 @@ public class MoonfinUserSettings
     public bool? ConfirmExit { get; set; }
     [JsonPropertyName("mediaBarEnabled")]
     public bool? MediaBarEnabled { get; set; }
-    [JsonPropertyName("mediaBarContentType")]
-    public string? MediaBarContentType { get; set; }
+
     [JsonPropertyName("mediaBarItemCount")]
     public int? MediaBarItemCount { get; set; }
     [JsonPropertyName("mediaBarOpacity")]

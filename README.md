@@ -205,6 +205,7 @@ Output: `Moonfin.Server-{VERSION}.zip` in the repo root.
 | `/Moonfin/Assets/{fileName}` | GET | Yes | Serve embedded rating icons |
 | `/Moonfin/MDBList/Batch` | POST | Yes | Batch fetch ratings for multiple items |
 | `/Moonfin/MDBList/{imdbId}` | GET | Yes | Get MDBList ratings for a single item |
+| `/Moonfin/MediaBar` | GET | Yes | Get resolved media bar content for the current user |
 | `/Moonfin/TMDB/Episode/{seriesId}/{seasonNumber}/{episodeNumber}` | GET | Yes | Get TMDB episode rating |
 
 ### Jellyseerr/Seerr Config Response
@@ -274,7 +275,10 @@ Settings stored on the server per-user and shared across all Moonfin clients. Ea
 | `showLibrariesInToolbar` | bool | Show library buttons in toolbar |
 | `shuffleContentType` | string | Shuffle content type (`movies`, `tv`, `both`) |
 | `mediaBarEnabled` | bool | Enable featured media bar |
-| `mediaBarContentType` | string | Media bar content type (`movies`, `tv`, `both`) |
+| `mediaBarSourceType` | string | Media bar content source (`library`, `collection`) |
+| `mediaBarLibraryIds` | list | Library IDs to pull media bar items from (empty = all libraries) |
+| `mediaBarCollectionIds` | list | Collection/playlist IDs for media bar (when source is `collection`) |
+| `mediaBarShuffleItems` | bool | Shuffle items in media bar |
 | `mediaBarItemCount` | int | Number of items in media bar |
 | `mediaBarOpacity` | int | Media bar overlay opacity (0–100) |
 | `mediaBarOverlayColor` | string | Media bar overlay color key |

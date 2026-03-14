@@ -205,7 +205,7 @@ var Settings = {
     var existing = document.querySelector(".moonfin-settings-dialog");
     if (existing) existing.remove();
 
-    var settings = Storage.getAll();
+    var settings = Storage.getAll(Storage.getActiveEditProfile());
     var self = this;
 
     this.dialog = document.createElement("div");
@@ -255,17 +255,6 @@ var Settings = {
       '<div class="moonfin-mediabar-library-options" style="' +
       (settings.mediaBarSourceType === "collection" ? "display:none" : "") +
       '">' +
-      this.createSelectCard(
-        "mediaBarContentType",
-        "Content Type",
-        "What type of content to show in the media bar",
-        [
-          { value: "both", label: "Movies & TV Shows" },
-          { value: "movies", label: "Movies Only" },
-          { value: "tv", label: "TV Shows Only" },
-        ],
-        settings.mediaBarContentType,
-      ) +
       '<div class="moonfin-select-card">' +
       '<div class="moonfin-select-info">' +
       '<div class="moonfin-toggle-title">Libraries</div>' +
