@@ -601,16 +601,17 @@ public class MoonfinController : ControllerBase
         {
             if (!Guid.TryParse(colId, out var parentGuid)) continue;
 
-            var query = new InternalItemsQuery
-            {
-                ParentId = parentGuid,
-                Recursive = true
-            };
+            // Get the collection/playlist as a Folder to access LinkedChildren
+            var parent = _libraryManager.GetItemById(parentGuid);
+            if (parent is not Folder folder) continue;
 
-            var result = _libraryManager.GetItemsResult(query);
-            foreach (var item in result.Items)
+            // Access LinkedChildren (data property, no method signature issues)
+            // then resolve each linked item individually via GetItemById (proven stable)
+            foreach (var linkedChild in folder.LinkedChildren)
             {
-                if (seenIds.Add(item.Id))
+                if (!linkedChild.ItemId.HasValue) continue;
+                var item = _libraryManager.GetItemById(linkedChild.ItemId.Value);
+                if (item != null && seenIds.Add(item.Id))
                 {
                     allItems.Add(item);
                 }
