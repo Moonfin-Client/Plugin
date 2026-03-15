@@ -147,28 +147,8 @@ var MediaBar = {
     },
 
     async loadContent() {
-        var settings = Storage.getAll();
-
-        // Try the unified server-side endpoint first
-        var serverItems = await API.getMediaBarItems(Device.getProfileName());
-        if (serverItems) {
-            this.items = serverItems;
-        } else if (settings.mediaBarSourceType === 'collection' &&
-            settings.mediaBarCollectionIds &&
-            settings.mediaBarCollectionIds.length > 0) {
-            // Fallback: client-side collection fetching
-            this.items = await API.getCollectionItems(
-                settings.mediaBarCollectionIds, {
-                    limit: settings.mediaBarItemCount,
-                    shuffle: settings.mediaBarShuffleItems !== false
-                });
-        } else {
-            // Fallback: client-side random items
-            this.items = await API.getRandomItems({
-                limit: settings.mediaBarItemCount,
-                libraryIds: settings.mediaBarLibraryIds || []
-            });
-        }
+        this.items = await API.getMediaBarItems(Device.getProfileName()) || [];
+        this.currentIndex = 0;
 
         if (this.items.length > 0) {
             this.updateDisplay();

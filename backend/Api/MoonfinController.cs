@@ -533,8 +533,13 @@ public class MoonfinController : ControllerBase
         var query = new InternalItemsQuery
         {
             IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
+            Limit = limit,
             Recursive = true
         };
+
+        // Set OrderBy = Random via reflection to avoid compile-time reference to
+        // SortOrder which moved assemblies between Jellyfin 10.10 and 10.11
+        SetRandomOrder(query);
 
         if (libraryIds is { Count: > 0 })
         {
@@ -549,9 +554,37 @@ public class MoonfinController : ControllerBase
             }
         }
 
-        var allItems = _libraryManager.GetItemsResult(query).Items.ToList();
+        return _libraryManager.GetItemsResult(query).Items.ToList();
+    }
 
-        return allItems.Take(limit).ToList();
+    /// <summary>
+    /// Sets OrderBy to Random on the query using reflection, avoiding direct
+    /// reference to SortOrder which moved between Jellyfin 10.10 and 10.11.
+    /// </summary>
+    private static void SetRandomOrder(InternalItemsQuery query)
+    {
+        try
+        {
+            // Find SortOrder enum type at runtime (works regardless of assembly)
+            var orderByProp = typeof(InternalItemsQuery).GetProperty(nameof(InternalItemsQuery.OrderBy));
+            if (orderByProp == null) return;
+
+            // Get the generic type args: (ItemSortBy, SortOrder)
+            var elementType = orderByProp.PropertyType.GetGenericArguments()[0];
+            var sortOrderType = elementType.GetGenericArguments()[1];
+            var ascending = Enum.ToObject(sortOrderType, 0);
+
+            // Create the tuple (ItemSortBy.Random, SortOrder.Ascending)
+            var tuple = Activator.CreateInstance(elementType, ItemSortBy.Random, ascending);
+            var array = Array.CreateInstance(elementType, 1);
+            array.SetValue(tuple, 0);
+
+            orderByProp.SetValue(query, array);
+        }
+        catch
+        {
+            // Reflection failed — query will return items in default order, still functional
+        }
     }
 
     /// <summary>
