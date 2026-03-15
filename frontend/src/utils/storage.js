@@ -105,12 +105,16 @@ const Storage = {
             profiles[profileName] = settings;
             localStorage.setItem(this.PROFILES_KEY, JSON.stringify(profiles));
 
-            // Dispatch change event with resolved settings for current device
-            const resolved = this.getAll();
-            window.dispatchEvent(new CustomEvent('moonfin-settings-changed', { detail: resolved }));
+            const dispatchChange = () => {
+                window.dispatchEvent(new CustomEvent('moonfin-settings-changed', { detail: this.getAll() }));
+            };
 
             if (syncToServer && this.syncState.serverAvailable && this.isSyncEnabled()) {
-                this.saveProfileToServer(profileName, settings);
+                // Dispatch after server sync so components re-fetching from the
+                // server (e.g. MediaBar) get up-to-date data
+                this.saveProfileToServer(profileName, settings).then(dispatchChange);
+            } else {
+                dispatchChange();
             }
         } catch (e) {
             console.error('[Moonfin] Failed to save profile:', e);
