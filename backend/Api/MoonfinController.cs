@@ -531,49 +531,29 @@ public class MoonfinController : ControllerBase
     /// </summary>
     private List<BaseItem> GetLibraryItems(List<string>? libraryIds, int limit)
     {
-        if (libraryIds is { Count: > 0 })
-        {
-            // Query each library separately and merge
-            var allItems = new List<BaseItem>();
-            var seenIds = new HashSet<Guid>();
-
-            foreach (var libId in libraryIds)
-            {
-                if (!Guid.TryParse(libId, out var parentGuid)) continue;
-
-                var query = new InternalItemsQuery
-                {
-                    IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                    ParentId = parentGuid,
-                    Recursive = true
-                };
-
-                var result = _libraryManager.GetItemsResult(query);
-                foreach (var item in result.Items)
-                {
-                    if (seenIds.Add(item.Id))
-                    {
-                        allItems.Add(item);
-                    }
-                }
-            }
-
-            // Partial Fisher-Yates: only shuffle `limit` elements from the full list
-            ShuffleAndTake(allItems, limit);
-            return allItems.Take(limit).ToList();
-        }
-
-        // Default: all libraries
-        var defaultQuery = new InternalItemsQuery
+        var query = new InternalItemsQuery
         {
             IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
             Recursive = true
         };
 
-        var allDefault = _libraryManager.GetItemsResult(defaultQuery).Items.ToList();
+        if (libraryIds is { Count: > 0 })
+        {
+            var parsedIds = libraryIds
+                .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
+                .Where(g => g != Guid.Empty)
+                .ToArray();
 
-        ShuffleAndTake(allDefault, limit);
-        return allDefault.Take(limit).ToList();
+            if (parsedIds.Length > 0)
+            {
+                query.TopParentIds = parsedIds;
+            }
+        }
+
+        var allItems = _libraryManager.GetItemsResult(query).Items.ToList();
+
+        ShuffleAndTake(allItems, limit);
+        return allItems.Take(limit).ToList();
     }
 
     /// <summary>
