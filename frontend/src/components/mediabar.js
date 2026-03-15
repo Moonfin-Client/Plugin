@@ -742,7 +742,7 @@ var MediaBar = {
     show() {
         if (this.container) {
             this.container.classList.remove('disabled');
-            if (Plugin.isHomePage()) {
+            if (Plugin.isHomePage() && this.items && this.items.length > 0) {
                 document.body.classList.add('moonfin-mediabar-active');
             }
         }
