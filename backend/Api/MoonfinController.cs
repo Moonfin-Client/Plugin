@@ -452,13 +452,12 @@ public class MoonfinController : ControllerBase
 
         var sourceType = settings.MediaBarSourceType ?? "library";
         var limit = settings.MediaBarItemCount ?? 10;
-        var shuffle = settings.MediaBarShuffleItems ?? true;
 
         List<BaseItem> items;
 
         if (sourceType == "collection" && settings.MediaBarCollectionIds is { Count: > 0 })
         {
-            items = GetCollectionItems(settings.MediaBarCollectionIds, limit, shuffle);
+            items = GetCollectionItems(settings.MediaBarCollectionIds, limit);
         }
         else
         {
@@ -552,14 +551,13 @@ public class MoonfinController : ControllerBase
 
         var allItems = _libraryManager.GetItemsResult(query).Items.ToList();
 
-        ShuffleAndTake(allItems, limit);
         return allItems.Take(limit).ToList();
     }
 
     /// <summary>
-    /// Queries items from specified collections/playlists, merges and optionally shuffles.
+    /// Queries items from specified collections/playlists, filtered to Movie/Series.
     /// </summary>
-    private List<BaseItem> GetCollectionItems(List<string> collectionIds, int limit, bool shuffle)
+    private List<BaseItem> GetCollectionItems(List<string> collectionIds, int limit)
     {
         var allItems = new List<BaseItem>();
         var seenIds = new HashSet<Guid>();
@@ -587,41 +585,7 @@ public class MoonfinController : ControllerBase
             }
         }
 
-        if (shuffle)
-        {
-            ShuffleAndTake(allItems, limit);
-        }
-
         return allItems.Take(limit).ToList();
-    }
-
-    /// <summary>
-    /// Shuffles items in-place using partial or full Fisher-Yates depending on limit.
-    /// When limit is smaller than the list, only the first `limit` positions are filled
-    /// with uniformly random picks from the entire list (O(limit) instead of O(n)).
-    /// </summary>
-    private static void ShuffleAndTake(List<BaseItem> items, int limit)
-    {
-        if (items.Count <= 1) return;
-
-        if (limit < items.Count)
-        {
-            // Partial Fisher-Yates: fill first `limit` slots from the full range
-            for (var i = 0; i < limit; i++)
-            {
-                var j = Random.Shared.Next(i, items.Count);
-                (items[i], items[j]) = (items[j], items[i]);
-            }
-        }
-        else
-        {
-            // Full Fisher-Yates shuffle
-            for (var i = items.Count - 1; i > 0; i--)
-            {
-                var j = Random.Shared.Next(i + 1);
-                (items[i], items[j]) = (items[j], items[i]);
-            }
-        }
     }
 
     /// <summary>
