@@ -3,6 +3,8 @@ var Settings = {
     isOpen: false,
     _toastTimeout: null,
 
+    _esc: function(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
+
     show: function() {
         if (this.isOpen) return;
 
@@ -1032,7 +1034,7 @@ var Settings = {
                             '<img class="moonfin-collection-poster" src="' + posterUrl + '" alt="">' :
                             '<div class="moonfin-collection-poster moonfin-collection-poster-empty"></div>') +
                         '<div class="moonfin-collection-info">' +
-                            '<div class="moonfin-collection-name">' + (item.Name || 'Untitled') + '</div>' +
+                            '<div class="moonfin-collection-name">' + Settings._esc(item.Name || 'Untitled') + '</div>' +
                             '<div class="moonfin-collection-type">' + typeBadge + '</div>' +
                         '</div>' +
                     '</label>';
@@ -1110,7 +1112,7 @@ var Settings = {
                             (lib.CollectionType === 'movies' ? '🎬' : lib.CollectionType === 'tvshows' ? '📺' : lib.CollectionType === 'music' ? '🎵' : '📁') +
                         '</div>' +
                         '<div class="moonfin-collection-info">' +
-                            '<div class="moonfin-collection-name">' + (lib.Name || 'Untitled') + '</div>' +
+                            '<div class="moonfin-collection-name">' + Settings._esc(lib.Name || 'Untitled') + '</div>' +
                             '<div class="moonfin-collection-type">' + typeBadge + '</div>' +
                         '</div>' +
                     '</label>';

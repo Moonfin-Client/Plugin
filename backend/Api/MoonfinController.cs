@@ -598,10 +598,12 @@ public class MoonfinController : ControllerBase
             {
                 if (!linkedChild.ItemId.HasValue) continue;
                 var item = _libraryManager.GetItemById(linkedChild.ItemId.Value);
-                if (item != null && seenIds.Add(item.Id))
-                {
-                    allItems.Add(item);
-                }
+                if (item == null || !seenIds.Add(item.Id)) continue;
+
+                var kind = item.GetBaseItemKind();
+                if (kind != BaseItemKind.Movie && kind != BaseItemKind.Series) continue;
+
+                allItems.Add(item);
             }
         }
 

@@ -30,6 +30,8 @@ var MediaBar = {
 
         if (Plugin.isHomePage()) {
             document.body.classList.add('moonfin-mediabar-active');
+        } else {
+            this.container.classList.add('hidden');
         }
 
         this.setupEventListeners();
