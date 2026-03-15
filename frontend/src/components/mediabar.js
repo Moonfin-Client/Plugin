@@ -47,34 +47,31 @@ var MediaBar = {
 
     _loadContentAsync(settings) {
         var self = this;
-        this.waitForApi()
-            .then(function () {
-                return self.loadContent();
-            })
-            .then(function () {
-                if (self.items.length > 0) {
-                    self.container.classList.remove('loading');
-                    if (settings.mediaBarAutoAdvance) {
-                        self.startAutoAdvance();
-                    }
-                } else {
-                    document.body.classList.remove('moonfin-mediabar-active');
-                    self.container.classList.add('empty');
+        this.waitForApi().then(function() {
+            return self.loadContent();
+        }).then(function() {
+            if (self.items.length > 0) {
+                self.container.classList.remove('loading');
+                if (settings.mediaBarAutoAdvance) {
+                    self.startAutoAdvance();
                 }
-            })
-            .catch(function (e) {
-                console.error('[Moonfin] MediaBar: Failed to load content -', e.message);
+            } else {
                 document.body.classList.remove('moonfin-mediabar-active');
-                if (self.container) self.container.classList.add('empty');
-            });
+                self.container.classList.add('empty');
+            }
+        }).catch(function(e) {
+            console.error('[Moonfin] MediaBar: Failed to load content -', e.message);
+            document.body.classList.remove('moonfin-mediabar-active');
+            if (self.container) self.container.classList.add('empty');
+        });
     },
 
     waitForApi() {
-        return new Promise(function (resolve, reject) {
+        return new Promise(function(resolve, reject) {
             var attempts = 0;
             var maxAttempts = 50;
-
-            var check = function () {
+            
+            var check = function() {
                 var api = API.getApiClient();
                 if (api) {
                     try {
@@ -87,7 +84,7 @@ var MediaBar = {
                         // Not authenticated yet
                     }
                 }
-
+                
                 if (attempts >= maxAttempts) {
                     reject(new Error('API timeout'));
                 } else {
@@ -112,44 +109,36 @@ var MediaBar = {
         this.container.className = 'moonfin-mediabar';
         this.container.innerHTML =
             '<div class="moonfin-mediabar-backdrop">' +
-            '<div class="moonfin-mediabar-backdrop-img moonfin-mediabar-backdrop-current"></div>' +
-            '<div class="moonfin-mediabar-backdrop-img moonfin-mediabar-backdrop-next"></div>' +
+                '<div class="moonfin-mediabar-backdrop-img moonfin-mediabar-backdrop-current"></div>' +
+                '<div class="moonfin-mediabar-backdrop-img moonfin-mediabar-backdrop-next"></div>' +
             '</div>' +
             '<div class="moonfin-mediabar-trailer-container"></div>' +
             '<div class="moonfin-mediabar-gradient"></div>' +
             '<div class="moonfin-mediabar-content">' +
-            '<div class="moonfin-mediabar-logo-container">' +
-            '<img class="moonfin-mediabar-logo" src="" alt="">' +
-            '</div>' +
-            '<div class="moonfin-mediabar-info" style="background: ' +
-            overlayColor +
-            '">' +
-            '<div class="moonfin-mediabar-metadata">' +
-            '<span class="moonfin-mediabar-year"></span>' +
-            '<span class="moonfin-mediabar-rating-badge"></span>' +
-            '<span class="moonfin-mediabar-runtime"></span>' +
-            '<span class="moonfin-mediabar-genres"></span>' +
-            '</div>' +
-            '<div class="moonfin-mediabar-ratings"></div>' +
-            '<div class="moonfin-mediabar-overview"></div>' +
-            '</div>' +
+                '<div class="moonfin-mediabar-logo-container">' +
+                    '<img class="moonfin-mediabar-logo" src="" alt="">' +
+                '</div>' +
+                '<div class="moonfin-mediabar-info" style="background: ' + overlayColor + '">' +
+                    '<div class="moonfin-mediabar-metadata">' +
+                        '<span class="moonfin-mediabar-year"></span>' +
+                        '<span class="moonfin-mediabar-rating-badge"></span>' +
+                        '<span class="moonfin-mediabar-runtime"></span>' +
+                        '<span class="moonfin-mediabar-genres"></span>' +
+                    '</div>' +
+                    '<div class="moonfin-mediabar-ratings"></div>' +
+                    '<div class="moonfin-mediabar-overview"></div>' +
+                '</div>' +
             '</div>' +
             '<div class="moonfin-mediabar-nav">' +
-            '<button class="moonfin-mediabar-nav-btn moonfin-mediabar-prev" style="background: ' +
-            overlayColor +
-            '">' +
-            '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>' +
-            '</button>' +
-            '<button class="moonfin-mediabar-nav-btn moonfin-mediabar-next" style="background: ' +
-            overlayColor +
-            '">' +
-            '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>' +
-            '</button>' +
+                '<button class="moonfin-mediabar-nav-btn moonfin-mediabar-prev" style="background: ' + overlayColor + '">' +
+                    '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>' +
+                '</button>' +
+                '<button class="moonfin-mediabar-nav-btn moonfin-mediabar-next" style="background: ' + overlayColor + '">' +
+                    '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>' +
+                '</button>' +
             '</div>' +
-            '<div class="moonfin-mediabar-dots-wrap" style="background: ' +
-            overlayColor +
-            '">' +
-            '<div class="moonfin-mediabar-dots"></div>' +
+            '<div class="moonfin-mediabar-dots-wrap" style="background: ' + overlayColor + '">' +
+                '<div class="moonfin-mediabar-dots"></div>' +
             '</div>';
 
         document.body.appendChild(this.container);
@@ -162,16 +151,15 @@ var MediaBar = {
         var serverItems = await API.getMediaBarItems(Device.getProfileName());
         if (serverItems) {
             this.items = serverItems;
-        } else if (
-            settings.mediaBarSourceType === 'collection' &&
+        } else if (settings.mediaBarSourceType === 'collection' &&
             settings.mediaBarCollectionIds &&
-            settings.mediaBarCollectionIds.length > 0
-        ) {
+            settings.mediaBarCollectionIds.length > 0) {
             // Fallback: client-side collection fetching
-            this.items = await API.getCollectionItems(settings.mediaBarCollectionIds, {
-                limit: settings.mediaBarItemCount,
-                shuffle: settings.mediaBarShuffleItems !== false
-            });
+            this.items = await API.getCollectionItems(
+                settings.mediaBarCollectionIds, {
+                    limit: settings.mediaBarItemCount,
+                    shuffle: settings.mediaBarShuffleItems !== false
+                });
         } else {
             // Fallback: client-side random items
             this.items = await API.getRandomItems({
@@ -200,7 +188,7 @@ var MediaBar = {
         var logoUrl = API.getImageUrl(item, 'Logo', { maxWidth: 500 });
         var logoContainer = this.container.querySelector('.moonfin-mediabar-logo-container');
         var logoImg = this.container.querySelector('.moonfin-mediabar-logo');
-
+        
         if (logoUrl) {
             logoImg.src = logoUrl;
             logoImg.alt = item.Name;
@@ -252,7 +240,7 @@ var MediaBar = {
 
         if (MdbList.isEnabled()) {
             var currentIdx = this.currentIndex;
-            MdbList.fetchRatings(item).then(function (mdbRatings) {
+            MdbList.fetchRatings(item).then(function(mdbRatings) {
                 if (MediaBar.currentIndex !== currentIdx) return;
                 if (mdbRatings && mdbRatings.length > 0) {
                     var mdbHtml = MdbList.buildRatingsHtml(mdbRatings, 'compact');
@@ -314,17 +302,15 @@ var MediaBar = {
         this._trailerState = 'resolving';
         this._trailerVideoId = videoId;
 
-        this._ensureYTApi(function () {
+        this._ensureYTApi(function() {
             if (self._trailerState !== 'resolving' || self._trailerVideoId !== videoId) return;
-            self.fetchSponsorSegments(videoId)
-                .then(function (segments) {
-                    self._sponsorSegments = segments;
-                    self._loadYTPlayer(videoId);
-                })
-                .catch(function () {
-                    self._sponsorSegments = [];
-                    self._loadYTPlayer(videoId);
-                });
+            self.fetchSponsorSegments(videoId).then(function(segments) {
+                self._sponsorSegments = segments;
+                self._loadYTPlayer(videoId);
+            }).catch(function() {
+                self._sponsorSegments = [];
+                self._loadYTPlayer(videoId);
+            });
         });
     },
 
@@ -340,7 +326,7 @@ var MediaBar = {
             tag.src = 'https://www.youtube.com/iframe_api';
             document.head.appendChild(tag);
         }
-        var checkInterval = setInterval(function () {
+        var checkInterval = setInterval(function() {
             if (window.YT && window.YT.Player) {
                 clearInterval(checkInterval);
                 self._ytApiReady = true;
@@ -348,9 +334,7 @@ var MediaBar = {
                 callback();
             }
         }, 100);
-        setTimeout(function () {
-            clearInterval(checkInterval);
-        }, 10000);
+        setTimeout(function() { clearInterval(checkInterval); }, 10000);
     },
 
     _loadYTPlayer(videoId) {
@@ -361,9 +345,7 @@ var MediaBar = {
         var trailerContainer = this.container.querySelector('.moonfin-mediabar-trailer-container');
 
         if (this._trailerPlayer) {
-            try {
-                this._trailerPlayer.destroy();
-            } catch (e) {}
+            try { this._trailerPlayer.destroy(); } catch(e) {}
             this._trailerPlayer = null;
         }
 
@@ -394,10 +376,10 @@ var MediaBar = {
                     origin: window.location.origin
                 },
                 events: {
-                    onReady: function (event) {
+                    onReady: function(event) {
                         event.target.mute();
                         event.target.playVideo();
-                        self._trailerRevealTimer = setTimeout(function () {
+                        self._trailerRevealTimer = setTimeout(function() {
                             if (self._trailerState === 'playing') {
                                 var iframe = trailerContainer.querySelector('iframe');
                                 if (iframe) iframe.classList.add('visible');
@@ -405,58 +387,44 @@ var MediaBar = {
                             }
                         }, self._trailerRevealMs);
                     },
-                    onStateChange: function (event) {
+                    onStateChange: function(event) {
                         if (event.data === 0) {
                             self.stopTrailer();
                         }
                     },
-                    onError: function (event) {
+                    onError: function(event) {
                         console.warn('[Moonfin] MediaBar: YouTube player error:', event.data);
                         self._trailerState = 'unavailable';
                         self.stopTrailer();
                     }
                 }
             });
-        } catch (e) {
+        } catch(e) {
             console.warn('[Moonfin] MediaBar: Failed to create YouTube player:', e);
             this._trailerState = 'unavailable';
         }
     },
 
     fetchSponsorSegments(videoId) {
-        return new Promise(function (resolve) {
-            var url =
-                'https://sponsor.ajay.app/api/skipSegments?videoID=' +
-                videoId +
-                '&categories=["sponsor","selfpromo","intro","outro","interaction","music_offtopic"]';
-
-            fetch(url)
-                .then(function (resp) {
-                    if (!resp.ok) {
-                        resolve([]);
-                        return;
+        return new Promise(function(resolve) {
+            var url = 'https://sponsor.ajay.app/api/skipSegments?videoID=' + videoId +
+                      '&categories=["sponsor","selfpromo","intro","outro","interaction","music_offtopic"]';
+            
+            fetch(url).then(function(resp) {
+                if (!resp.ok) { resolve([]); return; }
+                return resp.json();
+            }).then(function(data) {
+                if (!Array.isArray(data)) { resolve([]); return; }
+                var segments = [];
+                for (var i = 0; i < data.length; i++) {
+                    if (data[i].segment && data[i].segment.length === 2) {
+                        segments.push({ start: data[i].segment[0], end: data[i].segment[1] });
                     }
-                    return resp.json();
-                })
-                .then(function (data) {
-                    if (!Array.isArray(data)) {
-                        resolve([]);
-                        return;
-                    }
-                    var segments = [];
-                    for (var i = 0; i < data.length; i++) {
-                        if (data[i].segment && data[i].segment.length === 2) {
-                            segments.push({
-                                start: data[i].segment[0],
-                                end: data[i].segment[1]
-                            });
-                        }
-                    }
-                    resolve(segments);
-                })
-                .catch(function () {
-                    resolve([]);
-                });
+                }
+                resolve(segments);
+            }).catch(function() {
+                resolve([]);
+            });
         });
     },
 
@@ -464,9 +432,7 @@ var MediaBar = {
         var startTime = 0;
         if (!segments || segments.length === 0) return startTime;
 
-        var sorted = segments.slice().sort(function (a, b) {
-            return a.start - b.start;
-        });
+        var sorted = segments.slice().sort(function(a, b) { return a.start - b.start; });
         for (var i = 0; i < sorted.length; i++) {
             if (sorted[i].start <= startTime + 1) {
                 startTime = Math.max(startTime, sorted[i].end);
@@ -484,15 +450,11 @@ var MediaBar = {
         if (this.container) this.container.classList.remove('trailer-active');
 
         if (this._trailerPlayer) {
-            try {
-                this._trailerPlayer.destroy();
-            } catch (e) {}
+            try { this._trailerPlayer.destroy(); } catch(e) {}
             this._trailerPlayer = null;
         }
 
-        var trailerContainer = this.container
-            ? this.container.querySelector('.moonfin-mediabar-trailer-container')
-            : null;
+        var trailerContainer = this.container ? this.container.querySelector('.moonfin-mediabar-trailer-container') : null;
         if (trailerContainer) trailerContainer.innerHTML = '';
 
         this._trailerState = 'idle';
@@ -523,7 +485,7 @@ var MediaBar = {
 
         var img = new Image();
         var self = this;
-        var doSwap = function () {
+        var doSwap = function() {
             next.style.transition = 'none';
             next.classList.remove('active');
             next.style.backgroundImage = "url('" + url + "')";
@@ -532,7 +494,7 @@ var MediaBar = {
             next.style.transition = '';
             next.classList.add('active');
 
-            self._crossfadeTimer = setTimeout(function () {
+            self._crossfadeTimer = setTimeout(function() {
                 current.style.backgroundImage = "url('" + url + "')";
                 next.style.transition = 'none';
                 next.classList.remove('active');
@@ -544,7 +506,7 @@ var MediaBar = {
 
         img.onload = doSwap;
         img.onerror = doSwap;
-        setTimeout(function () {
+        setTimeout(function() {
             if (!img.complete) doSwap();
         }, 300);
         img.src = url;
@@ -556,32 +518,17 @@ var MediaBar = {
         if (!this.items || this.items.length < 2) return;
         var nextIdx = (this.currentIndex + 1) % this.items.length;
         var prevIdx = (this.currentIndex - 1 + this.items.length) % this.items.length;
-        var nextUrl = API.getImageUrl(this.items[nextIdx], 'Backdrop', {
-            maxWidth: 1920
-        });
-        var prevUrl = API.getImageUrl(this.items[prevIdx], 'Backdrop', {
-            maxWidth: 1920
-        });
-        if (nextUrl) {
-            var i1 = new Image();
-            i1.src = nextUrl;
-        }
-        if (prevUrl) {
-            var i2 = new Image();
-            i2.src = prevUrl;
-        }
+        var nextUrl = API.getImageUrl(this.items[nextIdx], 'Backdrop', { maxWidth: 1920 });
+        var prevUrl = API.getImageUrl(this.items[prevIdx], 'Backdrop', { maxWidth: 1920 });
+        if (nextUrl) { var i1 = new Image(); i1.src = nextUrl; }
+        if (prevUrl) { var i2 = new Image(); i2.src = prevUrl; }
     },
 
     updateDots() {
         var dotsContainer = this.container.querySelector('.moonfin-mediabar-dots');
         var html = '';
         for (var i = 0; i < this.items.length; i++) {
-            html +=
-                '<button class="moonfin-mediabar-dot' +
-                (i === this.currentIndex ? ' active' : '') +
-                '" data-index="' +
-                i +
-                '"></button>';
+            html += '<button class="moonfin-mediabar-dot' + (i === this.currentIndex ? ' active' : '') + '" data-index="' + i + '"></button>';
         }
         dotsContainer.innerHTML = html;
     },
@@ -629,7 +576,7 @@ var MediaBar = {
         var settings = Storage.getAll();
         if (!settings.mediaBarAutoAdvance) return;
 
-        this.autoAdvanceTimer = setInterval(function () {
+        this.autoAdvanceTimer = setInterval(function() {
             if (!self.isPaused && self.isVisible && self._trailerState === 'idle') {
                 self.nextSlide();
             }
@@ -652,6 +599,7 @@ var MediaBar = {
 
     ensureInDOM() {
         if (this.container && !document.body.contains(this.container)) {
+
             document.body.appendChild(this.container);
         }
     },
@@ -659,17 +607,17 @@ var MediaBar = {
     setupEventListeners() {
         var self = this;
 
-        this.container.querySelector('.moonfin-mediabar-prev').addEventListener('click', function (e) {
+        this.container.querySelector('.moonfin-mediabar-prev').addEventListener('click', function(e) {
             e.stopPropagation();
             self.prevSlide();
         });
 
-        this.container.querySelector('.moonfin-mediabar-next').addEventListener('click', function (e) {
+        this.container.querySelector('.moonfin-mediabar-next').addEventListener('click', function(e) {
             e.stopPropagation();
             self.nextSlide();
         });
 
-        this.container.querySelector('.moonfin-mediabar-dots').addEventListener('click', function (e) {
+        this.container.querySelector('.moonfin-mediabar-dots').addEventListener('click', function(e) {
             e.stopPropagation();
             var dot = e.target.closest('.moonfin-mediabar-dot');
             if (dot) {
@@ -677,7 +625,7 @@ var MediaBar = {
             }
         });
 
-        this.container.addEventListener('click', function (e) {
+        this.container.addEventListener('click', function(e) {
             if (e.target.closest('.moonfin-mediabar-nav-btn, .moonfin-mediabar-dots, .moonfin-mediabar-dots-wrap')) {
                 return;
             }
@@ -695,61 +643,37 @@ var MediaBar = {
         var touchStartY = 0;
         var touchMoved = false;
 
-        this.container.addEventListener(
-            'touchstart',
-            function (e) {
-                var touch = e.touches[0];
-                touchStartX = touch.clientX;
-                touchStartY = touch.clientY;
-                touchMoved = false;
-            },
-            { passive: true }
-        );
+        this.container.addEventListener('touchstart', function(e) {
+            var touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            touchMoved = false;
+        }, { passive: true });
 
-        this.container.addEventListener(
-            'touchmove',
-            function (e) {
-                if (!touchStartX) return;
-                var dx = Math.abs(e.touches[0].clientX - touchStartX);
-                var dy = Math.abs(e.touches[0].clientY - touchStartY);
-                if (dx > 10 || dy > 10) touchMoved = true;
-                if (dx > dy && dx > 10) e.preventDefault();
-            },
-            { passive: false }
-        );
+        this.container.addEventListener('touchmove', function(e) {
+            if (!touchStartX) return;
+            var dx = Math.abs(e.touches[0].clientX - touchStartX);
+            var dy = Math.abs(e.touches[0].clientY - touchStartY);
+            if (dx > 10 || dy > 10) touchMoved = true;
+            if (dx > dy && dx > 10) e.preventDefault();
+        }, { passive: false });
 
-        this.container.addEventListener(
-            'touchend',
-            function (e) {
-                if (!touchMoved) {
-                    touchStartX = 0;
-                    return;
-                }
-                var dx = e.changedTouches[0].clientX - touchStartX;
-                if (Math.abs(dx) >= 50) {
-                    if (dx < 0) self.nextSlide();
-                    else self.prevSlide();
-                }
-                touchStartX = 0;
-                touchMoved = false;
-            },
-            { passive: true }
-        );
+        this.container.addEventListener('touchend', function(e) {
+            if (!touchMoved) { touchStartX = 0; return; }
+            var dx = e.changedTouches[0].clientX - touchStartX;
+            if (Math.abs(dx) >= 50) {
+                if (dx < 0) self.nextSlide();
+                else self.prevSlide();
+            }
+            touchStartX = 0;
+            touchMoved = false;
+        }, { passive: true });
 
-        this.container.addEventListener('keydown', function (e) {
+        this.container.addEventListener('keydown', function(e) {
             switch (e.key) {
-                case 'ArrowLeft':
-                    self.prevSlide();
-                    e.preventDefault();
-                    break;
-                case 'ArrowRight':
-                    self.nextSlide();
-                    e.preventDefault();
-                    break;
-                case ' ':
-                    self.togglePause();
-                    e.preventDefault();
-                    break;
+                case 'ArrowLeft': self.prevSlide(); e.preventDefault(); break;
+                case 'ArrowRight': self.nextSlide(); e.preventDefault(); break;
+                case ' ': self.togglePause(); e.preventDefault(); break;
                 case 'Enter':
                     var item = self.items[self.currentIndex];
                     if (item) {
@@ -764,22 +688,22 @@ var MediaBar = {
             }
         });
 
-        this.container.addEventListener('mouseenter', function () {
+        this.container.addEventListener('mouseenter', function() {
             self.container.classList.add('focused');
         });
 
-        this.container.addEventListener('mouseleave', function () {
+        this.container.addEventListener('mouseleave', function() {
             self.container.classList.remove('focused');
         });
 
-        document.addEventListener('visibilitychange', function () {
+        document.addEventListener('visibilitychange', function() {
             self.isVisible = !document.hidden;
             if (document.hidden) {
                 self.stopTrailer();
             }
         });
 
-        window.addEventListener('moonfin-settings-changed', function (e) {
+        window.addEventListener('moonfin-settings-changed', function(e) {
             self.applySettings(e.detail);
         });
     },
@@ -799,7 +723,7 @@ var MediaBar = {
         var infoBox = this.container.querySelector('.moonfin-mediabar-info');
         if (infoBox) infoBox.style.background = overlayColor;
 
-        this.container.querySelectorAll('.moonfin-mediabar-nav-btn').forEach(function (btn) {
+        this.container.querySelectorAll('.moonfin-mediabar-nav-btn').forEach(function(btn) {
             btn.style.background = overlayColor;
         });
 
@@ -813,13 +737,11 @@ var MediaBar = {
             this.stopTrailer();
         }
 
-        if (
-            this._lastItemCount !== settings.mediaBarItemCount ||
+        if (this._lastItemCount !== settings.mediaBarItemCount ||
             this._lastSourceType !== settings.mediaBarSourceType ||
             this._lastShuffleItems !== settings.mediaBarShuffleItems ||
             JSON.stringify(this._lastCollectionIds) !== JSON.stringify(settings.mediaBarCollectionIds) ||
-            JSON.stringify(this._lastLibraryIds) !== JSON.stringify(settings.mediaBarLibraryIds)
-        ) {
+            JSON.stringify(this._lastLibraryIds) !== JSON.stringify(settings.mediaBarLibraryIds)) {
             this._lastItemCount = settings.mediaBarItemCount;
             this._lastSourceType = settings.mediaBarSourceType;
             this._lastCollectionIds = settings.mediaBarCollectionIds;

@@ -1,5 +1,5 @@
 const API = {
-    toCamelCase: function (obj) {
+    toCamelCase: function(obj) {
         if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
         var result = {};
         var keys = Object.keys(obj);
@@ -18,7 +18,7 @@ const API = {
     async getCurrentUser() {
         const api = this.getApiClient();
         if (!api) return null;
-
+        
         try {
             const user = await api.getCurrentUser();
             return user;
@@ -52,10 +52,10 @@ const API = {
             const headers = token ? { Authorization: 'MediaBrowser Token="' + token + '"' } : {};
 
             const profileParam = profile || 'global';
-            const response = await fetch(serverUrl + '/Moonfin/MediaBar?profile=' + encodeURIComponent(profileParam), {
-                method: 'GET',
-                headers: headers
-            });
+            const response = await fetch(
+                serverUrl + '/Moonfin/MediaBar?profile=' + encodeURIComponent(profileParam),
+                { method: 'GET', headers: headers }
+            );
 
             if (response.ok) {
                 const data = await response.json();
@@ -430,22 +430,24 @@ const API = {
     // extract the chunk IDs from their compiled source, load those chunks, then find the
     // editor modules by their export shapes.
 
-    getServerId: function () {
+    getServerId: function() {
         var api = this.getApiClient();
         if (!api) return null;
         try {
             if (api.serverInfo && typeof api.serverInfo === 'function') return api.serverInfo().Id;
             if (api._serverInfo) return api._serverInfo.Id;
             if (api.serverId && typeof api.serverId === 'function') return api.serverId();
-        } catch (e) {}
+        } catch(e) {}
         return null;
     },
 
-    _initWebpackRequire: function () {
+    _initWebpackRequire: function() {
         if (window.__moonfin_wp_require) return true;
         // Auto-detect: the compiled global varies by build config
         // Production jellyfin-web uses just 'webpackChunk' (no suffix)
-        var chunkArr = window.webpackChunk || window.webpackChunkjellyfin_web || window['webpackChunk_jellyfin_web'];
+        var chunkArr = window.webpackChunk
+            || window.webpackChunkjellyfin_web
+            || window['webpackChunk_jellyfin_web'];
         if (!chunkArr) {
             // Scan window for any webpackChunk* array
             var keys = Object.keys(window);
@@ -460,17 +462,13 @@ const API = {
             console.warn('[Moonfin] No webpackChunk array found');
             return false;
         }
-        chunkArr.push([
-            ['moonfin'],
-            {},
-            function (__webpack_require__) {
-                window.__moonfin_wp_require = __webpack_require__;
-            }
-        ]);
+        chunkArr.push([['moonfin'], {}, function(__webpack_require__) {
+            window.__moonfin_wp_require = __webpack_require__;
+        }]);
         return !!window.__moonfin_wp_require;
     },
 
-    _extractChunkIds: function (factorySource) {
+    _extractChunkIds: function(factorySource) {
         var ids = [];
         // Match numeric chunk IDs: .e(12345)
         var regex = /\.e\((\d+)\)/g;
@@ -487,15 +485,15 @@ const API = {
         return ids;
     },
 
-    _loadChunks: function (req, chunkIds) {
+    _loadChunks: function(req, chunkIds) {
         var loads = [];
         for (var i = 0; i < chunkIds.length; i++) {
-            loads.push(req.e(chunkIds[i]).catch(function () {}));
+            loads.push(req.e(chunkIds[i]).catch(function() {}));
         }
         return Promise.all(loads);
     },
 
-    _findFactoryByHint: function (req, hint) {
+    _findFactoryByHint: function(req, hint) {
         var factories = req.m || {};
         var keys = Object.keys(factories);
         for (var i = 0; i < keys.length; i++) {
@@ -503,12 +501,12 @@ const API = {
                 if (factories[keys[i]].toString().indexOf(hint) !== -1) {
                     return keys[i];
                 }
-            } catch (e) {}
+            } catch(e) {}
         }
         return null;
     },
 
-    _findFactoryByHints: function (req, hints) {
+    _findFactoryByHints: function(req, hints) {
         var factories = req.m || {};
         var keys = Object.keys(factories);
         for (var i = 0; i < keys.length; i++) {
@@ -516,27 +514,24 @@ const API = {
                 var src = factories[keys[i]].toString();
                 var allMatch = true;
                 for (var h = 0; h < hints.length; h++) {
-                    if (src.indexOf(hints[h]) === -1) {
-                        allMatch = false;
-                        break;
-                    }
+                    if (src.indexOf(hints[h]) === -1) { allMatch = false; break; }
                 }
                 if (allMatch) return keys[i];
-            } catch (e) {}
+            } catch(e) {}
         }
         return null;
     },
 
     _editorModulesPromise: null,
 
-    _loadEditorModules: function () {
+    _loadEditorModules: function() {
         if (this._editorModulesPromise) return this._editorModulesPromise;
         if (window.__moonfin_editors && Object.keys(window.__moonfin_editors).length >= 4) {
             return Promise.resolve(true);
         }
 
         var apiSelf = this;
-        this._editorModulesPromise = new Promise(function (resolve) {
+        this._editorModulesPromise = new Promise(function(resolve) {
             if (!apiSelf._initWebpackRequire()) {
                 resolve(false);
                 return;
@@ -556,94 +551,75 @@ const API = {
             var shortcutChunkIds = apiSelf._extractChunkIds(req.m[shortcutsId].toString());
             console.log('[Moonfin] Loading shortcuts chunks:', shortcutChunkIds);
 
-            apiSelf
-                ._loadChunks(req, shortcutChunkIds)
-                .then(function () {
-                    // Step 3: Find itemContextMenu module by its unique command strings
-                    var icmId = apiSelf._findFactoryByHints(req, ['editimages', 'editsubtitles', 'identify']);
-                    if (icmId) {
-                        // Step 4: Extract and load itemContextMenu's chunks (editor modules)
-                        var icmChunkIds = apiSelf._extractChunkIds(req.m[icmId].toString());
-                        console.log('[Moonfin] Loading itemContextMenu chunks:', icmChunkIds);
-                        return apiSelf._loadChunks(req, icmChunkIds);
-                    }
-                })
-                .then(function () {
-                    // Step 5: All editor chunks loaded. Find editor modules by export shape.
-                    var editors = {};
-                    var factories = req.m;
-                    var cache = req.c || {};
-                    var fkeys = Object.keys(factories);
+            apiSelf._loadChunks(req, shortcutChunkIds).then(function() {
+                // Step 3: Find itemContextMenu module by its unique command strings
+                var icmId = apiSelf._findFactoryByHints(req, ['editimages', 'editsubtitles', 'identify']);
+                if (icmId) {
+                    // Step 4: Extract and load itemContextMenu's chunks (editor modules)
+                    var icmChunkIds = apiSelf._extractChunkIds(req.m[icmId].toString());
+                    console.log('[Moonfin] Loading itemContextMenu chunks:', icmChunkIds);
+                    return apiSelf._loadChunks(req, icmChunkIds);
+                }
+            }).then(function() {
+                // Step 5: All editor chunks loaded. Find editor modules by export shape.
+                var editors = {};
+                var factories = req.m;
+                var cache = req.c || {};
+                var fkeys = Object.keys(factories);
 
-                    // Source hints to narrow down which factories to try instantiating
-                    var editorHints = [
-                        'editItemMetadataForm',
-                        'MessageItemSaved',
-                        'imageType',
-                        'hasChanges',
-                        'subtitleList',
-                        'btnOpenUploadMenu',
-                        'showFindNew',
-                        'identifyResults'
-                    ];
+                // Source hints to narrow down which factories to try instantiating
+                var editorHints = [
+                    'editItemMetadataForm', 'MessageItemSaved',
+                    'imageType', 'hasChanges',
+                    'subtitleList', 'btnOpenUploadMenu',
+                    'showFindNew', 'identifyResults'
+                ];
 
-                    for (var i = 0; i < fkeys.length; i++) {
-                        var id = fkeys[i];
-                        var mod;
+                for (var i = 0; i < fkeys.length; i++) {
+                    var id = fkeys[i];
+                    var mod;
 
-                        // Check cache first (no side effects)
-                        if (cache[id]) {
-                            mod = cache[id].exports;
-                        } else {
-                            // Only try modules whose factory contains editor-related strings
-                            var src;
-                            try {
-                                src = factories[id].toString();
-                            } catch (e) {
-                                continue;
-                            }
-                            var isEditor = false;
-                            for (var h = 0; h < editorHints.length; h++) {
-                                if (src.indexOf(editorHints[h]) !== -1) {
-                                    isEditor = true;
-                                    break;
-                                }
-                            }
-                            if (!isEditor) continue;
-
-                            try {
-                                mod = req(id);
-                            } catch (e) {
-                                continue;
-                            }
+                    // Check cache first (no side effects)
+                    if (cache[id]) {
+                        mod = cache[id].exports;
+                    } else {
+                        // Only try modules whose factory contains editor-related strings
+                        var src;
+                        try { src = factories[id].toString(); } catch(e) { continue; }
+                        var isEditor = false;
+                        for (var h = 0; h < editorHints.length; h++) {
+                            if (src.indexOf(editorHints[h]) !== -1) { isEditor = true; break; }
                         }
+                        if (!isEditor) continue;
 
-                        if (!mod) continue;
-                        apiSelf._matchEditorExports(mod, editors);
-
-                        if (editors.metadata && editors.identifier && editors.image && editors.subtitle) break;
+                        try { mod = req(id); } catch(e) { continue; }
                     }
 
-                    window.__moonfin_editors = editors;
-                    var found = Object.keys(editors);
-                    console.log('[Moonfin] Found editor modules:', found.join(', ') || 'none');
-                    resolve(found.length > 0);
-                })
-                .catch(function (e) {
-                    console.error('[Moonfin] Error loading editor chunks:', e);
-                    resolve(false);
-                });
+                    if (!mod) continue;
+                    apiSelf._matchEditorExports(mod, editors);
+
+                    if (editors.metadata && editors.identifier && editors.image && editors.subtitle) break;
+                }
+
+                window.__moonfin_editors = editors;
+                var found = Object.keys(editors);
+                console.log('[Moonfin] Found editor modules:', found.join(', ') || 'none');
+                resolve(found.length > 0);
+            }).catch(function(e) {
+                console.error('[Moonfin] Error loading editor chunks:', e);
+                resolve(false);
+            });
         });
 
         // Allow retry on failure
-        this._editorModulesPromise.then(function (success) {
+        this._editorModulesPromise.then(function(success) {
             if (!success) apiSelf._editorModulesPromise = null;
         });
 
         return this._editorModulesPromise;
     },
 
-    _matchEditorExports: function (mod, editors) {
+    _matchEditorExports: function(mod, editors) {
         if (!mod) return;
         var d = mod.default || mod;
 
@@ -660,84 +636,109 @@ const API = {
         }
 
         // imageeditor: named export show(options), length <= 1, no showFindNew/embed
-        if (
-            !editors.image &&
-            typeof mod.show === 'function' &&
-            !mod.showFindNew &&
-            !(d && typeof d.embed === 'function') &&
-            mod.show.length <= 1 &&
-            mod !== (editors.identifier || null)
-        ) {
+        if (!editors.image && typeof mod.show === 'function' && !mod.showFindNew &&
+            !(d && typeof d.embed === 'function') && mod.show.length <= 1 &&
+            mod !== (editors.identifier || null)) {
             editors.image = mod;
             return;
         }
 
         // subtitleeditor: default export with show(itemId, serverId), no embed
-        if (!editors.subtitle && d && d !== mod && typeof d.show === 'function' && !d.embed && d.show.length >= 2) {
+        if (!editors.subtitle && d && d !== mod && typeof d.show === 'function' &&
+            !d.embed && d.show.length >= 2) {
             editors.subtitle = d;
             return;
         }
     },
 
-    openMetadataEditor: function (itemId) {
+    openMetadataEditor: function(itemId) {
         var serverId = this.getServerId();
-        return this._loadEditorModules()
-            .then(function (loaded) {
-                var ed = window.__moonfin_editors && window.__moonfin_editors.metadata;
-                if (!ed) return false;
-                ed.show(itemId, serverId);
-                return true;
-            })
-            .catch(function (e) {
-                console.warn('[Moonfin] Failed to open metadata editor:', e);
-                return false;
-            });
+        return this._loadEditorModules().then(function(loaded) {
+            var ed = window.__moonfin_editors && window.__moonfin_editors.metadata;
+            if (!ed) return false;
+            ed.show(itemId, serverId);
+            return true;
+        }).catch(function(e) {
+            console.warn('[Moonfin] Failed to open metadata editor:', e);
+            return false;
+        });
     },
 
-    openImageEditor: function (itemId) {
+    openImageEditor: function(itemId) {
         var serverId = this.getServerId();
-        return this._loadEditorModules()
-            .then(function (loaded) {
-                var ed = window.__moonfin_editors && window.__moonfin_editors.image;
-                if (!ed) return false;
-                var showFn = ed.show || (ed.default && ed.default.show);
-                if (!showFn) return false;
-                showFn({ itemId: itemId, serverId: serverId });
-                return true;
-            })
-            .catch(function (e) {
-                console.warn('[Moonfin] Failed to open image editor:', e);
-                return false;
-            });
+        return this._loadEditorModules().then(function(loaded) {
+            var ed = window.__moonfin_editors && window.__moonfin_editors.image;
+            if (!ed) return false;
+            var showFn = ed.show || (ed.default && ed.default.show);
+            if (!showFn) return false;
+            showFn({ itemId: itemId, serverId: serverId });
+            return true;
+        }).catch(function(e) {
+            console.warn('[Moonfin] Failed to open image editor:', e);
+            return false;
+        });
     },
 
-    openSubtitleEditor: function (itemId) {
+    openSubtitleEditor: function(itemId) {
         var serverId = this.getServerId();
-        return this._loadEditorModules()
-            .then(function (loaded) {
-                var ed = window.__moonfin_editors && window.__moonfin_editors.subtitle;
-                if (!ed) return false;
-                ed.show(itemId, serverId);
-                return true;
-            })
-            .catch(function (e) {
-                console.warn('[Moonfin] Failed to open subtitle editor:', e);
-                return false;
-            });
+        return this._loadEditorModules().then(function(loaded) {
+            var ed = window.__moonfin_editors && window.__moonfin_editors.subtitle;
+            if (!ed) return false;
+            ed.show(itemId, serverId);
+            return true;
+        }).catch(function(e) {
+            console.warn('[Moonfin] Failed to open subtitle editor:', e);
+            return false;
+        });
     },
 
-    openItemIdentifier: function (itemId) {
+    openItemIdentifier: function(itemId) {
         var serverId = this.getServerId();
-        return this._loadEditorModules()
-            .then(function (loaded) {
-                var ed = window.__moonfin_editors && window.__moonfin_editors.identifier;
-                if (!ed) return false;
-                ed.show(itemId, serverId);
-                return true;
-            })
-            .catch(function (e) {
-                console.warn('[Moonfin] Failed to open item identifier:', e);
-                return false;
-            });
+        return this._loadEditorModules().then(function(loaded) {
+            var ed = window.__moonfin_editors && window.__moonfin_editors.identifier;
+            if (!ed) return false;
+            ed.show(itemId, serverId);
+            return true;
+        }).catch(function(e) {
+            console.warn('[Moonfin] Failed to open item identifier:', e);
+            return false;
+        });
+    },
+
+    _playbackManager: null,
+
+    getPlaybackManager: function() {
+        if (this._playbackManager) return this._playbackManager;
+        if (!this._initWebpackRequire()) return null;
+
+        var req = window.__moonfin_wp_require;
+        var cache = req.c || {};
+        var factories = req.m || {};
+        var keys = Object.keys(factories);
+
+        for (var i = 0; i < keys.length; i++) {
+            var id = keys[i];
+            var mod;
+
+            if (cache[id]) {
+                mod = cache[id].exports;
+            } else {
+                var src;
+                try { src = factories[id].toString(); } catch(e) { continue; }
+                if (src.indexOf('playRequestToPlayer') === -1) continue;
+                try { mod = req(id); } catch(e) { continue; }
+            }
+
+            if (!mod) continue;
+            var pm = mod.playbackManager || (mod.default && mod.default.playbackManager);
+            if (!pm && mod.default && typeof mod.default.play === 'function' && typeof mod.default.stop === 'function' && typeof mod.default.seek === 'function') {
+                pm = mod.default;
+            }
+            if (pm && typeof pm.play === 'function') {
+                this._playbackManager = pm;
+                return pm;
+            }
+        }
+        return null;
     }
 };

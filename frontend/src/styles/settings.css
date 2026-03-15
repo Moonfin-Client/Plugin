@@ -14,9 +14,7 @@
     justify-content: flex-end;
     opacity: 0;
     visibility: hidden;
-    transition:
-        opacity 0.3s ease,
-        visibility 0.3s ease;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .moonfin-settings-dialog.open {
@@ -90,9 +88,7 @@
     align-items: center;
     justify-content: center;
     color: rgba(255, 255, 255, 0.7);
-    transition:
-        background 0.2s ease,
-        color 0.2s ease;
+    transition: background 0.2s ease, color 0.2s ease;
 }
 
 .moonfin-settings-close:hover {
@@ -119,9 +115,7 @@
     font-weight: 500;
     cursor: pointer;
     border-radius: 6px 6px 0 0;
-    transition:
-        background 0.2s ease,
-        color 0.2s ease;
+    transition: background 0.2s ease, color 0.2s ease;
     text-align: center;
     white-space: nowrap;
     position: relative;
@@ -192,7 +186,7 @@
     user-select: none;
 }
 
-.moonfin-sync-toggle-label input[type='checkbox'] {
+.moonfin-sync-toggle-label input[type="checkbox"] {
     width: 14px;
     height: 14px;
     margin: 0;
@@ -293,7 +287,7 @@
     cursor: pointer;
 }
 
-.moonfin-toggle-label input[type='checkbox'] {
+.moonfin-toggle-label input[type="checkbox"] {
     width: 18px;
     height: 18px;
     accent-color: #00a4dc;
@@ -546,14 +540,8 @@
 }
 
 @keyframes moonfin-pulse {
-    0%,
-    100% {
-        opacity: 1;
-    }
-
-    50% {
-        opacity: 0.4;
-    }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
 }
 
 .moonfin-jellyseerr-sso-status {
@@ -646,7 +634,6 @@
         justify-content: flex-end;
     }
 }
-
 /* Collection / Playlist Picker */
 .moonfin-mediabar-library-options,
 .moonfin-mediabar-collection-options {

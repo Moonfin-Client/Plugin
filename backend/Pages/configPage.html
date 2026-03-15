@@ -1,14 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="utf-8">
     <title>Moonfin</title>
 </head>
-
 <body>
-    <div id="MoonfinConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
-        data-require="emby-input,emby-button,emby-checkbox">
+    <div id="MoonfinConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
         <div data-role="content">
             <div class="content-primary">
                 <form id="MoonfinConfigForm">
@@ -37,8 +34,7 @@
                                 <span>Enable Jellyseerr / Seerr</span>
                             </label>
                             <div class="fieldDescription">
-                                Enable Jellyseerr or Seerr integration for all users. Users can configure their own authentication
-                                method in their client settings.
+                                Enable Jellyseerr or Seerr integration for all users. Users can configure their own authentication method in their client settings.
                             </div>
                         </div>
                         <div class="inputContainer">
@@ -58,10 +54,8 @@
                             </div>
                         </div>
                         <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="JellyseerrDirectUrl">Direct Iframe URL
-                                (Advanced)</label>
-                            <input type="url" id="JellyseerrDirectUrl" is="emby-input"
-                                placeholder="https://jellyseerr.yourdomain.com" />
+                            <label class="inputLabel inputLabelUnfocused" for="JellyseerrDirectUrl">Direct Iframe URL (Advanced)</label>
+                            <input type="url" id="JellyseerrDirectUrl" is="emby-input" placeholder="https://jellyseerr.yourdomain.com" />
                             <div class="fieldDescription">
                                 <strong>Optional:</strong> When set, the client-side iframe loads directly from this URL
                                 instead of through the proxy. Use this if you're running Seerr v3 (Next.js) behind a reverse proxy
@@ -72,12 +66,10 @@
                                 SSO API calls will still go through the Jellyfin server.
                             </div>
                         </div>
-                        <div
-                            style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 1em 1.5em; margin: 1em 0;">
+                        <div style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 1em 1.5em; margin: 1em 0;">
                             <strong>SSO Proxy:</strong> When Jellyseerr is enabled, Moonfin provides single sign-on.
                             Users authenticate once with their Jellyfin credentials, and the session is stored server-side.
-                            All Moonfin clients (web, Android, Roku, webOS, Tizen, etc) can access Jellyseerr through
-                            <code>/Moonfin/Jellyseerr/Api/</code>
+                            All Moonfin clients (web, Android, Roku, webOS, Tizen, etc) can access Jellyseerr through <code>/Moonfin/Jellyseerr/Api/</code>
                             without re-authenticating.
                         </div>
                     </div>
@@ -99,8 +91,7 @@
                         <h3 class="sectionTitle">TMDB Integration</h3>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="TmdbApiKey">Server-wide TMDB API Key</label>
-                            <input type="password" id="TmdbApiKey" is="emby-input"
-                                placeholder="Enter your TMDB API key or v4 token" />
+                            <input type="password" id="TmdbApiKey" is="emby-input" placeholder="Enter your TMDB API key or v4 token" />
                             <div class="fieldDescription">
                                 Provide a server-wide <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB API key</a>
                                 that all users can use for episode ratings.
@@ -117,11 +108,9 @@
                             a setting will see these values. Users can always override defaults in their own Moonfin settings panel.
                         </div>
 
-                        <div
-                            style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 0.8em 1.2em; margin-bottom: 1.2em; font-size: 0.9em;">
+                        <div style="background-color: rgba(0, 164, 220, 0.1); border-left: 4px solid #00a4dc; border-radius: 4px; padding: 0.8em 1.2em; margin-bottom: 1.2em; font-size: 0.9em;">
                             <strong>How it works:</strong> These are the lowest-priority fallback. Resolution order:
-                            User's device profile &rarr; User's global settings &rarr; <strong>These admin defaults</strong> &rarr;
-                            Built-in defaults.
+                            User's device profile &rarr; User's global settings &rarr; <strong>These admin defaults</strong> &rarr; Built-in defaults.
                         </div>
 
                         <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">UI Features</h4>
@@ -148,8 +137,7 @@
                             <div class="fieldDescription">Enable the featured media carousel on the home page by default.</div>
                         </div>
                         <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarSourceType">Media Bar Content
-                                Source</label>
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarSourceType">Media Bar Content Source</label>
                             <select id="DefaultMediaBarSourceType" is="emby-select">
                                 <option value="">Not set (user decides)</option>
                                 <option value="library">Library (Random)</option>
@@ -160,22 +148,15 @@
                         <div id="DefaultCollectionPickerSection" style="display:none;">
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Default Collections / Playlists</label>
-                                <div class="fieldDescription" style="margin-bottom:0.5em;">Select which collections or playlists to show
-                                    in the media bar by default. Users can override this in their own settings. Note: users who don't have
-                                    access to a selected collection will simply not see those items.</div>
-                                <div id="DefaultCollectionPicker"
-                                    style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;">
-                                </div>
+                                <div class="fieldDescription" style="margin-bottom:0.5em;">Select which collections or playlists to show in the media bar by default. Users can override this in their own settings. Note: users who don't have access to a selected collection will simply not see those items.</div>
+                                <div id="DefaultCollectionPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
                             </div>
                         </div>
                         <div id="DefaultLibraryPickerSection" style="display:none;">
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Default Libraries</label>
-                                <div class="fieldDescription" style="margin-bottom:0.5em;">Optionally select specific libraries for the
-                                    media bar. Leave all unchecked to use all libraries. Users can override this.</div>
-                                <div id="DefaultLibraryPicker"
-                                    style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;">
-                                </div>
+                                <div class="fieldDescription" style="margin-bottom:0.5em;">Optionally select specific libraries for the media bar. Leave all unchecked to use all libraries. Users can override this.</div>
+                                <div id="DefaultLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
                             </div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
@@ -244,16 +225,14 @@
                                 <input type="checkbox" id="DefaultMdblistEnabled" is="emby-checkbox" />
                                 <span>MDBList Ratings</span>
                             </label>
-                            <div class="fieldDescription">Enable MDBList ratings by default (requires server-wide or user API key).
-                            </div>
+                            <div class="fieldDescription">Enable MDBList ratings by default (requires server-wide or user API key).</div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label">
                                 <input type="checkbox" id="DefaultTmdbEpisodeRatingsEnabled" is="emby-checkbox" />
                                 <span>TMDB Episode Ratings</span>
                             </label>
-                            <div class="fieldDescription">Enable TMDB episode ratings by default (requires server-wide or user API
-                                key).</div>
+                            <div class="fieldDescription">Enable TMDB episode ratings by default (requires server-wide or user API key).</div>
                         </div>
                     </div>
 
@@ -261,17 +240,14 @@
                         <h3 class="sectionTitle">Web Plugin Status</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
                             <p>Moonfin uses the
-                                <a href="https://github.com/IAmParadox27/jellyfin-plugin-file-transformation" target="_blank">File
-                                    Transformation</a>
+                                <a href="https://github.com/IAmParadox27/jellyfin-plugin-file-transformation" target="_blank">File Transformation</a>
                                 plugin to inject its web UI.
                             </p>
                             <p style="margin-top: 0.5em;">
                                 <strong>Setup:</strong>
                             </p>
                             <ol style="margin-left: 1.5em;">
-                                <li>Install the <strong>File Transformation</strong> plugin (add
-                                    <code>https://www.iamparadox.dev/jellyfin/plugins/manifest.json</code> to your plugin repositories)
-                                </li>
+                                <li>Install the <strong>File Transformation</strong> plugin (add <code>https://www.iamparadox.dev/jellyfin/plugins/manifest.json</code> to your plugin repositories)</li>
                                 <li>Restart Jellyfin</li>
                                 <li>Force refresh your browser (Ctrl+Shift+R)</li>
                             </ol>
@@ -296,11 +272,11 @@
                 pluginUniqueId: '8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b'
             };
 
-            document.addEventListener('pageshow', function (e) {
+            document.addEventListener('pageshow', function(e) {
                 if (e.target.id !== 'MoonfinConfigPage') return;
 
                 Dashboard.showLoadingMsg();
-                ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function (config) {
+                ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
                     document.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
                     document.querySelector('#JellyseerrEnabled').checked = config.JellyseerrEnabled;
                     document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
@@ -364,7 +340,7 @@
                         fields: 'PrimaryImageAspectRatio',
                         imageTypeLimit: 1,
                         enableImageTypes: 'Primary'
-                    }).then(function (result) {
+                    }).then(function(result) {
                         var items = result.Items || [];
                         if (items.length === 0) {
                             picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No collections or playlists found.</div>';
@@ -396,8 +372,8 @@
                     picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
 
                     var userId = ApiClient.getCurrentUserId();
-                    ApiClient.getUserViews(userId).then(function (result) {
-                        var items = (result.Items || []).filter(function (item) {
+                    ApiClient.getUserViews(userId).then(function(result) {
+                        var items = (result.Items || []).filter(function(item) {
                             var ct = item.CollectionType;
                             return ct === 'movies' || ct === 'tvshows' || ct === 'music' || ct === 'mixed';
                         });
@@ -422,10 +398,10 @@
                 }
 
                 document.querySelector('#MoonfinConfigForm')
-                    .addEventListener('submit', function (ev) {
+                    .addEventListener('submit', function(ev) {
                         ev.preventDefault();
                         Dashboard.showLoadingMsg();
-                        ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function (config) {
+                        ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
                             config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
                             config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
                             config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
@@ -466,7 +442,7 @@
                             config.DefaultUserSettings.mdblistEnabled = document.querySelector('#DefaultMdblistEnabled').checked;
                             config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
 
-                            ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function (result) {
+                            ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
                                 Dashboard.processPluginConfigurationUpdateResult(result);
                             });
                         });
@@ -476,5 +452,4 @@
         </script>
     </div>
 </body>
-
 </html>

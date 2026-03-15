@@ -57,27 +57,27 @@ const Storage = {
     },
 
     colorOptions: {
-        gray: { name: 'Gray', hex: '#808080' },
-        black: { name: 'Black', hex: '#000000' },
-        dark_blue: { name: 'Dark Blue', hex: '#1A2332' },
-        purple: { name: 'Purple', hex: '#4A148C' },
-        teal: { name: 'Teal', hex: '#00695C' },
-        navy: { name: 'Navy', hex: '#0D1B2A' },
-        charcoal: { name: 'Charcoal', hex: '#36454F' },
-        brown: { name: 'Brown', hex: '#3E2723' },
-        dark_red: { name: 'Dark Red', hex: '#8B0000' },
-        dark_green: { name: 'Dark Green', hex: '#0B4F0F' },
-        slate: { name: 'Slate', hex: '#475569' },
-        indigo: { name: 'Indigo', hex: '#1E3A8A' }
+        'gray': { name: 'Gray', hex: '#808080' },
+        'black': { name: 'Black', hex: '#000000' },
+        'dark_blue': { name: 'Dark Blue', hex: '#1A2332' },
+        'purple': { name: 'Purple', hex: '#4A148C' },
+        'teal': { name: 'Teal', hex: '#00695C' },
+        'navy': { name: 'Navy', hex: '#0D1B2A' },
+        'charcoal': { name: 'Charcoal', hex: '#36454F' },
+        'brown': { name: 'Brown', hex: '#3E2723' },
+        'dark_red': { name: 'Dark Red', hex: '#8B0000' },
+        'dark_green': { name: 'Dark Green', hex: '#0B4F0F' },
+        'slate': { name: 'Slate', hex: '#475569' },
+        'indigo': { name: 'Indigo', hex: '#1E3A8A' }
     },
 
     seasonalOptions: {
-        none: { name: 'None' },
-        winter: { name: 'Winter' },
-        spring: { name: 'Spring' },
-        summer: { name: 'Summer' },
-        fall: { name: 'Fall' },
-        halloween: { name: 'Halloween' }
+        'none': { name: 'None' },
+        'winter': { name: 'Winter' },
+        'spring': { name: 'Spring' },
+        'summer': { name: 'Summer' },
+        'fall': { name: 'Fall' },
+        'halloween': { name: 'Halloween' }
     },
 
     // ─── Profile Storage ────────────────────────────────────────────
@@ -142,7 +142,7 @@ const Storage = {
     resolveSettings(profileName) {
         const profiles = this.getProfiles();
         const global = profiles.global || {};
-        const device = profileName !== 'global' ? profiles[profileName] || {} : {};
+        const device = (profileName !== 'global') ? (profiles[profileName] || {}) : {};
         const adminDefaults = this.syncState.adminDefaults || {};
 
         const resolved = {};
@@ -166,7 +166,7 @@ const Storage = {
 
     get(key, defaultValue = null) {
         const settings = this.getAll();
-        return key in settings ? settings[key] : defaultValue !== null ? defaultValue : this.defaults[key];
+        return key in settings ? settings[key] : (defaultValue !== null ? defaultValue : this.defaults[key]);
     },
 
     set(key, value, profileName) {
@@ -284,7 +284,7 @@ const Storage = {
         } catch (e) {
             console.log('[Moonfin] Server plugin not available:', e.message);
         }
-
+        
         this.syncState.serverAvailable = false;
         return null;
     },
@@ -292,7 +292,7 @@ const Storage = {
     getAuthHeader() {
         const token = window.ApiClient?.accessToken?.();
         if (token) {
-            return { Authorization: `MediaBrowser Token="${token}"` };
+            return { 'Authorization': `MediaBrowser Token="${token}"` };
         }
         return {};
     },
@@ -324,7 +324,7 @@ const Storage = {
             console.error('[Moonfin] Failed to fetch from server:', e);
             this.syncState.lastSyncError = e.message;
         }
-
+        
         return null;
     },
 
@@ -336,7 +336,7 @@ const Storage = {
         try {
             this.syncState.syncing = true;
             const serverUrl = window.ApiClient?.serverAddress?.() || '';
-
+            
             const envelope = this._mapEnvelopeToServer(profiles);
             envelope.syncEnabled = this.isSyncEnabled();
 
@@ -365,7 +365,7 @@ const Storage = {
         } finally {
             this.syncState.syncing = false;
         }
-
+        
         return false;
     },
 
@@ -378,7 +378,7 @@ const Storage = {
             this.syncState.syncing = true;
             const serverUrl = window.ApiClient?.serverAddress?.() || '';
             const serverProfile = this._mapProfileToServer(profileSettings);
-
+            
             const response = await fetch(`${serverUrl}/Moonfin/Settings/Profile/${profileName}`, {
                 method: 'POST',
                 headers: {
@@ -403,7 +403,7 @@ const Storage = {
         } finally {
             this.syncState.syncing = false;
         }
-
+        
         return false;
     },
 
@@ -424,6 +424,7 @@ const Storage = {
 
         return false;
     },
+
 
     // ─── Server ↔ Local Mapping ─────────────────────────────────────
 
@@ -630,8 +631,7 @@ const Storage = {
             return true;
         }
         if (typeof a === 'object' && typeof b === 'object') {
-            const ka = Object.keys(a),
-                kb = Object.keys(b);
+            const ka = Object.keys(a), kb = Object.keys(b);
             if (ka.length !== kb.length) return false;
             for (const k of ka) {
                 if (!this._deepEqual(a[k], b[k])) return false;
@@ -645,7 +645,7 @@ const Storage = {
 
     async sync(forceFromServer = false) {
         console.log('[Moonfin] Starting settings sync...' + (forceFromServer ? ' (server wins)' : ''));
-
+        
         const pingResult = await this.pingServer();
         if (!pingResult?.installed || !pingResult?.settingsSyncEnabled) {
             console.log('[Moonfin] Server sync not available');
@@ -670,10 +670,7 @@ const Storage = {
             merged = {};
             const allNames = new Set([...Object.keys(localProfiles), ...Object.keys(serverProfiles)]);
             for (const name of allNames) {
-                merged[name] = {
-                    ...(localProfiles[name] || {}),
-                    ...(serverProfiles[name] || {})
-                };
+                merged[name] = { ...(localProfiles[name] || {}), ...(serverProfiles[name] || {}) };
             }
             console.log('[Moonfin] Applied server profiles (manual sync)');
         } else if (serverProfiles && hasLocalProfiles && snapshot) {
@@ -684,10 +681,7 @@ const Storage = {
             merged = {};
             const allNames = new Set([...Object.keys(serverProfiles), ...Object.keys(localProfiles)]);
             for (const name of allNames) {
-                merged[name] = {
-                    ...(serverProfiles[name] || {}),
-                    ...(localProfiles[name] || {})
-                };
+                merged[name] = { ...(serverProfiles[name] || {}), ...(localProfiles[name] || {}) };
             }
             console.log('[Moonfin] First sync — local wins, pushed to server');
         } else if (serverProfiles && !hasLocalProfiles) {
