@@ -534,31 +534,49 @@ public class MoonfinController : ControllerBase
     /// </summary>
     private List<BaseItem> GetLibraryItems(List<string>? libraryIds, int limit)
     {
-        var query = new InternalItemsQuery
+        if (libraryIds is not { Count: > 0 })
         {
-            IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-            Limit = limit,
-            Recursive = true
-        };
-
-        // Set OrderBy = Random via reflection to avoid compile-time reference to
-        // SortOrder which moved assemblies between Jellyfin 10.10 and 10.11
-        SetRandomOrder(query);
-
-        if (libraryIds is { Count: > 0 })
-        {
-            var parsedIds = libraryIds
-                .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
-                .Where(g => g != Guid.Empty)
-                .ToArray();
-
-            if (parsedIds.Length > 0)
+            // No specific libraries selected — query across all libraries
+            var query = new InternalItemsQuery
             {
-                query.TopParentIds = parsedIds;
+                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
+                Limit = limit,
+                Recursive = true
+            };
+            SetRandomOrder(query);
+            return _libraryManager.GetItemsResult(query).Items.ToList();
+        }
+
+        // Query each selected library via ParentId (matches user view IDs from getUserViews).
+        // TopParentIds won't work here — it filters on an internal DB column
+        // whose values differ from the user-facing view GUIDs.
+        var allItems = new List<BaseItem>();
+        var seenIds = new HashSet<Guid>();
+        var perLibraryLimit = Math.Max(1, limit / libraryIds.Count + 1);
+
+        foreach (var libId in libraryIds)
+        {
+            if (!Guid.TryParse(libId, out var parentGuid)) continue;
+
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
+                ParentId = parentGuid,
+                Limit = perLibraryLimit,
+                Recursive = true
+            };
+            SetRandomOrder(query);
+
+            foreach (var item in _libraryManager.GetItemsResult(query).Items)
+            {
+                if (seenIds.Add(item.Id))
+                {
+                    allItems.Add(item);
+                }
             }
         }
 
-        return _libraryManager.GetItemsResult(query).Items.ToList();
+        return allItems.Take(limit).ToList();
     }
 
     /// <summary>
