@@ -576,6 +576,13 @@ public class MoonfinController : ControllerBase
             }
         }
 
+        // Shuffle merged results for fair representation across libraries
+        for (var i = allItems.Count - 1; i > 0; i--)
+        {
+            var j = Random.Shared.Next(i + 1);
+            (allItems[i], allItems[j]) = (allItems[j], allItems[i]);
+        }
+
         return allItems.Take(limit).ToList();
     }
 
