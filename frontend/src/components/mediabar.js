@@ -52,8 +52,8 @@ var MediaBar = {
         this.waitForApi().then(function() {
             return self.loadContent();
         }).then(function() {
+            self.container.classList.remove('loading');
             if (self.items.length > 0) {
-                self.container.classList.remove('loading');
                 if (settings.mediaBarAutoAdvance) {
                     self.startAutoAdvance();
                 }
@@ -63,6 +63,7 @@ var MediaBar = {
             }
         }).catch(function(e) {
             console.error('[Moonfin] MediaBar: Failed to load content -', e.message);
+            if (self.container) self.container.classList.remove('loading');
             document.body.classList.remove('moonfin-mediabar-active');
             if (self.container) self.container.classList.add('empty');
         });
