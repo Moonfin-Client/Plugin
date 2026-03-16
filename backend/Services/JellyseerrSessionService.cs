@@ -18,6 +18,7 @@ public class JellyseerrSessionService
     private readonly ILogger<JellyseerrSessionService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private static readonly SemaphoreSlim _lock = new(1, 1);
+    private static readonly string[] CsrfCookiePrefixes = { "XSRF-TOKEN=", "_csrf=" };
 
     public JellyseerrSessionService(
         ILogger<JellyseerrSessionService> logger,
@@ -51,6 +52,46 @@ public class JellyseerrSessionService
 
     private string GetSessionPath(Guid userId) =>
         Path.Combine(_sessionsPath, $"{userId}.json");
+
+    private async Task<string?> FetchCsrfTokenAsync(HttpClient client, string jellyseerrUrl, CookieContainer cookieContainer)
+    {
+        try
+        {
+            using var response = await client.GetAsync($"{jellyseerrUrl}/api/v1/settings/public");
+
+            var cookies = cookieContainer.GetCookies(new Uri(jellyseerrUrl));
+            var csrfCookie = cookies["XSRF-TOKEN"]?.Value
+                ?? cookies["_csrf"]?.Value;
+
+            if (!string.IsNullOrEmpty(csrfCookie))
+            {
+                return Uri.UnescapeDataString(csrfCookie);
+            }
+
+            if (response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders))
+            {
+                foreach (var header in setCookieHeaders)
+                {
+                    foreach (var prefix in CsrfCookiePrefixes)
+                    {
+                        if (header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var value = header.Substring(prefix.Length);
+                            var semicolonIdx = value.IndexOf(';');
+                            if (semicolonIdx > 0) value = value.Substring(0, semicolonIdx);
+                            return Uri.UnescapeDataString(value);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to fetch CSRF token from Jellyseerr (non-fatal)");
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Authenticates a Jellyfin user with Jellyseerr and stores the session.
@@ -96,7 +137,15 @@ public class JellyseerrSessionService
                 Encoding.UTF8,
                 "application/json");
 
-            var response = await client.PostAsync(authEndpoint, content);
+            var csrfToken = await FetchCsrfTokenAsync(client, jellyseerrUrl, cookieContainer);
+
+            var request = new HttpRequestMessage(HttpMethod.Post, authEndpoint) { Content = content };
+            if (!string.IsNullOrEmpty(csrfToken))
+            {
+                request.Headers.Add("X-CSRF-Token", csrfToken);
+            }
+
+            var response = await client.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -390,6 +439,15 @@ public class JellyseerrSessionService
             }
 
             var request = new HttpRequestMessage(method, targetUrl);
+
+            if (method != HttpMethod.Get && method != HttpMethod.Head)
+            {
+                var csrfToken = await FetchCsrfTokenAsync(client, jellyseerrUrl, cookieContainer);
+                if (!string.IsNullOrEmpty(csrfToken))
+                {
+                    request.Headers.Add("X-CSRF-Token", csrfToken);
+                }
+            }
 
             if (body != null && body.Length > 0)
             {

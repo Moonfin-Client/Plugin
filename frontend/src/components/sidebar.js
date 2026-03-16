@@ -33,6 +33,11 @@ const Sidebar = {
         this.startClock();
 
         this.initialized = true;
+
+        if (Jellyseerr.config) {
+            this.updateJellyseerrButton(Jellyseerr.config);
+        }
+
         console.log('[Moonfin] Sidebar initialized');
     },
 

@@ -268,10 +268,7 @@ const Storage = {
             const serverUrl = window.ApiClient?.serverAddress?.() || '';
             const response = await fetch(`${serverUrl}/Moonfin/Ping`, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...this.getAuthHeader()
-                }
+                headers: this.getAuthHeader()
             });
 
             if (response.ok) {
@@ -313,10 +310,7 @@ const Storage = {
             const serverUrl = window.ApiClient?.serverAddress?.() || '';
             const response = await fetch(`${serverUrl}/Moonfin/Settings`, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...this.getAuthHeader()
-                }
+                headers: this.getAuthHeader()
             });
 
             if (response.ok) {

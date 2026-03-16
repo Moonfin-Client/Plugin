@@ -60,7 +60,6 @@ const Jellyseerr = {
             var response = await fetch(serverUrl + '/Moonfin/Jellyseerr/Config?' + params, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Authorization': 'MediaBrowser Token="' + token + '"'
                 }
             });
@@ -83,7 +82,6 @@ const Jellyseerr = {
             var response = await fetch(serverUrl + '/Moonfin/Jellyseerr/Status', {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Authorization': 'MediaBrowser Token="' + token + '"'
                 }
             });

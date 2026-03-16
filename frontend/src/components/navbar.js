@@ -32,6 +32,11 @@ const Navbar = {
         this.startClock();
 
         this.initialized = true;
+
+        if (Jellyseerr.config) {
+            this.updateJellyseerrButton(Jellyseerr.config);
+        }
+
         console.log('[Moonfin] Navbar initialized');
     },
 
