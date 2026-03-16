@@ -9,6 +9,15 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
+        "version": "1.7.1.0",
+        "changelog": "New Features:\n- Media Bar Genre Exclusions - exclude specific genres from the media bar so items from those genres won't appear, configurable per-user and as admin defaults\n- GET /Moonfin/Genres endpoint - returns all genre IDs and localized names for the genre picker\n\nBug Fixes:\n- Fixed Jellyseerr CSRF token errors causing failed authentication and proxy requests\n- Fixed Jellyseerr button not appearing when navbar/sidebar initializes after config is dispatched\n- Fixed media bar showing loading state indefinitely when no items are returned\n- Fixed media bar active class being added when there are no items to display\n- Fixed unnecessary Content-Type header on GET requests\n- Fixed duplicate event listeners on collection/library picker re-renders\n\nImprovements:\n- CSRF tokens are now fetched and sent for all Jellyseerr write operations with a fallback for IP-based URLs\n- Media bar loading class is now removed in error and empty states",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.7.1/Moonfin.Server-1.7.1.0.zip",
+        "checksum": "ECD1DE99E2A7CC34A4A7BD856848E073",
+        "timestamp": "2026-03-16T18:02:45",
+        "dependencies": []
+      },
+      {
         "version": "1.7.0.0",
         "changelog": "New Features:\n- Home Screen Row Ordering - drag and drop to reorder or hide home screen sections like Continue Watching, Next Up, and Latest Media\n- Media Bar Collections - choose specific collections or playlists to show in the media bar instead of pulling from all libraries\n- MDBList rating source labels can now be shown or hidden\n- Automatic settings change when switching between users on the same device\n\nNew Endpoint:\n- GET /Moonfin/MediaBar - returns media bar items based on user settings\n\nBug Fixes:\n- Fixed playback not working from the details page\n- Fixed media bar showing on pages other than the home screen\n- Fixed Seerr/Jellyseerr button not appearing after settings sync\n- Fixed details page interfering with media selection dialogs\n- Fixed incorrect Letterboxd rating values\n\nImprovements:\n- Reusable drag-and-drop sortable list component",
         "targetAbi": "10.10.0.0",
