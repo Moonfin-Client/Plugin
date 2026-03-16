@@ -431,6 +431,31 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
+    /// Gets all genres available in the user's libraries (Movie + Series).
+    /// Used to populate the genre exclusion picker in settings.
+    /// </summary>
+    /// <returns>List of genre names.</returns>
+    [HttpGet("Genres")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult GetGenres()
+    {
+        var query = new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Genre],
+            Recursive = true
+        };
+
+        var genres = _libraryManager.GetItemsResult(query).Items
+            .Where(g => !string.IsNullOrWhiteSpace(g.Name))
+            .Select(g => new { Id = g.Id.ToString("N"), Name = g.Name })
+            .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return Ok(new { Items = genres });
+    }
+
+    /// <summary>
     /// Gets resolved media bar content for the current user.
     /// Combines user settings resolution with server-side item queries so all clients
     /// (web, Android, TV) get identical results from a single call.
@@ -456,16 +481,17 @@ public class MoonfinController : ControllerBase
 
         var sourceType = settings.MediaBarSourceType ?? "library";
         var limit = settings.MediaBarItemCount ?? 10;
+        var excludedGenres = settings.MediaBarExcludedGenres;
 
         List<BaseItem> items;
 
         if (sourceType == "collection" && settings.MediaBarCollectionIds is { Count: > 0 })
         {
-            items = GetCollectionItems(settings.MediaBarCollectionIds, limit);
+            items = GetCollectionItems(settings.MediaBarCollectionIds, limit, excludedGenres);
         }
         else
         {
-            items = GetLibraryItems(settings.MediaBarLibraryIds, limit);
+            items = GetLibraryItems(settings.MediaBarLibraryIds, limit, excludedGenres);
         }
 
         var dtos = items.Select(MapItemToDto).ToList();
@@ -530,10 +556,68 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
-    /// Queries random Movie/Series items, optionally filtered to specific libraries.
+    /// Computes the included genre IDs by subtracting excluded genre IDs from all available genre IDs.
+    /// Returns null if no exclusions are needed (i.e. no genre filter should be applied).
+    /// Uses GUIDs instead of names for locale-independent filtering.
     /// </summary>
-    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, int limit)
+    private Guid[]? GetIncludedGenreIds(List<string>? excludedGenreIds)
     {
+        if (excludedGenreIds is not { Count: > 0 }) return null;
+
+        var genreQuery = new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Genre],
+            Recursive = true
+        };
+
+        var allGenres = _libraryManager.GetItemsResult(genreQuery).Items;
+
+        var excluded = new HashSet<Guid>();
+        foreach (var idStr in excludedGenreIds)
+        {
+            if (Guid.TryParse(idStr, out var guid)) excluded.Add(guid);
+        }
+
+        var included = allGenres
+            .Where(g => !excluded.Contains(g.Id))
+            .Select(g => g.Id)
+            .ToArray();
+
+        // If nothing was actually excluded, skip filtering
+        return included.Length < allGenres.Count ? included : null;
+    }
+
+    /// <summary>
+    /// Resolves excluded genre IDs to their current localized names for in-memory filtering.
+    /// Returns null if no exclusions are needed.
+    /// </summary>
+    private HashSet<string>? ResolveExcludedGenreNames(List<string>? excludedGenreIds)
+    {
+        if (excludedGenreIds is not { Count: > 0 }) return null;
+
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var idStr in excludedGenreIds)
+        {
+            if (!Guid.TryParse(idStr, out var guid)) continue;
+            var genre = _libraryManager.GetItemById(guid);
+            if (genre != null && !string.IsNullOrWhiteSpace(genre.Name))
+                names.Add(genre.Name);
+        }
+
+        return names.Count > 0 ? names : null;
+    }
+
+    /// <summary>
+    /// Queries random Movie/Series items, optionally filtered to specific libraries
+    /// and with genre exclusions applied at the database level.
+    /// </summary>
+    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, int limit, List<string>? excludedGenreIds = null)
+    {
+        var includedGenreIds = GetIncludedGenreIds(excludedGenreIds);
+
+        // All genres excluded — no items can match
+        if (includedGenreIds is { Length: 0 }) return [];
+
         if (libraryIds is not { Count: > 0 })
         {
             // No specific libraries selected — query across all libraries
@@ -543,6 +627,9 @@ public class MoonfinController : ControllerBase
                 Limit = limit,
                 Recursive = true
             };
+
+            if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+
             SetRandomOrder(query);
             return _libraryManager.GetItemsResult(query).Items.ToList();
         }
@@ -565,6 +652,9 @@ public class MoonfinController : ControllerBase
                 Limit = perLibraryLimit,
                 Recursive = true
             };
+
+            if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+
             SetRandomOrder(query);
 
             foreach (var item in _libraryManager.GetItemsResult(query).Items)
@@ -615,11 +705,13 @@ public class MoonfinController : ControllerBase
 
     /// <summary>
     /// Queries items from specified collections/playlists, filtered to Movie/Series.
+    /// Collection items are iterated individually, so genre exclusion is applied in-memory.
     /// </summary>
-    private List<BaseItem> GetCollectionItems(List<string> collectionIds, int limit)
+    private List<BaseItem> GetCollectionItems(List<string> collectionIds, int limit, List<string>? excludedGenreIds = null)
     {
         var allItems = new List<BaseItem>();
         var seenIds = new HashSet<Guid>();
+        var excludedNames = ResolveExcludedGenreNames(excludedGenreIds);
 
         foreach (var colId in collectionIds)
         {
@@ -639,6 +731,9 @@ public class MoonfinController : ControllerBase
 
                 var kind = item.GetBaseItemKind();
                 if (kind != BaseItemKind.Movie && kind != BaseItemKind.Series) continue;
+
+                // Skip items that have any excluded genre
+                if (excludedNames != null && item.Genres.Any(g => excludedNames.Contains(g))) continue;
 
                 allItems.Add(item);
             }

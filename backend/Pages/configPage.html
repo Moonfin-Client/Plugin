@@ -159,6 +159,11 @@
                                 <div id="DefaultLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
                             </div>
                         </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Default Excluded Genres</label>
+                            <div class="fieldDescription" style="margin-bottom:0.5em;">Select genres to exclude from the media bar by default. Items with any of these genres will not appear. Users can override this.</div>
+                            <div id="DefaultGenrePicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
+                        </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label">
                                 <input type="checkbox" id="DefaultDetailsPageEnabled" is="emby-checkbox" />
@@ -315,6 +320,7 @@
                     }
                     sourceSelect.addEventListener('change', togglePickerVisibility);
                     togglePickerVisibility();
+                    loadAdminGenrePicker(defaults.mediaBarExcludedGenres || []);
 
                     Dashboard.hideLoadingMsg();
                 });
@@ -392,6 +398,41 @@
                     });
                 }
 
+                function loadAdminGenrePicker(selectedIds) {
+                    var picker = document.querySelector('#DefaultGenrePicker');
+                    if (!picker) return;
+                    picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
+
+                    var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                    var token = ApiClient.accessToken ? ApiClient.accessToken() : '';
+                    var headers = token ? { 'Authorization': 'MediaBrowser Token="' + token + '"' } : {};
+
+                    fetch(serverUrl + '/Moonfin/Genres', { method: 'GET', headers: headers })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            var genres = data.Items || data.items || [];
+                            if (genres.length === 0) {
+                                picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No genres found.</div>';
+                                return;
+                            }
+                            var html = '';
+                            for (var i = 0; i < genres.length; i++) {
+                                var g = genres[i];
+                                var gId = g.id || g.Id;
+                                var gName = g.name || g.Name;
+                                var isChecked = selectedIds.indexOf(gId) !== -1;
+                                html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
+                                    '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gId) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                                    '<span style="font-size:14px;">&#x1F6AB;</span>' +
+                                    '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(gName) + '</div></div></label>';
+                            }
+                            picker.innerHTML = html;
+                        })
+                        .catch(function() {
+                            picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Failed to load genres.</div>';
+                        });
+                }
+
                 document.querySelector('#MoonfinConfigForm')
                     .addEventListener('submit', function(ev) {
                         ev.preventDefault();
@@ -425,6 +466,13 @@
                                 libraryIds.push(libraryCbs[li].dataset.id);
                             }
                             config.DefaultUserSettings.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
+                            // Collect selected excluded genre IDs
+                            var genreCbs = document.querySelectorAll('.adminGenreCb:checked');
+                            var genreIds = [];
+                            for (var gi = 0; gi < genreCbs.length; gi++) {
+                                genreIds.push(genreCbs[gi].dataset.id);
+                            }
+                            config.DefaultUserSettings.mediaBarExcludedGenres = genreIds.length > 0 ? genreIds : null;
                             config.DefaultUserSettings.detailsPageEnabled = document.querySelector('#DefaultDetailsPageEnabled').checked;
                             config.DefaultUserSettings.showClock = document.querySelector('#DefaultShowClock').checked;
                             config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;

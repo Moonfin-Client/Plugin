@@ -315,6 +315,16 @@ var Settings = {
                 '</div>' +
             '</div>' +
 
+            '<div class="moonfin-select-card">' +
+                '<div class="moonfin-select-info">' +
+                    '<div class="moonfin-toggle-title">Excluded Genres</div>' +
+                    '<div class="moonfin-toggle-desc">Items from these genres will not appear in the media bar.</div>' +
+                '</div>' +
+                '<div class="moonfin-genre-picker" id="moonfin-genre-picker">' +
+                    '<div class="moonfin-collection-picker-loading">Loading...</div>' +
+                '</div>' +
+            '</div>' +
+
             this.createSelectCard('mediaBarItemCount', 'Number of Items', 'How many items to display', [
                 { value: '5', label: '5' },
                 { value: '10', label: '10' },
@@ -666,6 +676,7 @@ var Settings = {
         if (collectionOpts) collectionOpts.style.display = isCollection ? '' : 'none';
         if (isCollection) this.loadCollectionPicker();
         if (!isCollection) this.loadLibraryPicker();
+        this.loadGenrePicker();
 
         // Update profile info text
         var infoText = this.dialog.querySelector('.moonfin-profile-info-text');
@@ -925,6 +936,7 @@ var Settings = {
             } else {
                 self.loadLibraryPicker();
             }
+            self.loadGenrePicker();
         }
 
         // MDBList API key - save on input with debounce + on blur
@@ -1218,5 +1230,81 @@ var Settings = {
             console.error('[Moonfin] Failed to load library picker:', e);
             picker.innerHTML = '<div class="moonfin-toggle-desc">Failed to load libraries.</div>';
         });
+    },
+
+    loadGenrePicker: function() {
+        var self = this;
+        var picker = this.dialog ? this.dialog.querySelector('#moonfin-genre-picker') : null;
+        if (!picker) return;
+
+        picker.innerHTML = '<div class="moonfin-collection-picker-loading">Loading...</div>';
+
+        var serverUrl = (window.ApiClient && window.ApiClient.serverAddress ? window.ApiClient.serverAddress() : '') || '';
+        var token = window.ApiClient && window.ApiClient.accessToken ? window.ApiClient.accessToken() : '';
+        var headers = token ? { 'Authorization': 'MediaBrowser Token="' + token + '"' } : {};
+
+        fetch(serverUrl + '/Moonfin/Genres', { method: 'GET', headers: headers })
+            .then(function(response) {
+                if (!response.ok) throw new Error('Failed to fetch genres');
+                return response.json();
+            })
+            .then(function(data) {
+                if (!self.dialog) return;
+
+                var genres = data.Items || data.items || [];
+                if (genres.length === 0) {
+                    picker.innerHTML = '<div class="moonfin-toggle-desc">No genres found in your library.</div>';
+                    return;
+                }
+
+                var settings = Storage.getAll();
+                var excludedGenres = settings.mediaBarExcludedGenres || [];
+                var html = '';
+
+                for (var i = 0; i < genres.length; i++) {
+                    var genre = genres[i];
+                    var genreId = genre.id || genre.Id;
+                    var genreName = genre.name || genre.Name;
+                    var isExcluded = excludedGenres.indexOf(genreId) !== -1;
+
+                    html +=
+                        '<label class="moonfin-collection-item' + (isExcluded ? ' moonfin-collection-item-active' : '') + '">' +
+                            '<input type="checkbox" data-genre-id="' + Settings._esc(genreId) + '"' + (isExcluded ? ' checked' : '') + '>' +
+                            '<div class="moonfin-collection-poster moonfin-collection-poster-empty" style="display:flex;align-items:center;justify-content:center;font-size:16px;">\ud83d\udeab</div>' +
+                            '<div class="moonfin-collection-info">' +
+                                '<div class="moonfin-collection-name">' + Settings._esc(genreName) + '</div>' +
+                            '</div>' +
+                        '</label>';
+                }
+
+                picker.innerHTML = html;
+
+                picker.addEventListener('change', function(e) {
+                    var cb = e.target;
+                    if (!cb.dataset.genreId) return;
+
+                    var currentExcluded = Storage.get('mediaBarExcludedGenres') || [];
+                    currentExcluded = currentExcluded.slice();
+                    var id = cb.dataset.genreId;
+                    var idx = currentExcluded.indexOf(id);
+
+                    if (cb.checked && idx === -1) {
+                        currentExcluded.push(id);
+                    } else if (!cb.checked && idx !== -1) {
+                        currentExcluded.splice(idx, 1);
+                    }
+
+                    self.saveSetting('mediaBarExcludedGenres', currentExcluded);
+
+                    var label = cb.closest('.moonfin-collection-item');
+                    if (label) label.classList.toggle('moonfin-collection-item-active', cb.checked);
+
+                    self.showToast(cb.checked ? 'Genre excluded' : 'Genre included');
+                });
+            })
+            .catch(function(e) {
+                console.error('[Moonfin] Failed to load genre picker:', e);
+                picker.innerHTML = '<div class="moonfin-toggle-desc">Failed to load genres.</div>';
+            });
     }
 };

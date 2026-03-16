@@ -42,6 +42,7 @@ var MediaBar = {
         this._lastSourceType = settings.mediaBarSourceType;
         this._lastCollectionIds = settings.mediaBarCollectionIds;
         this._lastLibraryIds = settings.mediaBarLibraryIds;
+        this._lastExcludedGenres = settings.mediaBarExcludedGenres;
 
         this._loadContentAsync(settings);
     },
@@ -51,8 +52,8 @@ var MediaBar = {
         this.waitForApi().then(function() {
             return self.loadContent();
         }).then(function() {
+            self.container.classList.remove('loading');
             if (self.items.length > 0) {
-                self.container.classList.remove('loading');
                 if (settings.mediaBarAutoAdvance) {
                     self.startAutoAdvance();
                 }
@@ -62,6 +63,7 @@ var MediaBar = {
             }
         }).catch(function(e) {
             console.error('[Moonfin] MediaBar: Failed to load content -', e.message);
+            if (self.container) self.container.classList.remove('loading');
             document.body.classList.remove('moonfin-mediabar-active');
             if (self.container) self.container.classList.add('empty');
         });
@@ -150,10 +152,15 @@ var MediaBar = {
         this.currentIndex = 0;
 
         if (this.items.length > 0) {
+            this.container.classList.remove('empty');
+            if (Plugin.isHomePage()) {
+                document.body.classList.add('moonfin-mediabar-active');
+            }
             this.updateDisplay();
             this.updateDots();
         } else {
             this.container.classList.add('empty');
+            document.body.classList.remove('moonfin-mediabar-active');
         }
     },
 
@@ -721,11 +728,13 @@ var MediaBar = {
         if (this._lastItemCount !== settings.mediaBarItemCount ||
             this._lastSourceType !== settings.mediaBarSourceType ||
             JSON.stringify(this._lastCollectionIds) !== JSON.stringify(settings.mediaBarCollectionIds) ||
-            JSON.stringify(this._lastLibraryIds) !== JSON.stringify(settings.mediaBarLibraryIds)) {
+            JSON.stringify(this._lastLibraryIds) !== JSON.stringify(settings.mediaBarLibraryIds) ||
+            JSON.stringify(this._lastExcludedGenres) !== JSON.stringify(settings.mediaBarExcludedGenres)) {
             this._lastItemCount = settings.mediaBarItemCount;
             this._lastSourceType = settings.mediaBarSourceType;
             this._lastCollectionIds = settings.mediaBarCollectionIds;
             this._lastLibraryIds = settings.mediaBarLibraryIds;
+            this._lastExcludedGenres = settings.mediaBarExcludedGenres;
             this.loadContent();
         }
     },
@@ -733,7 +742,7 @@ var MediaBar = {
     show() {
         if (this.container) {
             this.container.classList.remove('disabled');
-            if (Plugin.isHomePage()) {
+            if (Plugin.isHomePage() && this.items && this.items.length > 0) {
                 document.body.classList.add('moonfin-mediabar-active');
             }
         }

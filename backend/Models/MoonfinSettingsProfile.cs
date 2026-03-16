@@ -114,6 +114,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mediaBarLibraryIds")]
     public List<string>? MediaBarLibraryIds { get; set; }
 
+    [JsonPropertyName("mediaBarExcludedGenres")]
+    public List<string>? MediaBarExcludedGenres { get; set; }
+
     [JsonPropertyName("seasonalSurprise")]
     public string? SeasonalSurprise { get; set; }
 

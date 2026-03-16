@@ -208,6 +208,7 @@ Output: `Moonfin.Server-{VERSION}.zip` in the repo root.
 | `/Moonfin/MDBList/Batch` | POST | Yes | Batch fetch ratings for multiple items |
 | `/Moonfin/MDBList/{imdbId}` | GET | Yes | Get MDBList ratings for a single item |
 | `/Moonfin/MediaBar` | GET | Yes | Get resolved media bar content for the current user |
+| `/Moonfin/Genres` | GET | Yes | List all genres with IDs and localized names |
 | `/Moonfin/TMDB/Episode/{seriesId}/{seasonNumber}/{episodeNumber}` | GET | Yes | Get TMDB episode rating |
 | `/SyncPlay/List` | GET | Yes | List available SyncPlay groups |
 | `/SyncPlay/New` | POST | Yes | Create a new SyncPlay group |

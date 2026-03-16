@@ -30,6 +30,7 @@ const Storage = {
         mediaBarSourceType: 'library',
         mediaBarCollectionIds: [],
         mediaBarLibraryIds: [],
+        mediaBarExcludedGenres: [],
 
         showShuffleButton: true,
         showGenresButton: true,
@@ -449,6 +450,7 @@ const Storage = {
             mediaBarSourceType: 'mediaBarSourceType',
             mediaBarCollectionIds: 'mediaBarCollectionIds',
             mediaBarLibraryIds: 'mediaBarLibraryIds',
+            mediaBarExcludedGenres: 'mediaBarExcludedGenres',
             showShuffleButton: 'showShuffleButton',
             showGenresButton: 'showGenresButton',
             showFavoritesButton: 'showFavoritesButton',
@@ -498,6 +500,7 @@ const Storage = {
             mediaBarSourceType: localProfile.mediaBarSourceType,
             mediaBarCollectionIds: localProfile.mediaBarCollectionIds,
             mediaBarLibraryIds: localProfile.mediaBarLibraryIds,
+            mediaBarExcludedGenres: localProfile.mediaBarExcludedGenres,
             showShuffleButton: localProfile.showShuffleButton,
             showGenresButton: localProfile.showGenresButton,
             showFavoritesButton: localProfile.showFavoritesButton,

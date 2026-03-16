@@ -640,18 +640,24 @@
     margin-bottom: 10px;
 }
 
-.moonfin-collection-picker {
+.moonfin-collection-picker,
+.moonfin-library-picker,
+.moonfin-genre-picker {
     max-height: 240px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
-.moonfin-collection-picker::-webkit-scrollbar {
+.moonfin-collection-picker::-webkit-scrollbar,
+.moonfin-library-picker::-webkit-scrollbar,
+.moonfin-genre-picker::-webkit-scrollbar {
     width: 4px;
 }
 
-.moonfin-collection-picker::-webkit-scrollbar-thumb {
+.moonfin-collection-picker::-webkit-scrollbar-thumb,
+.moonfin-library-picker::-webkit-scrollbar-thumb,
+.moonfin-genre-picker::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.15);
     border-radius: 2px;
 }
