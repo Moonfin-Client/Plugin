@@ -1126,7 +1126,9 @@ var Settings = {
 
             picker.innerHTML = html;
 
-            // Event delegation for checkboxes
+            // Event delegation for checkboxes (guard against duplicate listeners on re-render)
+            if (!picker._collectionListenerAdded) {
+            picker._collectionListenerAdded = true;
             picker.addEventListener('change', function(e) {
                 var cb = e.target;
                 if (!cb.dataset.collectionId) return;
@@ -1149,6 +1151,7 @@ var Settings = {
 
                 self.showToast(cb.checked ? 'Added to media bar' : 'Removed from media bar');
             });
+            }
         }).catch(function(e) {
             console.error('[Moonfin] Failed to load collection picker:', e);
             picker.innerHTML = '<div class="moonfin-toggle-desc">Failed to load collections.</div>';
@@ -1203,7 +1206,9 @@ var Settings = {
 
             picker.innerHTML = html;
 
-            // Event delegation for library checkboxes
+            // Event delegation for library checkboxes (guard against duplicate listeners on re-render)
+            if (!picker._libraryListenerAdded) {
+            picker._libraryListenerAdded = true;
             picker.addEventListener('change', function(e) {
                 var cb = e.target;
                 if (!cb.dataset.libraryId) return;
@@ -1226,6 +1231,7 @@ var Settings = {
 
                 self.showToast(cb.checked ? 'Library added' : 'Library removed');
             });
+            }
         }).catch(function(e) {
             console.error('[Moonfin] Failed to load library picker:', e);
             picker.innerHTML = '<div class="moonfin-toggle-desc">Failed to load libraries.</div>';
@@ -1279,6 +1285,9 @@ var Settings = {
 
                 picker.innerHTML = html;
 
+                // Guard against duplicate listeners on re-render
+                if (!picker._genreListenerAdded) {
+                picker._genreListenerAdded = true;
                 picker.addEventListener('change', function(e) {
                     var cb = e.target;
                     if (!cb.dataset.genreId) return;
@@ -1301,6 +1310,7 @@ var Settings = {
 
                     self.showToast(cb.checked ? 'Genre excluded' : 'Genre included');
                 });
+                }
             })
             .catch(function(e) {
                 console.error('[Moonfin] Failed to load genre picker:', e);
