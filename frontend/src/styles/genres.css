@@ -60,10 +60,6 @@ body.moonfin-library-visible.moonfin-navbar-active .moonfin-library-overlay {
     align-items: center;
     padding: 24px 32px 16px;
     gap: 16px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: linear-gradient(to bottom, rgba(26, 26, 46, 0.98) 0%, rgba(26, 26, 46, 0.9) 80%, transparent 100%);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
 }
