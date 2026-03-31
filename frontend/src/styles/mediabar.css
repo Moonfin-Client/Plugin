@@ -8,10 +8,8 @@
 .moonfin-mediabar {
     position: absolute;
     top: 0;
-    left: 0;
-    right: 0;
     width: 100%;
-    height: 850px;
+    height: 100dvh;
     overflow: hidden;
     cursor: pointer;
     z-index: 100;
@@ -19,7 +17,7 @@
 
 body.moonfin-mediabar-active .homeSectionsContainer {
     position: relative;
-    top: 775px;
+    top: 90dvh;
     z-index: 6;
 }
 
