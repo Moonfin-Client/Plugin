@@ -862,10 +862,11 @@ public class MoonfinController : ControllerBase
 
         // Resolve settings: device profile → global → admin defaults
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
+        var isFallback = resolved == null;
         var settings = resolved ?? MoonfinPlugin.Instance?.Configuration?.DefaultUserSettings ?? new MoonfinSettingsProfile();
 
-        var sourceType = settings.MediaBarSourceType ?? "library";
-        var limit = settings.MediaBarItemCount ?? 10;
+        var sourceType = isFallback ? "library" : (settings.MediaBarSourceType ?? "library");
+        var limit = isFallback ? 5 : (settings.MediaBarItemCount ?? 10);
         var excludedGenres = settings.MediaBarExcludedGenres;
         var queryUser = ResolveQueryUser(userId.Value);
 
@@ -886,7 +887,7 @@ public class MoonfinController : ControllerBase
         }
         else
         {
-            items = GetLibraryItems(settings.MediaBarLibraryIds, limit, queryUser, excludedGenres);
+            items = GetLibraryItems(isFallback ? null : settings.MediaBarLibraryIds, limit, queryUser, excludedGenres);
         }
 
         var dtos = items
