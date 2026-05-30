@@ -1,5 +1,5 @@
-<h1 align="center">Moonfin for Jellyfin Web and Mobile</h1>
-<h3 align="center">A Jellyfin server plugin that serves the Moonfin Flutter web app, provides cross-client settings synchronization, and includes optional Seerr proxy integration.</h3>
+<h1 align="center">Moonbase *for* Moonfin!</h1>
+<h3 align="center">Moonbase is a multi-purpose Jellyfin server plugin that provides structural elements for all Moonfin clients.</h3>
 
 ---
 
@@ -9,44 +9,44 @@
 
 [![License](https://img.shields.io/github/license/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin) [![Release](https://img.shields.io/github/release/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin/releases)
 
-## What is this?
+## What is Moonbase?
 
-Moonfin is a Jellyfin server plugin that serves the Moonfin Flutter app at `/Moonfin/Web/` and provides server APIs used by Moonfin clients across web, mobile, and desktop.
+Moonbase is a Jellyfin server plugin that provides infrastructure for **all** Moonfin clients. The plugin handles settings synchronization, runtime web config/discovery pages, media bar and home row data preferences, enhanced Administrative pages, media rating integrations, and handles Seerr proxy/SSO configurations. User settings follow a profiled model (global profile with optional desktop/mobile/tv overrides), and admins can define and push server-wide defaults for many of Moonfin's preferences. 
 
-The plugin handles settings sync, runtime web config/discovery, media bar and home row data, ratings integrations, and Seerr proxy/SSO. User settings follow a profiled model (global plus optional desktop/mobile/tv overrides), and admins can define server-wide defaults.
+The plugin now also serves a **new Moonfin Flutter web interface** that can be opened directly from `/Moonfin/Web/` and has been optimized for in-browser navigation and viewing. This allows for the Moonfin web interface to run side-by-side with Jellyfin's. If desired, a link to the Moonbase web interface can be included in the stock Jellyfin Web header through the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) bridge detailed below.
 
-Moonfin can be opened directly at `/Moonfin/Web/`. A stock Jellyfin Web header button is optional and available through the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) bridge.
+> **Note:** The rebrand from "Plug-in" to Moonbase emphasizes the central role this component plays. It is **highly recommended** that all users of any Moonfin client install and set-up Moonbase on their server to get the best possible Moonfin experience!
 
-## Opening Moonfin
+## Opening the Moonbase Web Interface
 
-Primary path: open `https://your-jellyfin-host/Moonfin/Web/` directly.
+The Moonbase Web UI can be accessed and book-marked through it's primary path: `https://your-jellyfin-host/Moonfin/Web/`
 
-Optional path: install File Transformation and use the header Moonfin button next to SyncPlay inside stock Jellyfin Web.
+Optionally: If you install the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plug-in, a Moonfin icon will appear in the header (next to SyncPlay) inside stock Jellyfin Web that can be used as a direct link to the web interface.
 <img width="1521" height="164" alt="image" src="https://github.com/user-attachments/assets/bcb69e4b-edbe-4d1f-b9f1-dc81822d55d9" />
 
-> **Tip for admins:** Use *Dashboard → Plugins → Moonfin* to set default user settings and web runtime options (forced/default server URL, WebRTC scan toggle).
+> **Tip for Admins:** The Plug-in Settings panel (under *Dashboard → Plugins → Moonfin*) can be used to set default user settings, web runtime options (forced/default server URL, WebRTC scan toggle), and many other server-side settings!
 
 ## Features
 
-### Moonfin App (`frontend/`)
+### The Moonbase Web UI (`frontend/`)
 - **Cross-Platform Moonfin UI** - One app surface used across web, TV, mobile, and desktop with adaptive navigation and layout behavior
 - **Full Library Browsing** - Home, search, favorites, genres, folder/collection views, and unified multi-server library support
 - **Multiple Playback Surfaces** - Video, audio, photo, book, trailer, next-up, and still-watching playback routes
 - **Live TV and DVR Screens** - Live TV browse, guide, schedule, recordings, series recordings, and live TV player routes
-- **Integrated Admin Screens** - In-app admin routes for users, libraries, tasks, settings, plugins, logs, devices, analytics, and more
+- **Integrated Admin Screens** - In-app (and themed) admin routes for users, libraries, tasks, settings, plugins, logs, devices, analytics, and more
 - **Built-In Seerr Screens** - Discover, requests, browse, media detail, and person detail flows in Moonfin
 - **Web Diagnostics Route** - Dedicated diagnostics view for web startup and routing issues
 - **Per-User Settings Profiles** - Global plus optional desktop/mobile/tv overrides with server sync
 
-### Server Plugin (`backend/`)
+### The Moonbase Server Plugin (`backend/`)
 - **Settings Sync API** - Per-user preference storage with resolved profiles, profile-specific writes, and admin-configurable defaults
 - **Live Sync Events (SSE)** - Optional real-time settings/theme refresh events through `/Moonfin/Settings/Stream`
-- **Admin Defaults Operations** - Push current defaults to all existing users and broadcast admin messages/events
+- **Admin Defaults Operations** - Push current defaults to all existing users
 - **Admin Broadcast Messages** - Admins can send announcements to all connected users at any time for in-client display
 - **Runtime Web Config and Discovery** - `/Moonfin/Web/config.json` plus `/Moonfin/Discovery` endpoints for same-origin plugin mode startup
 - **Theme Upload and Validation APIs** - Admin upload/delete endpoints with strict schema validation and metadata tracking
 - **Media Bar and Genre APIs** - Server-resolved media bar content and genre filters shared across clients
-- **MDBList and TMDB Proxies** - Ratings endpoints that keep API keys server-side
+- **MDBList and TMDB Proxies** - Ratings endpoints that keep API keys server-side for users to incorporate additional ratings in their client displays
 - **Seerr Proxy and SSO** - Authenticated API proxy endpoints with session handling and variant-aware config
 - **Web Asset Hosting** - Serves Flutter web build output under `/Moonfin/Web/` with SPA fallback routing
 - **Optional Header Bridge** - Lightweight File Transformation integration for one-click entry from stock Jellyfin Web
@@ -104,7 +104,7 @@ Optional path: install File Transformation and use the header Moonfin button nex
 Moonfin serves its web app at `/Moonfin/Web/`.
 
 1. Open `/Moonfin/Web/` directly on your Jellyfin server.
-2. If assets do not appear after a fresh install, run the **Moonfin Startup** scheduled task once, then refresh the page.
+2. If assets do not appear after a fresh install, run the **Moonfin Startup** task from Jellyfin Dashboard → Administration → Scheduled Tasks once, then refresh the page.
 
 Optional one-click stock web entry:
 
@@ -118,7 +118,7 @@ Optional one-click stock web entry:
 > **UI not loading?** Go to *Dashboard → Scheduled Tasks* and run the **Moonfin Startup** task once, then refresh your browser.
 
 ### **Hide the optional header logo**
-Add these CSS lines on Branding/Custom CSS:
+If you have the File Transformation plug-in installed but do *not* want the Moonfin icon to appear, add these CSS lines to the Branding → Custom CSS settings on the Jellyfin Administrative Dashboard:
 
 ```
 .headerMoonfinButton {
@@ -142,13 +142,14 @@ Jellyfin Dashboard → Administration → Plugins → **Moonfin** to configure:
 
 ### Theme Editor and Custom Themes
 
-- Built-in editor is available at `/Moonfin/Web/theme/` for visual token editing, validation, and JSON export.
-- Admins can upload exported themes in the plugin config page, and clients can fetch uploaded themes through `/Moonfin/Themes`.
+- Custom theming is here! A built-in theme editor for Moonfin clients is available at `/Moonfin/Web/theme/`
+- This editor allows for visual token editing, validation, and JSON export.
+- Admins can upload exported themes in the plugin config page, and clients can fetch uploaded themes from within the Settings menu on their Moonfin client of choice.
 - Uploaded themes are schema-validated server-side and tracked with metadata (display name, checksum, uploader, upload time).
 
 # User Settings
 
-Open Moonfin at `/Moonfin/Web/`, then use the in-app settings page to customize navbar/media bar behavior, details screen settings, ratings integrations, and other synced preferences.
+Open the Moonbase Web UI at `/Moonfin/Web/`, then use the in-app settings page to customize navbar/media bar behavior, details screen settings, ratings integrations, and other synced preferences the same way you would on any other Moonfin client.
 
 Settings support **device profiles**: a shared global profile plus optional overrides for desktop, mobile, and TV. Device profiles only store values that differ from global, so changes to global automatically flow to all devices unless explicitly overridden. A sync toggle lets you enable or disable server synchronization per-user.
 
