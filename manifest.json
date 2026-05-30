@@ -9,15 +9,6 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
-        "version": "1.8.5.0",
-        "changelog": "## Features\n\n- Added Media Bar Fallback to Movie and TV libraries if no profile is resolved or plugin is uninstalled/disabled. (#133, #306)",
-        "targetAbi": "10.10.0.0",
-        "sourceUrl": "https://raw.githubusercontent.com/mattsigal/moonbase/feature/mediabar-fallback/Moonfin.Server-1.8.5.0.zip",
-        "checksum": "A73F2A4FA34A7AF4D89CE3B462F94F63",
-        "timestamp": "2026-05-30T00:15:26",
-        "dependencies": []
-      },
-      {
         "version": "1.8.2.0",
         "changelog": "## Features\n\n- Added Media Bar Enhanced support in desktop media bar settings. (#98)\n- Clicking a row item now navigates to the correct library, and playback from the Continue Watching row works properly again. (#60)\n\n## Bug Fixes\n\n- Details page buttons were too large on some screens — they've been resized to something more reasonable. (#100)\n- Clicking items from third-party home screen section plugins no longer incorrectly triggers Moonfin's custom detail page. (#96)\n- Admin default settings now correctly propagate to existing users when changed. (#101)\n- The Jellyseerr discover page was crashing to an error screen because the proxy was wrapping responses in an unexpected JSON envelope. That's fixed now. (#108)\n- The global profile now saves reliably, the media bar state persists correctly across Moonfin and Paradox themes, and users no longer see genres or library sections they don't have access to. (#87)",
         "targetAbi": "10.10.0.0",
