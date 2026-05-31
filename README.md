@@ -1,10 +1,10 @@
-<h1 align="center">Moonbase *for* Moonfin!</h1>
+<h1 align="center">Moonbase, the server plugin for Moonfin!</h1>
 <h3 align="center">Moonbase is a multi-purpose Jellyfin server plugin that provides structural elements for all Moonfin clients.</h3>
 
 ---
 
 <p align="center">
-   <img width="1920" height="1080" alt="Moonfin Logo" src="https://github.com/user-attachments/assets/8a22192b-1481-4d96-a832-0579a348943c" />
+   <img width="1920" height="1080" alt="Moonbase" src="https://github.com/user-attachments/assets/5d67e8d0-5972-49f2-89d5-376357c8997b" />
 </p>
 
 [![License](https://img.shields.io/github/license/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin) [![Release](https://img.shields.io/github/release/Moonfin-Client/Plugin.svg)](https://github.com/Moonfin-Client/Plugin/releases)
@@ -13,9 +13,9 @@
 
 Moonbase is a Jellyfin server plugin that provides infrastructure for **all** Moonfin clients. The plugin handles settings synchronization, runtime web config/discovery pages, media bar and home row data preferences, enhanced Administrative pages, media rating integrations, and handles Seerr proxy/SSO configurations. User settings follow a profiled model (global profile with optional desktop/mobile/tv overrides), and admins can define and push server-wide defaults for many of Moonfin's preferences. 
 
-The plugin now also serves a **new Moonfin Flutter web interface** that can be opened directly from `/Moonfin/Web/` and has been optimized for in-browser navigation and viewing. This allows for the Moonfin web interface to run side-by-side with Jellyfin's. If desired, a link to the Moonbase web interface can be included in the stock Jellyfin Web header through the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) bridge detailed below.
+The plugin also serves a **new Moonfin Flutter web interface** that can be opened directly from `/Moonfin/Web/` and has been optimized for in-browser navigation and viewing. This allows for the Moonfin web interface to run side-by-side with Jellyfin's. If desired, a link to the Moonbase web interface can be included in the stock Jellyfin Web header through the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) bridge detailed below.
 
-> **Note:** The rebrand from "Plug-in" to Moonbase emphasizes the central role this component plays. It is **highly recommended** that all users of any Moonfin client install and set-up Moonbase on their server to get the best possible Moonfin experience!
+> **Note:** It is **highly recommended** that all users of any Moonfin client install and set-up Moonbase on their server to get the best possible experience!
 
 ## Opening the Moonbase Web Interface
 
@@ -50,30 +50,6 @@ Optionally: If you install the [File Transformation](https://github.com/IAmParad
 - **Seerr Proxy and SSO** - Authenticated API proxy endpoints with session handling and variant-aware config
 - **Web Asset Hosting** - Serves Flutter web build output under `/Moonfin/Web/` with SPA fallback routing
 - **Optional Header Bridge** - Lightweight File Transformation integration for one-click entry from stock Jellyfin Web
-----
-# Screenshots
-
-## Web UI
-<img width="48%" alt="Home" src="https://github.com/user-attachments/assets/e71a5447-31c2-47e9-bfa8-3bd902ca7a50" />
-<img width="48%" alt="Media Bar" src="https://github.com/user-attachments/assets/3dffe616-829c-4b2e-9275-d24506b6481d" />
-<img width="48%" alt="Details" src="https://github.com/user-attachments/assets/bf9fd6df-d0b5-4eff-9557-5a9ec2acc0ad" />
-<img width="48%" alt="Jellyseerr" src="https://github.com/user-attachments/assets/cf3f371b-0ad0-43c0-ba98-4ddce67950d3" />
-<img width="48%" alt="Navbar" src="https://github.com/user-attachments/assets/bad74e17-e5f6-4654-b0bb-fed10d3b46ae" />
-<img width="48%" alt="Settings" src="https://github.com/user-attachments/assets/e31f1f15-b754-415c-a1fd-46f729964b79" />
-<img width="48%" alt="Genres" src="https://github.com/user-attachments/assets/8683d2e8-a096-4f5a-be74-9c0eea922e4e" />
-
-## Mobile UI
-<img width="23%" alt="Mobile Home" src="https://github.com/user-attachments/assets/ffdc52ea-b153-4518-9c3b-22870b463a83" />
-<img width="23%" alt="Mobile Details" src="https://github.com/user-attachments/assets/e0da8bc2-13ea-4c3c-86fc-7dadfa7be529" />
-<img width="23%" alt="Mobile Browse" src="https://github.com/user-attachments/assets/e33b196f-7ba5-469e-bc09-da7612b22f96" />
-<img width="23%" alt="Mobile Player" src="https://github.com/user-attachments/assets/4ff4292f-c4b3-409f-8dfd-0d97d9eff45e" />
-<img width="23%" alt="Mobile Settings" src="https://github.com/user-attachments/assets/3da56213-3c8b-4b9a-b736-4055acb10714" />
-<img width="23%" alt="Mobile Jellyseerr" src="https://github.com/user-attachments/assets/3cc8f260-e1f9-4cb9-bc7a-8e2359f473cf" />
-<img width="23%" alt="Mobile Navbar" src="https://github.com/user-attachments/assets/df6408d7-3883-4838-8228-f97d989f15d6" />
-
----
-
-**Disclaimer:** Screenshots shown in this documentation feature media content, artwork, and actor likenesses for demonstration purposes only. None of the media, studios, actors, or other content depicted are affiliated with, sponsored by, or endorsing the Moonfin client or the Jellyfin project. All rights to the portrayed content belong to their respective copyright holders. These screenshots are used solely to demonstrate the functionality and interface of the application.
 
 ---
 
@@ -249,7 +225,7 @@ Output: `Moonfin.Server-{VERSION}.zip` in the repo root.
 | `/Moonfin/Discovery` and `/Moonfin/Discovery/discover` | GET | No | Same-origin discovery response for web mode |
 | `/Moonfin/Web/{**path}` | GET | No | Serve Moonfin Flutter web assets and SPA routes |
 
-### Jellyseerr/Seerr Config Response
+### Seerr Config Response
 
 ```json
 {
@@ -343,17 +319,6 @@ Settings stored on the server per-user and shared across all Moonfin clients. Ea
 | `tmdbEpisodeRatingsEnabled` | bool | Enable TMDB episode ratings |
 | `homeRowOrder` | list | Ordered list of enabled home screen sections |
 
-### Web-Only Settings (Not Synced)
-
-These settings are stored in localStorage only and do not sync across clients:
-
-| Setting | Description |
-|---------|-------------|
-| `detailsPageEnabled` | Enable custom details screen |
-| `mediaBarAutoAdvance` | Auto-advance media bar slides |
-| `mediaBarIntervalMs` | Auto-advance interval in milliseconds |
-| `backdropEnabled` | Enable backdrop images |
-
 ### On Startup
 
 - Pings `GET /Moonfin/Ping` to check if the server plugin is installed and sync is enabled
@@ -373,7 +338,7 @@ These settings are stored in localStorage only and do not sync across clients:
 
 ### Cross-Client Behavior
 
-- When you open Jellyfin on a **new device/browser** with no local settings, it pulls from the server and your settings follow you
+- When you open Moonfin on a **new device/browser** with no local settings, it pulls from the server and your settings follow you
 - If you change settings on **Client A**, they push to server. When **Client B** next loads (page refresh/login), it syncs but Client B's local settings win in the merge, so it won't overwrite unsaved local preferences
 - Clients subscribed to `/Moonfin/Settings/Stream` receive live events (`settingsUpdated`, `themesChanged`, admin messages) and can refresh without waiting for restart/login
 - Admin broadcasts are delivered to connected clients through the same stream so users can see announcements immediately in-app
@@ -411,10 +376,9 @@ We welcome contributions to Moonfin for Jellyfin Web!
 
 ## Credits
 
-Moonfin for Jellyfin Web is built upon the excellent work of:
+Moonfin is built upon the excellent work of:
 
 - **[Jellyfin Project](https://jellyfin.org)** - The foundation and upstream codebase
-- **[MakD](https://github.com/MakD)** - Original Jellyfin-Media-Bar concept that inspired our featured media bar
 - **[Druidblack](https://github.com/Druidblack)** - Original MDBList Ratings plugin
 - **Moonfin Contributors** - Everyone who has contributed to this project
 
@@ -425,6 +389,6 @@ This project is licensed under GPL-3.0. See the [LICENSE](LICENSE) file for deta
 ---
 
 <p align="center">
-   <strong>Moonfin for Jellyfin Web</strong> is an independent project and is not affiliated with the Jellyfin project.<br>
+   <strong>Moonfin </strong> is an independent project and is not affiliated with the Jellyfin project.<br>
    <a href="https://github.com/Moonfin-Client">← Back to main Moonfin project</a>
 </p>
