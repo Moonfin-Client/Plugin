@@ -160,7 +160,40 @@ public class MdbListController : ControllerBase
         {
             if (ratingsBySource.TryGetValue(source, out var rating))
             {
-                result.Add(rating);
+                // Clone the rating object to prevent mutating the cached instance in memory
+                var ratingClone = new MdbListRating
+                {
+                    Source = rating.Source,
+                    Value = rating.Value,
+                    Score = rating.Score,
+                    Votes = rating.Votes,
+                    Url = rating.Url
+                };
+
+                // Letterboxd: MDBList's value field is on an ambiguous 0-10 scale.
+                // Normalize to the native 0-5 scale so all clients receive a correct value
+                // without mutating the underlying cache.
+                if (string.Equals(ratingClone.Source, "letterboxd", StringComparison.OrdinalIgnoreCase))
+                {
+                    var isAlreadyFormatted = ratingClone.Value != null && ratingClone.Value.ToString()?.Contains("/5") == true;
+
+                    if (!isAlreadyFormatted)
+                    {
+                        if (ratingClone.Score.HasValue)
+                        {
+                            var normalizedValue = ratingClone.Score.Value / 20.0;
+                            ratingClone.Value = $"{normalizedValue:0.0}/5";
+                            ratingClone.Score = normalizedValue;
+                        }
+                        else if (ratingClone.Value != null && double.TryParse(ratingClone.Value.ToString(), out var val))
+                        {
+                            var normalizedValue = val > 5.0 ? val / 2.0 : val;
+                            ratingClone.Value = $"{normalizedValue:0.0}/5";
+                            ratingClone.Score = normalizedValue;
+                        }
+                    }
+                }
+                result.Add(ratingClone);
             }
         }
 
@@ -228,7 +261,7 @@ public class MdbListRating
 
     /// <summary>Provider's native rating value.</summary>
     [JsonPropertyName("value")]
-    public double? Value { get; set; }
+    public object? Value { get; set; }
 
     /// <summary>Normalized score (0-100).</summary>
     [JsonPropertyName("score")]
