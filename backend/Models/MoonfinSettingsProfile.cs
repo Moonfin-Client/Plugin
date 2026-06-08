@@ -162,6 +162,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("homeRowsStyle")]
     public string? HomeRowsStyle { get; set; }
 
+    [JsonPropertyName("fullScreenRows")]
+    public bool? FullScreenRows { get; set; }
+
     [JsonPropertyName("homeRowsImageType")]
     public string? HomeRowsImageType { get; set; }
 
