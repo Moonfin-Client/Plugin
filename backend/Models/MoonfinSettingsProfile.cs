@@ -204,6 +204,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("displayGenresRows")]
     public bool? DisplayGenresRows { get; set; }
 
+    [JsonPropertyName("displaySeerrRows")]
+    public bool? DisplaySeerrRows { get; set; }
+
     [JsonPropertyName("favoritesRowSortBy")]
     public string? FavoritesRowSortBy { get; set; }
 
