@@ -117,6 +117,17 @@ public class MoonfinSettingsService
             }
         }
 
+        if (resolved.MdblistRatingSources != null)
+        {
+            for (var i = 0; i < resolved.MdblistRatingSources.Count; i++)
+            {
+                if (string.Equals(resolved.MdblistRatingSources[i], "rtAudience", StringComparison.OrdinalIgnoreCase))
+                {
+                    resolved.MdblistRatingSources[i] = "tomatoes_audience";
+                }
+            }
+        }
+
         return resolved;
     }
 

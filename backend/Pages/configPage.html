@@ -1017,7 +1017,7 @@
 
             var RATING_SOURCES = [
                 { id: 'tomatoes',       label: 'Rotten Tomatoes' },
-                { id: 'rtAudience',     label: 'RT Audience Score' },
+                { id: 'tomatoes_audience', label: 'RT Audience Score' },
                 { id: 'imdb',           label: 'IMDb' },
                 { id: 'tmdb',           label: 'TMDB' },
                 { id: 'metacritic',     label: 'Metacritic' },
@@ -1044,6 +1044,7 @@
                 var ordered = [];
                 if (selectedIds && selectedIds.length > 0) {
                     selectedIds.forEach(function(id) {
+                        if (id === 'rtAudience') id = 'tomatoes_audience';
                         var src = RATING_SOURCES.find(function(s) { return s.id === id; });
                         if (src) { ordered.push({ id: src.id, label: src.label, checked: true }); selectedSet[id] = true; }
                     });
