@@ -1651,89 +1651,93 @@
                         });
                 }
 
+                function submit() {
+                    ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
+                        config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
+                        config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
+                        config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
+                        config.JellyseerrDisplayName = document.querySelector('#JellyseerrDisplayName').value || null;
+                        config.MdblistApiKey = document.querySelector('#MdblistApiKey').value || null;
+                        config.TmdbApiKey = document.querySelector('#TmdbApiKey').value || null;
+                        config.WebDefaultServerUrl = document.querySelector('#WebDefaultServerUrl').value || null;
+                        config.WebForcedServerUrl = document.querySelector('#WebForcedServerUrl').value || null;
+                        config.WebEnableWebRtcScan = document.querySelector('#WebEnableWebRtcScan').checked;
+
+                        config.DefaultUserSettings = config.DefaultUserSettings || {};
+                        config.DefaultUserSettings.visualTheme = document.querySelector('#DefaultVisualTheme').value || null;
+                        config.DefaultUserSettings.focusColor = document.querySelector('#DefaultFocusColor').value || null;
+                        config.DefaultUserSettings.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
+                        config.DefaultUserSettings.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
+                        config.DefaultUserSettings.screensaverMode = document.querySelector('#DefaultScreensaverMode').value || null;
+
+                        config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
+                        config.DefaultUserSettings.navbarColor = document.querySelector('#DefaultNavbarColor').value || null;
+                        config.DefaultUserSettings.navbarOpacity = getNullableIntInput('#DefaultNavbarOpacity');
+
+                        config.DefaultUserSettings.mediaBarSourceType = document.querySelector('#DefaultMediaBarSourceType').value || null;
+                        config.DefaultUserSettings.mediaBarMode = document.querySelector('#DefaultMediaBarMode').value || null;
+                        config.DefaultUserSettings.mediaBarTrailerAudio = getNullableBoolSelect('#DefaultMediaBarTrailerAudio');
+
+                        var collectionCbs = document.querySelectorAll('.adminCollectionCb:checked');
+                        var collectionIds = [];
+                        for (var ci = 0; ci < collectionCbs.length; ci++) {
+                            collectionIds.push(collectionCbs[ci].dataset.id);
+                        }
+                        config.DefaultUserSettings.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
+                        var libraryCbs = document.querySelectorAll('.adminLibraryCb:checked');
+                        var libraryIds = [];
+                        for (var li = 0; li < libraryCbs.length; li++) {
+                            libraryIds.push(libraryCbs[li].dataset.id);
+                        }
+                        config.DefaultUserSettings.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
+                        var genreCbs = document.querySelectorAll('.adminGenreCb:checked');
+                        var genreIds = [];
+                        for (var gi = 0; gi < genreCbs.length; gi++) {
+                            genreIds.push(genreCbs[gi].dataset.id);
+                        }
+                        config.DefaultUserSettings.mediaBarExcludedGenres = genreIds.length > 0 ? genreIds : null;
+
+                        config.DefaultUserSettings.homeRowsStyle = document.querySelector('#DefaultHomeRowsStyle').value || null;
+                        config.DefaultUserSettings.homeImageTypeContinueWatching = document.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
+                        config.DefaultUserSettings.posterSize = document.querySelector('#DefaultPosterSize').value || null;
+                        config.DefaultUserSettings.displayFavoritesRows = getNullableBoolSelect('#DefaultDisplayFavoritesRows');
+                        config.DefaultUserSettings.displayCollectionsRows = getNullableBoolSelect('#DefaultDisplayCollectionsRows');
+                        config.DefaultUserSettings.displayGenresRows = getNullableBoolSelect('#DefaultDisplayGenresRows');
+                        config.DefaultUserSettings.favoritesRowSortBy = document.querySelector('#DefaultFavoritesRowSortBy').value || null;
+                        config.DefaultUserSettings.collectionsRowSortBy = document.querySelector('#DefaultCollectionsRowSortBy').value || null;
+                        config.DefaultUserSettings.genresRowSortBy = document.querySelector('#DefaultGenresRowSortBy').value || null;
+                        config.DefaultUserSettings.genresRowItemFilter = document.querySelector('#DefaultGenresRowItemFilter').value || null;
+                        config.DefaultUserSettings.homeImageUseSeriesImage = getNullableBoolSelect('#DefaultHomeImageUseSeriesImage');
+                        config.DefaultUserSettings.homeRowOrder = getHomeRowOrderValue();
+                        config.DefaultUserSettings.mergeContinueWatchingNextUp = document.querySelector('#DefaultMergeContinueWatchingNextUp').checked;
+
+                        config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;
+                        config.DefaultUserSettings.showGenresButton = document.querySelector('#DefaultShowGenresButton').checked;
+                        config.DefaultUserSettings.showFavoritesButton = document.querySelector('#DefaultShowFavoritesButton').checked;
+                        config.DefaultUserSettings.showCastButton = document.querySelector('#DefaultShowCastButton').checked;
+                        config.DefaultUserSettings.showSyncPlayButton = document.querySelector('#DefaultShowSyncPlayButton').checked;
+                        config.DefaultUserSettings.showLibrariesInToolbar = document.querySelector('#DefaultShowLibrariesInToolbar').checked;
+
+                        config.DefaultUserSettings.episodePreviewEnabled = getNullableBoolSelect('#DefaultEpisodePreviewEnabled');
+                        config.DefaultUserSettings.previewAudioEnabled = getNullableBoolSelect('#DefaultPreviewAudioEnabled');
+
+                        config.DefaultUserSettings.mdblistEnabled = document.querySelector('#DefaultMdblistEnabled').checked;
+                        config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
+                        config.DefaultUserSettings.mdblistShowRatingBadges = getNullableBoolSelect('#DefaultMdblistShowRatingBadges');
+                        config.DefaultUserSettings.mdblistRatingSources = getRatingSourcesValue();
+                        config.DefaultUserSettings.jellyseerrBlockNsfw = getNullableBoolSelect('#DefaultJellyseerrBlockNsfw');
+
+                        ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+                }
+
                 document.querySelector('#MoonfinConfigForm')
                     .addEventListener('submit', function(ev) {
                         ev.preventDefault();
                         Dashboard.showLoadingMsg();
-                        ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
-                            config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
-                            config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
-                            config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
-                            config.JellyseerrDisplayName = document.querySelector('#JellyseerrDisplayName').value || null;
-                            config.MdblistApiKey = document.querySelector('#MdblistApiKey').value || null;
-                            config.TmdbApiKey = document.querySelector('#TmdbApiKey').value || null;
-                            config.WebDefaultServerUrl = document.querySelector('#WebDefaultServerUrl').value || null;
-                            config.WebForcedServerUrl = document.querySelector('#WebForcedServerUrl').value || null;
-                            config.WebEnableWebRtcScan = document.querySelector('#WebEnableWebRtcScan').checked;
-
-                            config.DefaultUserSettings = config.DefaultUserSettings || {};
-                            config.DefaultUserSettings.visualTheme = document.querySelector('#DefaultVisualTheme').value || null;
-                            config.DefaultUserSettings.focusColor = document.querySelector('#DefaultFocusColor').value || null;
-                            config.DefaultUserSettings.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
-                            config.DefaultUserSettings.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
-                            config.DefaultUserSettings.screensaverMode = document.querySelector('#DefaultScreensaverMode').value || null;
-
-                            config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
-                            config.DefaultUserSettings.navbarColor = document.querySelector('#DefaultNavbarColor').value || null;
-                            config.DefaultUserSettings.navbarOpacity = getNullableIntInput('#DefaultNavbarOpacity');
-
-                            config.DefaultUserSettings.mediaBarSourceType = document.querySelector('#DefaultMediaBarSourceType').value || null;
-                            config.DefaultUserSettings.mediaBarMode = document.querySelector('#DefaultMediaBarMode').value || null;
-                            config.DefaultUserSettings.mediaBarTrailerAudio = getNullableBoolSelect('#DefaultMediaBarTrailerAudio');
-
-                            var collectionCbs = document.querySelectorAll('.adminCollectionCb:checked');
-                            var collectionIds = [];
-                            for (var ci = 0; ci < collectionCbs.length; ci++) {
-                                collectionIds.push(collectionCbs[ci].dataset.id);
-                            }
-                            config.DefaultUserSettings.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
-                            var libraryCbs = document.querySelectorAll('.adminLibraryCb:checked');
-                            var libraryIds = [];
-                            for (var li = 0; li < libraryCbs.length; li++) {
-                                libraryIds.push(libraryCbs[li].dataset.id);
-                            }
-                            config.DefaultUserSettings.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
-                            var genreCbs = document.querySelectorAll('.adminGenreCb:checked');
-                            var genreIds = [];
-                            for (var gi = 0; gi < genreCbs.length; gi++) {
-                                genreIds.push(genreCbs[gi].dataset.id);
-                            }
-                            config.DefaultUserSettings.mediaBarExcludedGenres = genreIds.length > 0 ? genreIds : null;
-
-                            config.DefaultUserSettings.homeRowsStyle = document.querySelector('#DefaultHomeRowsStyle').value || null;
-                            config.DefaultUserSettings.homeImageTypeContinueWatching = document.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
-                            config.DefaultUserSettings.posterSize = document.querySelector('#DefaultPosterSize').value || null;
-                            config.DefaultUserSettings.displayFavoritesRows = getNullableBoolSelect('#DefaultDisplayFavoritesRows');
-                            config.DefaultUserSettings.displayCollectionsRows = getNullableBoolSelect('#DefaultDisplayCollectionsRows');
-                            config.DefaultUserSettings.displayGenresRows = getNullableBoolSelect('#DefaultDisplayGenresRows');
-                            config.DefaultUserSettings.favoritesRowSortBy = document.querySelector('#DefaultFavoritesRowSortBy').value || null;
-                            config.DefaultUserSettings.collectionsRowSortBy = document.querySelector('#DefaultCollectionsRowSortBy').value || null;
-                            config.DefaultUserSettings.genresRowSortBy = document.querySelector('#DefaultGenresRowSortBy').value || null;
-                            config.DefaultUserSettings.genresRowItemFilter = document.querySelector('#DefaultGenresRowItemFilter').value || null;
-                            config.DefaultUserSettings.homeImageUseSeriesImage = getNullableBoolSelect('#DefaultHomeImageUseSeriesImage');
-                            config.DefaultUserSettings.homeRowOrder = getHomeRowOrderValue();
-                            config.DefaultUserSettings.mergeContinueWatchingNextUp = document.querySelector('#DefaultMergeContinueWatchingNextUp').checked;
-
-                            config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;
-                            config.DefaultUserSettings.showGenresButton = document.querySelector('#DefaultShowGenresButton').checked;
-                            config.DefaultUserSettings.showFavoritesButton = document.querySelector('#DefaultShowFavoritesButton').checked;
-                            config.DefaultUserSettings.showCastButton = document.querySelector('#DefaultShowCastButton').checked;
-                            config.DefaultUserSettings.showSyncPlayButton = document.querySelector('#DefaultShowSyncPlayButton').checked;
-                            config.DefaultUserSettings.showLibrariesInToolbar = document.querySelector('#DefaultShowLibrariesInToolbar').checked;
-
-                            config.DefaultUserSettings.episodePreviewEnabled = getNullableBoolSelect('#DefaultEpisodePreviewEnabled');
-                            config.DefaultUserSettings.previewAudioEnabled = getNullableBoolSelect('#DefaultPreviewAudioEnabled');
-
-                            config.DefaultUserSettings.mdblistEnabled = document.querySelector('#DefaultMdblistEnabled').checked;
-                            config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
-                            config.DefaultUserSettings.mdblistShowRatingBadges = getNullableBoolSelect('#DefaultMdblistShowRatingBadges');
-                            config.DefaultUserSettings.mdblistRatingSources = getRatingSourcesValue();
-                            config.DefaultUserSettings.jellyseerrBlockNsfw = getNullableBoolSelect('#DefaultJellyseerrBlockNsfw');
-
-                            ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
-                                Dashboard.processPluginConfigurationUpdateResult(result);
-                            });
-                        });
+                        submit();
                         return false;
                     });
 
@@ -1741,6 +1745,8 @@
                 if (pushDefaultsBtn && !pushDefaultsBtn.dataset.bound) {
                     pushDefaultsBtn.dataset.bound = 'true';
                     pushDefaultsBtn.addEventListener('click', function() {
+                        submit();
+
                         var overwrite = !!(document.querySelector('#OverwriteAllCheckbox') || {}).checked;
 
                         var confirmMsg = overwrite
@@ -1812,6 +1818,8 @@
                 if (applySingleUserBtn && !applySingleUserBtn.dataset.bound) {
                     applySingleUserBtn.dataset.bound = 'true';
                     applySingleUserBtn.addEventListener('click', function() {
+                        submit();
+
                         var select = document.querySelector('#SingleUserSelect');
                         var result = document.querySelector('#ApplySingleUserResult');
                         var userId = select ? select.value : '';
