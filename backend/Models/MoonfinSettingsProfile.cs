@@ -105,6 +105,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("enableFolderView")]
     public bool? EnableFolderView { get; set; }
 
+    [JsonPropertyName("useDetailedSubHeadings")]
+    public bool? useDetailedSubHeadings { get; set; }
+
     [JsonPropertyName("confirmExit")]
     public bool? ConfirmExit { get; set; }
 
@@ -162,6 +165,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("homeRowsStyle")]
     public string? HomeRowsStyle { get; set; }
 
+    [JsonPropertyName("fullScreenRows")]
+    public bool? FullScreenRows { get; set; }
+
     [JsonPropertyName("homeRowsImageType")]
     public string? HomeRowsImageType { get; set; }
 
@@ -203,6 +209,9 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("displayGenresRows")]
     public bool? DisplayGenresRows { get; set; }
+
+    [JsonPropertyName("displaySeerrRows")]
+    public bool? DisplaySeerrRows { get; set; }
 
     [JsonPropertyName("favoritesRowSortBy")]
     public string? FavoritesRowSortBy { get; set; }

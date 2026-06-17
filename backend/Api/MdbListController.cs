@@ -158,12 +158,19 @@ public class MdbListController : ControllerBase
         var result = new List<MdbListRating>();
         foreach (var source in sources)
         {
-            if (ratingsBySource.TryGetValue(source, out var rating))
+            var lookupSource = source;
+            if (string.Equals(source, "rtAudience", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "tomatoes_audience", StringComparison.OrdinalIgnoreCase))
+            {
+                lookupSource = "popcorn";
+            }
+
+            if (ratingsBySource.TryGetValue(lookupSource, out var rating))
             {
                 // Clone the rating object to prevent mutating the cached instance in memory
                 var ratingClone = new MdbListRating
                 {
-                    Source = rating.Source,
+                    Source = source,
                     Value = rating.Value,
                     Score = rating.Score,
                     Votes = rating.Votes,

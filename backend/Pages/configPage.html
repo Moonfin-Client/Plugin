@@ -382,6 +382,14 @@
                             </select>
                         </div>
                         <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultFullScreenRows">Expanded Rows</label>
+                            <select id="DefaultFullScreenRows" is="emby-select">
+                                <option value="">Not set (user decides)</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DefaultHomeImageTypeContinueWatching">Continue Watching Image Type</label>
                             <select id="DefaultHomeImageTypeContinueWatching" is="emby-select">
                                 <option value="">Not set (user decides)</option>
@@ -420,6 +428,14 @@
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayGenresRows">Show Genres Rows</label>
                             <select id="DefaultDisplayGenresRows" is="emby-select">
+                                <option value="">Not set (user decides)</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultDisplaySeerrRows">Show Seerr Rows</label>
+                            <select id="DefaultDisplaySeerrRows" is="emby-select">
                                 <option value="">Not set (user decides)</option>
                                 <option value="true">Yes</option>
                                 <option value="false">No</option>
@@ -1017,7 +1033,7 @@
 
             var RATING_SOURCES = [
                 { id: 'tomatoes',       label: 'Rotten Tomatoes' },
-                { id: 'rtAudience',     label: 'RT Audience Score' },
+                { id: 'tomatoes_audience', label: 'RT Audience Score' },
                 { id: 'imdb',           label: 'IMDb' },
                 { id: 'tmdb',           label: 'TMDB' },
                 { id: 'metacritic',     label: 'Metacritic' },
@@ -1044,6 +1060,7 @@
                 var ordered = [];
                 if (selectedIds && selectedIds.length > 0) {
                     selectedIds.forEach(function(id) {
+                        if (id === 'rtAudience') id = 'tomatoes_audience';
                         var src = RATING_SOURCES.find(function(s) { return s.id === id; });
                         if (src) { ordered.push({ id: src.id, label: src.label, checked: true }); selectedSet[id] = true; }
                     });
@@ -1492,11 +1509,13 @@
                     setNullableBoolSelect('#DefaultMediaBarTrailerAudio', defaults.mediaBarTrailerAudio);
 
                     setSelectValue('#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
+                    setNullableBoolSelect('#DefaultFullScreenRows', defaults.fullScreenRows);
                     setSelectValue('#DefaultHomeImageTypeContinueWatching', defaults.homeImageTypeContinueWatching, 'Configured image type');
                     setSelectValue('#DefaultPosterSize', defaults.posterSize, 'Configured size');
                     setNullableBoolSelect('#DefaultDisplayFavoritesRows', defaults.displayFavoritesRows);
                     setNullableBoolSelect('#DefaultDisplayCollectionsRows', defaults.displayCollectionsRows);
                     setNullableBoolSelect('#DefaultDisplayGenresRows', defaults.displayGenresRows);
+                    setNullableBoolSelect('#DefaultDisplaySeerrRows', defaults.displaySeerrRows);
                     setSelectValue('#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
                     setSelectValue('#DefaultCollectionsRowSortBy', defaults.collectionsRowSortBy, 'Configured sort');
                     setSelectValue('#DefaultGenresRowSortBy', defaults.genresRowSortBy, 'Configured sort');
@@ -1698,11 +1717,13 @@
                         config.DefaultUserSettings.mediaBarExcludedGenres = genreIds.length > 0 ? genreIds : null;
 
                         config.DefaultUserSettings.homeRowsStyle = document.querySelector('#DefaultHomeRowsStyle').value || null;
+                        config.DefaultUserSettings.fullScreenRows = getNullableBoolSelect('#DefaultFullScreenRows');
                         config.DefaultUserSettings.homeImageTypeContinueWatching = document.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
                         config.DefaultUserSettings.posterSize = document.querySelector('#DefaultPosterSize').value || null;
                         config.DefaultUserSettings.displayFavoritesRows = getNullableBoolSelect('#DefaultDisplayFavoritesRows');
                         config.DefaultUserSettings.displayCollectionsRows = getNullableBoolSelect('#DefaultDisplayCollectionsRows');
                         config.DefaultUserSettings.displayGenresRows = getNullableBoolSelect('#DefaultDisplayGenresRows');
+                        config.DefaultUserSettings.displaySeerrRows = getNullableBoolSelect('#DefaultDisplaySeerrRows');
                         config.DefaultUserSettings.favoritesRowSortBy = document.querySelector('#DefaultFavoritesRowSortBy').value || null;
                         config.DefaultUserSettings.collectionsRowSortBy = document.querySelector('#DefaultCollectionsRowSortBy').value || null;
                         config.DefaultUserSettings.genresRowSortBy = document.querySelector('#DefaultGenresRowSortBy').value || null;
