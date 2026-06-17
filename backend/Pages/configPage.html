@@ -1671,7 +1671,7 @@
                 }
 
                 function submit() {
-                    ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
+                    return ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
                         config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
                         config.JellyseerrEnabled = document.querySelector('#JellyseerrEnabled').checked;
                         config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value || null;
@@ -1748,7 +1748,7 @@
                         config.DefaultUserSettings.mdblistRatingSources = getRatingSourcesValue();
                         config.DefaultUserSettings.jellyseerrBlockNsfw = getNullableBoolSelect('#DefaultJellyseerrBlockNsfw');
 
-                        ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
+                        return ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
                         });
                     });
@@ -1766,7 +1766,6 @@
                 if (pushDefaultsBtn && !pushDefaultsBtn.dataset.bound) {
                     pushDefaultsBtn.dataset.bound = 'true';
                     pushDefaultsBtn.addEventListener('click', function() {
-                        submit();
 
                         var overwrite = !!(document.querySelector('#OverwriteAllCheckbox') || {}).checked;
 
@@ -1787,11 +1786,14 @@
                         }
 
                         Dashboard.showLoadingMsg();
-                        fetch(serverUrl + '/Moonfin/Admin/PushDefaults?overwrite=' + (overwrite ? 'true' : 'false'), {
+                        submit()
+                            .then(function() {
+                                return fetch(serverUrl + '/Moonfin/Admin/PushDefaults?overwrite=' + (overwrite ? 'true' : 'false'), {
                             method: 'POST',
                             headers: headers,
                             body: '{}'
-                        })
+                        });
+                   })
                             .then(parseJsonResponse)
                             .then(function(payload) {
                                 var usersAffected = payload.usersAffected != null ? payload.usersAffected : payload.UsersAffected;
@@ -1839,7 +1841,6 @@
                 if (applySingleUserBtn && !applySingleUserBtn.dataset.bound) {
                     applySingleUserBtn.dataset.bound = 'true';
                     applySingleUserBtn.addEventListener('click', function() {
-                        submit();
 
                         var select = document.querySelector('#SingleUserSelect');
                         var result = document.querySelector('#ApplySingleUserResult');
@@ -1872,11 +1873,14 @@
                         }
 
                         Dashboard.showLoadingMsg();
-                        fetch(serverUrl + '/Moonfin/Admin/PushDefaults/' + encodeURIComponent(userId) + '?overwrite=' + (overwrite ? 'true' : 'false'), {
+                        submit()
+                            .then(function() {
+                                return fetch(serverUrl + '/Moonfin/Admin/PushDefaults/' + encodeURIComponent(userId) + '?overwrite=' + (overwrite ? 'true' : 'false'), {
                             method: 'POST',
                             headers: headers,
                             body: '{}'
-                        })
+                        });
+                    })
                             .then(parseJsonResponse)
                             .then(function() {
                                 if (result) {
