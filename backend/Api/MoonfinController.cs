@@ -30,7 +30,7 @@ public class MoonfinController : ControllerBase
     
     private static readonly Type? _userManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
     private static readonly MethodInfo? _userManagerGetUserById = _userManagerType?.GetMethod("GetUserById", [typeof(Guid)]);
-    private static readonly PropertyInfo? _userManagerUsersProperty = _userManagerType?.GetProperty("Users");
+    private static readonly MethodInfo? _userManagerGetUsers = _userManagerType?.GetMethod("GetUsers");
     private static readonly MethodInfo? _internalItemsQuerySetUser = typeof(InternalItemsQuery).GetMethod("SetUser", BindingFlags.Public | BindingFlags.Instance);
     private static readonly PropertyInfo? _internalItemsQueryUserProperty = typeof(InternalItemsQuery).GetProperty(nameof(InternalItemsQuery.User), BindingFlags.Public | BindingFlags.Instance);
     private static readonly MethodInfo? _baseItemIsVisible = typeof(BaseItem)
@@ -1038,7 +1038,7 @@ public class MoonfinController : ControllerBase
 
     private List<Guid>? GetAllServerUserIds()
     {
-        if (_userManagerType == null || _userManagerUsersProperty == null)
+        if (_userManagerType == null)
         {
             return null;
         }
@@ -1049,7 +1049,8 @@ public class MoonfinController : ControllerBase
             return null;
         }
 
-        if (_userManagerUsersProperty.GetValue(userManager) is not IEnumerable<object> users)
+        object usersObject = _userManagerGetUsers.Invoke(userManager,[""]);
+        if (usersObject is not IEnumerable<object> users)
         {
             return null;
         }
