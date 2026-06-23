@@ -1049,7 +1049,7 @@ public class MoonfinController : ControllerBase
             return null;
         }
 
-        object usersObject = _userManagerGetUsers.Invoke(userManager,[""]);
+        object usersObject = _userManagerGetUsers.Invoke(userManager,["null"]);
         if (usersObject is not IEnumerable<object> users)
         {
             return null;
