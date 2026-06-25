@@ -565,6 +565,14 @@
 
                         <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Previews</h4>
                         <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarTrailerPreview">Trailer Preview in Media Bar</label>
+                            <select id="DefaultMediaBarTrailerPreview" is="emby-select">
+                                <option value="">Not set (user decides)</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DefaultEpisodePreviewEnabled">Episode Previews On Hover</label>
                             <select id="DefaultEpisodePreviewEnabled" is="emby-select">
                                 <option value="">Not set (user decides)</option>
@@ -1543,6 +1551,7 @@
                     document.querySelector('#DefaultShowSyncPlayButton').checked = !!defaults.showSyncPlayButton;
                     document.querySelector('#DefaultShowLibrariesInToolbar').checked = !!defaults.showLibrariesInToolbar;
 
+                    setNullableBoolSelect('#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
                     setNullableBoolSelect('#DefaultEpisodePreviewEnabled', defaults.episodePreviewEnabled);
                     setNullableBoolSelect('#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
 
@@ -1751,6 +1760,7 @@
                         config.DefaultUserSettings.showSyncPlayButton = document.querySelector('#DefaultShowSyncPlayButton').checked;
                         config.DefaultUserSettings.showLibrariesInToolbar = document.querySelector('#DefaultShowLibrariesInToolbar').checked;
 
+                        config.DefaultUserSettings.mediaBarTrailerPreview = getNullableBoolSelect('#DefaultMediaBarTrailerPreview');
                         config.DefaultUserSettings.episodePreviewEnabled = getNullableBoolSelect('#DefaultEpisodePreviewEnabled');
                         config.DefaultUserSettings.previewAudioEnabled = getNullableBoolSelect('#DefaultPreviewAudioEnabled');
 
