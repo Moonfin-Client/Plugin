@@ -383,148 +383,175 @@
                             <div class="fieldDescription" style="margin-bottom:0.5em;">Select genres to exclude from the media bar by default. Items with any of these genres will not appear. Users can override this.</div>
                             <div id="DefaultGenrePicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
                         </div>
-                        <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Home Screen</h4>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultHomeRowsStyle">Home Rows Style</label>
-                            <select id="DefaultHomeRowsStyle" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="v1">Classic</option>
-                                <option value="v2">Modern</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultFullScreenRows">Expanded Rows</label>
-                            <select id="DefaultFullScreenRows" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="true">Yes</option>
-                                <option value="false">No</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultHomeImageTypeContinueWatching">Continue Watching Image Type</label>
-                            <select id="DefaultHomeImageTypeContinueWatching" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="Primary">Poster</option>
-                                <option value="Backdrop">Backdrop</option>
-                                <option value="Thumb">Thumbnail</option>
-                                <option value="Banner">Banner</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultPosterSize">Card Size</label>
-                            <select id="DefaultPosterSize" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="small">Small</option>
-                                <option value="medium">Medium</option>
-                                <option value="large">Large</option>
-                                <option value="extraLarge">Extra Large</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayFavoritesRows">Show Favorites Rows</label>
-                            <select id="DefaultDisplayFavoritesRows" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="true">Yes</option>
-                                <option value="false">No</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayCollectionsRows">Show Collections Rows</label>
-                            <select id="DefaultDisplayCollectionsRows" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="true">Yes</option>
-                                <option value="false">No</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayGenresRows">Show Genres Rows</label>
-                            <select id="DefaultDisplayGenresRows" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="true">Yes</option>
-                                <option value="false">No</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultDisplaySeerrRows">Show Seerr Rows</label>
-                            <select id="DefaultDisplaySeerrRows" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="true">Yes</option>
-                                <option value="false">No</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortBy">Favorites Row Sort</label>
-                            <select id="DefaultFavoritesRowSortBy" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="name">Name</option>
-                                <option value="dateAdded">Date Added</option>
-                                <option value="premiereDate">Premiere Date</option>
-                                <option value="rating">Rating</option>
-                                <option value="runtime">Runtime</option>
-                                <option value="random">Random</option>
-                                <option value="criticRating">Critic Rating</option>
-                                <option value="communityRating">Community Rating</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortBy">Collections Row Sort</label>
-                            <select id="DefaultCollectionsRowSortBy" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="name">Name</option>
-                                <option value="dateAdded">Date Added</option>
-                                <option value="premiereDate">Premiere Date</option>
-                                <option value="rating">Rating</option>
-                                <option value="runtime">Runtime</option>
-                                <option value="random">Random</option>
-                                <option value="criticRating">Critic Rating</option>
-                                <option value="communityRating">Community Rating</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortBy">Genres Row Sort</label>
-                            <select id="DefaultGenresRowSortBy" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="name">Name</option>
-                                <option value="dateAdded">Date Added</option>
-                                <option value="premiereDate">Premiere Date</option>
-                                <option value="rating">Rating</option>
-                                <option value="runtime">Runtime</option>
-                                <option value="random">Random</option>
-                                <option value="criticRating">Critic Rating</option>
-                                <option value="communityRating">Community Rating</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowItemFilter">Genres Row Item Filter</label>
-                            <select id="DefaultGenresRowItemFilter" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="movies">Movies</option>
-                                <option value="series">Series</option>
-                                <option value="both">Both</option>
-                            </select>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="DefaultHomeImageUseSeriesImage">Series Thumbnails</label>
-                            <select id="DefaultHomeImageUseSeriesImage" is="emby-select">
-                                <option value="">Not set (user decides)</option>
-                                <option value="true">Yes</option>
-                                <option value="false">No</option>
-                            </select>
-                            <div class="fieldDescription">Use series thumbnails on home rows by default.</div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused">Default Home Row Order</label>
-                            <div id="DefaultHomeRowOrder" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
-                            <div class="fieldDescription">Enable rows and reorder with arrows.</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="DefaultMergeContinueWatchingNextUp" is="emby-checkbox" />
-                                <span>Merge Continue Watching &amp; Next Up</span>
-                            </label>
-                            <div class="fieldDescription">Combine Continue Watching and Next Up into a single home row by default.</div>
-                        </div>
-
+                        <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Home Row Settings</h4>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultHomeRowsStyle">Home Rows Style</label>
+                                    <select id="DefaultHomeRowsStyle" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="v1">Classic</option>
+                                        <option value="v2">Modern</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultFullScreenRows">Expanded Rows</label>
+                                    <select id="DefaultFullScreenRows" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultHomeImageTypeContinueWatching">Continue Watching Image Type</label>
+                                    <select id="DefaultHomeImageTypeContinueWatching" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="Primary">Poster</option>
+                                        <option value="Backdrop">Backdrop</option>
+                                        <option value="Thumb">Thumbnail</option>
+                                        <option value="Banner">Banner</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultPosterSize">Card Size</label>
+                                    <select id="DefaultPosterSize" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="small">Small</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="large">Large</option>
+                                        <option value="extraLarge">Extra Large</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayFavoritesRows">Show Favorites Rows</label>
+                                    <select id="DefaultDisplayFavoritesRows" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayCollectionsRows">Show Collections Rows</label>
+                                    <select id="DefaultDisplayCollectionsRows" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayGenresRows">Show Genres Rows</label>
+                                    <select id="DefaultDisplayGenresRows" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayPlaylistsRows">Show Playlist Rows</label>
+                                    <select id="DefaultDisplayPlaylistsRows" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioRows">Show Audio Rows</label>
+                                    <select id="DefaultDisplayAudioRows" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultDisplaySeerrRows">Show Seerr Rows</label>
+                                    <select id="DefaultDisplaySeerrRows" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortBy">Favorites Row Sort</label>
+                                    <select id="DefaultFavoritesRowSortBy" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="name">Name</option>
+                                        <option value="dateAdded">Date Added</option>
+                                        <option value="premiereDate">Premiere Date</option>
+                                        <option value="rating">Rating</option>
+                                        <option value="runtime">Runtime</option>
+                                        <option value="random">Random</option>
+                                        <option value="criticRating">Critic Rating</option>
+                                        <option value="communityRating">Community Rating</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortBy">Collections Row Sort</label>
+                                    <select id="DefaultCollectionsRowSortBy" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="name">Name</option>
+                                        <option value="dateAdded">Date Added</option>
+                                        <option value="premiereDate">Premiere Date</option>
+                                        <option value="rating">Rating</option>
+                                        <option value="runtime">Runtime</option>
+                                        <option value="random">Random</option>
+                                        <option value="criticRating">Critic Rating</option>
+                                        <option value="communityRating">Community Rating</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortBy">Genres Row Sort</label>
+                                    <select id="DefaultGenresRowSortBy" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="name">Name</option>
+                                        <option value="dateAdded">Date Added</option>
+                                        <option value="premiereDate">Premiere Date</option>
+                                        <option value="rating">Rating</option>
+                                        <option value="runtime">Runtime</option>
+                                        <option value="random">Random</option>
+                                        <option value="criticRating">Critic Rating</option>
+                                        <option value="communityRating">Community Rating</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowItemFilter">Genres Row Item Filter</label>
+                                    <select id="DefaultGenresRowItemFilter" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="movies">Movies</option>
+                                        <option value="series">Series</option>
+                                        <option value="both">Both</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultHomeImageUseSeriesImage">Series Thumbnails</label>
+                                    <select id="DefaultHomeImageUseSeriesImage" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                    <div class="fieldDescription">Use series thumbnails on home rows by default.</div>
+                                </div>
+                                <div class="checkboxContainer checkboxContainer-withDescription">
+                                    <label class="emby-checkbox-label">
+                                        <input type="checkbox" id="DefaultMergeContinueWatchingNextUp" is="emby-checkbox" />
+                                        <span>Merge Continue Watching &amp; Next Up</span>
+                                    </label>
+                                    <div class="fieldDescription">Combine Continue Watching and Next Up into a single home row by default.</div>
+                                </div>
+                        <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Home Row Layout</h4>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused">Default Home Layout</label>
+                                    <div class="fieldDescription" style="margin-bottom:0.75em;">Choose active default home sections and their order. This builder only changes the layout; row visibility and sorting stay in Home Row Settings.</div>
+                                    <div class="homeLayoutBuilder">
+                                        <div class="homeLayoutPanel">
+                                            <h5 class="homeLayoutPanelTitle">Current Layout</h5>
+                                            <div id="DefaultHomeRowOrder" class="homeLayoutList"></div>
+                                        </div>
+                                        <div class="homeLayoutPanel">
+                                            <h5 class="homeLayoutPanelTitle">Available Rows</h5>
+                                            <div id="DefaultHomeAvailableTabs" class="homeLayoutTabs"></div>
+                                            <input id="DefaultHomeAvailableSearch" class="homeLayoutSearch" type="search" placeholder="Search rows" />
+                                            <div id="DefaultHomeAvailableRows" class="homeLayoutList"></div>
+                                        </div>
+                                    </div>
+                                </div>
                         <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Toolbar Buttons</h4>
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label">
@@ -739,6 +766,245 @@
             </div>
         </div>
 
+        <script type="text/plain" id="MoonfinAdminRuntimeStyleSource">
+        #MoonfinConfigPage .homeLayoutBuilder {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 14px;
+            align-items: start;
+        }
+
+        #MoonfinConfigPage .homeLayoutPanel {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            height: 430px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.025);
+            padding: 10px;
+        }
+
+        #MoonfinConfigPage .homeLayoutPanelTitle {
+            margin: 0 0 10px;
+            font-size: 0.95em;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.92);
+        }
+
+        #MoonfinConfigPage .homeLayoutList {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            scrollbar-color: rgba(0, 164, 220, 0.65) rgba(255, 255, 255, 0.08);
+            scrollbar-width: auto;
+        }
+
+        #MoonfinConfigPage .homeLayoutList::-webkit-scrollbar {
+            width: 12px;
+        }
+
+        #MoonfinConfigPage .homeLayoutList::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+        }
+
+        #MoonfinConfigPage .homeLayoutList::-webkit-scrollbar-thumb {
+            border: 2px solid rgba(28, 28, 28, 0.95);
+            border-radius: 999px;
+            background: rgba(0, 164, 220, 0.7);
+        }
+
+        #MoonfinConfigPage .homeLayoutRow,
+        #MoonfinConfigPage .homeAvailableRow {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            align-items: center;
+            gap: 6px;
+            min-height: 34px;
+            padding: 4px 6px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            margin-bottom: 5px;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025));
+            box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.08);
+        }
+
+        #MoonfinConfigPage .homeAvailableRow {
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+
+
+        #MoonfinConfigPage .homeAvailableRow.is-added {
+            opacity: 0.48;
+            background: rgba(255, 255, 255, 0.025);
+        }
+
+        #MoonfinConfigPage .homeAvailableRow.is-added:hover {
+            background: rgba(255, 255, 255, 0.025);
+        }
+
+        #MoonfinConfigPage .homeLayoutRow {
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .homeLayoutRow:hover,
+        #MoonfinConfigPage .homeAvailableRow:hover {
+            background: rgba(255, 255, 255, 0.055);
+        }
+
+        #MoonfinConfigPage .homeLayoutRow.is-selected {
+            border-color: rgba(0, 164, 220, 0.72);
+            background: linear-gradient(90deg, rgba(0, 164, 220, 0.22), rgba(0, 164, 220, 0.08));
+            box-shadow: inset 3px 0 0 rgba(0, 164, 220, 0.95);
+        }
+
+        #MoonfinConfigPage .homeLayoutRowText,
+        #MoonfinConfigPage .homeAvailableRowText {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        #MoonfinConfigPage .homeLayoutRowTitle,
+        #MoonfinConfigPage .homeAvailableRowTitle {
+            overflow: hidden;
+            color: rgba(255, 255, 255, 0.93);
+            font-size: 0.9em;
+            line-height: 1.2;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #MoonfinConfigPage .homeLayoutBadge {
+            display: inline-flex;
+            align-items: center;
+            max-width: 150px;
+            min-height: 18px;
+            padding: 1px 7px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 999px;
+            font-size: 0.7em;
+            font-weight: 600;
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #MoonfinConfigPage .homeLayoutBadge-builtin {
+            border-color: rgba(148, 163, 184, 0.34);
+            background: rgba(148, 163, 184, 0.14);
+            color: rgba(226, 232, 240, 0.92);
+        }
+
+        #MoonfinConfigPage .homeLayoutBadge-collections {
+            border-color: rgba(0, 164, 220, 0.38);
+            background: rgba(0, 164, 220, 0.16);
+            color: rgba(186, 236, 255, 0.96);
+        }
+
+        #MoonfinConfigPage .homeLayoutBadge-playlists {
+            border-color: rgba(34, 197, 94, 0.36);
+            background: rgba(34, 197, 94, 0.14);
+            color: rgba(187, 247, 208, 0.96);
+        }
+
+        #MoonfinConfigPage .homeLayoutBadge-genres {
+            border-color: rgba(245, 158, 11, 0.38);
+            background: rgba(245, 158, 11, 0.15);
+            color: rgba(254, 215, 170, 0.96);
+        }
+
+        #MoonfinConfigPage .homeLayoutBadge-seerr {
+            border-color: rgba(168, 85, 247, 0.48);
+            background: rgba(168, 85, 247, 0.18);
+            color: rgba(237, 221, 255, 0.98);
+        }
+
+        #MoonfinConfigPage .homeLayoutBadge-dynamic {
+            border-color: rgba(168, 85, 247, 0.38);
+            background: rgba(168, 85, 247, 0.14);
+            color: rgba(233, 213, 255, 0.96);
+        }
+
+        #MoonfinConfigPage .homeLayoutIconButton,
+        #MoonfinConfigPage .homeLayoutAddButton,
+        #MoonfinConfigPage .homeLayoutTabButton {
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.86);
+            cursor: pointer;
+            font-size: 0.82em;
+            line-height: 1.2;
+        }
+
+        #MoonfinConfigPage .homeLayoutIconButton:hover,
+        #MoonfinConfigPage .homeLayoutAddButton:hover,
+        #MoonfinConfigPage .homeLayoutTabButton:hover {
+            border-color: rgba(255, 255, 255, 0.32);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #MoonfinConfigPage .homeLayoutIconButton {
+            width: 26px;
+            height: 24px;
+            padding: 0;
+        }
+
+        #MoonfinConfigPage .homeLayoutAddButton {
+            min-width: 46px;
+            padding: 3px 8px;
+        }
+
+        #MoonfinConfigPage .homeLayoutIconButton:disabled,
+        #MoonfinConfigPage .homeLayoutAddButton:disabled {
+            cursor: default;
+            opacity: 0.42;
+        }
+
+        #MoonfinConfigPage .homeLayoutTabs {
+            display: flex;
+            align-items: flex-end;
+            gap: 0;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        #MoonfinConfigPage .homeLayoutTabButton {
+            margin: 0 2px -1px 0;
+            padding: 6px 10px;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        #MoonfinConfigPage .homeLayoutTabButton.is-active {
+            border-color: rgba(0, 164, 220, 0.65);
+            border-bottom-color: rgba(28, 28, 28, 1);
+            background: rgba(0, 164, 220, 0.18);
+            color: #fff;
+        }
+
+        #MoonfinConfigPage .homeLayoutSearch {
+            box-sizing: border-box;
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 7px 8px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.2);
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .homeLayoutEmpty {
+            padding: 12px 8px;
+            color: rgba(255, 255, 255, 0.54);
+            font-size: 0.88em;
+        }
+        </script>
         <script type="text/javascript">
             function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
@@ -1056,13 +1322,39 @@
                 { id: 'aniList',        label: 'AniList' },
             ];
 
-            var HOME_ROW_DEFINITIONS = [
-                { id: 'resume', label: 'Continue Watching' },
-                { id: 'nextup', label: 'Next Up' },
-                { id: 'latestmedia', label: 'Recently Added Media' },
-                { id: 'collections', label: 'Collections' },
-                { id: 'smalllibrarytiles', label: 'My Media' },
-                { id: 'recentlyreleased', label: 'Recently Released'},
+            var HOME_SECTION_DEFINITIONS = [
+                { type: 'smalllibrarytiles', label: 'My Media' },
+                { type: 'resume', label: 'Continue Watching' },
+                { type: 'nextup', label: 'Next Up' },
+                { type: 'latestmedia', label: 'Recently Added Media' },
+                { type: 'recentlyreleased', label: 'Recently Released' },
+                { type: 'livetv', label: 'Live TV' },
+                { type: 'librarybuttons', label: 'Library Buttons' },
+                { type: 'resumeaudio', label: 'Resume Audio' },
+                { type: 'resumebook', label: 'Resume Books' },
+                { type: 'activerecordings', label: 'Active Recordings' },
+                { type: 'collections', label: 'Collections' },
+                { type: 'favoritemovies', label: 'Favorite Movies' },
+                { type: 'favoriteseries', label: 'Favorite Series' },
+                { type: 'favoriteepisodes', label: 'Favorite Episodes' },
+                { type: 'favoritepeople', label: 'Favorite People' },
+                { type: 'favoriteartists', label: 'Favorite Artists' },
+                { type: 'favoritemusicvideos', label: 'Favorite Music Videos' },
+                { type: 'favoritealbums', label: 'Favorite Albums' },
+                { type: 'favoritesongs', label: 'Favorite Songs' },
+                { type: 'genres', label: 'Genres' },
+                { type: 'playlists', label: 'Playlists' },
+                { type: 'seerr_recent_requests', label: 'Seerr Recent Requests' },
+                { type: 'seerr_recently_added', label: 'Seerr Recently Added' },
+                { type: 'seerr_popular_movies', label: 'Seerr Popular Movies' },
+                { type: 'seerr_upcoming_movies', label: 'Seerr Upcoming Movies' },
+                { type: 'seerr_popular_series', label: 'Seerr Popular Series' },
+                { type: 'seerr_upcoming_series', label: 'Seerr Upcoming Series' },
+                { type: 'seerr_trending', label: 'Seerr Trending' },
+                { type: 'seerr_movie_genres', label: 'Seerr Movie Genres' },
+                { type: 'seerr_studios', label: 'Seerr Studios' },
+                { type: 'seerr_series_genres', label: 'Seerr Series Genres' },
+                { type: 'seerr_networks', label: 'Seerr Networks' }
             ];
 
             function loadRatingSourcesPicker(selectedIds) {
@@ -1119,66 +1411,559 @@
                 return result.length > 0 ? result : null;
             }
 
-            function loadHomeRowOrderEditor(savedIds) {
-                var container = document.querySelector('#DefaultHomeRowOrder');
-                if (!container) return;
+            var HOME_LAYOUT_TABS = [
+                { id: 'builtin', label: 'Basics' },
+                { id: 'collections', label: 'Collections' },
+                { id: 'playlists', label: 'Playlists' },
+                { id: 'genres', label: 'Genres' },
+                { id: 'seerr', label: 'Seerr' }
+            ];
 
-                var selectedSet = {};
+            var HOME_LAYOUT_SEERR_TYPES = {
+                seerr_recent_requests: true,
+                seerr_recently_added: true,
+                seerr_popular_movies: true,
+                seerr_upcoming_movies: true,
+                seerr_popular_series: true,
+                seerr_upcoming_series: true,
+                seerr_trending: true,
+                seerr_movie_genres: true,
+                seerr_studios: true,
+                seerr_series_genres: true,
+                seerr_networks: true
+            };
+
+            function isSeerrHomeSectionType(type) {
+                return !!HOME_LAYOUT_SEERR_TYPES[type];
+            }
+
+            var HOME_LAYOUT_STATE = {
+                sections: [],
+                selectedIndex: null,
+                activeTab: 'builtin',
+                search: '',
+                available: {
+                    builtin: [],
+                    collections: [],
+                    playlists: [],
+                    genres: [],
+                    seerr: []
+                },
+            };
+
+            function homeSectionDefinition(type) {
+                return HOME_SECTION_DEFINITIONS.find(function(row) { return row.type === type; }) || null;
+            }
+
+            function homeSectionLabel(section) {
+                if (!section) return 'Unknown row';
+                if (section.kind === 'pluginDynamic') {
+                    return section.pluginDisplayText || section.pluginSection || 'Dynamic row';
+                }
+                var definition = homeSectionDefinition(section.type);
+                return definition ? definition.label : (section.type || 'Unknown row');
+            }
+
+            function homeSectionMeta(section) {
+                if (!section) return 'Basics';
+                if (section.kind !== 'pluginDynamic') {
+                    return isSeerrHomeSectionType(section.type) ? 'Seerr' : 'Basics';
+                }
+                if (section.pluginSource === 'collections') return 'Collection';
+                if (section.pluginSource === 'playlists') return 'Playlist';
+                if (section.pluginSource === 'genres') return 'Genre';
+                if (section.pluginSource === 'hss') return 'HSS';
+                return 'Dynamic';
+            }
+
+            function homeSectionBadgeClass(section) {
+                if (!section || section.kind !== 'pluginDynamic') {
+                    if (section && isSeerrHomeSectionType(section.type)) return 'homeLayoutBadge-seerr';
+                    return 'homeLayoutBadge-builtin';
+                }
+                if (section.pluginSource === 'collections') return 'homeLayoutBadge-collections';
+                if (section.pluginSource === 'playlists') return 'homeLayoutBadge-playlists';
+                if (section.pluginSource === 'genres') return 'homeLayoutBadge-genres';
+                return 'homeLayoutBadge-dynamic';
+            }
+
+            function homeSectionKey(section) {
+                if (!section) return '';
+                if (section.kind === 'pluginDynamic') {
+                    return [
+                        'pluginDynamic',
+                        section.pluginSource || '',
+                        section.pluginSection || '',
+                        section.pluginAdditionalData || ''
+                    ].join(':');
+                }
+                return 'builtin:' + (section.type || '');
+            }
+
+            function candidateKey(candidate) {
+                return candidate ? candidate.key : '';
+            }
+
+            function currentHomeLayoutKeys() {
+                var keys = {};
+                HOME_LAYOUT_STATE.sections.forEach(function(section) {
+                    keys[homeSectionKey(section)] = true;
+                });
+                return keys;
+            }
+
+            function cloneHomeSection(section) {
+                return JSON.parse(JSON.stringify(section));
+            }
+
+            function renumberHomeLayoutSections() {
+                HOME_LAYOUT_STATE.sections.forEach(function(section, index) {
+                    section.enabled = true;
+                    section.order = index;
+                });
+            }
+
+            function legacyOrderToHomeSections(savedIds) {
+                if (!savedIds || savedIds.length === 0) return [];
+                return savedIds.reduce(function(result, id) {
+                    var definition = homeSectionDefinition(id);
+                    if (!definition) return result;
+                    result.push({
+                        kind: 'builtin',
+                        type: definition.type,
+                        enabled: true,
+                        order: result.length
+                    });
+                    return result;
+                }, []);
+            }
+
+            function normalizeHomeSections(savedSections, legacyOrder) {
+                var source = Array.isArray(savedSections) && savedSections.length > 0
+                    ? savedSections
+                    : legacyOrderToHomeSections(legacyOrder);
+                var seen = {};
                 var ordered = [];
 
-                if (savedIds && savedIds.length > 0) {
-                    savedIds.forEach(function(id) {
-                        var row = HOME_ROW_DEFINITIONS.find(function(r) { return r.id === id; });
-                        if (row) {
-                            ordered.push({ id: row.id, label: row.label, checked: true });
-                            selectedSet[id] = true;
-                        }
-                    });
+                source.slice().sort(function(a, b) {
+                    return (a.order == null ? 0 : a.order) - (b.order == null ? 0 : b.order);
+                }).forEach(function(section) {
+                    if (!section || section.enabled === false) return;
+                    var normalized;
+                    if (section.kind === 'pluginDynamic') {
+                        normalized = {
+                            kind: 'pluginDynamic',
+                            type: 'none',
+                            enabled: true,
+                            order: ordered.length,
+                            serverId: section.serverId || '',
+                            pluginSource: section.pluginSource || 'hss',
+                            pluginSection: section.pluginSection || '',
+                            pluginAdditionalData: section.pluginAdditionalData || '',
+                            pluginDisplayText: section.pluginDisplayText || section.pluginSection || 'Dynamic row'
+                        };
+                    } else {
+                        var definition = homeSectionDefinition(section.type);
+                        if (!definition) return;
+                        normalized = {
+                            kind: 'builtin',
+                            type: definition.type,
+                            enabled: true,
+                            order: ordered.length
+                        };
+                    }
+
+                    var key = homeSectionKey(normalized);
+                    if (seen[key]) return;
+                    seen[key] = true;
+                    ordered.push(normalized);
+                });
+
+                return ordered;
+            }
+
+            function createBuiltinCandidate(definition) {
+                return {
+                    key: 'builtin:' + definition.type,
+                    tab: 'builtin',
+                    label: definition.label,
+                    meta: isSeerrHomeSectionType(definition.type) ? 'Seerr' : 'Basics',
+                    badgeClass: isSeerrHomeSectionType(definition.type) ? 'homeLayoutBadge-seerr' : 'homeLayoutBadge-builtin',
+                    section: {
+                        kind: 'builtin',
+                        type: definition.type,
+                        enabled: true,
+                        order: 0
+                    }
+                };
+            }
+
+            function createDynamicCandidate(tab, source, sectionName, id, label, meta, serverId) {
+                return {
+                    key: ['pluginDynamic', source, sectionName, id || ''].join(':'),
+                    tab: tab,
+                    label: label || 'Untitled',
+                    meta: meta,
+                    badgeClass: 'homeLayoutBadge-' + (source || 'dynamic'),
+                    section: {
+                        kind: 'pluginDynamic',
+                        type: 'none',
+                        enabled: true,
+                        order: 0,
+                        serverId: serverId || '',
+                        pluginSource: source,
+                        pluginSection: sectionName,
+                        pluginAdditionalData: id || '',
+                        pluginDisplayText: label || 'Untitled'
+                    }
+                };
+            }
+
+            function initializeHomeLayoutAvailableRows() {
+                HOME_LAYOUT_STATE.available.builtin = HOME_SECTION_DEFINITIONS
+                    .filter(function(definition) { return !isSeerrHomeSectionType(definition.type); })
+                    .map(createBuiltinCandidate);
+                HOME_LAYOUT_STATE.available.seerr = HOME_SECTION_DEFINITIONS
+                    .filter(function(definition) { return isSeerrHomeSectionType(definition.type); })
+                    .map(createBuiltinCandidate);
+            }
+
+            function getHomeLayoutInsertIndex() {
+                var count = HOME_LAYOUT_STATE.sections.length;
+                var selected = HOME_LAYOUT_STATE.selectedIndex;
+                if (selected == null || selected < 0 || selected >= count) return count;
+                return selected + 1;
+            }
+
+            function addHomeLayoutCandidate(candidate) {
+                if (!candidate) return;
+                var keys = currentHomeLayoutKeys();
+                if (keys[candidateKey(candidate)]) return;
+                var section = cloneHomeSection(candidate.section);
+                var insertIndex = getHomeLayoutInsertIndex();
+                HOME_LAYOUT_STATE.sections.splice(insertIndex, 0, section);
+                HOME_LAYOUT_STATE.selectedIndex = insertIndex;
+                renumberHomeLayoutSections();
+                renderHomeSectionsEditor();
+                scrollSelectedHomeLayoutRowIntoView();
+            }
+
+            function removeHomeLayoutSection(index) {
+                if (index < 0 || index >= HOME_LAYOUT_STATE.sections.length) return;
+                HOME_LAYOUT_STATE.sections.splice(index, 1);
+                if (HOME_LAYOUT_STATE.sections.length === 0) {
+                    HOME_LAYOUT_STATE.selectedIndex = null;
+                } else if (HOME_LAYOUT_STATE.selectedIndex === index) {
+                    HOME_LAYOUT_STATE.selectedIndex = Math.min(index, HOME_LAYOUT_STATE.sections.length - 1);
+                } else if (HOME_LAYOUT_STATE.selectedIndex > index) {
+                    HOME_LAYOUT_STATE.selectedIndex -= 1;
+                }
+                renumberHomeLayoutSections();
+                renderHomeSectionsEditor();
+            }
+
+            function moveHomeLayoutSection(index, direction) {
+                var target = index + direction;
+                if (index < 0 || target < 0 || index >= HOME_LAYOUT_STATE.sections.length || target >= HOME_LAYOUT_STATE.sections.length) return;
+                var section = HOME_LAYOUT_STATE.sections[index];
+                HOME_LAYOUT_STATE.sections[index] = HOME_LAYOUT_STATE.sections[target];
+                HOME_LAYOUT_STATE.sections[target] = section;
+                HOME_LAYOUT_STATE.selectedIndex = target;
+                renumberHomeLayoutSections();
+                renderHomeSectionsEditor();
+            }
+
+            function renderHomeLayoutTabs() {
+                var tabs = document.querySelector('#DefaultHomeAvailableTabs');
+                if (!tabs) return;
+                tabs.innerHTML = '';
+                HOME_LAYOUT_TABS.forEach(function(tab) {
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'homeLayoutTabButton' + (HOME_LAYOUT_STATE.activeTab === tab.id ? ' is-active' : '');
+                    button.dataset.tab = tab.id;
+                    button.textContent = tab.label;
+                    tabs.appendChild(button);
+                });
+            }
+
+            function renderHomeLayoutRows() {
+                var container = document.querySelector('#DefaultHomeRowOrder');
+                if (!container) return;
+                container.innerHTML = '';
+
+                if (HOME_LAYOUT_STATE.sections.length === 0) {
+                    container.innerHTML = '<div class="homeLayoutEmpty">No default rows configured. Add rows from the catalog.</div>';
+                    return;
                 }
 
-                HOME_ROW_DEFINITIONS.forEach(function(row) {
-                    if (!selectedSet[row.id]) {
-                        ordered.push({ id: row.id, label: row.label, checked: false });
-                    }
+                HOME_LAYOUT_STATE.sections.forEach(function(section, index) {
+                    var row = document.createElement('div');
+                    row.className = 'homeLayoutRow' + (HOME_LAYOUT_STATE.selectedIndex === index ? ' is-selected' : '');
+                    row.dataset.index = String(index);
+                    row.innerHTML =
+                        '<div class="homeLayoutRowText">'
+                        + '<div class="homeLayoutRowTitle">' + esc(homeSectionLabel(section)) + '</div>'
+                        + '<span class="homeLayoutBadge ' + homeSectionBadgeClass(section) + '">' + esc(homeSectionMeta(section)) + '</span>'
+                        + '</div>'
+                        + '<button type="button" class="homeLayoutIconButton" data-action="up" title="Move up"' + (index === 0 ? ' disabled' : '') + '>&#x2191;</button>'
+                        + '<button type="button" class="homeLayoutIconButton" data-action="down" title="Move down"' + (index === HOME_LAYOUT_STATE.sections.length - 1 ? ' disabled' : '') + '>&#x2193;</button>'
+                        + '<button type="button" class="homeLayoutIconButton" data-action="remove" title="Remove">&#x2715;</button>';
+                    container.appendChild(row);
+                });
+            }
+
+            function renderHomeAvailableRows() {
+                var container = document.querySelector('#DefaultHomeAvailableRows');
+                if (!container) return;
+                var tab = HOME_LAYOUT_STATE.activeTab;
+                var search = (HOME_LAYOUT_STATE.search || '').toLowerCase();
+                var keys = currentHomeLayoutKeys();
+                var candidates = (HOME_LAYOUT_STATE.available[tab] || []).filter(function(candidate) {
+                    if (!search) return true;
+                    return (candidate.label || '').toLowerCase().indexOf(search) !== -1
+                        || (candidate.meta || '').toLowerCase().indexOf(search) !== -1;
                 });
 
                 container.innerHTML = '';
-                ordered.forEach(function(item) {
+                if (candidates.length === 0) {
+                    container.innerHTML = '<div class="homeLayoutEmpty">No rows found.</div>';
+                    return;
+                }
+
+                candidates.forEach(function(candidate) {
+                    var added = !!keys[candidateKey(candidate)];
                     var row = document.createElement('div');
-                    row.className = 'homeRowOrderItem';
-                    row.dataset.id = item.id;
-                    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;margin-bottom:2px;background:rgba(255,255,255,0.03);';
+                    row.className = 'homeAvailableRow' + (added ? ' is-added' : '');
+                    row.dataset.key = candidate.key;
                     row.innerHTML =
-                        '<input type="checkbox"' + (item.checked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;flex-shrink:0;">'
-                        + '<span style="flex:1;font-size:0.9em;color:rgba(255,255,255,0.9);">' + esc(item.label) + '</span>'
-                        + '<button type="button" class="homeRowMoveBtn" data-dir="up" style="background:none;border:1px solid rgba(255,255,255,0.2);border-radius:3px;color:rgba(255,255,255,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2191;</button>'
-                        + '<button type="button" class="homeRowMoveBtn" data-dir="down" style="background:none;border:1px solid rgba(255,255,255,0.2);border-radius:3px;color:rgba(255,255,255,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2193;</button>';
+                        '<div class="homeAvailableRowText">'
+                        + '<div class="homeAvailableRowTitle">' + esc(candidate.label) + '</div>'
+                        + '</div>'
+                        + '<button type="button" class="homeLayoutAddButton" data-action="add"' + (added ? ' disabled' : '') + '>Add</button>';
                     container.appendChild(row);
                 });
+            }
 
-                if (!container.dataset.hasListener) {
-                    container.dataset.hasListener = 'true';
-                    container.addEventListener('click', function(e) {
-                        var btn = e.target.closest('.homeRowMoveBtn');
-                        if (!btn) return;
-                        var row = btn.closest('.homeRowOrderItem');
+            function scrollSelectedHomeLayoutRowIntoView() {
+                window.setTimeout(function() {
+                    var container = document.querySelector('#DefaultHomeRowOrder');
+                    if (!container) return;
+                    var selected = container.querySelector('.homeLayoutRow.is-selected');
+                    if (!selected) return;
+                    selected.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                }, 0);
+            }
+
+            function renderHomeSectionsEditor() {
+                renderHomeLayoutRows();
+                renderHomeLayoutTabs();
+                renderHomeAvailableRows();
+            }
+
+            function findHomeLayoutCandidate(key) {
+                var candidates = HOME_LAYOUT_STATE.available[HOME_LAYOUT_STATE.activeTab] || [];
+                for (var i = 0; i < candidates.length; i++) {
+                    if (candidates[i].key === key) return candidates[i];
+                }
+                return null;
+            }
+
+            function loadHomeSectionsEditor(savedSections, legacyOrder) {
+                initializeHomeLayoutAvailableRows();
+                HOME_LAYOUT_STATE.sections = normalizeHomeSections(savedSections, legacyOrder);
+                HOME_LAYOUT_STATE.selectedIndex = HOME_LAYOUT_STATE.sections.length > 0 ? HOME_LAYOUT_STATE.sections.length - 1 : null;
+                renumberHomeLayoutSections();
+                bindHomeLayoutEditorEvents();
+                renderHomeSectionsEditor();
+                loadHomeLayoutDynamicRows();
+            }
+
+            function bindHomeLayoutEditorEvents() {
+                var layout = document.querySelector('#DefaultHomeRowOrder');
+                var tabs = document.querySelector('#DefaultHomeAvailableTabs');
+                var available = document.querySelector('#DefaultHomeAvailableRows');
+                var search = document.querySelector('#DefaultHomeAvailableSearch');
+                if (layout && !layout.dataset.bound) {
+                    layout.dataset.bound = 'true';
+                    layout.addEventListener('click', function(event) {
+                        var row = event.target.closest('.homeLayoutRow');
                         if (!row) return;
-                        if (btn.dataset.dir === 'up' && row.previousElementSibling) {
-                            container.insertBefore(row, row.previousElementSibling);
-                        } else if (btn.dataset.dir === 'down' && row.nextElementSibling) {
-                            container.insertBefore(row.nextElementSibling, row);
+                        var index = parseInt(row.dataset.index, 10);
+                        var actionButton = event.target.closest('[data-action]');
+                        if (!Number.isFinite(index)) return;
+                        if (!actionButton) {
+                            HOME_LAYOUT_STATE.selectedIndex = index;
+                            renderHomeSectionsEditor();
+                            return;
                         }
+                        var action = actionButton.dataset.action;
+                        if (action === 'up') moveHomeLayoutSection(index, -1);
+                        if (action === 'down') moveHomeLayoutSection(index, 1);
+                        if (action === 'remove') removeHomeLayoutSection(index);
+                    });
+                }
+
+                if (tabs && !tabs.dataset.bound) {
+                    tabs.dataset.bound = 'true';
+                    tabs.addEventListener('click', function(event) {
+                        var button = event.target.closest('.homeLayoutTabButton');
+                        if (!button) return;
+                        HOME_LAYOUT_STATE.activeTab = button.dataset.tab || 'builtin';
+                        HOME_LAYOUT_STATE.search = '';
+                        if (search) search.value = '';
+                        renderHomeSectionsEditor();
+                    });
+                }
+
+                if (available && !available.dataset.bound) {
+                    available.dataset.bound = 'true';
+                    available.addEventListener('click', function(event) {
+                        var button = event.target.closest('[data-action="add"]');
+                        if (!button || button.disabled) return;
+                        var row = button.closest('.homeAvailableRow');
+                        if (!row) return;
+                        addHomeLayoutCandidate(findHomeLayoutCandidate(row.dataset.key));
+                    });
+                }
+
+                if (search && !search.dataset.bound) {
+                    search.dataset.bound = 'true';
+                    search.addEventListener('input', function() {
+                        HOME_LAYOUT_STATE.search = search.value || '';
+                        renderHomeAvailableRows();
                     });
                 }
             }
 
-            function getHomeRowOrderValue() {
-                var items = document.querySelectorAll('#DefaultHomeRowOrder .homeRowOrderItem');
+            function loadHomeLayoutDynamicRows() {
+                loadHomeLayoutCollections();
+                loadHomeLayoutPlaylists();
+                loadHomeLayoutGenres();
+            }
+
+            function setHomeLayoutAvailable(tab, candidates) {
+                HOME_LAYOUT_STATE.available[tab] = candidates;
+                if (HOME_LAYOUT_STATE.activeTab === tab) {
+                    renderHomeAvailableRows();
+                }
+            }
+
+            function loadHomeLayoutCollections() {
+                var userId = ApiClient.getCurrentUserId();
+                var serverId = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                ApiClient.getItems(userId, {
+                    userId: userId,
+                    includeItemTypes: 'BoxSet',
+                    sortBy: 'SortName',
+                    sortOrder: 'Ascending',
+                    recursive: true,
+                    fields: 'PrimaryImageAspectRatio',
+                    imageTypeLimit: 1,
+                    enableImageTypes: 'Primary'
+                }).then(function(result) {
+                    var items = result.Items || [];
+                    setHomeLayoutAvailable('collections', items.map(function(item) {
+                        return createDynamicCandidate('collections', 'collections', 'collection', item.Id, item.Name || 'Untitled', 'Collection row', serverId);
+                    }));
+                }).catch(function() {
+                    setHomeLayoutAvailable('collections', []);
+                });
+            }
+
+            function loadHomeLayoutPlaylists() {
+                var userId = ApiClient.getCurrentUserId();
+                var serverId = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                ApiClient.getItems(userId, {
+                    userId: userId,
+                    includeItemTypes: 'Playlist',
+                    sortBy: 'SortName',
+                    sortOrder: 'Ascending',
+                    recursive: true,
+                    fields: 'PrimaryImageAspectRatio',
+                    imageTypeLimit: 1,
+                    enableImageTypes: 'Primary'
+                }).then(function(result) {
+                    var items = result.Items || [];
+                    setHomeLayoutAvailable('playlists', items.map(function(item) {
+                        return createDynamicCandidate('playlists', 'playlists', 'playlist', item.Id, item.Name || 'Untitled', 'Playlist row', serverId);
+                    }));
+                }).catch(function() {
+                    setHomeLayoutAvailable('playlists', []);
+                });
+            }
+
+            function mapGenreCandidates(items, serverId) {
+                return (items || []).map(function(item) {
+                    var id = item.id || item.Id;
+                    var name = item.name || item.Name || 'Untitled';
+                    return createDynamicCandidate('genres', 'genres', 'genre', id, name, 'Genre row', serverId);
+                }).filter(function(candidate) { return !!candidate.section.pluginAdditionalData; });
+            }
+
+            function loadJellyfinGenresFallback(serverId) {
+                var userId = ApiClient.getCurrentUserId();
+                var query = '?userId=' + encodeURIComponent(userId)
+                    + '&sortBy=SortName&sortOrder=Ascending&recursive=true'
+                    + '&fields=ItemCounts&includeItemTypes=Movie,Series';
+                return fetch(serverId + '/Genres' + query, { method: 'GET', headers: getMoonfinAuthHeaders() })
+                    .then(function(response) { return response.json(); })
+                    .then(function(data) { return data.Items || data.items || []; });
+            }
+
+            function loadHomeLayoutGenres() {
+                var serverId = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                fetch(serverId + '/Moonfin/Genres', { method: 'GET', headers: getMoonfinAuthHeaders() })
+                    .then(function(response) { return response.json(); })
+                    .then(function(data) {
+                        var items = data.Items || data.items || [];
+                        if (items.length > 0) {
+                            setHomeLayoutAvailable('genres', mapGenreCandidates(items, serverId));
+                            return null;
+                        }
+                        return loadJellyfinGenresFallback(serverId).then(function(fallbackItems) {
+                            setHomeLayoutAvailable('genres', mapGenreCandidates(fallbackItems, serverId));
+                        });
+                    }).catch(function() {
+                        loadJellyfinGenresFallback(serverId)
+                            .then(function(items) {
+                                setHomeLayoutAvailable('genres', mapGenreCandidates(items, serverId));
+                            })
+                            .catch(function() {
+                                setHomeLayoutAvailable('genres', []);
+                            });
+                    });
+            }
+
+            function getHomeSectionsValue() {
+                if (HOME_LAYOUT_STATE.sections.length === 0) return null;
+                renumberHomeLayoutSections();
+                return HOME_LAYOUT_STATE.sections.map(function(section) {
+                    var result = {
+                        type: section.kind === 'pluginDynamic' ? 'none' : section.type,
+                        enabled: true,
+                        order: section.order
+                    };
+                    if (section.kind === 'pluginDynamic') {
+                        result.kind = 'pluginDynamic';
+                        result.pluginSource = section.pluginSource || 'hss';
+                        if (section.serverId) result.serverId = section.serverId;
+                        if (section.pluginSection) result.pluginSection = section.pluginSection;
+                        if (section.pluginAdditionalData) result.pluginAdditionalData = section.pluginAdditionalData;
+                        if (section.pluginDisplayText) result.pluginDisplayText = section.pluginDisplayText;
+                    } else {
+                        result.kind = 'builtin';
+                    }
+                    return result;
+                });
+            }
+
+            function getHomeRowOrderValue(homeSections) {
+                var sections = homeSections || getHomeSectionsValue() || [];
                 var result = [];
-                items.forEach(function(item) {
-                    var cb = item.querySelector('input[type=checkbox]');
-                    if (cb && cb.checked) {
-                        result.push(item.dataset.id);
+                sections.forEach(function(section) {
+                    if ((section.kind === 'builtin' || !section.kind) && section.enabled && section.type && section.type !== 'none') {
+                        result.push(section.type);
                     }
                 });
                 return result.length > 0 ? result : null;
@@ -1439,9 +2224,27 @@
                     });
             }
 
+            function ensureMoonfinAdminRuntimeStyles() {
+                var source = document.getElementById('MoonfinAdminRuntimeStyleSource');
+                if (!source || !source.textContent) {
+                    return;
+                }
+
+                var style = document.getElementById('MoonfinAdminRuntimeStyles');
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = 'MoonfinAdminRuntimeStyles';
+                    style.type = 'text/css';
+                    document.head.appendChild(style);
+                }
+
+                style.textContent = source.textContent;
+            }
+
             document.addEventListener('pageshow', function(e) {
                 if (e.target.id !== 'MoonfinConfigPage') return;
 
+                ensureMoonfinAdminRuntimeStyles();
                 initializeCollapsibleCategories();
 
                 var themeFileInput = document.querySelector('#AdminThemeFileInput');
@@ -1527,13 +2330,15 @@
                     setNullableBoolSelect('#DefaultDisplayFavoritesRows', defaults.displayFavoritesRows);
                     setNullableBoolSelect('#DefaultDisplayCollectionsRows', defaults.displayCollectionsRows);
                     setNullableBoolSelect('#DefaultDisplayGenresRows', defaults.displayGenresRows);
+                    setNullableBoolSelect('#DefaultDisplayPlaylistsRows', defaults.displayPlaylistsRows);
+                    setNullableBoolSelect('#DefaultDisplayAudioRows', defaults.displayAudioRows);
                     setNullableBoolSelect('#DefaultDisplaySeerrRows', defaults.displaySeerrRows);
                     setSelectValue('#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
                     setSelectValue('#DefaultCollectionsRowSortBy', defaults.collectionsRowSortBy, 'Configured sort');
                     setSelectValue('#DefaultGenresRowSortBy', defaults.genresRowSortBy, 'Configured sort');
                     setSelectValue('#DefaultGenresRowItemFilter', defaults.genresRowItemFilter, 'Configured filter');
                     setNullableBoolSelect('#DefaultHomeImageUseSeriesImage', defaults.homeImageUseSeriesImage);
-                    loadHomeRowOrderEditor(defaults.homeRowOrder || null);
+                    loadHomeSectionsEditor(defaults.homeSections || null, defaults.homeRowOrder || null);
                     document.querySelector('#DefaultMergeContinueWatchingNextUp').checked = !!defaults.mergeContinueWatchingNextUp;
 
                     document.querySelector('#DefaultShowShuffleButton').checked = !!defaults.showShuffleButton;
@@ -1735,13 +2540,17 @@
                         config.DefaultUserSettings.displayFavoritesRows = getNullableBoolSelect('#DefaultDisplayFavoritesRows');
                         config.DefaultUserSettings.displayCollectionsRows = getNullableBoolSelect('#DefaultDisplayCollectionsRows');
                         config.DefaultUserSettings.displayGenresRows = getNullableBoolSelect('#DefaultDisplayGenresRows');
+                        config.DefaultUserSettings.displayPlaylistsRows = getNullableBoolSelect('#DefaultDisplayPlaylistsRows');
+                        config.DefaultUserSettings.displayAudioRows = getNullableBoolSelect('#DefaultDisplayAudioRows');
                         config.DefaultUserSettings.displaySeerrRows = getNullableBoolSelect('#DefaultDisplaySeerrRows');
                         config.DefaultUserSettings.favoritesRowSortBy = document.querySelector('#DefaultFavoritesRowSortBy').value || null;
                         config.DefaultUserSettings.collectionsRowSortBy = document.querySelector('#DefaultCollectionsRowSortBy').value || null;
                         config.DefaultUserSettings.genresRowSortBy = document.querySelector('#DefaultGenresRowSortBy').value || null;
                         config.DefaultUserSettings.genresRowItemFilter = document.querySelector('#DefaultGenresRowItemFilter').value || null;
                         config.DefaultUserSettings.homeImageUseSeriesImage = getNullableBoolSelect('#DefaultHomeImageUseSeriesImage');
-                        config.DefaultUserSettings.homeRowOrder = getHomeRowOrderValue();
+                        var homeSections = getHomeSectionsValue();
+                        config.DefaultUserSettings.homeSections = homeSections;
+                        config.DefaultUserSettings.homeRowOrder = getHomeRowOrderValue(homeSections);
                         config.DefaultUserSettings.mergeContinueWatchingNextUp = document.querySelector('#DefaultMergeContinueWatchingNextUp').checked;
 
                         config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;

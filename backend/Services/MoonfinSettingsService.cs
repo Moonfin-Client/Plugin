@@ -117,6 +117,10 @@ public class MoonfinSettingsService
             }
         }
 
+        var homeLayout = ResolveHomeLayout(deviceProfile, global, adminDefaults);
+        resolved.HomeSections = homeLayout.HomeSections;
+        resolved.HomeRowOrder = homeLayout.HomeRowOrder;
+
         if (resolved.MdblistRatingSources != null)
         {
             for (var i = 0; i < resolved.MdblistRatingSources.Count; i++)
@@ -129,6 +133,53 @@ public class MoonfinSettingsService
         }
 
         return resolved;
+    }
+
+    private static (List<MoonfinHomeSectionConfig>? HomeSections, List<string>? HomeRowOrder) ResolveHomeLayout(
+        MoonfinSettingsProfile? deviceProfile,
+        MoonfinSettingsProfile? global,
+        MoonfinSettingsProfile? adminDefaults)
+    {
+        foreach (var profile in new[] { deviceProfile, global, adminDefaults })
+        {
+            if (profile == null)
+            {
+                continue;
+            }
+
+            if (profile.HomeSections == null && profile.HomeRowOrder == null)
+            {
+                continue;
+            }
+
+            return (profile.HomeSections, ResolveHomeRowOrder(profile));
+        }
+
+        return (null, null);
+    }
+
+    private static List<string>? ResolveHomeRowOrder(MoonfinSettingsProfile profile)
+    {
+        if (profile.HomeRowOrder != null)
+        {
+            return profile.HomeRowOrder;
+        }
+
+        if (profile.HomeSections == null)
+        {
+            return null;
+        }
+
+        var homeRowOrder = profile.HomeSections
+            .Where(section => !string.Equals(section.Kind, "pluginDynamic", StringComparison.OrdinalIgnoreCase))
+            .Where(section => section.Enabled != false)
+            .Where(section => !string.IsNullOrWhiteSpace(section.Type) &&
+                !string.Equals(section.Type, "none", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(section => section.Order ?? int.MaxValue)
+            .Select(section => section.Type!)
+            .ToList();
+
+        return homeRowOrder.Count > 0 ? homeRowOrder : null;
     }
 
     public async Task SaveUserSettingsAsync(Guid userId, MoonfinUserSettings settings, string? clientId = null, string mergeMode = "merge")
@@ -421,6 +472,11 @@ public class MoonfinSettingsService
 
     private void MergeProfile(MoonfinSettingsProfile existing, MoonfinSettingsProfile incoming)
     {
+        if (incoming.HomeSections == null && incoming.HomeRowOrder != null)
+        {
+            existing.HomeSections = null;
+        }
+
         var properties = typeof(MoonfinSettingsProfile).GetProperties();
         foreach (var prop in properties)
         {

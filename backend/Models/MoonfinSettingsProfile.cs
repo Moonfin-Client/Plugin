@@ -215,6 +215,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("homeRowOrder")]
     public List<string>? HomeRowOrder { get; set; }
 
+    [JsonPropertyName("homeSections")]
+    public List<MoonfinHomeSectionConfig>? HomeSections { get; set; }
+
     [JsonPropertyName("displayFavoritesRows")]
     public bool? DisplayFavoritesRows { get; set; }
 
@@ -227,6 +230,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("displaySeerrRows")]
     public bool? DisplaySeerrRows { get; set; }
 
+    [JsonPropertyName("displayPlaylistsRows")]
+    public bool? DisplayPlaylistsRows { get; set; }
+
+    [JsonPropertyName("displayAudioRows")]
+    public bool? DisplayAudioRows { get; set; }
+
     [JsonPropertyName("favoritesRowSortBy")]
     public string? FavoritesRowSortBy { get; set; }
 
@@ -238,4 +247,39 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("genresRowItemFilter")]
     public string? GenresRowItemFilter { get; set; }
+}
+
+/// <summary>
+/// A Moonfin home section entry. Built-in sections only need Type/Enabled/Order.
+/// Dynamic plugin sections keep their source metadata so newer clients can sync
+/// the full home layout while older clients continue using HomeRowOrder.
+/// </summary>
+public class MoonfinHomeSectionConfig
+{
+    [JsonPropertyName("kind")]
+    public string? Kind { get; set; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [JsonPropertyName("enabled")]
+    public bool? Enabled { get; set; }
+
+    [JsonPropertyName("order")]
+    public int? Order { get; set; }
+
+    [JsonPropertyName("serverId")]
+    public string? ServerId { get; set; }
+
+    [JsonPropertyName("pluginSource")]
+    public string? PluginSource { get; set; }
+
+    [JsonPropertyName("pluginSection")]
+    public string? PluginSection { get; set; }
+
+    [JsonPropertyName("pluginAdditionalData")]
+    public string? PluginAdditionalData { get; set; }
+
+    [JsonPropertyName("pluginDisplayText")]
+    public string? PluginDisplayText { get; set; }
 }

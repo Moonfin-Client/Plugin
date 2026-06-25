@@ -283,6 +283,12 @@ Settings stored on the server per-user and shared across all Moonfin clients. Ea
 | `visualTheme` | string | Built-in theme selection (`moonfin`, `neon_pulse`, etc.) |
 | `customThemeId` | string | Uploaded custom theme ID selected for this profile |
 | `homeRowsStyle` | string | Home rows rendering style preset |
+| `displayFavoritesRows` | bool | Show favorite media rows |
+| `displayCollectionsRows` | bool | Show collection rows |
+| `displayGenresRows` | bool | Show genre rows |
+| `displayPlaylistsRows` | bool | Show playlist rows |
+| `displayAudioRows` | bool | Show audio rows |
+| `displaySeerrRows` | bool | Show Seerr rows |
 | `showShuffleButton` | bool | Show shuffle button in toolbar |
 | `showGenresButton` | bool | Show genres button in toolbar |
 | `showFavoritesButton` | bool | Show favorites button in toolbar |
@@ -317,7 +323,8 @@ Settings stored on the server per-user and shared across all Moonfin clients. Ea
 | `mediaBarTrailerPreview` | bool | Enable trailer previews in media bar |
 | `tmdbApiKey` | string | TMDB API key for episode ratings |
 | `tmdbEpisodeRatingsEnabled` | bool | Enable TMDB episode ratings |
-| `homeRowOrder` | list | Ordered list of enabled home screen sections |
+| `homeRowOrder` | list | Legacy ordered list of enabled built-in home screen sections |
+| `homeSections` | list | Full ordered home layout entries, including dynamic rows; newer clients prefer this over `homeRowOrder` |
 
 ### On Startup
 
