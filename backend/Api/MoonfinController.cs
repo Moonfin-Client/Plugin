@@ -89,26 +89,6 @@ public class MoonfinController : ControllerBase
     {
         var report = new List<LibraryWriteAccessReport>();
         var virtualFolders = _libraryManager.GetVirtualFolders();
-        if (userId == null)
-        {
-            return Unauthorized(new { Error = "User not authenticated" });
-        }
-
-        var user = ResolveQueryUser(userId.Value);
-        if (user == null)
-        {
-            return Unauthorized(new { Error = "User not found" });
-        }
-
-        var policy = user.GetType().GetProperty("Policy")?.GetValue(user);
-        var isAdministrator = policy?.GetType().GetProperty("IsAdministrator")?.GetValue(policy) is bool isAdmin && isAdmin;
-        if (!isAdministrator)
-        {
-            return Forbid();
-        }
-
-        var report = new List<LibraryWriteAccessReport>();
-        var virtualFolders = _libraryManager.GetVirtualFolders();
 
         foreach (var folder in virtualFolders)
         {
