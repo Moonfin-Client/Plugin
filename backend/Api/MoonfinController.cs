@@ -147,7 +147,7 @@ public class MoonfinController : ControllerBase
             {
                 report.Add(new LibraryWriteAccessReport
                 {
-                    LibraryId = folder.ItemId.ToString(),
+                    LibraryId = folder.ItemId,
                     LibraryName = folder.Name,
                     FailedPaths = failedPaths
                 });
