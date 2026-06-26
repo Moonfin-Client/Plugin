@@ -1117,33 +1117,18 @@ public class MoonfinController : ControllerBase
         }
 
         // Preferred path: ask the server for the Guid list directly.
-object? idsObject = _userManagerGetUsersIds != null
-    ? _userManagerGetUsersIds.Invoke(userManager, null)
-    : _userManagerUsersIdsProperty?.GetValue(userManager);
-if (idsObject is IEnumerable<Guid> guidIds)
-{
-    return guidIds.ToList();
-}
+        object? idsObject = _userManagerGetUsersIds != null
+            ? _userManagerGetUsersIds.Invoke(userManager, null)
+            : _userManagerUsersIdsProperty?.GetValue(userManager);
+        if (idsObject is IEnumerable<Guid> guidIds)
+        {
+            return guidIds.ToList();
+        }
 
-// Fallback: enumerate User objects and reflect their Id (older shapes / safety).
-object? usersObject = _userManagerGetUsers != null
-    ? _userManagerGetUsers.Invoke(userManager, null)
-    : _userManagerUsersProperty?.GetValue(userManager);
-if (usersObject is not IEnumerable<object> users)
-{
-    return null;
-}
-
-var ids = new List<Guid>();
-foreach (var user in users)
-{
-    if (user?.GetType().GetProperty("Id")?.GetValue(user) is Guid id)
-    {
-        ids.Add(id);
-    }
-}
-
-return ids;
+        // Fallback: enumerate User objects and reflect their Id (older shapes / safety).
+        object? usersObject = _userManagerGetUsers != null
+            ? _userManagerGetUsers.Invoke(userManager, null)
+            : _userManagerUsersProperty?.GetValue(userManager);
         if (usersObject is not IEnumerable<object> users)
         {
             return null;
