@@ -87,7 +87,8 @@ public class MoonfinController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<List<LibraryWriteAccessReport>> CheckLibrariesWriteAccess()
     {
-        var userId = this.GetUserIdFromClaims();
+        var report = new List<LibraryWriteAccessReport>();
+        var virtualFolders = _libraryManager.GetVirtualFolders();
         if (userId == null)
         {
             return Unauthorized(new { Error = "User not authenticated" });
