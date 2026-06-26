@@ -1,6 +1,8 @@
 using System.Net.Mime;
 using System.Reflection;
 using System.Text.Json;
+using MediaBrowser.Model.Configuration;
+using MediaBrowser.Model.Dto;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -76,6 +78,66 @@ public class MoonfinController : ControllerBase
             TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
             DefaultSettings = config?.DefaultUserSettings
         });
+    }
+
+    /// <summary>
+    /// Checks server-side write permissions for all libraries that have SaveLocalMetadata enabled.
+    /// </summary>
+    [HttpGet("Libraries/CheckWriteAccess")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public ActionResult<List<LibraryWriteAccessReport>> CheckLibrariesWriteAccess()
+    {
+        var report = new List<LibraryWriteAccessReport>();
+        var virtualFolders = _libraryManager.GetVirtualFolders();
+
+        foreach (var folder in virtualFolders)
+        {
+            var options = folder.LibraryOptions;
+            if (options == null || !options.SaveLocalMetadata)
+            {
+                continue;
+            }
+
+            var failedPaths = new List<string>();
+            foreach (var location in folder.Locations)
+            {
+                if (string.IsNullOrWhiteSpace(location)) continue;
+
+                bool hasWriteAccess = false;
+                string testFile = Path.Combine(location, $"moonfin_write_test_{Guid.NewGuid():N}.tmp");
+                try
+                {
+                    // Attempt to create, write, and delete a temporary file
+                    System.IO.File.WriteAllText(testFile, "test");
+                    System.IO.File.Delete(testFile);
+                    hasWriteAccess = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Jellyfin lacks write access to library path: {Path}", location);
+                }
+
+                if (!hasWriteAccess)
+                {
+                    failedPaths.Add(location);
+                }
+            }
+
+            if (failedPaths.Count > 0)
+            {
+                report.Add(new LibraryWriteAccessReport
+                {
+                    LibraryId = folder.ItemId,
+                    LibraryName = folder.Name,
+                    FailedPaths = failedPaths
+                });
+            }
+        }
+
+        return Ok(report);
     }
 
     [HttpGet("Settings/Stream")]
@@ -1533,4 +1595,25 @@ public class MoonfinDetailsScreenOpacitySaveResponse : MoonfinDetailsScreenOpaci
 public class MoonfinBroadcastRequest
 {
     public string? Message { get; set; }
+}
+
+/// <summary>
+/// Report on write access for a media library.
+/// </summary>
+public class LibraryWriteAccessReport
+{
+    /// <summary>
+    /// Gets or sets the library's unique identifier.
+    /// </summary>
+    public string LibraryId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the library's name.
+    /// </summary>
+    public string LibraryName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a list of locations where write access failed.
+    /// </summary>
+    public List<string> FailedPaths { get; set; } = new();
 }
