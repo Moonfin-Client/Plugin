@@ -81,7 +81,7 @@ public class MoonfinController : ControllerBase
     /// Checks server-side write permissions for all libraries that have SaveLocalMetadata enabled.
     /// </summary>
     [HttpGet("Libraries/CheckWriteAccess")]
-    [Authorize]
+    [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
