@@ -1480,7 +1480,6 @@
                 if (section.pluginSource === 'collections') return 'Collection';
                 if (section.pluginSource === 'playlists') return 'Playlist';
                 if (section.pluginSource === 'genres') return 'Genre';
-                if (section.pluginSource === 'hss') return 'HSS';
                 return 'Dynamic';
             }
 
@@ -1565,7 +1564,7 @@
                             enabled: true,
                             order: ordered.length,
                             serverId: section.serverId || '',
-                            pluginSource: section.pluginSource || 'hss',
+                            pluginSource: section.pluginSource,
                             pluginSection: section.pluginSection || '',
                             pluginAdditionalData: section.pluginAdditionalData || '',
                             pluginDisplayText: section.pluginDisplayText || section.pluginSection || 'Dynamic row'
@@ -1954,7 +1953,7 @@
                     };
                     if (section.kind === 'pluginDynamic') {
                         result.kind = 'pluginDynamic';
-                        result.pluginSource = section.pluginSource || 'hss';
+                        result.pluginSource = section.pluginSource;
                         if (section.serverId) result.serverId = section.serverId;
                         if (section.pluginSection) result.pluginSection = section.pluginSection;
                         if (section.pluginAdditionalData) result.pluginAdditionalData = section.pluginAdditionalData;
