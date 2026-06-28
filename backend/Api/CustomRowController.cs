@@ -101,6 +101,9 @@ public class CustomRowController : ControllerBase
                 case "tmdb":
                     items = await FetchTmdb(type, parsedParams, userId.Value, cancellationToken);
                     break;
+                case "tmdb_chart":
+                    items = await FetchTmdbChart(type, userId.Value, cancellationToken);
+                    break;
                 case "letterboxd":
                     items = await FetchLetterboxd(type, parsedParams, userId.Value, cancellationToken);
                     break;
@@ -245,6 +248,58 @@ public class CustomRowController : ControllerBase
             });
         }
 
+        // Fetch posters and backdrops from TMDb API in parallel to support high-res and backdrops
+        var resolvedProfile = await _settingsService.GetResolvedProfileAsync(userId, "global");
+        var tmdbKey = resolvedProfile?.TmdbApiKey;
+        if (string.IsNullOrWhiteSpace(tmdbKey))
+        {
+            tmdbKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
+        }
+
+        if (!string.IsNullOrWhiteSpace(tmdbKey))
+        {
+            using var tmdbSemaphore = new SemaphoreSlim(15, 15);
+            var movieTasks = items.Where(i => i.Id.HasValue).Select(async rowItem =>
+            {
+                await tmdbSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    var isShow = rowItem.Type == "Series";
+                    var tmdbUrl = isShow 
+                        ? $"https://api.themoviedb.org/3/tv/{rowItem.Id}"
+                        : $"https://api.themoviedb.org/3/movie/{rowItem.Id}";
+
+                    using var req = new HttpRequestMessage(HttpMethod.Get, tmdbUrl);
+                    ApplyTmdbAuth(req, tmdbKey);
+                    using var resp = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        var detailsJson = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                        using var doc = JsonDocument.Parse(detailsJson);
+                        var detailsRoot = doc.RootElement;
+                        
+                        if (detailsRoot.TryGetProperty("poster_path", out var pProp) && pProp.ValueKind == JsonValueKind.String)
+                        {
+                            rowItem.PosterUrl = pProp.GetString();
+                        }
+                        if (detailsRoot.TryGetProperty("backdrop_path", out var bProp) && bProp.ValueKind == JsonValueKind.String)
+                        {
+                            rowItem.BackdropUrl = bProp.GetString();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to fetch TMDb details for MDBList item ID: {Id}", rowItem.Id);
+                }
+                finally
+                {
+                    tmdbSemaphore.Release();
+                }
+            });
+            await Task.WhenAll(movieTasks).ConfigureAwait(false);
+        }
+
         return items;
     }
 
@@ -312,6 +367,7 @@ public class CustomRowController : ControllerBase
                     if (!string.IsNullOrEmpty(partId))
                     {
                         var posterPath = part.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
+                        var backdropPath = part.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
                         items.Add(new CustomRowItem
                         {
                             Id = long.Parse(partId),
@@ -323,7 +379,8 @@ public class CustomRowController : ControllerBase
                             {
                                 Tmdb = partId
                             },
-                            PosterUrl = posterPath
+                            PosterUrl = posterPath,
+                            BackdropUrl = backdropPath
                         });
                     }
                 }
@@ -361,6 +418,7 @@ public class CustomRowController : ControllerBase
                     if (!string.IsNullOrEmpty(itemId))
                     {
                         var posterPath = item.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
+                        var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
                         items.Add(new CustomRowItem
                         {
                             Id = long.Parse(itemId),
@@ -372,9 +430,102 @@ public class CustomRowController : ControllerBase
                             {
                                 Tmdb = itemId
                             },
-                            PosterUrl = posterPath
+                            PosterUrl = posterPath,
+                            BackdropUrl = backdropPath
                         });
                     }
+                }
+            }
+        }
+
+        return items;
+    }
+
+    private async Task<List<CustomRowItem>> FetchTmdbChart(
+        string type,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var resolved = await _settingsService.GetResolvedProfileAsync(userId, "global");
+        var apiKey = resolved?.TmdbApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            apiKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
+        }
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new InvalidOperationException("TMDB API Key is not configured.");
+        }
+
+        // type is the API path, e.g. movie/popular, trending/movie/day, etc.
+        var url = $"https://api.themoviedb.org/3/{type}";
+        var client = CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        ApplyTmdbAuth(request, apiKey);
+
+        using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new Exception($"TMDB API returned status {(int)response.StatusCode} for chart {type}");
+        }
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        var items = new List<CustomRowItem>();
+        int rank = 1;
+
+        if (root.TryGetProperty("results", out var resultsProp) && resultsProp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in resultsProp.EnumerateArray())
+            {
+                var itemId = item.TryGetProperty("id", out var idProp) ? idProp.GetInt64().ToString() : null;
+                var title = item.TryGetProperty("title", out var titleProp) ? titleProp.GetString() : null;
+                if (string.IsNullOrEmpty(title) && item.TryGetProperty("name", out var nameProp))
+                {
+                    title = nameProp.GetString();
+                }
+                title ??= "Unknown";
+
+                var dateStr = item.TryGetProperty("release_date", out var rdProp) ? rdProp.GetString() : null;
+                if (string.IsNullOrEmpty(dateStr) && item.TryGetProperty("first_air_date", out var fadProp))
+                {
+                    dateStr = fadProp.GetString();
+                }
+
+                int? year = null;
+                if (!string.IsNullOrEmpty(dateStr) && dateStr.Length >= 4 && int.TryParse(dateStr.Substring(0, 4), out var yr))
+                {
+                    year = yr;
+                }
+
+                var mediaType = item.TryGetProperty("media_type", out var mtProp) ? mtProp.GetString() : null;
+                if (string.IsNullOrEmpty(mediaType))
+                {
+                    mediaType = type.Contains("tv") ? "tv" : "movie";
+                }
+                var finalType = mediaType == "tv" ? "Series" : "Movie";
+
+                if (!string.IsNullOrEmpty(itemId))
+                {
+                    var posterPath = item.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
+                    var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
+                    items.Add(new CustomRowItem
+                    {
+                        Id = long.Parse(itemId),
+                        Name = title,
+                        Type = finalType,
+                        ProductionYear = year,
+                        Rank = rank++,
+                        ProviderIds = new CustomRowItemProviderIds
+                        {
+                            Tmdb = itemId
+                        },
+                        PosterUrl = posterPath,
+                        BackdropUrl = backdropPath
+                    });
                 }
             }
         }
@@ -390,62 +541,137 @@ public class CustomRowController : ControllerBase
     {
         paramsMap.TryGetValue("user", out var username);
         paramsMap.TryGetValue("name", out var listname);
+        paramsMap.TryGetValue("url", out var fullUrl);
 
-        if (string.IsNullOrWhiteSpace(username))
+        if (type == "user_list")
+        {
+            if (string.IsNullOrWhiteSpace(fullUrl))
+            {
+                throw new ArgumentException("Letterboxd URL lists require a URL.");
+            }
+
+            // Normalise URL / path (e.g. /official/list/letterboxds-top-500-films/ or https://letterboxd.com/...)
+            var cleanedUrl = fullUrl.Replace("https://", "").Replace("http://", "").Replace("www.", "").Replace("letterboxd.com/", "");
+            if (cleanedUrl.StartsWith('/')) cleanedUrl = cleanedUrl.Substring(1);
+
+            var parts = cleanedUrl.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3 && parts[1] == "list")
+            {
+                username = parts[0];
+                listname = parts[2];
+            }
+            else if (parts.Length >= 2)
+            {
+                username = parts[0];
+                listname = parts[1];
+            }
+            else
+            {
+                throw new ArgumentException("Invalid Letterboxd list URL or path format.");
+            }
+        }
+
+        if (username != null)
+        {
+            username = username.ToLowerInvariant().Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(username) && type != "user_list")
         {
             throw new ArgumentException("Letterboxd requires user parameter.");
         }
 
-        var url = type switch
+        var isHtmlCrawled = type == "user_list" || type == "watchlist" || type == "films";
+        var baseUrl = type switch
         {
-            "watchlist" => $"https://letterboxd.com/{Uri.EscapeDataString(username)}/watchlist/rss/",
-            "films" => $"https://letterboxd.com/{Uri.EscapeDataString(username)}/films/rss/",
-            _ => $"https://letterboxd.com/{Uri.EscapeDataString(username)}/list/{Uri.EscapeDataString(listname ?? "")}/rss/"
+            "watchlist" => $"https://letterboxd.com/{Uri.EscapeDataString(username ?? "")}/watchlist/",
+            "films" => $"https://letterboxd.com/{Uri.EscapeDataString(username ?? "")}/films/",
+            "user_list" => $"https://letterboxd.com/{Uri.EscapeDataString(username ?? "")}/list/{Uri.EscapeDataString(listname ?? "")}/",
+            _ => $"https://letterboxd.com/{Uri.EscapeDataString(username ?? "")}/rss/"
         };
 
         var client = CreateClient();
-        using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new Exception($"Letterboxd RSS feed returned status {(int)response.StatusCode}");
-        }
-
-        var xmlContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var document = XDocument.Parse(xmlContent);
-
         var items = new List<CustomRowItem>();
-        var rssItems = document.Descendants("item");
-
         EnsureSlugsLoaded();
 
-        // 1. Parse Letterboxd details from XML feed
         var parsedFeedItems = new List<LetterboxdFeedItem>();
-        foreach (var rssItem in rssItems)
+
+        if (isHtmlCrawled)
         {
-            var title = rssItem.Element("title")?.Value ?? "Unknown";
-            var link = rssItem.Element("link")?.Value ?? "";
-            
-            var filmTitle = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "filmTitle")?.Value ?? title;
-            var filmYearStr = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "filmYear")?.Value;
-            var memberRatingStr = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "memberRating")?.Value;
-
-            int? year = null;
-            if (int.TryParse(filmYearStr, out var y)) year = y;
-
-            double? rating = null;
-            if (double.TryParse(memberRatingStr, out var r)) rating = r;
-
-            var slugMatch = Regex.Match(link, @"film/([^/]+)/?");
-            if (slugMatch.Success)
+            for (int page = 1; page <= 5; page++)
             {
-                var slug = slugMatch.Groups[1].Value;
-                parsedFeedItems.Add(new LetterboxdFeedItem
+                var pageUrl = page == 1
+                    ? baseUrl
+                    : $"{baseUrl}page/{page}/";
+
+                using var pageResp = await client.GetAsync(pageUrl, cancellationToken).ConfigureAwait(false);
+                if (!pageResp.IsSuccessStatusCode)
                 {
-                    Title = filmTitle,
-                    Year = year,
-                    Rating = rating,
-                    Slug = slug
-                });
+                    break;
+                }
+
+                var htmlContent = await pageResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                var matches = Regex.Matches(htmlContent, @"data-target-link=""/film/([^/]+)/""");
+                if (matches.Count == 0)
+                {
+                    break;
+                }
+
+                foreach (Match match in matches)
+                {
+                    if (match.Success)
+                    {
+                        var slug = match.Groups[1].Value;
+                        if (!parsedFeedItems.Any(i => i.Slug == slug))
+                        {
+                            parsedFeedItems.Add(new LetterboxdFeedItem
+                            {
+                                Title = slug,
+                                Slug = slug
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            using var response = await client.GetAsync(baseUrl, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"Letterboxd returned status {(int)response.StatusCode} for {baseUrl}");
+            }
+            var xmlContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var document = XDocument.Parse(xmlContent);
+            var rssItems = document.Descendants("item");
+
+            foreach (var rssItem in rssItems)
+            {
+                var title = rssItem.Element("title")?.Value ?? "Unknown";
+                var link = rssItem.Element("link")?.Value ?? "";
+                
+                var filmTitle = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "filmTitle")?.Value ?? title;
+                var filmYearStr = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "filmYear")?.Value;
+                var memberRatingStr = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "memberRating")?.Value;
+
+                int? year = null;
+                if (int.TryParse(filmYearStr, out var y)) year = y;
+
+                double? rating = null;
+                if (double.TryParse(memberRatingStr, out var r)) rating = r;
+
+                var slugMatch = Regex.Match(link, @"film/([^/]+)/?");
+                if (slugMatch.Success)
+                {
+                    var slug = slugMatch.Groups[1].Value;
+                    parsedFeedItems.Add(new LetterboxdFeedItem
+                    {
+                        Title = filmTitle,
+                        Year = year,
+                        Rating = rating,
+                        Slug = slug
+                    });
+                }
             }
         }
 
@@ -463,14 +689,19 @@ public class CustomRowController : ControllerBase
             }
         }
 
-        // Fetch unresolved slugs sequentially with a minor delay to avoid rate limit
+        // Fetch unresolved slugs in parallel (max 10 concurrent requests) to avoid timeouts
         if (slugsToFetch.Count > 0)
         {
-            foreach (var slug in slugsToFetch)
+            using var slugSemaphore = new SemaphoreSlim(10, 10);
+            var tasks = slugsToFetch.Select(async slug =>
             {
+                await slugSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+                    // Stagger request startup slightly to prevent instant bursts
+                    var delayMs = new Random().Next(30, 250);
+                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+
                     var filmUrl = $"https://letterboxd.com/film/{slug}/";
                     using var filmResp = await client.GetAsync(filmUrl, cancellationToken).ConfigureAwait(false);
                     if (filmResp.IsSuccessStatusCode)
@@ -482,10 +713,12 @@ public class CustomRowController : ControllerBase
                             var resolvedId = tmdbMatch.Groups[1].Value;
                             _letterboxdSlugMap![slug] = resolvedId;
                             
-                            // Map to items in this run
-                            foreach (var pItem in parsedFeedItems.Where(i => i.Slug == slug))
+                            lock (parsedFeedItems)
                             {
-                                pItem.TmdbId = resolvedId;
+                                foreach (var pItem in parsedFeedItems.Where(i => i.Slug == slug))
+                                {
+                                    pItem.TmdbId = resolvedId;
+                                }
                             }
                         }
                     }
@@ -494,12 +727,17 @@ public class CustomRowController : ControllerBase
                 {
                     _logger.LogWarning(ex, "Failed to resolve TMDb ID for Letterboxd slug: {Slug}", slug);
                 }
-            }
+                finally
+                {
+                    slugSemaphore.Release();
+                }
+            });
 
+            await Task.WhenAll(tasks).ConfigureAwait(false);
             await FlushSlugsAsync().ConfigureAwait(false);
         }
 
-        // 2.5 Fetch poster paths from TMDb API in parallel if TMDB key is configured
+        // 2.5 Fetch full details/posters from TMDb API in parallel (max 15 concurrent requests)
         var resolvedProfile = await _settingsService.GetResolvedProfileAsync(userId, "global");
         var tmdbKey = resolvedProfile?.TmdbApiKey;
         if (string.IsNullOrWhiteSpace(tmdbKey))
@@ -509,8 +747,10 @@ public class CustomRowController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(tmdbKey))
         {
+            using var tmdbSemaphore = new SemaphoreSlim(15, 15);
             var movieTasks = parsedFeedItems.Where(i => !string.IsNullOrEmpty(i.TmdbId)).Select(async pItem =>
             {
+                await tmdbSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
                     var tmdbUrl = $"https://api.themoviedb.org/3/movie/{pItem.TmdbId}";
@@ -522,15 +762,35 @@ public class CustomRowController : ControllerBase
                         var detailsJson = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                         using var doc = JsonDocument.Parse(detailsJson);
                         var detailsRoot = doc.RootElement;
+                        if (detailsRoot.TryGetProperty("title", out var titleProp) && titleProp.ValueKind == JsonValueKind.String)
+                        {
+                            pItem.Title = titleProp.GetString() ?? pItem.Title;
+                        }
+                        if (detailsRoot.TryGetProperty("release_date", out var rdProp) && rdProp.ValueKind == JsonValueKind.String)
+                        {
+                            var dateStr = rdProp.GetString();
+                            if (!string.IsNullOrEmpty(dateStr) && dateStr.Length >= 4 && int.TryParse(dateStr.Substring(0, 4), out var yr))
+                            {
+                                pItem.Year = yr;
+                            }
+                        }
                         if (detailsRoot.TryGetProperty("poster_path", out var pProp) && pProp.ValueKind == JsonValueKind.String)
                         {
                             pItem.PosterUrl = pProp.GetString();
+                        }
+                        if (detailsRoot.TryGetProperty("backdrop_path", out var bProp) && bProp.ValueKind == JsonValueKind.String)
+                        {
+                            pItem.BackdropUrl = bProp.GetString();
                         }
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to fetch TMDb details for movie ID: {Id}", pItem.TmdbId);
+                }
+                finally
+                {
+                    tmdbSemaphore.Release();
                 }
             });
             await Task.WhenAll(movieTasks).ConfigureAwait(false);
@@ -555,7 +815,8 @@ public class CustomRowController : ControllerBase
                         Tmdb = pItem.TmdbId
                     },
                     UserRating = stars,
-                    PosterUrl = pItem.PosterUrl
+                    PosterUrl = pItem.PosterUrl,
+                    BackdropUrl = pItem.BackdropUrl
                 });
             }
         }
@@ -669,6 +930,7 @@ internal class LetterboxdFeedItem
     public string Slug { get; set; } = string.Empty;
     public string? TmdbId { get; set; }
     public string? PosterUrl { get; set; }
+    public string? BackdropUrl { get; set; }
 }
 
 public class CustomRowResponse

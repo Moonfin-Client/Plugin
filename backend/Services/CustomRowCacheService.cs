@@ -155,6 +155,9 @@ public class CustomRowItem
 
     [JsonPropertyName("posterUrl")]
     public string? PosterUrl { get; set; }
+
+    [JsonPropertyName("backdropUrl")]
+    public string? BackdropUrl { get; set; }
 }
 
 public class CustomRowItemProviderIds
