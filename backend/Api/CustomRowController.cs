@@ -421,7 +421,7 @@ public class CustomRowController : ControllerBase
                         var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
                         items.Add(new CustomRowItem
                         {
-                            Id = long.Parse(itemId),
+                    Id = long.TryParse(pItem.TmdbId, out var lbTmdbId) ? lbTmdbId : null,
                             Name = title,
                             Type = finalType,
                             ProductionYear = year,
