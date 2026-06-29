@@ -153,6 +153,9 @@ public class CustomRowItem
     [JsonPropertyName("userRating")]
     public string? UserRating { get; set; }
 
+    [JsonPropertyName("rating")]
+    public double? Rating { get; set; }
+
     [JsonPropertyName("posterUrl")]
     public string? PosterUrl { get; set; }
 
