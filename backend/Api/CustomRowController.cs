@@ -234,7 +234,7 @@ public class CustomRowController : ControllerBase
 
             items.Add(new CustomRowItem
             {
-                Id = string.IsNullOrWhiteSpace(tmdbId) ? null : long.Parse(tmdbId),
+                    Id = long.TryParse(pItem.TmdbId, out var lbTmdbId) ? lbTmdbId : null,
                 Name = title,
                 Type = finalType,
                 ProductionYear = year,
