@@ -815,6 +815,7 @@ public class CustomRowController : ControllerBase
                         Tmdb = pItem.TmdbId
                     },
                     UserRating = stars,
+                    Rating = pItem.Rating,
                     PosterUrl = pItem.PosterUrl,
                     BackdropUrl = pItem.BackdropUrl
                 });
