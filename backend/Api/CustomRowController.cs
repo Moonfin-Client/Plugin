@@ -805,7 +805,7 @@ public class CustomRowController : ControllerBase
                 var stars = pItem.Rating.HasValue ? FormatRatingToStars(pItem.Rating.Value) : null;
                 items.Add(new CustomRowItem
                 {
-                    Id = long.Parse(pItem.TmdbId),
+                    Id = long.TryParse(pItem.TmdbId, out var lbTmdbId) ? lbTmdbId : null,
                     Name = pItem.Title,
                     Type = "Movie", // Letterboxd is strictly movies
                     ProductionYear = pItem.Year,
