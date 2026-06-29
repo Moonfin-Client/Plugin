@@ -23,11 +23,6 @@ public class CustomRowController : ControllerBase
     private readonly ILogger<CustomRowController> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
-    
-    // Persistent file mapping Letterboxd slugs to TMDb IDs
-    private readonly string _letterboxdSlugsFilePath;
-    private static ConcurrentDictionary<string, string>? _letterboxdSlugMap;
-    private static readonly SemaphoreSlim _slugFileLock = new(1, 1);
 
     public CustomRowController(
         MoonfinSettingsService settingsService,
@@ -39,16 +34,6 @@ public class CustomRowController : ControllerBase
         _cacheService = cacheService;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
-
-        var dataPath = MoonfinPlugin.Instance?.DataFolderPath
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
-
-        if (!Directory.Exists(dataPath))
-        {
-            Directory.CreateDirectory(dataPath);
-        }
-
-        _letterboxdSlugsFilePath = Path.Combine(dataPath, "letterboxd_slug_to_tmdb.json");
     }
 
     [HttpGet("Items")]
@@ -234,7 +219,7 @@ public class CustomRowController : ControllerBase
 
             items.Add(new CustomRowItem
             {
-                    Id = long.TryParse(pItem.TmdbId, out var lbTmdbId) ? lbTmdbId : null,
+                Id = long.TryParse(tmdbId, out var lbTmdbId) ? lbTmdbId : null,
                 Name = title,
                 Type = finalType,
                 ProductionYear = year,
@@ -370,7 +355,7 @@ public class CustomRowController : ControllerBase
                         var backdropPath = part.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
                         items.Add(new CustomRowItem
                         {
-                    Id = long.TryParse(pItem.TmdbId, out var lbTmdbId) ? lbTmdbId : null,
+                            Id = long.TryParse(partId, out var lbTmdbId) ? lbTmdbId : null,
                             Name = title,
                             Type = "Movie",
                             ProductionYear = year,
@@ -421,7 +406,7 @@ public class CustomRowController : ControllerBase
                         var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
                         items.Add(new CustomRowItem
                         {
-                    Id = long.TryParse(pItem.TmdbId, out var lbTmdbId) ? lbTmdbId : null,
+                            Id = long.TryParse(itemId, out var lbTmdbId) ? lbTmdbId : null,
                             Name = title,
                             Type = finalType,
                             ProductionYear = year,
@@ -514,7 +499,7 @@ public class CustomRowController : ControllerBase
                     var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
                     items.Add(new CustomRowItem
                     {
-                    Id = long.TryParse(pItem.TmdbId, out var lbTmdbId) ? lbTmdbId : null,
+                        Id = long.TryParse(itemId, out var lbTmdbId) ? lbTmdbId : null,
                         Name = title,
                         Type = finalType,
                         ProductionYear = year,
@@ -543,32 +528,9 @@ public class CustomRowController : ControllerBase
         paramsMap.TryGetValue("name", out var listname);
         paramsMap.TryGetValue("url", out var fullUrl);
 
-        if (type == "user_list")
+        if (type == "user_list" || type == "watchlist" || type == "films")
         {
-            if (string.IsNullOrWhiteSpace(fullUrl))
-            {
-                throw new ArgumentException("Letterboxd URL lists require a URL.");
-            }
-
-            // Normalise URL / path (e.g. /official/list/letterboxds-top-500-films/ or https://letterboxd.com/...)
-            var cleanedUrl = fullUrl.Replace("https://", "").Replace("http://", "").Replace("www.", "").Replace("letterboxd.com/", "");
-            if (cleanedUrl.StartsWith('/')) cleanedUrl = cleanedUrl.Substring(1);
-
-            var parts = cleanedUrl.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 3 && parts[1] == "list")
-            {
-                username = parts[0];
-                listname = parts[2];
-            }
-            else if (parts.Length >= 2)
-            {
-                username = parts[0];
-                listname = parts[1];
-            }
-            else
-            {
-                throw new ArgumentException("Invalid Letterboxd list URL or path format.");
-            }
+            throw new ArgumentException("Direct HTML scraping of Letterboxd watchlists and lists is disabled due to their Terms of Service. Please import your list into MDBList and use the MDBList custom row source instead.");
         }
 
         if (username != null)
@@ -576,168 +538,59 @@ public class CustomRowController : ControllerBase
             username = username.ToLowerInvariant().Trim();
         }
 
-        if (string.IsNullOrWhiteSpace(username) && type != "user_list")
+        if (string.IsNullOrWhiteSpace(username))
         {
             throw new ArgumentException("Letterboxd requires user parameter.");
         }
 
-        var isHtmlCrawled = type == "user_list" || type == "watchlist" || type == "films";
-        var baseUrl = type switch
-        {
-            "watchlist" => $"https://letterboxd.com/{Uri.EscapeDataString(username ?? "")}/watchlist/",
-            "films" => $"https://letterboxd.com/{Uri.EscapeDataString(username ?? "")}/films/",
-            "user_list" => $"https://letterboxd.com/{Uri.EscapeDataString(username ?? "")}/list/{Uri.EscapeDataString(listname ?? "")}/",
-            _ => $"https://letterboxd.com/{Uri.EscapeDataString(username ?? "")}/rss/"
-        };
+        var baseUrl = $"https://letterboxd.com/{Uri.EscapeDataString(username)}/rss/";
 
         var client = CreateClient();
         var items = new List<CustomRowItem>();
-        EnsureSlugsLoaded();
 
         var parsedFeedItems = new List<LetterboxdFeedItem>();
 
-        if (isHtmlCrawled)
+        using var response = await client.GetAsync(baseUrl, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
         {
-            for (int page = 1; page <= 5; page++)
-            {
-                var pageUrl = page == 1
-                    ? baseUrl
-                    : $"{baseUrl}page/{page}/";
-
-                using var pageResp = await client.GetAsync(pageUrl, cancellationToken).ConfigureAwait(false);
-                if (!pageResp.IsSuccessStatusCode)
-                {
-                    break;
-                }
-
-                var htmlContent = await pageResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                var matches = Regex.Matches(htmlContent, @"data-target-link=""/film/([^/]+)/""");
-                if (matches.Count == 0)
-                {
-                    break;
-                }
-
-                foreach (Match match in matches)
-                {
-                    if (match.Success)
-                    {
-                        var slug = match.Groups[1].Value;
-                        if (!parsedFeedItems.Any(i => i.Slug == slug))
-                        {
-                            parsedFeedItems.Add(new LetterboxdFeedItem
-                            {
-                                Title = slug,
-                                Slug = slug
-                            });
-                        }
-                    }
-                }
-            }
+            throw new Exception($"Letterboxd returned status {(int)response.StatusCode} for {baseUrl}");
         }
-        else
+        var xmlContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var document = XDocument.Parse(xmlContent);
+        var rssItems = document.Descendants("item");
+
+        foreach (var rssItem in rssItems)
         {
-            using var response = await client.GetAsync(baseUrl, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            var title = rssItem.Element("title")?.Value ?? "Unknown";
+            var link = rssItem.Element("link")?.Value ?? "";
+            
+            var filmTitle = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "filmTitle")?.Value ?? title;
+            var filmYearStr = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "filmYear")?.Value;
+            var memberRatingStr = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "memberRating")?.Value;
+            var resolvedTmdbId = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "movieId")?.Value;
+
+            int? year = null;
+            if (int.TryParse(filmYearStr, out var y)) year = y;
+
+            double? rating = null;
+            if (double.TryParse(memberRatingStr, out var r)) rating = r;
+
+            var slugMatch = Regex.Match(link, @"film/([^/]+)/?");
+            if (slugMatch.Success)
             {
-                throw new Exception($"Letterboxd returned status {(int)response.StatusCode} for {baseUrl}");
-            }
-            var xmlContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            var document = XDocument.Parse(xmlContent);
-            var rssItems = document.Descendants("item");
-
-            foreach (var rssItem in rssItems)
-            {
-                var title = rssItem.Element("title")?.Value ?? "Unknown";
-                var link = rssItem.Element("link")?.Value ?? "";
-                
-                var filmTitle = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "filmTitle")?.Value ?? title;
-                var filmYearStr = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "filmYear")?.Value;
-                var memberRatingStr = rssItem.Elements().FirstOrDefault(e => e.Name.LocalName == "memberRating")?.Value;
-
-                int? year = null;
-                if (int.TryParse(filmYearStr, out var y)) year = y;
-
-                double? rating = null;
-                if (double.TryParse(memberRatingStr, out var r)) rating = r;
-
-                var slugMatch = Regex.Match(link, @"film/([^/]+)/?");
-                if (slugMatch.Success)
+                var slug = slugMatch.Groups[1].Value;
+                parsedFeedItems.Add(new LetterboxdFeedItem
                 {
-                    var slug = slugMatch.Groups[1].Value;
-                    parsedFeedItems.Add(new LetterboxdFeedItem
-                    {
-                        Title = filmTitle,
-                        Year = year,
-                        Rating = rating,
-                        Slug = slug
-                    });
-                }
+                    Title = filmTitle,
+                    Year = year,
+                    Rating = rating,
+                    Slug = slug,
+                    TmdbId = resolvedTmdbId
+                });
             }
         }
 
-        // 2. Resolve TMDB IDs for each slug
-        var slugsToFetch = new List<string>();
-        foreach (var pItem in parsedFeedItems)
-        {
-            if (_letterboxdSlugMap!.TryGetValue(pItem.Slug, out var tmdbId))
-            {
-                pItem.TmdbId = tmdbId;
-            }
-            else
-            {
-                slugsToFetch.Add(pItem.Slug);
-            }
-        }
-
-        // Fetch unresolved slugs in parallel (max 10 concurrent requests) to avoid timeouts
-        if (slugsToFetch.Count > 0)
-        {
-            using var slugSemaphore = new SemaphoreSlim(10, 10);
-            var tasks = slugsToFetch.Select(async slug =>
-            {
-                await slugSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    // Stagger request startup slightly to prevent instant bursts
-                    var delayMs = new Random().Next(30, 250);
-                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
-
-                    var filmUrl = $"https://letterboxd.com/film/{slug}/";
-                    using var filmResp = await client.GetAsync(filmUrl, cancellationToken).ConfigureAwait(false);
-                    if (filmResp.IsSuccessStatusCode)
-                    {
-                        var filmHtml = await filmResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        var tmdbMatch = Regex.Match(filmHtml, @"data-tmdb-id=""(\d+)""");
-                        if (tmdbMatch.Success)
-                        {
-                            var resolvedId = tmdbMatch.Groups[1].Value;
-                            _letterboxdSlugMap![slug] = resolvedId;
-                            
-                            lock (parsedFeedItems)
-                            {
-                                foreach (var pItem in parsedFeedItems.Where(i => i.Slug == slug))
-                                {
-                                    pItem.TmdbId = resolvedId;
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to resolve TMDb ID for Letterboxd slug: {Slug}", slug);
-                }
-                finally
-                {
-                    slugSemaphore.Release();
-                }
-            });
-
-            await Task.WhenAll(tasks).ConfigureAwait(false);
-            await FlushSlugsAsync().ConfigureAwait(false);
-        }
-
-        // 2.5 Fetch full details/posters from TMDb API in parallel (max 15 concurrent requests)
+        // Fetch full details/posters from TMDb API in parallel (max 15 concurrent requests)
         var resolvedProfile = await _settingsService.GetResolvedProfileAsync(userId, "global");
         var tmdbKey = resolvedProfile?.TmdbApiKey;
         if (string.IsNullOrWhiteSpace(tmdbKey))
@@ -834,60 +687,7 @@ public class CustomRowController : ControllerBase
         return stars;
     }
 
-    private void EnsureSlugsLoaded()
-    {
-        if (_letterboxdSlugMap != null) return;
 
-        _slugFileLock.Wait();
-        try
-        {
-            if (_letterboxdSlugMap != null) return;
-
-            if (System.IO.File.Exists(_letterboxdSlugsFilePath))
-            {
-                try
-                {
-                    var json = System.IO.File.ReadAllText(_letterboxdSlugsFilePath);
-                    var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-                    _letterboxdSlugMap = dict != null
-                        ? new ConcurrentDictionary<string, string>(dict, StringComparer.OrdinalIgnoreCase)
-                        : new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                }
-                catch
-                {
-                    _letterboxdSlugMap = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                }
-            }
-            else
-            {
-                _letterboxdSlugMap = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            }
-        }
-        finally
-        {
-            _slugFileLock.Release();
-        }
-    }
-
-    private async Task FlushSlugsAsync()
-    {
-        if (_letterboxdSlugMap == null) return;
-
-        await _slugFileLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            var json = JsonSerializer.Serialize(_letterboxdSlugMap);
-            await System.IO.File.WriteAllTextAsync(_letterboxdSlugsFilePath, json).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to flush Letterboxd slugs map to disk");
-        }
-        finally
-        {
-            _slugFileLock.Release();
-        }
-    }
 
     private HttpClient CreateClient()
     {
