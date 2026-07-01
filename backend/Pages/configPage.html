@@ -250,6 +250,14 @@
                             <div class="fieldDescription">Default overall app style. Keep Not set to let users choose.</div>
                         </div>
                         <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultDetailScreenStyle">Detail Screen Style</label>
+                            <select id="DefaultDetailScreenStyle" is="emby-select">
+                                <option value="">Not set (user decides)</option>
+                                <option value="classic">Classic</option>
+                                <option value="modern">Modern</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DefaultFocusColor">Focus Highlight Color</label>
                             <select id="DefaultFocusColor" is="emby-select">
                                 <option value="">Not set (user decides)</option>
@@ -2317,6 +2325,7 @@
 
                     var defaults = config.DefaultUserSettings || {};
                     setSelectValue('#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
+                    setSelectValue('#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
                     setSelectValue('#DefaultFocusColor', defaults.focusColor, 'Configured color');
                     setSelectValue('#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
                     setNullableBoolSelect('#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
@@ -2509,6 +2518,7 @@
 
                         config.DefaultUserSettings = config.DefaultUserSettings || {};
                         config.DefaultUserSettings.visualTheme = document.querySelector('#DefaultVisualTheme').value || null;
+                        config.DefaultUserSettings.detailScreenStyle = document.querySelector('#DefaultDetailScreenStyle').value || null;
                         config.DefaultUserSettings.focusColor = document.querySelector('#DefaultFocusColor').value || null;
                         config.DefaultUserSettings.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
                         config.DefaultUserSettings.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
