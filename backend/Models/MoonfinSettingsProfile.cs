@@ -77,6 +77,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("focusColor")]
     public string? FocusColor { get; set; }
 
+    [JsonPropertyName("detailScreenStyle")]
+    public string? DetailScreenStyle { get; set; }
+
     [JsonPropertyName("visualTheme")]
     public string? VisualTheme { get; set; }
 
