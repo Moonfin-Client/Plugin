@@ -3,98 +3,301 @@
 <head>
     <meta charset="utf-8">
     <title>Moonfin</title>
-    <style>
-        #MoonfinConfigPage .verticalSection.collapsibleSection {
-            margin-bottom: 0.9em;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.02);
-            overflow: hidden;
-        }
-
-        #MoonfinConfigPage .collapsibleSectionTrigger,
-        #MoonfinConfigPage .collapsibleSubsectionTrigger {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1em;
-            border: 0;
-            background: transparent;
-            color: inherit;
-            cursor: pointer;
-            text-align: left;
-        }
-
-        #MoonfinConfigPage .collapsibleSectionTrigger {
-            padding: 0.85em 1em;
-            font-size: 1em;
-            font-weight: 600;
-        }
-
-        #MoonfinConfigPage .collapsibleSectionContent {
-            display: none;
-            padding: 0 1em 1em;
-        }
-
-        #MoonfinConfigPage .collapsibleSection.is-open .collapsibleSectionContent {
-            display: block;
-        }
-
-        #MoonfinConfigPage .collapsibleSectionChevron,
-        #MoonfinConfigPage .collapsibleSubsectionChevron {
-            color: rgba(255, 255, 255, 0.75);
-            transition: transform 0.2s ease;
-            flex-shrink: 0;
-        }
-
-        #MoonfinConfigPage .collapsibleSection.is-open .collapsibleSectionChevron,
-        #MoonfinConfigPage .collapsibleSubsection.is-open .collapsibleSubsectionChevron {
-            transform: rotate(90deg);
-        }
-
-        #MoonfinConfigPage .collapsibleSubsection {
-            margin-top: 0.75em;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 6px;
-            background: rgba(255, 255, 255, 0.015);
-            overflow: hidden;
-        }
-
-        #MoonfinConfigPage .collapsibleSubsectionTrigger {
-            padding: 0.7em 0.9em;
-            font-size: 0.95em;
-            font-weight: 600;
-            color: #00a4dc;
-        }
-
-        #MoonfinConfigPage .collapsibleSubsectionContent {
-            display: none;
-            padding: 0 0.9em 0.9em;
-        }
-
-        #MoonfinConfigPage .collapsibleSubsection.is-open .collapsibleSubsectionContent {
-            display: block;
-        }
-
-        #MoonfinConfigPage .collapsibleSectionContent > :first-child,
-        #MoonfinConfigPage .collapsibleSubsectionContent > :first-child {
-            margin-top: 0;
-        }
-
-        #MoonfinConfigPage #AdminThemeChooseBtn {
-            background: rgba(255, 255, 255, 0.08);
-            color: inherit;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-        }
-
-        #MoonfinConfigPage #AdminThemeChooseBtn:hover {
-            background: rgba(255, 255, 255, 0.14);
-        }
-    </style>
 </head>
 <body>
     <div id="MoonfinConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <style>
+            #MoonfinConfigPage #AdminThemeChooseBtn {
+                background: rgba(255, 255, 255, 0.08);
+                color: inherit;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+            }
+
+            #MoonfinConfigPage #AdminThemeChooseBtn:hover {
+                background: rgba(255, 255, 255, 0.14);
+            }
+
+            #MoonfinConfigPage #MoonfinConfigForm {
+                max-width: none;
+            }
+
+            #MoonfinConfigPage .moonfinAdminShell {
+                display: flex;
+                gap: 18px;
+                align-items: flex-start;
+                margin-top: 1em;
+            }
+
+            #MoonfinConfigPage .moonfinTabPanel .inputContainer input,
+            #MoonfinConfigPage .moonfinTabPanel .inputContainer textarea,
+            #MoonfinConfigPage .moonfinTabPanel .inputContainer select,
+            #MoonfinConfigPage .moonfinTabPanel .selectContainer select {
+                max-width: 720px;
+            }
+
+            #MoonfinConfigPage .moonfinAdminNav {
+                flex: 0 0 280px;
+                position: sticky;
+                top: 0.5em;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                padding: 14px 12px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 14px;
+                background: rgba(255, 255, 255, 0.02);
+            }
+
+            #MoonfinConfigPage .moonfinNavBrand {
+                display: flex;
+                align-items: center;
+                gap: 11px;
+                padding: 6px 8px 16px;
+            }
+
+            #MoonfinConfigPage .moonfinNavLogo {
+                width: 36px;
+                height: 36px;
+                object-fit: contain;
+                flex-shrink: 0;
+            }
+
+            #MoonfinConfigPage .moonfinNavBrandText {
+                font-size: 1.2em;
+                font-weight: 600;
+                color: #f0f6fc;
+            }
+
+            #MoonfinConfigPage .moonfinNavItem {
+                display: flex;
+                align-items: center;
+                gap: 13px;
+                width: 100%;
+                text-align: left;
+                border: 0;
+                background: transparent;
+                color: inherit;
+                border-radius: 10px;
+                padding: 11px 12px;
+                cursor: pointer;
+                box-shadow: inset 2px 0 0 transparent;
+                transition: background 0.15s ease;
+            }
+
+            #MoonfinConfigPage .moonfinNavItem:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            #MoonfinConfigPage .moonfinNavItem.is-active {
+                background: rgba(0, 164, 220, 0.14);
+                box-shadow: inset 2px 0 0 #00a4dc;
+            }
+
+            #MoonfinConfigPage .moonfinNavIcon {
+                font-size: 23px;
+                color: rgba(255, 255, 255, 0.6);
+                flex-shrink: 0;
+            }
+
+            #MoonfinConfigPage .moonfinNavItem.is-active .moonfinNavIcon {
+                color: #37d3e6;
+            }
+
+            #MoonfinConfigPage .moonfinNavText {
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+
+            #MoonfinConfigPage .moonfinNavLabel {
+                font-size: 1.02em;
+                color: rgba(255, 255, 255, 0.86);
+                line-height: 1.3;
+            }
+
+            #MoonfinConfigPage .moonfinNavItem.is-active .moonfinNavLabel {
+                color: #f0f6fc;
+            }
+
+            #MoonfinConfigPage .moonfinNavSub {
+                font-size: 0.82em;
+                color: rgba(255, 255, 255, 0.4);
+                line-height: 1.2;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            #MoonfinConfigPage .moonfinAdminMain {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+
+            #MoonfinConfigPage .moonfinSearch {
+                position: relative;
+                margin-bottom: 16px;
+            }
+
+            #MoonfinConfigPage .moonfinSearch .material-icons {
+                position: absolute;
+                left: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                font-size: 18px;
+                color: rgba(255, 255, 255, 0.4);
+                pointer-events: none;
+            }
+
+            #MoonfinConfigPage .moonfinSearchInput {
+                box-sizing: border-box;
+                width: 100%;
+                height: 38px;
+                padding: 0 12px 0 36px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 10px;
+                background: rgba(0, 0, 0, 0.2);
+                color: inherit;
+                font-size: 0.9em;
+            }
+
+            #MoonfinConfigPage .moonfinTabPanel {
+                display: none;
+            }
+
+            #MoonfinConfigPage .moonfinTabPanel.is-active {
+                display: block;
+                animation: moonfinFade 0.18s ease;
+            }
+
+            @keyframes moonfinFade {
+                from { opacity: 0; transform: translateY(4px); }
+                to { opacity: 1; transform: none; }
+            }
+
+            #MoonfinConfigPage .moonfinTabPanel .verticalSection {
+                margin: 0 0 16px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                background: rgba(255, 255, 255, 0.02);
+                padding: 2px 18px 16px;
+            }
+
+            #MoonfinConfigPage .moonfinTabPanel .verticalSection > .sectionTitle {
+                margin: 16px 0 12px;
+                font-size: 1.05em;
+                font-weight: 600;
+                color: #f0f6fc;
+            }
+
+            #MoonfinConfigPage .moonfinSaveBar {
+                position: sticky;
+                bottom: 0;
+                z-index: 5;
+                display: flex;
+                justify-content: flex-end;
+                align-items: center;
+                gap: 12px;
+                margin-top: 18px;
+                padding: 12px 14px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                background: rgba(28, 28, 30, 0.92);
+                -webkit-backdrop-filter: blur(8px);
+                backdrop-filter: blur(8px);
+            }
+
+            #MoonfinConfigPage .moonfinSaveBar .button-submit {
+                margin: 0;
+                width: auto;
+            }
+
+            #MoonfinConfigPage .moonfinSubTabs {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 7px;
+                margin: 2px 0 16px;
+            }
+
+            #MoonfinConfigPage .moonfinSubTab {
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                background: transparent;
+                color: rgba(255, 255, 255, 0.6);
+                border-radius: 999px;
+                padding: 7px 14px;
+                font-size: 0.85em;
+                cursor: pointer;
+                transition: all 0.15s ease;
+            }
+
+            #MoonfinConfigPage .moonfinSubTab:hover {
+                border-color: rgba(255, 255, 255, 0.28);
+                color: rgba(255, 255, 255, 0.85);
+            }
+
+            #MoonfinConfigPage .moonfinSubTab.is-active {
+                border-color: #00a4dc;
+                background: rgba(0, 164, 220, 0.16);
+                color: #7fd6f2;
+            }
+
+            #MoonfinConfigPage .moonfinSubPanel {
+                display: none;
+            }
+
+            #MoonfinConfigPage .moonfinSubPanel.is-active {
+                display: block;
+            }
+
+            #MoonfinConfigPage.moonfin-searching .moonfinTabPanel {
+                display: block;
+            }
+
+            #MoonfinConfigPage.moonfin-searching .moonfinSubTabs,
+            #MoonfinConfigPage.moonfin-searching .moonfinAdminNav {
+                display: none;
+            }
+
+            #MoonfinConfigPage.moonfin-searching .moonfinSubPanel {
+                display: block;
+            }
+
+            #MoonfinConfigPage .moonfin-hidden-by-search {
+                display: none !important;
+            }
+
+            @media (max-width: 800px) {
+                #MoonfinConfigPage .moonfinAdminShell {
+                    flex-direction: column;
+                }
+
+                #MoonfinConfigPage .moonfinAdminNav {
+                    flex: 0 0 auto;
+                    flex-direction: row;
+                    position: static;
+                    width: 100%;
+                    overflow-x: auto;
+                    gap: 6px;
+                }
+
+                #MoonfinConfigPage .moonfinNavBrand,
+                #MoonfinConfigPage .moonfinNavSub {
+                    display: none;
+                }
+
+                #MoonfinConfigPage .moonfinNavItem {
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 4px;
+                    min-width: 78px;
+                    box-shadow: none;
+                    text-align: center;
+                }
+
+                #MoonfinConfigPage .moonfinNavItem.is-active {
+                    box-shadow: inset 0 -2px 0 #00a4dc;
+                }
+            }
+        </style>
         <div data-role="content">
             <div class="content-primary">
                 <form id="MoonfinConfigForm">
@@ -102,6 +305,43 @@
                         <h2 class="sectionTitle">Moonfin Settings</h2>
                     </div>
 
+                    <div class="moonfinAdminShell">
+                    <nav class="moonfinAdminNav" aria-label="Moonfin settings categories">
+                        <div class="moonfinNavBrand">
+                            <img id="MoonfinBrandLogo" class="moonfinNavLogo" alt="Moonfin" />
+                            <span class="moonfinNavBrandText">Moonfin</span>
+                        </div>
+                        <button type="button" class="moonfinNavItem is-active" data-tab="general">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">settings</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">General</span><span class="moonfinNavSub">Sync &amp; web client</span></span>
+                        </button>
+                        <button type="button" class="moonfinNavItem" data-tab="integrations">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">extension</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Integrations</span><span class="moonfinNavSub">Seerr, MDBList, TMDB</span></span>
+                        </button>
+                        <button type="button" class="moonfinNavItem" data-tab="defaults">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">tune</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
+                        </button>
+                        <button type="button" class="moonfinNavItem" data-tab="themes">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">palette</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Themes</span><span class="moonfinNavSub">Upload &amp; catalog</span></span>
+                        </button>
+                        <button type="button" class="moonfinNavItem" data-tab="actions">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">campaign</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Actions</span><span class="moonfinNavSub">Apply &amp; broadcast</span></span>
+                        </button>
+                        <button type="button" class="moonfinNavItem" data-tab="help">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">help_outline</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Help</span><span class="moonfinNavSub">Web plugin status</span></span>
+                        </button>
+                    </nav>
+                    <div class="moonfinAdminMain">
+                    <div class="moonfinSearch">
+                        <span class="material-icons" aria-hidden="true">search</span>
+                        <input type="search" id="MoonfinSettingsSearch" class="moonfinSearchInput" placeholder="Search settings" autocomplete="off" />
+                    </div>
+                    <section class="moonfinTabPanel is-active" data-tab="general">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">General</h3>
                         <div class="checkboxContainer checkboxContainer-withDescription">
@@ -147,6 +387,8 @@
                         </div>
                     </div>
 
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="integrations">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Seerr Integration</h3>
                         <div class="checkboxContainer checkboxContainer-withDescription">
@@ -222,6 +464,8 @@
                         </div>
                     </div>
 
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="defaults">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Default User Settings</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
@@ -662,6 +906,8 @@
                         </div>
                     </div>
 
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="themes">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Uploaded Themes</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
@@ -689,6 +935,8 @@
                         </div>
                     </div>
 
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="actions">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Apply Defaults To Users</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
@@ -748,6 +996,8 @@
                         <div id="BroadcastMessageResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
                     </div>
 
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="help">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Web Plugin Status</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
@@ -773,10 +1023,13 @@
                         </div>
                     </div>
 
-                    <div>
+                    </section>
+                    <div class="moonfinSaveBar">
                         <button is="emby-button" type="submit" class="raised button-submit block">
                             <span>Save as Default</span>
                         </button>
+                    </div>
+                    </div>
                     </div>
                 </form>
             </div>
@@ -1024,226 +1277,159 @@
         <script type="text/javascript">
             function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-            function setCollapsibleOpen(container, trigger, content, chevron, isOpen) {
-                container.classList.toggle('is-open', !!isOpen);
-                trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-                if (content) {
-                    content.style.display = isOpen ? '' : 'none';
-                }
-                if (chevron) {
-                    chevron.style.transform = isOpen ? 'rotate(90deg)' : 'rotate(0deg)';
-                }
-            }
-
-            function findDirectSectionTitle(section) {
-                for (var i = 0; i < section.children.length; i++) {
-                    var child = section.children[i];
-                    if (child.classList && child.classList.contains('sectionTitle')) {
-                        return child;
-                    }
-                }
-                return null;
-            }
-
-            function makeCollapsibleSection(section, heading, openByDefault) {
-                if (!section || !heading || section.dataset.collapsibleInit === 'true') {
-                    return null;
-                }
-
-                section.dataset.collapsibleInit = 'true';
-                section.classList.add('collapsibleSection');
-                section.style.border = '1px solid rgba(255, 255, 255, 0.08)';
-                section.style.borderRadius = '8px';
-                section.style.background = 'rgba(255, 255, 255, 0.02)';
-                section.style.overflow = 'hidden';
-
-                var titleText = (heading.textContent || '').trim();
-                var trigger = document.createElement('button');
-                trigger.type = 'button';
-                trigger.className = 'collapsibleSectionTrigger';
-                trigger.style.cssText = [
-                    'width:100%',
-                    'display:flex',
-                    'align-items:center',
-                    'justify-content:space-between',
-                    'gap:1em',
-                    'padding:0.85em 1em',
-                    'border:0',
-                    'background:transparent',
-                    'color:inherit',
-                    'cursor:pointer',
-                    'text-align:left',
-                    'font-size:1em',
-                    'font-weight:600'
-                ].join(';');
-
-                var titleSpan = document.createElement('span');
-                titleSpan.textContent = titleText;
-                var chevron = document.createElement('span');
-                chevron.className = 'collapsibleSectionChevron';
-                chevron.setAttribute('aria-hidden', 'true');
-                chevron.textContent = '\u25B8';
-                chevron.style.transition = 'transform 0.2s ease';
-                chevron.style.flexShrink = '0';
-                chevron.style.color = 'rgba(255, 255, 255, 0.75)';
-                trigger.appendChild(titleSpan);
-                trigger.appendChild(chevron);
-
-                var content = document.createElement('div');
-                content.className = 'collapsibleSectionContent';
-                content.style.padding = '0 1em 1em';
-
-                var current = heading.nextSibling;
-                while (current) {
-                    var next = current.nextSibling;
-                    content.appendChild(current);
-                    current = next;
-                }
-
-                heading.remove();
-                section.insertBefore(trigger, section.firstChild);
-                section.appendChild(content);
-
-                trigger.addEventListener('click', function() {
-                    setCollapsibleOpen(section, trigger, content, chevron, !section.classList.contains('is-open'));
-                });
-
-                setCollapsibleOpen(section, trigger, content, chevron, !!openByDefault);
-                return content;
-            }
-
-            function makeDefaultSettingSubsections(defaultsContent) {
-                if (!defaultsContent || defaultsContent.dataset.subsectionsInit === 'true') {
+            function buildDefaultSettingsSubTabs(section) {
+                if (!section || section.dataset.subTabsInit === 'true') {
                     return;
                 }
 
-                defaultsContent.dataset.subsectionsInit = 'true';
-                var headings = Array.prototype.slice.call(defaultsContent.querySelectorAll('h4'));
+                var headings = Array.prototype.slice.call(section.querySelectorAll('h4'));
                 if (!headings.length) {
                     return;
                 }
 
-                var openedOne = false;
-                headings.forEach(function(heading) {
+                section.dataset.subTabsInit = 'true';
+
+                var tabBar = document.createElement('div');
+                tabBar.className = 'moonfinSubTabs';
+                tabBar.setAttribute('role', 'tablist');
+
+                var entries = [];
+
+                function selectSubTab(active) {
+                    entries.forEach(function(entry, i) {
+                        var on = i === active;
+                        entry.button.classList.toggle('is-active', on);
+                        entry.button.setAttribute('aria-selected', on ? 'true' : 'false');
+                        entry.panel.classList.toggle('is-active', on);
+                    });
+                }
+
+                headings.forEach(function(heading, index) {
                     if (!heading || !heading.parentNode) {
                         return;
                     }
 
-                    var subsection = document.createElement('div');
-                    subsection.className = 'collapsibleSubsection';
-                    subsection.style.marginTop = '0.75em';
-                    subsection.style.border = '1px solid rgba(255, 255, 255, 0.06)';
-                    subsection.style.borderRadius = '6px';
-                    subsection.style.background = 'rgba(255, 255, 255, 0.015)';
-                    subsection.style.overflow = 'hidden';
+                    var title = (heading.textContent || '').trim();
 
-                    var trigger = document.createElement('button');
-                    trigger.type = 'button';
-                    trigger.className = 'collapsibleSubsectionTrigger';
-                    trigger.style.cssText = [
-                        'width:100%',
-                        'display:flex',
-                        'align-items:center',
-                        'justify-content:space-between',
-                        'gap:1em',
-                        'padding:0.7em 0.9em',
-                        'border:0',
-                        'background:transparent',
-                        'color:#00a4dc',
-                        'cursor:pointer',
-                        'text-align:left',
-                        'font-size:0.95em',
-                        'font-weight:600'
-                    ].join(';');
-
-                    var triggerTitle = document.createElement('span');
-                    triggerTitle.textContent = (heading.textContent || '').trim();
-                    var chevron = document.createElement('span');
-                    chevron.className = 'collapsibleSubsectionChevron';
-                    chevron.setAttribute('aria-hidden', 'true');
-                    chevron.textContent = '\u25B8';
-                    chevron.style.transition = 'transform 0.2s ease';
-                    chevron.style.flexShrink = '0';
-                    chevron.style.color = 'rgba(255, 255, 255, 0.75)';
-                    trigger.appendChild(triggerTitle);
-                    trigger.appendChild(chevron);
-
-                    var content = document.createElement('div');
-                    content.className = 'collapsibleSubsectionContent';
-                    content.style.padding = '0 0.9em 0.9em';
-
-                    defaultsContent.insertBefore(subsection, heading);
-                    subsection.appendChild(trigger);
-                    subsection.appendChild(content);
+                    var panel = document.createElement('div');
+                    panel.className = 'moonfinSubPanel';
+                    panel.setAttribute('role', 'tabpanel');
+                    panel.setAttribute('data-subpanel', String(index));
 
                     var node = heading.nextSibling;
                     while (node && !(node.nodeType === 1 && node.tagName && node.tagName.toUpperCase() === 'H4')) {
                         var nextNode = node.nextSibling;
-                        content.appendChild(node);
+                        panel.appendChild(node);
                         node = nextNode;
                     }
 
+                    heading.parentNode.insertBefore(panel, heading);
                     heading.remove();
 
-                    trigger.addEventListener('click', function() {
-                        setCollapsibleOpen(subsection, trigger, content, chevron, !subsection.classList.contains('is-open'));
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'moonfinSubTab';
+                    button.setAttribute('role', 'tab');
+                    button.setAttribute('data-subtab', String(index));
+                    button.textContent = title;
+                    button.addEventListener('click', function() {
+                        selectSubTab(index);
                     });
 
-                    var shouldOpen = !openedOne;
-                    if (shouldOpen) {
-                        openedOne = true;
-                    }
-                    setCollapsibleOpen(subsection, trigger, content, chevron, shouldOpen);
+                    tabBar.appendChild(button);
+                    entries.push({ button: button, panel: panel });
                 });
+
+                if (entries.length) {
+                    section.insertBefore(tabBar, entries[0].panel);
+                    selectSubTab(0);
+                }
             }
 
-            function findSectionByTitle(form, title) {
-                if (!form) {
-                    return null;
-                }
-
-                for (var i = 0; i < form.children.length; i++) {
-                    var section = form.children[i];
-                    if (!section.classList || !section.classList.contains('verticalSection')) {
-                        continue;
-                    }
-
-                    var heading = findDirectSectionTitle(section);
-                    var headingText = heading ? (heading.textContent || '').trim() : '';
-                    if (heading && headingText === title) {
-                        return { section: section, heading: heading };
-                    }
-                }
-
-                return null;
-            }
-
-            function initializeCollapsibleCategories() {
-                var page = document.querySelector('#MoonfinConfigPage');
-                if (!page || page.dataset.categoriesInitialized === 'true') {
+            function initializeAdminTabs(root) {
+                var page = root || document.querySelector('#MoonfinConfigPage');
+                if (!page || page.dataset.tabsInitialized === 'true') {
                     return;
                 }
 
-                page.dataset.categoriesInitialized = 'true';
-                var form = page.querySelector('#MoonfinConfigForm');
-                var defaultSettingsSection = findSectionByTitle(form, 'Default User Settings');
-                if (defaultSettingsSection) {
-                    var defaultsContent = makeCollapsibleSection(
-                        defaultSettingsSection.section,
-                        defaultSettingsSection.heading,
-                        true
-                    );
-                    makeDefaultSettingSubsections(defaultsContent);
+                page.dataset.tabsInitialized = 'true';
+
+                var brandLogo = page.querySelector('#MoonfinBrandLogo');
+                if (brandLogo && !brandLogo.getAttribute('src')) {
+                    var assetBase = (window.ApiClient && ApiClient.serverAddress) ? (ApiClient.serverAddress() || '') : '';
+                    brandLogo.src = assetBase + '/Moonfin/Assets/icon.png';
                 }
 
-                var pushDefaultsSection = findSectionByTitle(form, 'Apply Defaults To Users');
-                if (pushDefaultsSection) {
-                    makeCollapsibleSection(
-                        pushDefaultsSection.section,
-                        pushDefaultsSection.heading,
-                        false
-                    );
+                var navItems = Array.prototype.slice.call(page.querySelectorAll('.moonfinNavItem'));
+                var panels = Array.prototype.slice.call(page.querySelectorAll('.moonfinTabPanel'));
+                if (!navItems.length || !panels.length) {
+                    return;
                 }
+
+                function selectTab(tabId) {
+                    navItems.forEach(function(item) {
+                        item.classList.toggle('is-active', item.getAttribute('data-tab') === tabId);
+                    });
+                    panels.forEach(function(panel) {
+                        panel.classList.toggle('is-active', panel.getAttribute('data-tab') === tabId);
+                    });
+                    try { window.localStorage.setItem('moonfinAdminActiveTab', tabId); } catch (e) {}
+                }
+
+                navItems.forEach(function(item) {
+                    item.addEventListener('click', function() {
+                        selectTab(item.getAttribute('data-tab'));
+                    });
+                });
+
+                var defaultsPanel = page.querySelector('.moonfinTabPanel[data-tab="defaults"]');
+                if (defaultsPanel) {
+                    var defaultsSection = defaultsPanel.querySelector('.verticalSection');
+                    if (defaultsSection) {
+                        buildDefaultSettingsSubTabs(defaultsSection);
+                    }
+                }
+
+                var saved = null;
+                try { saved = window.localStorage.getItem('moonfinAdminActiveTab'); } catch (e) {}
+                var validSaved = saved && panels.some(function(p) { return p.getAttribute('data-tab') === saved; });
+                selectTab(validSaved ? saved : 'general');
+
+                initializeSettingsSearch(page);
+            }
+
+            function initializeSettingsSearch(page) {
+                var input = page.querySelector('#MoonfinSettingsSearch');
+                if (!input || input.dataset.bound === 'true') {
+                    return;
+                }
+
+                input.dataset.bound = 'true';
+
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                    }
+                });
+
+                var fields = Array.prototype.slice.call(
+                    page.querySelectorAll('.moonfinTabPanel .inputContainer, .moonfinTabPanel .checkboxContainer, .moonfinTabPanel .selectContainer')
+                );
+
+                input.addEventListener('input', function() {
+                    var query = (input.value || '').trim().toLowerCase();
+                    if (!query) {
+                        page.classList.remove('moonfin-searching');
+                        fields.forEach(function(field) { field.classList.remove('moonfin-hidden-by-search'); });
+                        return;
+                    }
+
+                    page.classList.add('moonfin-searching');
+                    fields.forEach(function(field) {
+                        var text = (field.textContent || '').toLowerCase();
+                        field.classList.toggle('moonfin-hidden-by-search', text.indexOf(query) === -1);
+                    });
+                });
             }
 
             var MoonfinConfig = {
@@ -2116,7 +2302,7 @@
                         + (checksum ? ' • SHA256: ' + esc(checksum.slice(0, 12)) + '…' : '')
                         + '</div>'
                         + '</div>'
-                        + '<button type="button" class="adminThemeDeleteBtn" data-theme-id="' + esc(id) + '" title="Delete theme" style="background:none;border:1px solid rgba(239,68,68,0.6);color:#ef4444;border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">✕</button>'
+                        + '<button type="button" class="adminThemeDeleteBtn" data-theme-id="' + esc(id) + '" title="Delete theme" style="background:none;border:1px solid rgba(239,68,68,0.6);color:#ef4444;border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">&#x2715;</button>'
                         + '</div>';
                 });
 
@@ -2260,7 +2446,7 @@
                 if (e.target.id !== 'MoonfinConfigPage') return;
 
                 ensureMoonfinAdminRuntimeStyles();
-                initializeCollapsibleCategories();
+                initializeAdminTabs();
 
                 var themeFileInput = document.querySelector('#AdminThemeFileInput');
                 var themeChooseButton = document.querySelector('#AdminThemeChooseBtn');
@@ -2456,11 +2642,9 @@
                         for (var i = 0; i < items.length; i++) {
                             var item = items[i];
                             var isChecked = selectedIds.indexOf(item.Id) !== -1;
-                            var emoji = item.CollectionType === 'movies' ? '🎬' : item.CollectionType === 'tvshows' ? '📺' : '📁';
                             var typeLabel = item.CollectionType === 'movies' ? 'Movies' : item.CollectionType === 'tvshows' ? 'Shows' : 'Mixed';
                             html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
                                 '<input type="checkbox" class="adminLibraryCb" data-id="' + item.Id + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
-                                '<span style="font-size:18px;">' + emoji + '</span>' +
                                 '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(item.Name || 'Untitled') + '</div>' +
                                 '<div style="font-size:0.75em;color:rgba(255,255,255,0.4);">' + typeLabel + '</div>' +
                                 '</div></label>';
