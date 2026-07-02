@@ -87,6 +87,61 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public List<UploadedThemeEntry> UploadedThemes { get; set; } = new();
 
+    // ---------------------------------------------------------------------
+    // Retro games (EmulatorJS) configuration
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Enables the retro-games (EmulatorJS) feature for all Moonfin clients.
+    /// </summary>
+    public bool GamesEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Jellyfin library IDs (GUID strings) that hold retro game ROMs using the
+    /// "System folder → BIOS + per-game folder" convention. When empty, libraries
+    /// whose name contains "game", "rom", or "emulat" are auto-detected.
+    /// </summary>
+    public List<string> GameLibraryIds { get; set; } = new();
+
+    /// <summary>
+    /// Optional override for where EmulatorJS loads its runtime and cores from. When empty,
+    /// self-hosted cores are used if installed under the plugin data folder, otherwise the
+    /// EmulatorJS CDN. Advanced users can point this at their own mirror.
+    /// </summary>
+    public string? GamesCoreDataUrl { get; set; }
+
+    /// <summary>
+    /// Optional URL of an EmulatorJS cores zip (containing the data/ folder) that the
+    /// "Download cores to server" button fetches. When empty, the plugin looks for an
+    /// "emulatorjs-data.zip" asset on its own latest GitHub release.
+    /// </summary>
+    public string? GamesCoreZipUrl { get; set; }
+
+    /// <summary>
+    /// Enables keyless game metadata (genre, developer, year, ...) sourced from the libretro
+    /// database. Files are fetched lazily per system and cached under the plugin data folder.
+    /// </summary>
+    public bool GamesMetadataEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Base location for libretro <c>.rdb</c> files, ending in a slash. Defaults to the
+    /// jsDelivr CDN mirror of libretro-database (no per-release maintenance). An http(s) value
+    /// is downloaded; a local directory path is read directly for offline/air-gapped servers.
+    /// </summary>
+    public string GamesMetadataDbUrlBase { get; set; } =
+        "https://cdn.jsdelivr.net/gh/libretro/libretro-database@master/rdb/";
+
+    /// <summary>
+    /// Enables rich game metadata (overview, genre, developer, year, ...) from the LaunchBox
+    /// Games Database. The whole database is one ~100 MB download, fetched once and reduced to a
+    /// compact per-system cache under the plugin data folder.
+    /// </summary>
+    public bool GamesLaunchBoxEnabled { get; set; } = true;
+
+    /// <summary>URL of the LaunchBox metadata zip (contains Metadata.xml).</summary>
+    public string GamesLaunchBoxUrl { get; set; } =
+        "https://gamesdb.launchbox-app.com/Metadata.zip";
+
     /// <summary>
     /// Gets the effective Seerr URL for server-to-server communication.
     /// </summary>

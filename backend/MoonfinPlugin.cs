@@ -38,7 +38,7 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override string Name => "Moonfin";
 
     /// <inheritdoc />
-    public override string Description => "Moonfin brings a modern TV-style UI to Jellyfin web. Features include: custom navbar, media bar with featured content, Seerr integration, and cross-device settings synchronization. Works with Android TV, Roku, Tizen, webOS, and Web clients.";
+    public override string Description => "Moonbase is the Moonfin server plugin providing shared infrastructure for every Moonfin client (web, mobile, desktop, and TV): cross-device settings sync with per-device profiles and admin defaults, hosting for the Moonfin Web app at /Moonfin/Web/, a theme editor with custom theme APIs, ratings integrations (MDBList and TMDB), and Seerr proxy with single sign-on. It also powers retro game libraries via EmulatorJS, with keyless libretro box art plus server-hosted cores and save sync.";
 
     /// <inheritdoc />
     public override Guid Id => Guid.Parse("8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b");

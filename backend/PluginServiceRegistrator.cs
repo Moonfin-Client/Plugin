@@ -20,6 +20,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<MdbListCacheService>();
         serviceCollection.AddSingleton<MdbListListsCacheService>();
         serviceCollection.AddSingleton<CustomRowCacheService>();
+        serviceCollection.AddSingleton<GamesService>();
+        serviceCollection.AddSingleton<GameSavesService>();
+        serviceCollection.AddSingleton<CoresService>();
+        serviceCollection.AddSingleton<RdbService>();
+        serviceCollection.AddSingleton<LaunchBoxService>();
         serviceCollection.AddHttpClient();
 
         // Auto-register file transformations on plugin load (no manual task needed)

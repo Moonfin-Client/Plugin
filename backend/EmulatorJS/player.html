@@ -1,0 +1,272 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Moonfin Game</title>
+    <style>
+      html, body, #game {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      #moonfin-error {
+        color: #fff;
+        font-family: sans-serif;
+        padding: 24px;
+        line-height: 1.5;
+      }
+      /* EmulatorJS pins its menu toggle to the top-right corner (top:5px;right:5px),
+         which lands under a phone's curved corner / camera cutout. Push it into the
+         safe area and enlarge it so it's tappable. */
+      .ejs_virtualGamepad_open {
+        top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+        right: calc(8px + env(safe-area-inset-right, 0px)) !important;
+        width: 40px !important;
+        height: 40px !important;
+        opacity: 0.85 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="moonfin-error" style="display:none"></div>
+
+    <script>
+      // Query params (URL-encoded): core, rom (with &api_key=), bios, save, name.
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var core = params.get('core');
+        var rom = params.get('rom');
+
+        if (!core || !rom) {
+          var err = document.getElementById('moonfin-error');
+          err.style.display = 'block';
+          err.textContent = 'Missing required parameters (core, rom).';
+          return;
+        }
+
+        // __EJS_PATHTODATA__ is substituted by the server: self-hosted cores when installed,
+        // otherwise the EmulatorJS CDN so games work with zero setup.
+        window.EJS_player = '#game';
+        window.EJS_core = core;
+        window.EJS_gameUrl = rom;
+        window.EJS_pathtodata = '__EJS_PATHTODATA__';
+        window.EJS_startOnLoaded = true;
+        // Threads (SharedArrayBuffer) are only available when the server served this document
+        // cross-origin isolated, which it does only for cores that require it (e.g. PSP).
+        // Cartridge and single-threaded disc cores keep running without isolation.
+        window.EJS_threads = !!self.crossOriginIsolated;
+
+        var bios = params.get('bios');
+        if (bios) { window.EJS_biosUrl = bios; }
+
+        var save = params.get('save');
+        if (save) { window.EJS_loadStateURL = save; }
+
+        var name = params.get('name');
+        if (name) { window.EJS_gameName = name; }
+
+        window.EJS_ready = function () {
+          postToHost({ type: 'moonfin-ready' });
+        };
+
+        function postToHost(message) {
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage(message, '*');
+            }
+          } catch (e) { /* ignore */ }
+          // flutter_inappwebview handler (registered by the Flutter host).
+          try {
+            if (window.flutter_inappwebview) {
+              window.flutter_inappwebview.callHandler('moonfinPlayer', message);
+            }
+          } catch (e) { /* ignore */ }
+        }
+
+        // Injects a controller button into the running core (RetroPad button index). The Flutter
+        // host forwards hardware-gamepad key events here because the Android System WebView does
+        // not reliably expose the browser Gamepad API. Guarded: if a native pad IS visible to the
+        // WebView, do nothing and let EmulatorJS read it directly (avoids double input).
+        window.moonfinInput = function (index, pressed) {
+          try {
+            if (navigator.getGamepads) {
+              var pads = navigator.getGamepads();
+              for (var i = 0; i < pads.length; i++) {
+                if (pads[i]) { return; }
+              }
+            }
+            var emu = window.EJS_emulator;
+            if (emu && emu.gameManager && emu.gameManager.simulateInput) {
+              emu.gameManager.simulateInput(0, index, pressed ? 1 : 0);
+            }
+          } catch (e) { /* ignore */ }
+        };
+
+        // Returns the current save state as a base64 string, or null on failure.
+        window.moonfinGetState = function () {
+          try {
+            var emu = window.EJS_emulator;
+            if (!emu || !emu.gameManager) { return null; }
+            var state = emu.gameManager.getState();
+            if (!state) { return null; }
+            return uint8ToBase64(state);
+          } catch (e) {
+            return null;
+          }
+        };
+
+        function uint8ToBase64(bytes) {
+          var binary = '';
+          var len = bytes.byteLength;
+          for (var i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          return btoa(binary);
+        }
+
+        function base64ToUint8(b64) {
+          var binary = atob(b64);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+          return bytes;
+        }
+
+        // Loads a save state from a base64 blob (the Moonfin cloud save).
+        window.moonfinLoadState = function (b64) {
+          try {
+            var emu = window.EJS_emulator;
+            if (emu && emu.gameManager && b64) {
+              emu.gameManager.loadState(base64ToUint8(b64));
+            }
+          } catch (e) { /* ignore */ }
+        };
+
+        window.moonfinRestart = function () {
+          try {
+            var emu = window.EJS_emulator;
+            if (emu && emu.gameManager) { emu.gameManager.restart(); }
+          } catch (e) { /* ignore */ }
+        };
+
+        window.moonfinFastForward = function (on) {
+          try {
+            var emu = window.EJS_emulator;
+            if (emu && emu.gameManager && emu.gameManager.toggleFastForward) {
+              emu.gameManager.toggleFastForward(on ? 1 : 0);
+            }
+          } catch (e) { /* ignore */ }
+        };
+
+        window.moonfinPause = function (paused) {
+          try {
+            var emu = window.EJS_emulator;
+            if (emu && emu.gameManager && emu.gameManager.toggleMainLoop) {
+              emu.gameManager.toggleMainLoop(paused ? 0 : 1);
+            }
+          } catch (e) { /* ignore */ }
+        };
+
+        // EmulatorJS's stored settings (control remaps + options), for cloud sync on exit.
+        window.moonfinGetSettings = function () {
+          try { return localStorage.getItem('ejs-settings'); } catch (e) { return null; }
+        };
+
+        // Enumerates the running core's adjustable options (id, label, choices, current) so a
+        // native d-pad settings screen can render them. Parses the same string EmulatorJS uses
+        // to build its own settings menu. Returns "[]" when the core exposes none.
+        window.moonfinGetOptions = function () {
+          try {
+            var emu = window.EJS_emulator;
+            if (!emu || !emu.gameManager || !emu.gameManager.getCoreOptions) { return '[]'; }
+            var raw = emu.gameManager.getCoreOptions();
+            if (!raw) { return '[]'; }
+            var out = [];
+            raw.split('\n').forEach(function (line) {
+              if (!line) { return; }
+              var parts = line.split('; ');
+              if (parts.length < 2) { return; }
+              var id = parts[0].split('|')[0];
+              var choices = parts[1].split('|');
+              if (choices.length <= 1) { return; }
+              out.push({
+                id: id,
+                label: id.replace(/_/g, ' ').replace(/.+\-(.+)/, '$1'),
+                choices: choices.map(function (c) {
+                  return { value: c, label: c.replace('(Default) ', '') };
+                }),
+                current: emu.getSettingValue ? emu.getSettingValue(id) : null
+              });
+            });
+            // Common general settings by known id with fixed choices; included only when the
+            // core/build registered them (getSettingValue returns non-null).
+            var general = [
+              { id: 'shader', label: 'Shader', choices: ['disabled', '2xScaleHQ', '4xScaleHQ', 'crt-aperture', 'crt-easymode', 'crt-geom', 'crt-mattias', 'sabr', 'bicubic'] },
+              { id: 'fps', label: 'FPS counter', choices: ['show', 'hide'] },
+              { id: 'vsync', label: 'VSync', choices: ['enabled', 'disabled'] },
+              { id: 'ff-ratio', label: 'Fast-forward ratio', choices: ['1.5', '2.0', '2.5', '3.0', '4.0', '5.0', '6.0', '8.0', 'unlimited'] },
+              { id: 'sm-ratio', label: 'Slow-motion ratio', choices: ['1.5', '2.0', '2.5', '3.0', '4.0', '5.0'] },
+              { id: 'save-state-slot', label: 'Save state slot', choices: ['1', '2', '3', '4', '5', '6', '7', '8', '9'] }
+            ];
+            general.forEach(function (g) {
+              var cur = emu.getSettingValue ? emu.getSettingValue(g.id) : null;
+              if (cur == null) { return; }
+              out.push({
+                id: g.id,
+                label: g.label,
+                choices: g.choices.map(function (c) { return { value: c, label: c }; }),
+                current: cur
+              });
+            });
+            return JSON.stringify(out);
+          } catch (e) { return '[]'; }
+        };
+
+        window.moonfinSetOption = function (id, value) {
+          try {
+            var emu = window.EJS_emulator;
+            if (emu && emu.changeSettingOption) { emu.changeSettingOption(id, value); }
+          } catch (e) { /* ignore */ }
+        };
+
+        // Forward hardware-gamepad buttons to the Flutter host on platforms whose WebView
+        // exposes the Gamepad API (iOS / desktop). Self-gating: does nothing on Android, where
+        // getGamepads() is empty and the native channel provides input instead.
+        (function () {
+          var prev = {};
+          function poll() {
+            try {
+              var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+              var pad = null;
+              for (var i = 0; i < pads.length; i++) { if (pads[i]) { pad = pads[i]; break; } }
+              if (pad) {
+                for (var b = 0; b < pad.buttons.length; b++) {
+                  var pressed = !!pad.buttons[b].pressed;
+                  if (prev[b] !== pressed) {
+                    prev[b] = pressed;
+                    postToHost({ type: 'gamepad', index: b, pressed: pressed });
+                  }
+                }
+              }
+            } catch (e) { /* ignore */ }
+            requestAnimationFrame(poll);
+          }
+          requestAnimationFrame(poll);
+        })();
+      })();
+
+      // Load the EmulatorJS loader from the resolved data path (self-host or CDN).
+      (function () {
+        var base = window.EJS_pathtodata;
+        if (!base) { return; }
+        var s = document.createElement('script');
+        s.src = base + 'loader.js';
+        document.body.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

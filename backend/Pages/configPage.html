@@ -319,6 +319,10 @@
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">extension</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Integrations</span><span class="moonfinNavSub">Seerr, MDBList, TMDB</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="games">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">sports_esports</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Games</span><span class="moonfinNavSub">Retro / EmulatorJS</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="defaults">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">tune</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
@@ -465,6 +469,79 @@
                     </div>
 
                     </section>
+                    <section class="moonfinTabPanel" data-tab="games">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Retro Games (EmulatorJS)</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="GamesEnabled" is="emby-checkbox" />
+                                <span>Enable retro games</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Lets Moonfin clients browse and play ROMs from a "Mixed Content" library using
+                                <a href="https://github.com/EmulatorJS/EmulatorJS" target="_blank">EmulatorJS</a>.
+                                Organize ROMs as <code>System/&lt;game&gt;/rom.ext</code> with any BIOS files at the
+                                top of each system folder. No setup is needed for the emulator itself: cores stream
+                                from the EmulatorJS CDN by default. For offline use, drop the EmulatorJS
+                                <code>data/</code> folder into <code>&lt;plugin data&gt;/emulatorjs/data/</code> and it
+                                is used automatically.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Emulator cores</label>
+                            <div class="fieldDescription">
+                                <strong>Online (default):</strong> cores stream from the EmulatorJS CDN. Zero setup,
+                                but each client needs internet access when a game launches.<br>
+                                <strong>Offline (self-host):</strong> install the cores on this server once so clients
+                                play with no internet and lower latency. Use either option below; clients switch to
+                                the local copy automatically once it is installed.
+                            </div>
+                            <div style="margin-top:8px;">
+                                <span id="GameCoresStatus" style="font-size:0.9em;color:rgba(255,255,255,0.7);">Checking...</span>
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Upload cores zip</label>
+                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                                <input type="file" id="GameCoresFile" accept=".zip" />
+                                <button type="button" id="GameCoresUploadBtn" is="emby-button" class="raised">Upload &amp; install</button>
+                            </div>
+                            <div class="fieldDescription">
+                                Upload an EmulatorJS <code>data</code> folder zipped up (the zip must contain
+                                <code>loader.js</code> somewhere inside). Get it from
+                                <a href="https://github.com/EmulatorJS/EmulatorJS/releases/latest" target="_blank">EmulatorJS releases</a>
+                                (extract the archive and zip its <code>data</code> folder). ~290&nbsp;MB.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="GamesCoreZipUrl">Or download from a zip URL</label>
+                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                                <input type="url" id="GamesCoreZipUrl" is="emby-input" placeholder="https://.../emulatorjs-data.zip" style="flex:1;min-width:240px;" />
+                                <button type="button" id="GameCoresInstallBtn" is="emby-button" class="raised">Download to server</button>
+                            </div>
+                            <div class="fieldDescription">
+                                Downloads the zip in the background. Leave the URL blank to use an
+                                <code>emulatorjs-data.zip</code> asset on the plugin's GitHub release. Click Save below
+                                to persist the URL.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Game libraries</label>
+                            <div id="GameLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
+                            <div class="fieldDescription">
+                                Select the libraries that hold your game ROMs, then click Save below. If none
+                                are selected, libraries whose name contains "game", "rom", or "emulat" are
+                                auto-detected.
+                            </div>
+                        </div>
+                        <div class="fieldDescription">
+                            Box art is fetched automatically from the keyless
+                            <a href="https://thumbnails.libretro.com/" target="_blank">libretro thumbnail server</a>
+                            (matched by game name); no API keys or accounts are needed.
+                        </div>
+                    </div>
+
+                    </section>
                     <section class="moonfinTabPanel" data-tab="defaults">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Default User Settings</h3>
@@ -500,6 +577,7 @@
                                 <option value="classic">Classic</option>
                                 <option value="modern">Modern</option>
                             </select>
+                            <div class="fieldDescription">Default layout for item detail pages. Keep Not set to let users choose.</div>
                         </div>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DefaultFocusColor">Focus Highlight Color</label>
@@ -2509,6 +2587,11 @@
                     document.querySelector('#WebForcedServerUrl').value = config.WebForcedServerUrl || '';
                     document.querySelector('#WebEnableWebRtcScan').checked = config.WebEnableWebRtcScan !== false;
 
+                    document.querySelector('#GamesEnabled').checked = config.GamesEnabled === true;
+                    loadGameLibraryPicker(config.GameLibraryIds || []);
+                    initGameCores();
+                    document.querySelector('#GamesCoreZipUrl').value = config.GamesCoreZipUrl || '';
+
                     var defaults = config.DefaultUserSettings || {};
                     setSelectValue('#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
                     setSelectValue('#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
@@ -2653,6 +2736,108 @@
                     });
                 }
 
+                var gameCoresPollTimer = null;
+
+                function gameCoresHeaders() {
+                    var token = ApiClient.accessToken ? ApiClient.accessToken() : '';
+                    return token ? { 'Authorization': 'MediaBrowser Token="' + token + '"' } : {};
+                }
+
+                function refreshCoresStatus() {
+                    var statusEl = document.querySelector('#GameCoresStatus');
+                    var btn = document.querySelector('#GameCoresInstallBtn');
+                    if (!statusEl || !btn) return;
+                    var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                    fetch(serverUrl + '/Moonfin/Games/Cores/Status', { headers: gameCoresHeaders() })
+                        .then(function(r) { return r.json(); })
+                        .then(function(s) {
+                            if (s.downloading) {
+                                statusEl.textContent = 'Downloading cores... (' + (s.filesInstalled || 0) + ' files so far)';
+                                btn.disabled = true;
+                                if (!gameCoresPollTimer) gameCoresPollTimer = setInterval(refreshCoresStatus, 4000);
+                                return;
+                            }
+                            if (gameCoresPollTimer) { clearInterval(gameCoresPollTimer); gameCoresPollTimer = null; }
+                            btn.disabled = false;
+                            if (s.installed) {
+                                statusEl.textContent = 'Installed on server (offline ready).';
+                                btn.textContent = 'Re-download cores';
+                            } else if (s.state === 'failed') {
+                                statusEl.textContent = 'Download failed: ' + (s.error || 'unknown error');
+                            } else {
+                                statusEl.textContent = 'Using EmulatorJS CDN (no local cores).';
+                            }
+                        })
+                        .catch(function() { statusEl.textContent = ''; });
+                }
+
+                function initGameCores() {
+                    var btn = document.querySelector('#GameCoresInstallBtn');
+                    if (!btn || btn.dataset.wired === '1') { refreshCoresStatus(); return; }
+                    btn.dataset.wired = '1';
+                    btn.addEventListener('click', function() {
+                        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                        var statusEl = document.querySelector('#GameCoresStatus');
+                        if (statusEl) statusEl.textContent = 'Starting download...';
+                        btn.disabled = true;
+                        fetch(serverUrl + '/Moonfin/Games/Cores/Install', { method: 'POST', headers: gameCoresHeaders() })
+                            .then(function() { refreshCoresStatus(); })
+                            .catch(function() {
+                                if (statusEl) statusEl.textContent = 'Failed to start download.';
+                                btn.disabled = false;
+                            });
+                    });
+
+                    var uploadBtn = document.querySelector('#GameCoresUploadBtn');
+                    if (uploadBtn) {
+                        uploadBtn.addEventListener('click', function() {
+                            var fileInput = document.querySelector('#GameCoresFile');
+                            var statusEl = document.querySelector('#GameCoresStatus');
+                            var file = fileInput && fileInput.files ? fileInput.files[0] : null;
+                            if (!file) { if (statusEl) statusEl.textContent = 'Choose a .zip file first.'; return; }
+                            var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                            if (statusEl) statusEl.textContent = 'Uploading cores zip... (this can take a while)';
+                            uploadBtn.disabled = true;
+                            var headers = gameCoresHeaders();
+                            headers['Content-Type'] = 'application/octet-stream';
+                            fetch(serverUrl + '/Moonfin/Games/Cores/Upload', { method: 'POST', headers: headers, body: file })
+                                .then(function() { refreshCoresStatus(); })
+                                .catch(function() {
+                                    if (statusEl) statusEl.textContent = 'Upload failed.';
+                                })
+                                .finally(function() { uploadBtn.disabled = false; });
+                        });
+                    }
+
+                    refreshCoresStatus();
+                }
+
+                function loadGameLibraryPicker(selectedIds) {
+                    var picker = document.querySelector('#GameLibraryPicker');
+                    if (!picker) return;
+                    picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
+
+                    var userId = ApiClient.getCurrentUserId();
+                    ApiClient.getUserViews(userId).then(function(result) {
+                        var items = result.Items || [];
+                        if (items.length === 0) {
+                            picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No libraries found.</div>';
+                            return;
+                        }
+                        var html = '';
+                        for (var i = 0; i < items.length; i++) {
+                            var item = items[i];
+                            var isChecked = selectedIds.indexOf(item.Id) !== -1;
+                            html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
+                                '<input type="checkbox" class="gameLibraryCb" data-id="' + item.Id + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                                '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(item.Name || 'Untitled') + '</div>' +
+                                '<div style="font-size:0.75em;color:rgba(255,255,255,0.4);">' + esc(item.CollectionType || 'mixed') + '</div>' +
+                                '</div></label>';
+                        }
+                        picker.innerHTML = html;
+                    });
+                }
+
                 function loadAdminGenrePicker(selectedIds) {
                     var picker = document.querySelector('#DefaultGenrePicker');
                     if (!picker) return;
@@ -2699,6 +2884,12 @@
                         config.WebDefaultServerUrl = document.querySelector('#WebDefaultServerUrl').value || null;
                         config.WebForcedServerUrl = document.querySelector('#WebForcedServerUrl').value || null;
                         config.WebEnableWebRtcScan = document.querySelector('#WebEnableWebRtcScan').checked;
+
+                        config.GamesEnabled = document.querySelector('#GamesEnabled').checked;
+                        config.GameLibraryIds = Array.prototype.slice.call(
+                            document.querySelectorAll('.gameLibraryCb:checked')
+                        ).map(function (cb) { return cb.getAttribute('data-id'); });
+                        config.GamesCoreZipUrl = document.querySelector('#GamesCoreZipUrl').value || null;
 
                         config.DefaultUserSettings = config.DefaultUserSettings || {};
                         config.DefaultUserSettings.visualTheme = document.querySelector('#DefaultVisualTheme').value || null;
