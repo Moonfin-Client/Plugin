@@ -339,6 +339,10 @@
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">help_outline</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Help</span><span class="moonfinNavSub">Web plugin status</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="syncs">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">cloud_sync</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Active Downloads</span><span class="moonfinNavSub">Background transcodes</span></span>
+                        </button>
                     </nav>
                     <div class="moonfinAdminMain">
                     <div class="moonfinSearch">
@@ -1101,6 +1105,14 @@
                         </div>
                     </div>
 
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="syncs">
+                        <div class="verticalSection">
+                            <h3 class="sectionTitle">Active Downloads</h3>
+                            <div class="paperList" id="MoonfinActiveSyncsList" style="margin-top:1em; display:flex; flex-direction:column; gap:10px;">
+                                <div style="padding:16px; text-align:center; color:rgba(255,255,255,0.5);">Loading...</div>
+                            </div>
+                        </div>
                     </section>
                     <div class="moonfinSaveBar">
                         <button is="emby-button" type="submit" class="raised button-submit block">
@@ -3175,6 +3187,125 @@
                     });
                 }
             });
+
+            // Moonfin Active Syncs Polling
+            var syncsTimer = null;
+            var syncsLastData = {};
+            
+            function formatTime(totalSeconds) {
+                if (isNaN(totalSeconds) || !isFinite(totalSeconds)) return '--:--:--';
+                var h = Math.floor(totalSeconds / 3600);
+                var m = Math.floor((totalSeconds % 3600) / 60);
+                var s = Math.floor(totalSeconds % 60);
+                return [h, m > 9 ? m : '0' + m, s > 9 ? s : '0' + s].filter(function(val, i) { return val > 0 || i > 0; }).join(':');
+            }
+
+            function loadActiveSyncs() {
+                if (!document.querySelector('.moonfinNavItem[data-tab="syncs"]').classList.contains('is-active')) {
+                    return;
+                }
+                ApiClient.getJSON(ApiClient.getUrl("Moonfin/Transcodes/Active")).then(function(jobs) {
+                    var html = '';
+                    if (!jobs || jobs.length === 0) {
+                        html = '<div style="padding:16px; text-align:center; color:rgba(255,255,255,0.5);">No active background conversions</div>';
+                        syncsLastData = {};
+                    } else {
+                        var now = new Date().getTime();
+                        jobs.forEach(function(job) {
+                            var pct = job.CompletionPercentage ? job.CompletionPercentage.toFixed(1) : '0.0';
+                            var fps = job.Framerate ? job.Framerate.toFixed(1) : '0.0';
+                            var hwBadge = job.IsHardwareAccelerated ? '<span style="background:rgba(82, 181, 75, 0.2); color:#52b54b; padding:4px 10px; border-radius:12px; font-size:0.85em; margin-right:8px; font-weight:600;">🚀 Hardware Accelerated</span>' : '';
+                            var jobBadge = '<span style="background:rgba(255, 255, 255, 0.1); color:#fff; padding:4px 10px; border-radius:12px; font-size:0.85em; margin-right:8px; font-weight:600;">🆔 Job ID: ' + (job.Id || 'Unknown') + '</span>';
+                            
+                            var posText = '--:-- / --:--';
+                            if (job.PositionTicks && job.RuntimeTicks) {
+                                posText = formatTime(job.PositionTicks / 10000000) + ' / ' + formatTime(job.RuntimeTicks / 10000000);
+                            }
+                            
+                            var elapsedText = '--:--:--';
+                            if (job.StartTime) {
+                                var elapsedSecs = (now - new Date(job.StartTime).getTime()) / 1000;
+                                elapsedText = formatTime(elapsedSecs);
+                            }
+
+                            var bitrateText = job.BitRate ? (job.BitRate / 1000000).toFixed(1) + ' Mbps' : 'Unknown';
+
+                            var etaText = '--:--';
+                            if (job.Framerate && job.Framerate > 0 && job.PositionTicks && job.RuntimeTicks) {
+                                var remainingTicks = job.RuntimeTicks - job.PositionTicks;
+                                var remainingSecs = (remainingTicks / 10000000) / (job.Framerate / 24.0);
+                                etaText = formatTime(remainingSecs);
+                            }
+
+                            var speedMultText = job.Framerate ? '(' + (job.Framerate / 24.0).toFixed(1) + 'x)' : '';
+
+                            html += '<div style="background:rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius:10px; padding:16px; margin-bottom:12px; position:relative; overflow:hidden;">';
+                            
+                            html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">';
+                            html += '<div style="font-weight:600; font-size:1.15em; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85%;">' + (job.MediaSource || 'Unknown Media') + '</div>';
+                            html += '</div>';
+
+                            html += '<div style="margin-bottom:16px; display:flex; flex-wrap:wrap; gap:8px;">';
+                            html += jobBadge;
+                            html += hwBadge;
+                            html += '</div>';
+
+                            html += '<div style="margin-bottom:16px;">';
+                            html += '<div style="background:rgba(255,255,255,0.1); border-radius:6px; height:14px; width:100%; overflow:hidden; position:relative;">';
+                            html += '<div style="background: #00a4dc; height: 100%; width: ' + pct + '%; box-shadow: 0 0 10px rgba(0, 164, 220, 0.6); transition: width 3s linear;"></div>';
+                            html += '<div style="position:absolute; right:8px; top:0; font-size:0.75em; line-height:14px; color:#fff; font-weight:bold; text-shadow:1px 1px 2px #000;">' + pct + '%</div>';
+                            html += '</div>';
+                            
+                            html += '<div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; font-size:0.95em; margin-top:4px;">';
+                            html += '<div style="display:flex; align-items:center; gap:10px;"><span style="font-size:1.4em;">⚡</span><div><div style="color:rgba(255,255,255,0.5);font-size:0.85em;text-transform:uppercase;letter-spacing:1px;">Speed</div><div style="font-weight:500;">' + fps + ' fps ' + speedMultText + '</div></div></div>';
+                            html += '<div style="display:flex; align-items:center; gap:10px;"><span style="font-size:1.4em;">⏱️</span><div><div style="color:rgba(255,255,255,0.5);font-size:0.85em;text-transform:uppercase;letter-spacing:1px;">ETA</div><div style="font-weight:500;">' + etaText + ' remaining</div></div></div>';
+                            html += '<div style="display:flex; align-items:center; gap:10px;"><span style="font-size:1.4em;">📍</span><div><div style="color:rgba(255,255,255,0.5);font-size:0.85em;text-transform:uppercase;letter-spacing:1px;">Position</div><div style="font-weight:500;">' + posText + '</div></div></div>';
+                            html += '<div style="display:flex; align-items:center; gap:10px;"><span style="font-size:1.4em;">⏳</span><div><div style="color:rgba(255,255,255,0.5);font-size:0.85em;text-transform:uppercase;letter-spacing:1px;">Elapsed</div><div style="font-weight:500;">' + elapsedText + '</div></div></div>';
+                            html += '<div style="display:flex; align-items:center; gap:10px;"><span style="font-size:1.4em;">🎥</span><div><div style="color:rgba(255,255,255,0.5);font-size:0.85em;text-transform:uppercase;letter-spacing:1px;">Bitrate</div><div style="font-weight:500;">' + bitrateText + '</div></div></div>';
+                            html += '</div>';
+
+                            html += '<div style="display:flex; justify-content:flex-end; align-items:center; margin-top:8px;">';
+                            html += '<button type="button" class="btnCancelSync" data-jobid="' + job.Id + '" style="background:rgba(211, 47, 47, 0.1); border:1px solid #d32f2f; color:#ff5252; border-radius:6px; padding:8px 20px; cursor:pointer; font-weight:bold; transition:all 0.2s;">Cancel ❌</button>';
+                            html += '</div>';
+                            html += '</div>';
+                        });
+                    }
+                    var container = document.getElementById('MoonfinActiveSyncsList');
+                    if (container) {
+                        container.innerHTML = html;
+                        var cancelBtns = container.querySelectorAll('.btnCancelSync');
+                        for (var i=0; i<cancelBtns.length; i++) {
+                            cancelBtns[i].addEventListener('click', function(e) {
+                                var jid = this.getAttribute('data-jobid');
+                                if (confirm('Are you sure you want to cancel this background download?\\n\\nWARNING: Because this forcefully closes an active HTTP stream, the Moonfin client will incorrectly assume the download completed successfully and will keep the partial video file on the device.\\n\\nOnly use this to free up server resources!')) {
+                                    ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl("Moonfin/Transcodes/Active/" + jid) }).then(function() { loadActiveSyncs(); });
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+
+            var tabs = document.querySelectorAll('.moonfinNavItem');
+            for(var i=0; i<tabs.length; i++) {
+                tabs[i].addEventListener('click', function() {
+                    if (this.getAttribute('data-tab') === 'syncs') {
+                        loadActiveSyncs();
+                        if (!syncsTimer) syncsTimer = setInterval(loadActiveSyncs, 3000);
+                    } else {
+                        if (syncsTimer) { clearInterval(syncsTimer); syncsTimer = null; }
+                    }
+                });
+            }
+
+            // Fix for hard refresh: automatically start polling if tab is already active
+            setTimeout(function() {
+                var syncsTab = document.querySelector('.moonfinNavItem[data-tab="syncs"]');
+                if (syncsTab && syncsTab.classList.contains('is-active')) {
+                    loadActiveSyncs();
+                    if (!syncsTimer) syncsTimer = setInterval(loadActiveSyncs, 3000);
+                }
+            }, 600);
         </script>
     </div>
 </body>
