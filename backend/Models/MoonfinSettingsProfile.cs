@@ -250,7 +250,14 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("genresRowItemFilter")]
     public string? GenresRowItemFilter { get; set; }
+
+    [JsonPropertyName("hiddenContinueWatchingItems")]
+    public string? HiddenContinueWatchingItems { get; set; }
+
+    [JsonPropertyName("hiddenNextUpSeries")]
+    public string? HiddenNextUpSeries { get; set; }
 }
+
 
 /// <summary>
 /// A Moonfin home section entry. Built-in sections only need Type/Enabled/Order.
