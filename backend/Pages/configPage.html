@@ -653,6 +653,14 @@
                             <div class="fieldDescription">Color used for focused cards and controls.</div>
                         </div>
                         <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultBrowsingBlur">Browsing Blur</label>
+                            <input type="number" id="DefaultBrowsingBlur" is="emby-input" min="0" max="100" step="1" placeholder="Not set" />
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultDetailsScreenBlur">Detail Screen Blur</label>
+                            <input type="number" id="DefaultDetailsScreenBlur" is="emby-input" min="0" max="100" step="1" placeholder="Not set" />
+                        </div>
+                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DefaultWatchedIndicator">Watched Indicator</label>
                             <select id="DefaultWatchedIndicator" is="emby-select">
                                 <option value="">Not set (user decides)</option>
@@ -738,6 +746,14 @@
                             <div class="fieldDescription">Visual style/mode for the media bar.</div>
                         </div>
                         <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarTrailerPreview">Trailer In Media Bar</label>
+                            <select id="DefaultMediaBarTrailerPreview" is="emby-select">
+                                <option value="">Not set (user decides)</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarTrailerAudio">Trailer Audio In Media Bar</label>
                             <select id="DefaultMediaBarTrailerAudio" is="emby-select">
                                 <option value="">Not set (user decides)</option>
@@ -799,6 +815,14 @@
                                         <option value="medium">Medium</option>
                                         <option value="large">Large</option>
                                         <option value="extraLarge">Extra Large</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultThemeMusicOnHomeRows">Play Theme Music on Home Rows</label>
+                                    <select id="DefaultThemeMusicOnHomeRows" is="emby-select">
+                                        <option value="">Not set (user decides)</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
                                     </select>
                                 </div>
                                 <div class="inputContainer">
