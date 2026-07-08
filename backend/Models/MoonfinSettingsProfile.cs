@@ -74,6 +74,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("navbarOpacity")]
     public int? NavbarOpacity { get; set; }
 
+    [JsonPropertyName("navbarAlwaysExpanded")]
+    public int? NavbarAlwaysExpanded { get; set; }
+
     [JsonPropertyName("focusColor")]
     public string? FocusColor { get; set; }
 
@@ -238,6 +241,12 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("displayAudioRows")]
     public bool? DisplayAudioRows { get; set; }
+
+    [JsonPropertyName("displaySinceYouWatchedRows")]
+    public bool? DisplaySinceYouWatchedRows { get; set; }
+
+    [JsonPropertyName("displayRewatchRow")]
+    public bool? DisplayRewatchRow { get; set; }
 
     [JsonPropertyName("favoritesRowSortBy")]
     public string? FavoritesRowSortBy { get; set; }
