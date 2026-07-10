@@ -75,7 +75,7 @@ public class MoonfinSettingsProfile
     public int? NavbarOpacity { get; set; }
 
     [JsonPropertyName("navbarAlwaysExpanded")]
-    public int? NavbarAlwaysExpanded { get; set; }
+    public bool? NavbarAlwaysExpanded { get; set; }
 
     [JsonPropertyName("focusColor")]
     public string? FocusColor { get; set; }
