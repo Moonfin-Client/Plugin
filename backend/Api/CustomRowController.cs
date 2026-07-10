@@ -19,21 +19,27 @@ public class CustomRowController : ControllerBase
 {
     private readonly MoonfinSettingsService _settingsService;
     private readonly CustomRowCacheService _cacheService;
+    private readonly ImdbListsCacheService _imdbCacheService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CustomRowController> _logger;
+    private readonly ILogger<ImdbListsTask> _taskLogger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
 
     public CustomRowController(
         MoonfinSettingsService settingsService,
         CustomRowCacheService cacheService,
+        ImdbListsCacheService imdbCacheService,
         IHttpClientFactory httpClientFactory,
-        ILogger<CustomRowController> logger)
+        ILogger<CustomRowController> logger,
+        ILogger<ImdbListsTask> taskLogger)
     {
         _settingsService = settingsService;
         _cacheService = cacheService;
+        _imdbCacheService = imdbCacheService;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _taskLogger = taskLogger;
     }
 
     [HttpGet("Items")]
@@ -58,6 +64,24 @@ public class CustomRowController : ControllerBase
         if (userId == null)
         {
             return Unauthorized(new { Error = "User not authenticated" });
+        }
+
+        if (source == "imdb")
+        {
+            try
+            {
+                var imdbItems = await FetchImdbList(type, cancellationToken);
+                return Ok(new CustomRowResponse
+                {
+                    Success = true,
+                    Items = imdbItems
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to resolve IMDb custom row for type: {Type}", type);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { Error = ex.Message });
+            }
         }
 
         var paramHash = GetStringSha256Hash(@params);
@@ -711,6 +735,34 @@ public class CustomRowController : ControllerBase
             uriBuilder.Query = query.ToString();
             request.RequestUri = uriBuilder.Uri;
         }
+    }
+
+    private async Task<List<CustomRowItem>> FetchImdbList(string type, CancellationToken cancellationToken)
+    {
+        var cached = _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(1));
+        if (cached != null && cached.Count > 0)
+        {
+            return cached;
+        }
+
+        _logger.LogInformation("IMDb chart {Type} cache miss or expired, fetching on-demand", type);
+        try
+        {
+            var task = new ImdbListsTask(_httpClientFactory, _imdbCacheService, _taskLogger);
+            var items = await task.FetchChartAsync(type, cancellationToken);
+            if (items != null && items.Count > 0)
+            {
+                _imdbCacheService.SetItems(type, items);
+                await _imdbCacheService.FlushAsync();
+                return items;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch IMDb chart {Type} on-demand", type);
+        }
+
+        return _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(30)) ?? new List<CustomRowItem>();
     }
 
     private static string GetStringSha256Hash(string text)

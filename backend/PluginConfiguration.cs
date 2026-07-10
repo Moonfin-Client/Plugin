@@ -68,6 +68,11 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool MdblistOfficialListsEnabled { get; set; } = true;
 
     /// <summary>
+    /// Fetch and cache IMDb lists (curated charts) on a schedule so clients can show them as home rows.
+    /// </summary>
+    public bool ImdbListsEnabled { get; set; } = true;
+
+    /// <summary>
     /// Maximum number of items cached per official list. Caps cache size and API calls
     /// (250 covers charts like IMDb Top 250).
     /// </summary>
