@@ -82,7 +82,9 @@ public sealed class MoonfinTranscodesController : ControllerBase
                     DateTime? startTime = null;
                     try
                     {
-                        startTime = job.Process?.StartTime;
+                        // Report the start in UTC so the browser measures elapsed
+                        // time correctly even when it sits in a different timezone.
+                        startTime = job.Process?.StartTime.ToUniversalTime();
                     }
                     catch
                     {
