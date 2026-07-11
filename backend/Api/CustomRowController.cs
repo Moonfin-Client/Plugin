@@ -737,6 +737,12 @@ public class CustomRowController : ControllerBase
         }
     }
 
+    // One gate per chart so a burst of clients on an expired chart triggers a single scrape
+    // instead of one per request. Only the handful of chart types ever get added, so the map
+    // doesn't grow unbounded.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ImdbFetchGates =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private async Task<List<CustomRowItem>> FetchImdbList(string type, CancellationToken cancellationToken)
     {
         var cached = _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(1));
@@ -745,24 +751,40 @@ public class CustomRowController : ControllerBase
             return cached;
         }
 
-        _logger.LogInformation("IMDb chart {Type} cache miss or expired, fetching on-demand", type);
+        var gate = ImdbFetchGates.GetOrAdd(type, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var task = new ImdbListsTask(_httpClientFactory, _imdbCacheService, _taskLogger);
-            var items = await task.FetchChartAsync(type, cancellationToken);
-            if (items != null && items.Count > 0)
+            // Another request may have refilled the cache while we waited on the gate.
+            var refreshed = _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(1));
+            if (refreshed != null && refreshed.Count > 0)
             {
-                _imdbCacheService.SetItems(type, items);
-                await _imdbCacheService.FlushAsync();
-                return items;
+                return refreshed;
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to fetch IMDb chart {Type} on-demand", type);
-        }
 
-        return _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(30)) ?? new List<CustomRowItem>();
+            _logger.LogInformation("IMDb chart {Type} cache miss or expired, fetching on-demand", type);
+            try
+            {
+                var task = new ImdbListsTask(_httpClientFactory, _imdbCacheService, _taskLogger);
+                var items = await task.FetchChartAsync(type, cancellationToken);
+                if (items != null && items.Count > 0)
+                {
+                    _imdbCacheService.SetItems(type, items);
+                    await _imdbCacheService.FlushAsync();
+                    return items;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to fetch IMDb chart {Type} on-demand", type);
+            }
+
+            return _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(30)) ?? new List<CustomRowItem>();
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private static string GetStringSha256Hash(string text)

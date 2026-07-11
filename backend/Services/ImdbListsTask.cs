@@ -173,9 +173,10 @@ public class ImdbListsTask : IScheduledTask
             }
 
             int? year = null;
-            if (node.TryGetProperty("releaseYear", out var yearEl) && yearEl.ValueKind == JsonValueKind.Object && yearEl.TryGetProperty("year", out var yearProp))
+            if (node.TryGetProperty("releaseYear", out var yearEl) && yearEl.ValueKind == JsonValueKind.Object && yearEl.TryGetProperty("year", out var yearProp)
+                && yearProp.ValueKind == JsonValueKind.Number && yearProp.TryGetInt32(out var parsedYear))
             {
-                year = yearProp.GetInt32();
+                year = parsedYear;
             }
 
             var typeId = "movie";
