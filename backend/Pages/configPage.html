@@ -1057,6 +1057,14 @@
                             </select>
                         </div>
                         <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultMdblistShowRatingNames">Show Rating Labels</label>
+                            <select id="DefaultMdblistShowRatingNames" is="emby-select">
+                                <option value="">Not set (user decides)</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused">Default Rating Sources &amp; Order</label>
                             <div class="fieldDescription" style="margin-bottom:0.5em;">Check which ratings to display and drag or use the arrows to set their order. Leave all unchecked to use each user's own choice.</div>
                             <div id="DefaultMdblistRatingSourcesList" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
@@ -2752,6 +2760,7 @@
                     document.querySelector('#DefaultMdblistEnabled').checked = !!defaults.mdblistEnabled;
                     document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked = !!defaults.tmdbEpisodeRatingsEnabled;
                     setNullableBoolSelect('#DefaultMdblistShowRatingBadges', defaults.mdblistShowRatingBadges);
+                    setNullableBoolSelect('#DefaultMdblistShowRatingNames', defaults.mdblistShowRatingNames);
                     loadRatingSourcesPicker(defaults.mdblistRatingSources || null);
                     setNullableBoolSelect('#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
 
@@ -3128,10 +3137,10 @@
                         config.DefaultUserSettings.mediaBarTrailerPreview = getNullableBoolSelect('#DefaultMediaBarTrailerPreview');
                         config.DefaultUserSettings.episodePreviewEnabled = getNullableBoolSelect('#DefaultEpisodePreviewEnabled');
                         config.DefaultUserSettings.previewAudioEnabled = getNullableBoolSelect('#DefaultPreviewAudioEnabled');
-
                         config.DefaultUserSettings.mdblistEnabled = document.querySelector('#DefaultMdblistEnabled').checked;
                         config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = document.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
                         config.DefaultUserSettings.mdblistShowRatingBadges = getNullableBoolSelect('#DefaultMdblistShowRatingBadges');
+                        config.DefaultUserSettings.mdblistShowRatingNames = getNullableBoolSelect('#DefaultMdblistShowRatingNames');
                         config.DefaultUserSettings.mdblistRatingSources = getRatingSourcesValue();
                         config.DefaultUserSettings.seerrBlockNsfw = getNullableBoolSelect('#DefaultSeerrBlockNsfw');
 
