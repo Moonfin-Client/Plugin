@@ -251,8 +251,35 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("displaySinceYouWatchedRows")]
     public bool? DisplaySinceYouWatchedRows { get; set; }
 
+    [JsonPropertyName("sinceYouWatchedSource")]
+    public string? SinceYouWatchedSource { get; set; }
+
+    [JsonPropertyName("sinceYouWatchedSourceType")]
+    public string? SinceYouWatchedSourceType { get; set; }
+
+    [JsonPropertyName("sinceYouWatchedSourceItem")]
+    public string? SinceYouWatchedSourceItem { get; set; }
+
+    [JsonPropertyName("sinceYouWatchedNumRows")]
+    public int? SinceYouWatchedNumRows { get; set; }
+
+    [JsonPropertyName("sinceYouWatchedIncludeWatched")]
+    public bool? SinceYouWatchedIncludeWatched { get; set; }
+
     [JsonPropertyName("displayRewatchRow")]
     public bool? DisplayRewatchRow { get; set; }
+
+    [JsonPropertyName("rewatchSortBy")]
+    public string? RewatchSortBy { get; set; }
+
+    [JsonPropertyName("rewatchIncludeMovies")]
+    public bool? RewatchIncludeMovies { get; set; }
+
+    [JsonPropertyName("rewatchIncludeShows")]
+    public bool? RewatchIncludeShows { get; set; }
+
+    [JsonPropertyName("rewatchIncludeCollections")]
+    public bool? RewatchIncludeCollections { get; set; }
 
     [JsonPropertyName("favoritesRowSortBy")]
     public string? FavoritesRowSortBy { get; set; }
