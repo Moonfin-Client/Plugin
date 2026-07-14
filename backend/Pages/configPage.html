@@ -635,6 +635,15 @@
                             <div class="fieldDescription">Default layout for item detail pages. Keep Not set to let users choose.</div>
                         </div>
                         <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultDetailExpandedTabs">Detail Screen Expanded Tabs</label>
+                            <select id="DefaultDetailExpandedTabs" is="emby-select">
+                                <option value="">Not set (user decides)</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                            <div class="fieldDescription">Default layout for item detail pages. Keep Not set to let users choose.</div>
+                        </div>
+                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DefaultFocusColor">Focus Highlight Color</label>
                             <select id="DefaultFocusColor" is="emby-select">
                                 <option value="">Not set (user decides)</option>
@@ -2704,6 +2713,7 @@
                     var defaults = config.DefaultUserSettings || {};
                     setSelectValue('#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
                     setSelectValue('#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
+                    setNullableBoolSelect('#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
                     setSelectValue('#DefaultFocusColor', defaults.focusColor, 'Configured color');
                     setNullableIntInput('#DefaultBrowsingBlur', defaults.browsingBlur);
                     setNullableIntInput('#DefaultDetailsScreenBlur', defaults.detailsScreenBlur);
@@ -3063,6 +3073,7 @@
                         config.DefaultUserSettings = config.DefaultUserSettings || {};
                         config.DefaultUserSettings.visualTheme = document.querySelector('#DefaultVisualTheme').value || null;
                         config.DefaultUserSettings.detailScreenStyle = document.querySelector('#DefaultDetailScreenStyle').value || null;
+                        config.DefaultUserSettings.detailExpandedTabs = getNullableBoolSelect('#DefaultDetailExpandedTabs');
                         config.DefaultUserSettings.focusColor = document.querySelector('#DefaultFocusColor').value || null;
                         config.DefaultUserSettings.browsingBlur = getNullableIntInput('#DefaultBrowsingBlur');
                         config.DefaultUserSettings.detailsScreenBlur = getNullableIntInput('#DefaultDetailsScreenBlur');
