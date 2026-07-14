@@ -83,6 +83,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("detailScreenStyle")]
     public string? DetailScreenStyle { get; set; }
 
+    [JsonPropertyName("detailExpandedTabs")]
+    public string? DetailExpandedTabs { get; set; }
+
     [JsonPropertyName("visualTheme")]
     public string? VisualTheme { get; set; }
 
