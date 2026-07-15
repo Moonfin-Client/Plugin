@@ -1728,6 +1728,12 @@
                 { type: 'favoritesongs', label: 'Favorite Songs' },
                 { type: 'genres', label: 'Genres' },
                 { type: 'playlists', label: 'Playlists' },
+                { type: 'since-you-watched-1', label: "Since You Watched 1" },
+                { type: 'since-you-watched-2', label: "Since You Watched 2" },
+                { type: 'since-you-watched-3', label: "Since You Watched 3" },
+                { type: 'since-you-watched-4', label: "Since You Watched 4" },
+                { type: 'since-you-watched-5', label: "Since You Watched 5" },
+                { type: 'rewatch', label: "Rewatch" },
                 { type: 'seerr_recent_requests', label: 'Seerr Recent Requests' },
                 { type: 'seerr_recently_added', label: 'Seerr Recently Added' },
                 { type: 'seerr_popular_movies', label: 'Seerr Popular Movies' },
@@ -1738,7 +1744,22 @@
                 { type: 'seerr_movie_genres', label: 'Seerr Movie Genres' },
                 { type: 'seerr_studios', label: 'Seerr Studios' },
                 { type: 'seerr_series_genres', label: 'Seerr Series Genres' },
-                { type: 'seerr_networks', label: 'Seerr Networks' }
+                { type: 'seerr_networks', label: 'Seerr Networks' },
+                { type: 'tmdb_popular_movies', label: 'TMDB Popular Movies' },
+	            { type: 'tmdb_top_rated_movies', label: 'TMDB Top Rated Movies' },
+	            { type: 'tmdb_now_playing_movies', label: 'TMDB Now Playing Movies' },
+	            { type: 'tmdb_upcoming_movies', label: 'TMDB Upcoming Movies' },
+	            { type: 'tmdb_popular_tv', label: 'TMDB Popular TV' },
+	            { type: 'tmdb_top_rated_tv', label: 'TMDB Top Rated TV' },
+	            { type: 'tmdb_airing_today_tv', label: 'TMDB Airing Today TV' },
+	            { type: 'tmdb_on_the_air_tv', label: 'TMDB On The Air TV' },
+	            { type: 'tmdb_trending_movie_daily', label: 'TMDB Trending Movies (Daily)' },
+	            { type: 'tmdb_trending_movie_weekly', label: 'TMDB Trending Movies (Weekly)' },
+	            { type: 'tmdb_trending_tv_daily', label: 'TMDB Trending TV (Daily)' },
+	            { type: 'tmdb_trending_tv_weekly', label: 'TMDB Trending TV (Weekly)' },
+	            { type: 'tmdb_trending_all_weekly', label: 'TMDB Trending All (Weekly)' },
+	            { type: 'radarr_calendar', label: 'Radarr Upcoming' },
+	            { type: 'sonarr_calendar', label: 'Sonarr Upcoming' }
             ];
 
             function loadRatingSourcesPicker(selectedIds) {
@@ -1800,7 +1821,8 @@
                 { id: 'collections', label: 'Collections' },
                 { id: 'playlists', label: 'Playlists' },
                 { id: 'genres', label: 'Genres' },
-                { id: 'seerr', label: 'Seerr' }
+                { id: 'seerr', label: 'Seerr' },
+                { id: 'external', label: 'External Lists' }
             ];
 
             var HOME_LAYOUT_SEERR_TYPES = {
@@ -1814,11 +1836,33 @@
                 seerr_movie_genres: true,
                 seerr_studios: true,
                 seerr_series_genres: true,
-                seerr_networks: true
+                seerr_networks: true,
+                radarr_calendar: true,
+	            sonarr_calendar: true
             };
+
+            var HOME_LAYOUT_EXTERNAL_LISTS = {
+                tmdb_popular_movies: true,
+	            tmdb_top_rated_movies: true,
+	            tmdb_now_playing_movies: true,
+	            tmdb_upcoming_movies: true,
+	            tmdb_popular_tv: true,
+	            tmdb_top_rated_tv: true,
+	            tmdb_airing_today_tv: true,
+	            tmdb_on_the_air_tv: true,
+	            tmdb_trending_movie_daily: true,
+	            tmdb_trending_movie_weekly: true,
+	            tmdb_trending_tv_daily: true,
+	            tmdb_trending_tv_weekly: true,
+	            tmdb_trending_all_weekly: true
+            }
 
             function isSeerrHomeSectionType(type) {
                 return !!HOME_LAYOUT_SEERR_TYPES[type];
+            }
+
+            function isExternalHomeSectionType(type) {
+                return !!HOME_LAYOUT_EXTERNAL_LISTS[type];
             }
 
             var HOME_LAYOUT_STATE = {
@@ -1831,7 +1875,8 @@
                     collections: [],
                     playlists: [],
                     genres: [],
-                    seerr: []
+                    seerr: [],
+                    external: [],
                 },
             };
 
@@ -1851,7 +1896,7 @@
             function homeSectionMeta(section) {
                 if (!section) return 'Basics';
                 if (section.kind !== 'pluginDynamic') {
-                    return isSeerrHomeSectionType(section.type) ? 'Seerr' : 'Basics';
+                    return isSeerrHomeSectionType(section.type) ? 'Seerr' : (isExternalHomeSectionType(section.type) ? 'External Lists' : 'Basics');
                 }
                 if (section.pluginSource === 'collections') return 'Collection';
                 if (section.pluginSource === 'playlists') return 'Playlist';
@@ -1862,6 +1907,7 @@
             function homeSectionBadgeClass(section) {
                 if (!section || section.kind !== 'pluginDynamic') {
                     if (section && isSeerrHomeSectionType(section.type)) return 'homeLayoutBadge-seerr';
+                    if (section && isExternalHomeSectionType(section.type)) return 'homeLayoutBadge-external';
                     return 'homeLayoutBadge-builtin';
                 }
                 if (section.pluginSource === 'collections') return 'homeLayoutBadge-collections';
@@ -1970,8 +2016,8 @@
                     key: 'builtin:' + definition.type,
                     tab: 'builtin',
                     label: definition.label,
-                    meta: isSeerrHomeSectionType(definition.type) ? 'Seerr' : 'Basics',
-                    badgeClass: isSeerrHomeSectionType(definition.type) ? 'homeLayoutBadge-seerr' : 'homeLayoutBadge-builtin',
+                    meta: isSeerrHomeSectionType(definition.type) ? 'Seerr' : (isExternalHomeSectionType(section.type) ? 'External Lists' : 'Basics'),
+                    badgeClass: isSeerrHomeSectionType(definition.type) ? 'homeLayoutBadge-seerr' : (isExternalHomeSectionType(section.type) ? 'homeLayoutBadge-external' : 'homeLayoutBadge-builtin'),
                     section: {
                         kind: 'builtin',
                         type: definition.type,
@@ -2004,10 +2050,13 @@
 
             function initializeHomeLayoutAvailableRows() {
                 HOME_LAYOUT_STATE.available.builtin = HOME_SECTION_DEFINITIONS
-                    .filter(function(definition) { return !isSeerrHomeSectionType(definition.type); })
+                    .filter(function(definition) { return (!isSeerrHomeSectionType(definition.type) && !isExternalHomeSectionType(definition.type)); })
                     .map(createBuiltinCandidate);
                 HOME_LAYOUT_STATE.available.seerr = HOME_SECTION_DEFINITIONS
                     .filter(function(definition) { return isSeerrHomeSectionType(definition.type); })
+                    .map(createBuiltinCandidate);
+                HOME_LAYOUT_STATE.available.external = HOME_SECTION_DEFINITIONS
+                    .filter(function(definition) { return isExternalHomeSectionType(definition.type); })
                     .map(createBuiltinCandidate);
             }
 
