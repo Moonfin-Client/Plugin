@@ -1441,7 +1441,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultDisplayFavoritesRows', defaults.displayFavoritesRows);
             setNullableBoolSelect(view, '#DefaultDisplayCollectionsRows', defaults.displayCollectionsRows);
             setNullableBoolSelect(view, '#DefaultDisplayGenresRows', defaults.displayGenresRows);
-            setNullableBoolSelect(view, '#DefaultDisplaySeerrRows', defaults.displaySeerrRows);
             setNullableBoolSelect(view, '#DefaultDisplayPlaylistsRows', defaults.displayPlaylistsRows);
             setNullableBoolSelect(view, '#DefaultDisplayAudioRows', defaults.displayAudioRows);
             setSelectValue(view, '#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
@@ -1545,7 +1544,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.displayFavoritesRows = getNullableBoolSelect(view, '#DefaultDisplayFavoritesRows');
             d.displayCollectionsRows = getNullableBoolSelect(view, '#DefaultDisplayCollectionsRows');
             d.displayGenresRows = getNullableBoolSelect(view, '#DefaultDisplayGenresRows');
-            d.displaySeerrRows = getNullableBoolSelect(view, '#DefaultDisplaySeerrRows');
             d.displayPlaylistsRows = getNullableBoolSelect(view, '#DefaultDisplayPlaylistsRows');
             d.displayAudioRows = getNullableBoolSelect(view, '#DefaultDisplayAudioRows');
             d.favoritesRowSortBy = view.querySelector('#DefaultFavoritesRowSortBy').value || null;
