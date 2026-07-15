@@ -887,14 +887,6 @@
                                     </select>
                                 </div>
                                 <div class="inputContainer">
-                                    <label class="inputLabel inputLabelUnfocused" for="DefaultDisplaySeerrRows">Show Seerr Rows</label>
-                                    <select id="DefaultDisplaySeerrRows" is="emby-select">
-                                        <option value="">Not set (user decides)</option>
-                                        <option value="true">Yes</option>
-                                        <option value="false">No</option>
-                                    </select>
-                                </div>
-                                <div class="inputContainer">
                                     <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortBy">Favorites Row Sort</label>
                                     <select id="DefaultFavoritesRowSortBy" is="emby-select">
                                         <option value="">Not set (user decides)</option>
@@ -2747,7 +2739,6 @@
                     setNullableBoolSelect('#DefaultDisplayGenresRows', defaults.displayGenresRows);
                     setNullableBoolSelect('#DefaultDisplayPlaylistsRows', defaults.displayPlaylistsRows);
                     setNullableBoolSelect('#DefaultDisplayAudioRows', defaults.displayAudioRows);
-                    setNullableBoolSelect('#DefaultDisplaySeerrRows', defaults.displaySeerrRows);
                     setSelectValue('#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
                     setSelectValue('#DefaultCollectionsRowSortBy', defaults.collectionsRowSortBy, 'Configured sort');
                     setSelectValue('#DefaultGenresRowSortBy', defaults.genresRowSortBy, 'Configured sort');
@@ -3127,7 +3118,6 @@
                         config.DefaultUserSettings.displayGenresRows = getNullableBoolSelect('#DefaultDisplayGenresRows');
                         config.DefaultUserSettings.displayPlaylistsRows = getNullableBoolSelect('#DefaultDisplayPlaylistsRows');
                         config.DefaultUserSettings.displayAudioRows = getNullableBoolSelect('#DefaultDisplayAudioRows');
-                        config.DefaultUserSettings.displaySeerrRows = getNullableBoolSelect('#DefaultDisplaySeerrRows');
                         config.DefaultUserSettings.favoritesRowSortBy = document.querySelector('#DefaultFavoritesRowSortBy').value || null;
                         config.DefaultUserSettings.collectionsRowSortBy = document.querySelector('#DefaultCollectionsRowSortBy').value || null;
                         config.DefaultUserSettings.genresRowSortBy = document.querySelector('#DefaultGenresRowSortBy').value || null;
