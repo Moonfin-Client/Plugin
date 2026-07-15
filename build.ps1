@@ -75,6 +75,7 @@ if (Test-Path $ManifestFile) {
     # Read as UTF-8 explicitly, Get-Content defaults to the system codepage on
     # Windows PowerShell 5.1 and would mangle non-ASCII characters
     $Manifest = [System.IO.File]::ReadAllText($ManifestFile) | ConvertFrom-Json
+    $Manifest = @($Manifest)
 
     $Manifest[0].versions[0].version = $Version
     $Manifest[0].versions[0].targetAbi = "${TargetAbi}.0"
@@ -82,6 +83,9 @@ if (Test-Path $ManifestFile) {
     $Manifest[0].versions[0].timestamp = $Timestamp
 
     $Json = ConvertTo-Json -InputObject $Manifest -Depth 10
+    if ($Manifest.Count -eq 1 -and -not $Json.TrimStart().StartsWith('[')) {
+        $Json = "[$Json]"
+    }
     [System.IO.File]::WriteAllText($ManifestFile, $Json, (New-Object System.Text.UTF8Encoding $false))
     Write-Host "Updated manifest.json with new checksum and version"
 }

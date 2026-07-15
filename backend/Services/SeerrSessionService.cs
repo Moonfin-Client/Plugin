@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -122,27 +123,74 @@ public class SeerrSessionService
         return value.Length > 0;
     }
 
-    // Reads connect.sid (URL-decoded) from a response, preferring the Set-Cookie header
-    // since CookieContainer.GetCookies can miss it for IP-based hosts. Storing one
-    // canonical decoded form keeps capture and rotation consistent.
-    private static string? ReadSessionCookie(HttpResponseMessage response, CookieContainer jar, string seerrUrl)
+    // CSRF cookies Seerr sets next to the session cookie. They are never the session
+    // cookie, so we skip them when looking for a renamed one.
+    private static readonly string[] NonSessionCookieNames = { "XSRF-TOKEN", "_csrf" };
+
+    // express-session signs its cookie, so the decoded value starts with "s:". That tells
+    // the real session cookie apart from CSRF tokens and proxy or CDN cookies.
+    private static bool LooksLikeSignedSession(string decodedValue)
+        => decodedValue.StartsWith("s:", StringComparison.Ordinal);
+
+    // Reads the Seerr session cookie and its name from a response, decoding the value. We
+    // check the Set-Cookie header first because CookieContainer.GetCookies can miss it for
+    // IP-based hosts.
+    //
+    // The name is not fixed. Standard Jellyseerr and Overseerr use "connect.sid", but a
+    // rebranded Seerr can rename it (SparkBox issues "sb.sid"). We take "connect.sid" when
+    // it is there, otherwise the cookie carrying an express-session signed value, which
+    // identifies the session without special-casing any one name.
+    private static (string? Name, string? Value) ReadSessionCookie(HttpResponseMessage response, CookieContainer jar, string seerrUrl)
     {
         if (response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders))
         {
-            foreach (var header in setCookieHeaders)
+            var headers = setCookieHeaders.ToList();
+
+            // Try the express-session default name first.
+            foreach (var header in headers)
             {
-                if (header.StartsWith("connect.sid=", StringComparison.OrdinalIgnoreCase))
-                {
-                    var value = header.Substring("connect.sid=".Length);
-                    var semi = value.IndexOf(';');
-                    if (semi >= 0) value = value.Substring(0, semi);
-                    return Uri.UnescapeDataString(value);
-                }
+                if (TryReadSetCookie(header, "connect.sid", out var value))
+                    return ("connect.sid", Uri.UnescapeDataString(value));
+            }
+
+            // Otherwise take the first cookie with a signed value that is not a CSRF cookie.
+            foreach (var header in headers)
+            {
+                var eq = header.IndexOf('=');
+                if (eq <= 0) continue;
+
+                var name = header[..eq].Trim();
+                if (NonSessionCookieNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    continue;
+
+                if (!TryReadSetCookie(header, name, out var rawValue))
+                    continue;
+
+                var value = Uri.UnescapeDataString(rawValue);
+                if (LooksLikeSignedSession(value))
+                    return (name, value);
             }
         }
 
-        var raw = jar.GetCookies(new Uri(seerrUrl))["connect.sid"]?.Value;
-        return string.IsNullOrEmpty(raw) ? null : Uri.UnescapeDataString(raw);
+        // Fall back to the cookie jar. Default name first, then any cookie with a signed value.
+        var jarCookies = jar.GetCookies(new Uri(seerrUrl));
+        var known = jarCookies["connect.sid"];
+        if (known != null && !string.IsNullOrEmpty(known.Value))
+            return ("connect.sid", Uri.UnescapeDataString(known.Value));
+
+        foreach (Cookie cookie in jarCookies)
+        {
+            if (NonSessionCookieNames.Contains(cookie.Name, StringComparer.OrdinalIgnoreCase))
+                continue;
+            if (string.IsNullOrEmpty(cookie.Value))
+                continue;
+
+            var value = Uri.UnescapeDataString(cookie.Value);
+            if (LooksLikeSignedSession(value))
+                return (cookie.Name, value);
+        }
+
+        return (null, null);
     }
 
     // Maps a non-API upstream response (a redirect or an HTML proxy login/error page)
@@ -293,7 +341,7 @@ public class SeerrSessionService
                 };
             }
 
-            var sessionCookie = ReadSessionCookie(response, cookieContainer, seerrUrl);
+            var (sessionCookieName, sessionCookie) = ReadSessionCookie(response, cookieContainer, seerrUrl);
 
             if (string.IsNullOrEmpty(sessionCookie))
             {
@@ -314,6 +362,7 @@ public class SeerrSessionService
             {
                 JellyfinUserId = userId,
                 SessionCookie = sessionCookie,
+                SessionCookieName = sessionCookieName ?? "connect.sid",
                 SeerrUserId = userInfo.TryGetProperty("id", out var idProp) ? idProp.GetInt32() : 0,
                 Username = username,
                 DisplayName = userInfo.TryGetProperty("displayName", out var dnProp) ? dnProp.GetString() : username,
@@ -399,7 +448,7 @@ public class SeerrSessionService
         try
         {
             var cookieContainer = new CookieContainer();
-            cookieContainer.Add(new Uri(seerrUrl), new Cookie("connect.sid", session.SessionCookie));
+            cookieContainer.Add(new Uri(seerrUrl), new Cookie(session.SessionCookieName, session.SessionCookie));
 
             using var handler = new HttpClientHandler
             {
@@ -440,7 +489,7 @@ public class SeerrSessionService
     }
 
     /// <summary>
-    /// Checks if Seerr rotated the connect.sid cookie and updates the session if so.
+    /// Checks if Seerr rotated the session cookie and updates the session if so.
     /// Express.js with rolling sessions may issue a new cookie on every response.
     /// </summary>
     private async Task CheckForRotatedCookieAsync(
@@ -449,10 +498,14 @@ public class SeerrSessionService
         CookieContainer cookieContainer,
         string seerrUrl)
     {
-        var updatedCookie = ReadSessionCookie(response, cookieContainer, seerrUrl);
+        var (updatedName, updatedCookie) = ReadSessionCookie(response, cookieContainer, seerrUrl);
         if (!string.IsNullOrEmpty(updatedCookie) && updatedCookie != session.SessionCookie)
         {
             session.SessionCookie = updatedCookie;
+            if (!string.IsNullOrEmpty(updatedName))
+            {
+                session.SessionCookieName = updatedName;
+            }
             await SaveSessionAsync(session);
         }
     }
@@ -520,7 +573,7 @@ public class SeerrSessionService
         try
         {
             var cookieContainer = new CookieContainer();
-            cookieContainer.Add(new Uri(seerrUrl), new Cookie("connect.sid", session.SessionCookie));
+            cookieContainer.Add(new Uri(seerrUrl), new Cookie(session.SessionCookieName, session.SessionCookie));
 
             using var handler = new HttpClientHandler
             {
@@ -723,7 +776,7 @@ public class SeerrSessionService
         try
         {
             var cookieContainer = new CookieContainer();
-            cookieContainer.Add(new Uri(seerrUrl), new Cookie("connect.sid", session.SessionCookie));
+            cookieContainer.Add(new Uri(seerrUrl), new Cookie(session.SessionCookieName, session.SessionCookie));
 
             using var handler = new HttpClientHandler
             {
@@ -839,9 +892,17 @@ public class SeerrSession
     [JsonPropertyName("jellyfinUserId")]
     public Guid JellyfinUserId { get; set; }
 
-    /// <summary>The Seerr connect.sid session cookie value.</summary>
+    /// <summary>The Seerr session cookie value.</summary>
     [JsonPropertyName("sessionCookie")]
     public string SessionCookie { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Name of the session cookie Seerr issues. Standard Jellyseerr and Overseerr use
+    /// "connect.sid", but rebranded editions can rename it (SparkBox issues "sb.sid").
+    /// Defaults to "connect.sid" so existing stored sessions keep working.
+    /// </summary>
+    [JsonPropertyName("sessionCookieName")]
+    public string SessionCookieName { get; set; } = "connect.sid";
 
     /// <summary>The Seerr internal user ID.</summary>
     [JsonPropertyName("seerrUserId")]
