@@ -461,7 +461,7 @@ namespace Emby.Plugins.Moonfin.Services
                 return upstreamFailure;
 
             if (evictUserIdOn401.HasValue &&
-                (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden))
+                (response.StatusCode == HttpStatusCode.Unauthorized))
             {
                 await ClearSessionAsync(evictUserIdOn401.Value).ConfigureAwait(false);
                 return ErrorResponse(401, "Seerr session expired", "SESSION_EXPIRED");
