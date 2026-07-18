@@ -50,16 +50,13 @@ public class NotificationStore
     public NotificationPrefs GetPrefs(Guid userId)
     {
         var path = GetPrefsPath(userId);
-        if (!File.Exists(path))
-        {
-            return new NotificationPrefs { JellyfinUserId = userId };
-        }
 
         _lock.Wait();
         try
         {
-            var json = File.ReadAllText(path);
-            var prefs = JsonSerializer.Deserialize<NotificationPrefs>(json, _jsonOptions);
+            var prefs = AtomicFile.ReadWithRecovery(
+                path,
+                json => JsonSerializer.Deserialize<NotificationPrefs>(json, _jsonOptions));
             if (prefs != null)
             {
                 prefs.JellyfinUserId = userId;
@@ -181,7 +178,7 @@ public class NotificationStore
         {
             EnsureDirectory();
             var json = JsonSerializer.Serialize(prefs, _jsonOptions);
-            File.WriteAllText(GetPrefsPath(userId), json);
+            AtomicFile.WriteAllText(GetPrefsPath(userId), json);
         }
         catch (Exception ex)
         {

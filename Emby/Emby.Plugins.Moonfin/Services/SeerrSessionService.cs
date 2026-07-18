@@ -392,8 +392,9 @@ namespace Emby.Plugins.Moonfin.Services
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var path = GetSessionPath(userId);
-                if (File.Exists(path)) File.Delete(path);
+                // Takes the backup with it, otherwise recovery could bring back a session the
+                // user just signed out of.
+                AtomicFile.DeleteWithSidecars(GetSessionPath(userId));
             }
             finally { _lock.Release(); }
         }
@@ -528,8 +529,10 @@ namespace Emby.Plugins.Moonfin.Services
                 SeerrSession? session = null;
                 try
                 {
-                    var json = File.ReadAllText(path);
-                    session = JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions);
+                    // Recover from the backup so one bad file doesn't drop a user from the results.
+                    session = AtomicFile.ReadWithRecovery(
+                        path,
+                        json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions));
                 }
                 catch (Exception ex)
                 {
@@ -597,7 +600,7 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 EnsureDirectory();
                 var json = JsonSerializer.Serialize(session, _jsonOptions);
-                await Task.Run(() => File.WriteAllText(GetSessionPath(session.JellyfinUserId), json)).ConfigureAwait(false);
+                await Task.Run(() => AtomicFile.WriteAllText(GetSessionPath(session.JellyfinUserId), json)).ConfigureAwait(false);
             }
             finally { _lock.Release(); }
         }
@@ -605,12 +608,12 @@ namespace Emby.Plugins.Moonfin.Services
         private async Task<SeerrSession?> LoadSessionAsync(Guid userId)
         {
             var path = GetSessionPath(userId);
-            if (!File.Exists(path)) return null;
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var json = await Task.Run(() => File.ReadAllText(path)).ConfigureAwait(false);
-                return JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions);
+                return await Task.Run(() => AtomicFile.ReadWithRecovery(
+                    path,
+                    json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions))).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

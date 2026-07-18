@@ -516,9 +516,11 @@ public class SeerrSessionService
         try
         {
             var path = GetSessionPath(userId);
-            if (File.Exists(path))
+            if (File.Exists(path) || File.Exists(AtomicFile.BackupPath(path)))
             {
-                File.Delete(path);
+                // Takes the backup with it, otherwise recovery could bring back a session the
+                // user just signed out of.
+                AtomicFile.DeleteWithSidecars(path);
                 _logger.LogInformation("Seerr session cleared for user {UserId}", userId);
             }
         }
@@ -685,8 +687,10 @@ public class SeerrSessionService
             SeerrSession? session = null;
             try
             {
-                var json = File.ReadAllText(path);
-                session = JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions);
+                // Recover from the backup so one bad file doesn't drop a user from the results.
+                session = AtomicFile.ReadWithRecovery(
+                    path,
+                    json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions));
             }
             catch (Exception ex)
             {
@@ -852,7 +856,7 @@ public class SeerrSessionService
         {
             EnsureDirectory();
             var json = JsonSerializer.Serialize(session, _jsonOptions);
-            await File.WriteAllTextAsync(GetSessionPath(session.JellyfinUserId), json);
+            AtomicFile.WriteAllText(GetSessionPath(session.JellyfinUserId), json);
         }
         finally
         {
@@ -863,13 +867,13 @@ public class SeerrSessionService
     private async Task<SeerrSession?> LoadSessionAsync(Guid userId)
     {
         var path = GetSessionPath(userId);
-        if (!File.Exists(path)) return null;
 
         await _lock.WaitAsync();
         try
         {
-            var json = await File.ReadAllTextAsync(path);
-            return JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions);
+            return AtomicFile.ReadWithRecovery(
+                path,
+                json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions));
         }
         catch (Exception ex)
         {

@@ -51,22 +51,32 @@ namespace Emby.Plugins.Moonfin.Services
         private string GetUserSettingsPath(Guid userId) =>
             Path.Combine(_dataPath, $"{userId}.json");
 
+        /// <summary>
+        /// Loads settings, falling back to the backup copy when the file is missing or unreadable.
+        /// </summary>
+        private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath)
+        {
+            return AtomicFile.ReadWithRecovery(
+                filePath,
+                json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions));
+        }
+
         public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId)
         {
             var filePath = GetUserSettingsPath(userId);
-            if (!File.Exists(filePath)) return null;
 
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var json = await Task.Run(() => File.ReadAllText(filePath)).ConfigureAwait(false);
-                var settings = JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions);
-                if (settings != null && settings.NeedsMigration)
+                var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
+                if (settings == null) return null;
+
+                if (settings.NeedsMigration)
                 {
                     _logger.Info("Migrating v1 settings to v2 for user " + userId, 0);
                     settings = MigrateV1ToV2(settings);
                     var migratedJson = JsonSerializer.Serialize(settings, _jsonOptions);
-                    await Task.Run(() => File.WriteAllText(filePath, migratedJson)).ConfigureAwait(false);
+                    await Task.Run(() => AtomicFile.WriteAllText(filePath, migratedJson)).ConfigureAwait(false);
                 }
                 return settings;
             }
@@ -166,10 +176,9 @@ namespace Emby.Plugins.Moonfin.Services
             try
             {
                 MoonfinUserSettings finalSettings;
-                if (mergeMode == "merge" && File.Exists(filePath))
+                if (mergeMode == "merge")
                 {
-                    var existingJson = await Task.Run(() => File.ReadAllText(filePath)).ConfigureAwait(false);
-                    var existingSettings = JsonSerializer.Deserialize<MoonfinUserSettings>(existingJson, _jsonOptions);
+                    var existingSettings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
                     if (existingSettings != null && existingSettings.NeedsMigration)
                         existingSettings = MigrateV1ToV2(existingSettings);
                     finalSettings = MergeSettings(existingSettings, settings);
@@ -184,7 +193,7 @@ namespace Emby.Plugins.Moonfin.Services
                 finalSettings.SchemaVersion = 2;
 
                 var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
-                await Task.Run(() => File.WriteAllText(filePath, json)).ConfigureAwait(false);
+                await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
             }
             finally
             {
@@ -200,17 +209,9 @@ namespace Emby.Plugins.Moonfin.Services
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                MoonfinUserSettings settings;
-                if (File.Exists(filePath))
-                {
-                    var json = await Task.Run(() => File.ReadAllText(filePath)).ConfigureAwait(false);
-                    settings = JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions) ?? new MoonfinUserSettings();
-                    if (settings.NeedsMigration) settings = MigrateV1ToV2(settings);
-                }
-                else
-                {
-                    settings = new MoonfinUserSettings();
-                }
+                var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false)
+                    ?? new MoonfinUserSettings();
+                if (settings.NeedsMigration) settings = MigrateV1ToV2(settings);
 
                 var existingProfile = string.Equals(profileName, "global", StringComparison.OrdinalIgnoreCase)
                     ? settings.Global
@@ -226,7 +227,7 @@ namespace Emby.Plugins.Moonfin.Services
                 settings.SchemaVersion = 2;
 
                 var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
-                await Task.Run(() => File.WriteAllText(filePath, serialized)).ConfigureAwait(false);
+                await Task.Run(() => AtomicFile.WriteAllText(filePath, serialized)).ConfigureAwait(false);
             }
             finally
             {
@@ -438,7 +439,7 @@ namespace Emby.Plugins.Moonfin.Services
                 {
                     var fileName = Path.GetFileNameWithoutExtension(filePath);
                     if (!Guid.TryParse(fileName, out var userId) || serverSet.Contains(userId)) continue;
-                    try { File.Delete(filePath); orphansDeleted++; }
+                    try { AtomicFile.DeleteWithSidecars(filePath); orphansDeleted++; }
                     catch (Exception ex) { _logger.ErrorException("Failed to delete orphan settings " + userId, ex); }
                 }
             }
@@ -465,7 +466,7 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 var filePath = GetUserSettingsPath(userId);
                 var json = JsonSerializer.Serialize(clean, _jsonOptions);
-                await Task.Run(() => File.WriteAllText(filePath, json)).ConfigureAwait(false);
+                await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
             }
             finally
             {
@@ -492,7 +493,9 @@ namespace Emby.Plugins.Moonfin.Services
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (File.Exists(filePath)) File.Delete(filePath);
+                // Takes the backup with it, otherwise a deleted user's settings could come back
+                // through recovery.
+                AtomicFile.DeleteWithSidecars(filePath);
             }
             finally
             {
@@ -513,7 +516,7 @@ namespace Emby.Plugins.Moonfin.Services
                 var filePath = GetUserSettingsPath(userId);
                 settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 var json = JsonSerializer.Serialize(settings, _jsonOptions);
-                await Task.Run(() => File.WriteAllText(filePath, json)).ConfigureAwait(false);
+                await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
             }
             finally
             {
@@ -521,7 +524,12 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
-        public bool UserSettingsExist(Guid userId) => File.Exists(GetUserSettingsPath(userId));
+        // Settings that only survive as a backup still count as existing.
+        public bool UserSettingsExist(Guid userId)
+        {
+            var path = GetUserSettingsPath(userId);
+            return File.Exists(path) || File.Exists(AtomicFile.BackupPath(path));
+        }
 
         private MoonfinUserSettings MigrateV1ToV2(MoonfinUserSettings v1)
         {

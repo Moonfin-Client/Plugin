@@ -46,29 +46,37 @@ public class MoonfinSettingsService
         return Path.Combine(_dataPath, $"{userId}.json");
     }
 
+    /// <summary>
+    /// Loads settings, falling back to the backup copy when the file is missing or unreadable.
+    /// </summary>
+    private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath)
+    {
+        return AtomicFile.ReadWithRecovery(
+            filePath,
+            json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions));
+    }
+
     public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId)
     {
         var filePath = GetUserSettingsPath(userId);
-        
-        if (!File.Exists(filePath))
-        {
-            return null;
-        }
 
         await _lock.WaitAsync();
         try
         {
-            var json = await File.ReadAllTextAsync(filePath);
-            var settings = JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions);
+            var settings = ReadSettingsWithRecovery(filePath);
+            if (settings == null)
+            {
+                return null;
+            }
 
-            if (settings != null && settings.NeedsMigration)
+            if (settings.NeedsMigration)
             {
                 _logger.LogInformation("Migrating v1 settings to v2 for user {UserId}", userId);
                 settings = MigrateV1ToV2(settings);
 
                 // Persist the migrated version
                 var migratedJson = JsonSerializer.Serialize(settings, _jsonOptions);
-                await File.WriteAllTextAsync(filePath, migratedJson);
+                AtomicFile.WriteAllText(filePath, migratedJson);
             }
 
             return settings;
@@ -191,10 +199,9 @@ public class MoonfinSettingsService
         {
             MoonfinUserSettings finalSettings;
 
-            if (mergeMode == "merge" && File.Exists(filePath))
+            if (mergeMode == "merge")
             {
-                var existingJson = await File.ReadAllTextAsync(filePath);
-                var existingSettings = JsonSerializer.Deserialize<MoonfinUserSettings>(existingJson, _jsonOptions);
+                var existingSettings = ReadSettingsWithRecovery(filePath);
 
                 // Migrate v1 if needed
                 if (existingSettings != null && existingSettings.NeedsMigration)
@@ -215,7 +222,7 @@ public class MoonfinSettingsService
             finalSettings.SchemaVersion = 2;
 
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
-            await File.WriteAllTextAsync(filePath, json);
+            AtomicFile.WriteAllText(filePath, json);
         }
         finally
         {
@@ -237,21 +244,11 @@ public class MoonfinSettingsService
         await _lock.WaitAsync();
         try
         {
-            MoonfinUserSettings settings;
+            var settings = ReadSettingsWithRecovery(filePath) ?? new MoonfinUserSettings();
 
-            if (File.Exists(filePath))
+            if (settings.NeedsMigration)
             {
-                var json = await File.ReadAllTextAsync(filePath);
-                settings = JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions) ?? new MoonfinUserSettings();
-
-                if (settings.NeedsMigration)
-                {
-                    settings = MigrateV1ToV2(settings);
-                }
-            }
-            else
-            {
-                settings = new MoonfinUserSettings();
+                settings = MigrateV1ToV2(settings);
             }
 
             // Merge profile properties
@@ -274,7 +271,7 @@ public class MoonfinSettingsService
             settings.SchemaVersion = 2;
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
-            await File.WriteAllTextAsync(filePath, serialized);
+            AtomicFile.WriteAllText(filePath, serialized);
         }
         finally
         {
@@ -618,7 +615,7 @@ public class MoonfinSettingsService
                 {
                     if (File.Exists(filePath))
                     {
-                        File.Delete(filePath);
+                        AtomicFile.DeleteWithSidecars(filePath);
                         orphansDeleted++;
                     }
                 }
@@ -665,7 +662,7 @@ public class MoonfinSettingsService
         try
         {
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
-            await File.WriteAllTextAsync(filePath, json);
+            AtomicFile.WriteAllText(filePath, json);
         }
         finally
         {
@@ -761,10 +758,9 @@ public class MoonfinSettingsService
         await _lock.WaitAsync();
         try
         {
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-            }
+            // Takes the backup with it, otherwise a deleted user's settings could come back
+            // through recovery.
+            AtomicFile.DeleteWithSidecars(filePath);
         }
         finally
         {
@@ -791,7 +787,7 @@ public class MoonfinSettingsService
             var filePath = GetUserSettingsPath(userId);
             settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
-            await File.WriteAllTextAsync(filePath, json);
+            AtomicFile.WriteAllText(filePath, json);
         }
         finally
         {
@@ -801,6 +797,8 @@ public class MoonfinSettingsService
 
     public bool UserSettingsExist(Guid userId)
     {
-        return File.Exists(GetUserSettingsPath(userId));
+        // Settings that only survive as a backup still count as existing.
+        var path = GetUserSettingsPath(userId);
+        return File.Exists(path) || File.Exists(AtomicFile.BackupPath(path));
     }
 }
