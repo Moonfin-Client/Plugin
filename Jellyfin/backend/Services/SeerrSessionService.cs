@@ -624,8 +624,7 @@ public class SeerrSessionService
             }
 
             // If auth expired, clear session
-            if (response.StatusCode == HttpStatusCode.Unauthorized ||
-                response.StatusCode == HttpStatusCode.Forbidden)
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 _logger.LogInformation("Seerr session expired for user {UserId}", userId);
                 await ClearSessionAsync(userId);
