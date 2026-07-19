@@ -148,6 +148,16 @@ public class MoonfinSettingsService
             }
         }
 
+        if (string.IsNullOrWhiteSpace(resolved.TmdbApiKey))
+        {
+            resolved.TmdbApiKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
+        }
+
+        if (string.IsNullOrWhiteSpace(resolved.MdblistApiKey))
+        {
+            resolved.MdblistApiKey = MoonfinPlugin.Instance?.Configuration?.MdblistApiKey;
+        }
+
         return resolved;
     }
 
@@ -225,6 +235,7 @@ public class MoonfinSettingsService
             }
 
             // Update metadata
+            StripServerWideKeys(finalSettings);
             finalSettings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             finalSettings.LastUpdatedBy = clientId ?? "unknown";
             finalSettings.SchemaVersion = 2;
@@ -274,6 +285,7 @@ public class MoonfinSettingsService
             }
 
             // Update metadata
+            StripServerWideKeys(settings);
             settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             settings.LastUpdatedBy = clientId ?? "unknown";
             settings.SchemaVersion = 2;
@@ -808,5 +820,42 @@ public class MoonfinSettingsService
         // Settings that only survive as a backup still count as existing.
         var path = GetUserSettingsPath(userId);
         return File.Exists(path) || File.Exists(AtomicFile.BackupPath(path));
+    }
+
+    private void StripServerWideKeys(MoonfinSettingsProfile? profile)
+    {
+        if (profile == null) return;
+        var config = MoonfinPlugin.Instance?.Configuration;
+        if (config == null) return;
+
+        if (profile.TmdbApiKey == config.TmdbApiKey)
+        {
+            profile.TmdbApiKey = null;
+        }
+        if (profile.MdblistApiKey == config.MdblistApiKey)
+        {
+            profile.MdblistApiKey = null;
+        }
+    }
+
+    private void StripServerWideKeys(MoonfinUserSettings? settings)
+    {
+        if (settings == null) return;
+        var config = MoonfinPlugin.Instance?.Configuration;
+        if (config == null) return;
+
+        if (settings.TmdbApiKey == config.TmdbApiKey)
+        {
+            settings.TmdbApiKey = null;
+        }
+        if (settings.MdblistApiKey == config.MdblistApiKey)
+        {
+            settings.MdblistApiKey = null;
+        }
+
+        StripServerWideKeys(settings.Global);
+        StripServerWideKeys(settings.Desktop);
+        StripServerWideKeys(settings.Mobile);
+        StripServerWideKeys(settings.Tv);
     }
 }
