@@ -240,6 +240,8 @@ public class MoonfinSettingsService
             finalSettings.LastUpdatedBy = clientId ?? "unknown";
             finalSettings.SchemaVersion = 2;
 
+            MoveContentHidingToGlobal(finalSettings);
+
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
         }
@@ -289,6 +291,8 @@ public class MoonfinSettingsService
             settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             settings.LastUpdatedBy = clientId ?? "unknown";
             settings.SchemaVersion = 2;
+
+            MoveContentHidingToGlobal(settings);
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
@@ -498,6 +502,59 @@ public class MoonfinSettingsService
         settings.ThemeMusicVolume = null;
         settings.BlockedRatings = null;
         settings.ClientSpecific = null;
+    }
+
+    private void MoveContentHidingToGlobal(MoonfinUserSettings settings)
+    {
+        if (settings.Global == null)
+        {
+            settings.Global = new MoonfinSettingsProfile();
+        }
+
+        // Check Desktop
+        if (settings.Desktop != null)
+        {
+            if (settings.Desktop.HiddenContinueWatchingItems != null)
+            {
+                settings.Global.HiddenContinueWatchingItems = settings.Desktop.HiddenContinueWatchingItems;
+                settings.Desktop.HiddenContinueWatchingItems = null;
+            }
+            if (settings.Desktop.HiddenNextUpSeries != null)
+            {
+                settings.Global.HiddenNextUpSeries = settings.Desktop.HiddenNextUpSeries;
+                settings.Desktop.HiddenNextUpSeries = null;
+            }
+        }
+
+        // Check Mobile
+        if (settings.Mobile != null)
+        {
+            if (settings.Mobile.HiddenContinueWatchingItems != null)
+            {
+                settings.Global.HiddenContinueWatchingItems = settings.Mobile.HiddenContinueWatchingItems;
+                settings.Mobile.HiddenContinueWatchingItems = null;
+            }
+            if (settings.Mobile.HiddenNextUpSeries != null)
+            {
+                settings.Global.HiddenNextUpSeries = settings.Mobile.HiddenNextUpSeries;
+                settings.Mobile.HiddenNextUpSeries = null;
+            }
+        }
+
+        // Check Tv
+        if (settings.Tv != null)
+        {
+            if (settings.Tv.HiddenContinueWatchingItems != null)
+            {
+                settings.Global.HiddenContinueWatchingItems = settings.Tv.HiddenContinueWatchingItems;
+                settings.Tv.HiddenContinueWatchingItems = null;
+            }
+            if (settings.Tv.HiddenNextUpSeries != null)
+            {
+                settings.Global.HiddenNextUpSeries = settings.Tv.HiddenNextUpSeries;
+                settings.Tv.HiddenNextUpSeries = null;
+            }
+        }
     }
 
     private void MergeProfile(MoonfinSettingsProfile existing, MoonfinSettingsProfile incoming)
