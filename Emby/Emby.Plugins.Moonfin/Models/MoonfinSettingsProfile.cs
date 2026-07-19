@@ -62,6 +62,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("backdropEnabled")] public bool? BackdropEnabled { get; set; }
         [JsonPropertyName("homeRowsImageTypeOverride")] public bool? HomeRowsImageTypeOverride { get; set; }
         [JsonPropertyName("homeRowsStyle")] public string? HomeRowsStyle { get; set; }
+        [JsonPropertyName("modernHomeRowsPadding")] public int? ModernHomeRowsPadding { get; set; }
+        [JsonPropertyName("classicHomeRowsPadding")] public int? ClassicHomeRowsPadding { get; set; }
         [JsonPropertyName("fullScreenRows")] public bool? FullScreenRows { get; set; }
         [JsonPropertyName("homeRowsImageType")] public string? HomeRowsImageType { get; set; }
         [JsonPropertyName("homeImageTypeContinueWatching")] public string? HomeImageTypeContinueWatching { get; set; }
@@ -102,6 +104,162 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("rewatchIncludeCollections")] public bool? RewatchIncludeCollections { get; set; }
         [JsonPropertyName("hiddenContinueWatchingItems")] public string? HiddenContinueWatchingItems { get; set; }
         [JsonPropertyName("hiddenNextUpSeries")] public string? HiddenNextUpSeries { get; set; }
+
+        // Detail screen extras. Clients already sent these two, but there was nowhere to store
+        // them, so every value was dropped on arrival.
+        // Which item types the media bar shows. Kept apart from mediaBarSourceType, which says
+        // where items are drawn from (libraries or collections). The two used to share a key,
+        // so a client picking "library" as a source handed that word to clients reading it as
+        // an item type, and picking "movies" as a type handed that back as a source.
+        [JsonPropertyName("mediaBarContentType")] public string? MediaBarContentType { get; set; }
+
+        [JsonPropertyName("detailShowTechnicalDetails")] public bool? DetailShowTechnicalDetails { get; set; }
+        [JsonPropertyName("recommendationSystemSource")] public string? RecommendationSystemSource { get; set; }
+        [JsonPropertyName("recommendationsApplyParentalRatingCap")] public bool? RecommendationsApplyParentalRatingCap { get; set; }
+
+        // Screensaver. The admin config page already reads and writes screensaverMode, so
+        // without this property the admin's choice was discarded on every save.
+        [JsonPropertyName("screensaverEnabled")] public bool? ScreensaverEnabled { get; set; }
+        [JsonPropertyName("screensaverMode")] public string? ScreensaverMode { get; set; }
+        [JsonPropertyName("screensaverTimeout")] public string? ScreensaverTimeout { get; set; }
+        [JsonPropertyName("screensaverDimming")] public int? ScreensaverDimming { get; set; }
+        [JsonPropertyName("screensaverClockMode")] public string? ScreensaverClockMode { get; set; }
+        [JsonPropertyName("screensaverMaxAgeRating")] public string? ScreensaverMaxAgeRating { get; set; }
+        [JsonPropertyName("screensaverRequireRating")] public bool? ScreensaverRequireRating { get; set; }
+
+        // Subtitles. Colours travel as #AARRGGBB strings so clients that store an int and
+        // clients that store a CSS colour can both round-trip them without loss.
+        [JsonPropertyName("subtitleMode")] public string? SubtitleMode { get; set; }
+        [JsonPropertyName("defaultSubtitleLanguage")] public string? DefaultSubtitleLanguage { get; set; }
+        [JsonPropertyName("fallbackSubtitleLanguage")] public string? FallbackSubtitleLanguage { get; set; }
+        [JsonPropertyName("preferSdhSubtitles")] public bool? PreferSdhSubtitles { get; set; }
+        [JsonPropertyName("subtitlesUseEmbeddedStyles")] public bool? SubtitlesUseEmbeddedStyles { get; set; }
+        [JsonPropertyName("subtitlesUseEmbeddedFontSizes")] public bool? SubtitlesUseEmbeddedFontSizes { get; set; }
+        [JsonPropertyName("pgsDirectPlay")] public bool? PgsDirectPlay { get; set; }
+        [JsonPropertyName("assDirectPlay")] public bool? AssDirectPlay { get; set; }
+        [JsonPropertyName("subtitlesTextColor")] public string? SubtitlesTextColor { get; set; }
+        [JsonPropertyName("subtitleTextStrokeColor")] public string? SubtitleTextStrokeColor { get; set; }
+        [JsonPropertyName("subtitlesBackgroundColor")] public string? SubtitlesBackgroundColor { get; set; }
+        [JsonPropertyName("subtitlesTextSize")] public double? SubtitlesTextSize { get; set; }
+        [JsonPropertyName("subtitlesOffsetPosition")] public double? SubtitlesOffsetPosition { get; set; }
+        [JsonPropertyName("subtitlesTextWeight")] public int? SubtitlesTextWeight { get; set; }
+
+        // Audio track selection. Output and passthrough settings are deliberately absent,
+        // they describe the hardware attached to one device rather than a user preference.
+        [JsonPropertyName("defaultAudioLanguage")] public string? DefaultAudioLanguage { get; set; }
+        [JsonPropertyName("fallbackAudioLanguage")] public string? FallbackAudioLanguage { get; set; }
+        [JsonPropertyName("preferDefaultAudioTrack")] public bool? PreferDefaultAudioTrack { get; set; }
+        [JsonPropertyName("preferAudioDescription")] public bool? PreferAudioDescription { get; set; }
+        [JsonPropertyName("audioNightMode")] public bool? AudioNightMode { get; set; }
+        [JsonPropertyName("showDescriptionOnPause")] public bool? ShowDescriptionOnPause { get; set; }
+        [JsonPropertyName("playerZoomMode")] public string? PlayerZoomMode { get; set; }
+        [JsonPropertyName("resumeSubtractDuration")] public string? ResumeSubtractDuration { get; set; }
+        [JsonPropertyName("unpauseRewindDuration")] public int? UnpauseRewindDuration { get; set; }
+        [JsonPropertyName("skipBackLength")] public int? SkipBackLength { get; set; }
+        [JsonPropertyName("skipForwardLength")] public int? SkipForwardLength { get; set; }
+        [JsonPropertyName("osdLockEnabled")] public bool? OsdLockEnabled { get; set; }
+        [JsonPropertyName("videoStartDelay")] public int? VideoStartDelay { get; set; }
+        [JsonPropertyName("liveTvDirectPlayEnabled")] public bool? LiveTvDirectPlayEnabled { get; set; }
+        [JsonPropertyName("maxBitrate")] public string? MaxBitrate { get; set; }
+        [JsonPropertyName("maxVideoResolution")] public string? MaxVideoResolution { get; set; }
+        [JsonPropertyName("cinemaModeEnabled")] public bool? CinemaModeEnabled { get; set; }
+        [JsonPropertyName("mediaSegmentCountdown")] public string? MediaSegmentCountdown { get; set; }
+        [JsonPropertyName("autoplayNextEpisode")] public bool? AutoplayNextEpisode { get; set; }
+        [JsonPropertyName("nextUpBehavior")] public string? NextUpBehavior { get; set; }
+        [JsonPropertyName("nextUpTimeout")] public int? NextUpTimeout { get; set; }
+        [JsonPropertyName("replaceSkipOutroWithNextUp")] public bool? ReplaceSkipOutroWithNextUp { get; set; }
+        [JsonPropertyName("stillWatchingBehavior")] public string? StillWatchingBehavior { get; set; }
+        [JsonPropertyName("mediaQueuingEnabled")] public bool? MediaQueuingEnabled { get; set; }
+        [JsonPropertyName("resumeLastQueueOnPlay")] public bool? ResumeLastQueueOnPlay { get; set; }
+
+        // SyncPlay. Correction tuning is a user preference, the transport settings aren't.
+        [JsonPropertyName("syncPlayEnabled")] public bool? SyncPlayEnabled { get; set; }
+        [JsonPropertyName("syncPlayAutoOpen")] public bool? SyncPlayAutoOpen { get; set; }
+        [JsonPropertyName("syncPlayAdvancedCorrectionEnabled")] public bool? SyncPlayAdvancedCorrectionEnabled { get; set; }
+        [JsonPropertyName("syncPlayEnableSyncCorrection")] public bool? SyncPlayEnableSyncCorrection { get; set; }
+        [JsonPropertyName("syncPlayUseSpeedToSync")] public bool? SyncPlayUseSpeedToSync { get; set; }
+        [JsonPropertyName("syncPlayUseSkipToSync")] public bool? SyncPlayUseSkipToSync { get; set; }
+        [JsonPropertyName("syncPlayMinDelaySpeedToSync")] public double? SyncPlayMinDelaySpeedToSync { get; set; }
+        [JsonPropertyName("syncPlayMaxDelaySpeedToSync")] public double? SyncPlayMaxDelaySpeedToSync { get; set; }
+        [JsonPropertyName("syncPlaySpeedToSyncDuration")] public double? SyncPlaySpeedToSyncDuration { get; set; }
+        [JsonPropertyName("syncPlayMinDelaySkipToSync")] public double? SyncPlayMinDelaySkipToSync { get; set; }
+        [JsonPropertyName("syncPlayExtraTimeOffset")] public double? SyncPlayExtraTimeOffset { get; set; }
+
+        // Downloads. Paths and concurrency stay device local, the behaviour toggles sync.
+        [JsonPropertyName("defaultDownloadQuality")] public string? DefaultDownloadQuality { get; set; }
+        [JsonPropertyName("downloadWifiOnly")] public bool? DownloadWifiOnly { get; set; }
+        [JsonPropertyName("reportDownloadsAsActivity")] public bool? ReportDownloadsAsActivity { get; set; }
+        [JsonPropertyName("downloadStorageLimitMb")] public int? DownloadStorageLimitMb { get; set; }
+        [JsonPropertyName("imdbTop250MoviesEnabled")] public bool? ImdbTop250MoviesEnabled { get; set; }
+        [JsonPropertyName("imdbTop250TvShowsEnabled")] public bool? ImdbTop250TvShowsEnabled { get; set; }
+        [JsonPropertyName("imdbMostPopularMoviesEnabled")] public bool? ImdbMostPopularMoviesEnabled { get; set; }
+        [JsonPropertyName("imdbMostPopularTvShowsEnabled")] public bool? ImdbMostPopularTvShowsEnabled { get; set; }
+        [JsonPropertyName("imdbLowestRatedMoviesEnabled")] public bool? ImdbLowestRatedMoviesEnabled { get; set; }
+        [JsonPropertyName("imdbTopEnglishMoviesEnabled")] public bool? ImdbTopEnglishMoviesEnabled { get; set; }
+        [JsonPropertyName("tmdbPopularMoviesEnabled")] public bool? TmdbPopularMoviesEnabled { get; set; }
+        [JsonPropertyName("tmdbTopRatedMoviesEnabled")] public bool? TmdbTopRatedMoviesEnabled { get; set; }
+        [JsonPropertyName("tmdbNowPlayingMoviesEnabled")] public bool? TmdbNowPlayingMoviesEnabled { get; set; }
+        [JsonPropertyName("tmdbUpcomingMoviesEnabled")] public bool? TmdbUpcomingMoviesEnabled { get; set; }
+        [JsonPropertyName("tmdbPopularTvEnabled")] public bool? TmdbPopularTvEnabled { get; set; }
+        [JsonPropertyName("tmdbTopRatedTvEnabled")] public bool? TmdbTopRatedTvEnabled { get; set; }
+        [JsonPropertyName("tmdbAiringTodayTvEnabled")] public bool? TmdbAiringTodayTvEnabled { get; set; }
+        [JsonPropertyName("tmdbOnTheAirTvEnabled")] public bool? TmdbOnTheAirTvEnabled { get; set; }
+        [JsonPropertyName("tmdbTrendingMovieDailyEnabled")] public bool? TmdbTrendingMovieDailyEnabled { get; set; }
+        [JsonPropertyName("tmdbTrendingMovieWeeklyEnabled")] public bool? TmdbTrendingMovieWeeklyEnabled { get; set; }
+        [JsonPropertyName("tmdbTrendingTvDailyEnabled")] public bool? TmdbTrendingTvDailyEnabled { get; set; }
+        [JsonPropertyName("tmdbTrendingTvWeeklyEnabled")] public bool? TmdbTrendingTvWeeklyEnabled { get; set; }
+        [JsonPropertyName("tmdbTrendingAllWeeklyEnabled")] public bool? TmdbTrendingAllWeeklyEnabled { get; set; }
+        [JsonPropertyName("mergeRadarrSonarrCalendars")] public bool? MergeRadarrSonarrCalendars { get; set; }
+        [JsonPropertyName("enableRadarrCalendar")] public bool? EnableRadarrCalendar { get; set; }
+        [JsonPropertyName("radarrCalendarShowCinema")] public bool? RadarrCalendarShowCinema { get; set; }
+        [JsonPropertyName("radarrCalendarShowDigital")] public bool? RadarrCalendarShowDigital { get; set; }
+        [JsonPropertyName("radarrCalendarShowPhysical")] public bool? RadarrCalendarShowPhysical { get; set; }
+        [JsonPropertyName("radarrCalendarShowDate")] public bool? RadarrCalendarShowDate { get; set; }
+        [JsonPropertyName("enableSonarrCalendar")] public bool? EnableSonarrCalendar { get; set; }
+        [JsonPropertyName("sonarrCalendarShowEpisodeInfo")] public bool? SonarrCalendarShowEpisodeInfo { get; set; }
+        [JsonPropertyName("sonarrCalendarShowDate")] public bool? SonarrCalendarShowDate { get; set; }
+        [JsonPropertyName("libraryPosterSize")] public string? LibraryPosterSize { get; set; }
+        [JsonPropertyName("playlistPosterSize")] public string? PlaylistPosterSize { get; set; }
+        [JsonPropertyName("audioSortOption")] public string? AudioSortOption { get; set; }
+        [JsonPropertyName("favoritesViewStyle")] public string? FavoritesViewStyle { get; set; }
+        [JsonPropertyName("defaultFavoritesFilter")] public string? DefaultFavoritesFilter { get; set; }
+        [JsonPropertyName("displayAudioAlbumArtists")] public bool? DisplayAudioAlbumArtists { get; set; }
+        [JsonPropertyName("displayAudioAlbums")] public bool? DisplayAudioAlbums { get; set; }
+        [JsonPropertyName("displayAudioArtists")] public bool? DisplayAudioArtists { get; set; }
+        [JsonPropertyName("displayAudioFavorites")] public bool? DisplayAudioFavorites { get; set; }
+        [JsonPropertyName("displayAudioLastPlayed")] public bool? DisplayAudioLastPlayed { get; set; }
+        [JsonPropertyName("displayAudioLatest")] public bool? DisplayAudioLatest { get; set; }
+        [JsonPropertyName("displayAudioPlaylists")] public bool? DisplayAudioPlaylists { get; set; }
+        [JsonPropertyName("personPageGroupItems")] public bool? PersonPageGroupItems { get; set; }
+        [JsonPropertyName("personPageSortOption")] public string? PersonPageSortOption { get; set; }
+        [JsonPropertyName("liveTvChannelSortBy")] public string? LiveTvChannelSortBy { get; set; }
+        [JsonPropertyName("allGenresImageType")] public string? AllGenresImageType { get; set; }
+        [JsonPropertyName("groupItemsIntoCollections")] public bool? GroupItemsIntoCollections { get; set; }
+        [JsonPropertyName("showMediaDetailsOnLibraryPage")] public bool? ShowMediaDetailsOnLibraryPage { get; set; }
+        [JsonPropertyName("hideBackdropsInLibraries")] public bool? HideBackdropsInLibraries { get; set; }
+        [JsonPropertyName("playlistsRowSortBy")] public string? PlaylistsRowSortBy { get; set; }
+        [JsonPropertyName("audioRowsSortBy")] public string? AudioRowsSortBy { get; set; }
+        [JsonPropertyName("epgMobileView")] public string? EpgMobileView { get; set; }
+        [JsonPropertyName("sinceYouWatched1Enabled")] public bool? SinceYouWatched1Enabled { get; set; }
+        [JsonPropertyName("sinceYouWatched2Enabled")] public bool? SinceYouWatched2Enabled { get; set; }
+        [JsonPropertyName("sinceYouWatched3Enabled")] public bool? SinceYouWatched3Enabled { get; set; }
+        [JsonPropertyName("sinceYouWatched4Enabled")] public bool? SinceYouWatched4Enabled { get; set; }
+        [JsonPropertyName("sinceYouWatched5Enabled")] public bool? SinceYouWatched5Enabled { get; set; }
+
+        // Account level appearance and behaviour. clockBehavior replaces the v1 showClock
+        // bool, so it takes a new name rather than reviving the legacy one.
+        [JsonPropertyName("languageOverride")] public string? LanguageOverride { get; set; }
+        [JsonPropertyName("userSortBy")] public string? UserSortBy { get; set; }
+        [JsonPropertyName("interfaceStyle")] public string? InterfaceStyle { get; set; }
+        [JsonPropertyName("glassQuality")] public string? GlassQuality { get; set; }
+        [JsonPropertyName("desktopUiScale")] public string? DesktopUiScale { get; set; }
+        [JsonPropertyName("preferSystemImeKeyboard")] public bool? PreferSystemImeKeyboard { get; set; }
+        [JsonPropertyName("clockBehavior")] public string? ClockBehavior { get; set; }
+        [JsonPropertyName("use24HourClock")] public bool? Use24HourClock { get; set; }
+        [JsonPropertyName("homeRowInfoOverlay")] public bool? HomeRowInfoOverlay { get; set; }
+        [JsonPropertyName("showSeerrButton")] public bool? ShowSeerrButton { get; set; }
+        [JsonPropertyName("diagnosticLoggingEnabled")] public bool? DiagnosticLoggingEnabled { get; set; }
+        [JsonPropertyName("updateNotificationsEnabled")] public bool? UpdateNotificationsEnabled { get; set; }
     }
 
     /// <summary>

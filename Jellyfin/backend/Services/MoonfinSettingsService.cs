@@ -17,6 +17,14 @@ public class MoonfinSettingsService
     private static readonly SemaphoreSlim _lock = new(1, 1);
     private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<Channel<string>, byte>> _sseChannels = new();
 
+    // Resolve and merge reflect over every property on each call, and the profile carries a
+    // couple of hundred of them, so the lookup is cached rather than repeated per request.
+    private static readonly System.Reflection.PropertyInfo[] ProfileProps =
+        typeof(MoonfinSettingsProfile).GetProperties();
+
+    private static readonly System.Reflection.PropertyInfo[] UserSettingsProps =
+        typeof(MoonfinUserSettings).GetProperties();
+
     public MoonfinSettingsService(ILogger<MoonfinSettingsService> logger)
     {
         _logger = logger;
@@ -110,7 +118,7 @@ public class MoonfinSettingsService
         var adminDefaults = MoonfinPlugin.Instance?.Configuration?.DefaultUserSettings;
 
         var resolved = new MoonfinSettingsProfile();
-        var properties = typeof(MoonfinSettingsProfile).GetProperties();
+        var properties = ProfileProps;
 
         foreach (var prop in properties)
         {
@@ -395,8 +403,8 @@ public class MoonfinSettingsService
     private MoonfinUserSettings MigrateV1ToV2(MoonfinUserSettings v1)
     {
         var global = new MoonfinSettingsProfile();
-        var profileProps = typeof(MoonfinSettingsProfile).GetProperties();
-        var v1Props = typeof(MoonfinUserSettings).GetProperties();
+        var profileProps = ProfileProps;
+        var v1Props = UserSettingsProps;
 
         // Map matching property names from v1 flat fields into the global profile
         foreach (var profileProp in profileProps)
@@ -487,7 +495,7 @@ public class MoonfinSettingsService
             existing.HomeSections = null;
         }
 
-        var properties = typeof(MoonfinSettingsProfile).GetProperties();
+        var properties = ProfileProps;
         foreach (var prop in properties)
         {
             var incomingValue = prop.GetValue(incoming);
@@ -547,7 +555,7 @@ public class MoonfinSettingsService
         }
 
         // Also merge any legacy flat fields (from older clients)
-        var props = typeof(MoonfinUserSettings).GetProperties();
+        var props = UserSettingsProps;
         foreach (var prop in props)
         {
             if (prop.Name is "LastUpdated" or "LastUpdatedBy" or "SchemaVersion" or "SyncEnabled"
@@ -740,7 +748,7 @@ public class MoonfinSettingsService
 
     private static bool HasAnyProfileValues(MoonfinSettingsProfile profile)
     {
-        foreach (var prop in typeof(MoonfinSettingsProfile).GetProperties())
+        foreach (var prop in ProfileProps)
         {
             if (prop.GetValue(profile) != null)
             {
