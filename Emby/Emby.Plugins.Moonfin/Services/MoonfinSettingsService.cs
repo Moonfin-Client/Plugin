@@ -134,6 +134,16 @@ namespace Emby.Plugins.Moonfin.Services
             resolved.HomeSections = homeLayout.HomeSections;
             resolved.HomeRowOrder = homeLayout.HomeRowOrder;
 
+            if (string.IsNullOrWhiteSpace(resolved.TmdbApiKey))
+            {
+                resolved.TmdbApiKey = Plugin.Instance?.Configuration?.TmdbApiKey;
+            }
+
+            if (string.IsNullOrWhiteSpace(resolved.MdblistApiKey))
+            {
+                resolved.MdblistApiKey = Plugin.Instance?.Configuration?.MdblistApiKey;
+            }
+
             return resolved;
         }
 
@@ -169,6 +179,43 @@ namespace Emby.Plugins.Moonfin.Services
             return homeRowOrder.Count > 0 ? homeRowOrder : null;
         }
 
+        private void StripServerWideKeys(MoonfinSettingsProfile? profile)
+        {
+            if (profile == null) return;
+            var config = Plugin.Instance?.Configuration;
+            if (config == null) return;
+
+            if (profile.TmdbApiKey == config.TmdbApiKey)
+            {
+                profile.TmdbApiKey = null;
+            }
+            if (profile.MdblistApiKey == config.MdblistApiKey)
+            {
+                profile.MdblistApiKey = null;
+            }
+        }
+
+        private void StripServerWideKeys(MoonfinUserSettings? settings)
+        {
+            if (settings == null) return;
+            var config = Plugin.Instance?.Configuration;
+            if (config == null) return;
+
+            if (settings.TmdbApiKey == config.TmdbApiKey)
+            {
+                settings.TmdbApiKey = null;
+            }
+            if (settings.MdblistApiKey == config.MdblistApiKey)
+            {
+                settings.MdblistApiKey = null;
+            }
+
+            StripServerWideKeys(settings.Global);
+            StripServerWideKeys(settings.Desktop);
+            StripServerWideKeys(settings.Mobile);
+            StripServerWideKeys(settings.Tv);
+        }
+
         public async Task SaveUserSettingsAsync(Guid userId, MoonfinUserSettings settings, string? clientId = null, string mergeMode = "merge")
         {
             var filePath = GetUserSettingsPath(userId);
@@ -188,6 +235,7 @@ namespace Emby.Plugins.Moonfin.Services
                     finalSettings = settings;
                 }
 
+                StripServerWideKeys(finalSettings);
                 finalSettings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 finalSettings.LastUpdatedBy = clientId ?? "unknown";
                 finalSettings.SchemaVersion = 2;
@@ -222,6 +270,7 @@ namespace Emby.Plugins.Moonfin.Services
                 else
                     settings.SetProfile(profileName, profile);
 
+                StripServerWideKeys(settings);
                 settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 settings.LastUpdatedBy = clientId ?? "unknown";
                 settings.SchemaVersion = 2;
