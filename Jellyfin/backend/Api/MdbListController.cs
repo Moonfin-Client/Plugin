@@ -246,6 +246,10 @@ public class MdbListController : ControllerBase
             {
                 lookupSource = "popcorn";
             }
+            else if (string.Equals(source, "tomatoes", StringComparison.OrdinalIgnoreCase))
+            {
+                lookupSource = "tomato";
+            }
 
             if (ratingsBySource.TryGetValue(lookupSource, out var rating))
             {

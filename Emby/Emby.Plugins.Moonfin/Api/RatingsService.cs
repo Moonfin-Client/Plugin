@@ -120,9 +120,16 @@ namespace Emby.Plugins.Moonfin.Api
             {
                 // rtAudience (legacy web) and tomatoes_audience (client) both come from MDBList's
                 // "popcorn" source. Look it up there but return it under the key the caller asked for.
-                var lookupSource = (string.Equals(src, "rtAudience", StringComparison.OrdinalIgnoreCase) ||
-                                    string.Equals(src, "tomatoes_audience", StringComparison.OrdinalIgnoreCase))
-                    ? "popcorn" : src;
+                var lookupSource = src;
+                if (string.Equals(src, "rtAudience", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(src, "tomatoes_audience", StringComparison.OrdinalIgnoreCase))
+                {
+                    lookupSource = "popcorn";
+                }
+                else if (string.Equals(src, "tomatoes", StringComparison.OrdinalIgnoreCase))
+                {
+                    lookupSource = "tomato";
+                }
 
                 if (bySource.TryGetValue(lookupSource, out var r))
                 {
