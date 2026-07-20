@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Linq;
 using System.Net.Http;
+using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace Moonfin.Server.Services;
@@ -149,6 +152,32 @@ public class RdbService
             if (norm.Length > 0 && index.ByName.TryGetValue(norm, out var byTitle))
             {
                 return byTitle;
+            }
+        }
+
+        // Partial match fallback for name lookups
+        if (fileName.Length >= 5)
+        {
+            string? bestKey = null;
+            RdbRecord? bestRecord = null;
+            var minDiff = int.MaxValue;
+            foreach (var kv in index.ByName)
+            {
+                if (kv.Key.StartsWith(fileName, StringComparison.Ordinal) || 
+                    fileName.StartsWith(kv.Key, StringComparison.Ordinal))
+                {
+                    var diff = Math.Abs(kv.Key.Length - fileName.Length);
+                    if (diff < minDiff)
+                    {
+                        minDiff = diff;
+                        bestKey = kv.Key;
+                        bestRecord = kv.Value;
+                    }
+                }
+            }
+            if (bestRecord != null && minDiff <= 45)
+            {
+                return bestRecord;
             }
         }
 
@@ -350,9 +379,16 @@ public class RdbService
 
     private static string NormalizeName(string value)
     {
+        var normalizedString = value.Normalize(NormalizationForm.FormD);
         var sb = new System.Text.StringBuilder(value.Length);
-        foreach (var ch in value)
+        foreach (var ch in normalizedString)
         {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(ch);
+            if (unicodeCategory == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
             if (char.IsLetterOrDigit(ch))
             {
                 sb.Append(char.ToLowerInvariant(ch));
