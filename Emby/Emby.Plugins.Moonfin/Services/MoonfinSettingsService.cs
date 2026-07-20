@@ -568,49 +568,70 @@ namespace Emby.Plugins.Moonfin.Services
                 settings.Global = new MoonfinSettingsProfile();
             }
 
-            // Check Desktop
-            if (settings.Desktop != null)
+            // Content hiding is a global preference, so lift each device's hidden lists into the
+            // global profile. Union across devices so a file that hid items on more than one device
+            // keeps them all instead of the last device winning.
+            var devices = new[] { settings.Desktop, settings.Mobile, settings.Tv };
+
+            var hiddenContinueWatching = UnionHiddenEntries(devices, p => p.HiddenContinueWatchingItems);
+            if (hiddenContinueWatching != null)
             {
-                if (settings.Desktop.HiddenContinueWatchingItems != null)
+                settings.Global.HiddenContinueWatchingItems = hiddenContinueWatching;
+            }
+
+            var hiddenNextUp = UnionHiddenEntries(devices, p => p.HiddenNextUpSeries);
+            if (hiddenNextUp != null)
+            {
+                settings.Global.HiddenNextUpSeries = hiddenNextUp;
+            }
+
+            foreach (var device in devices)
+            {
+                if (device == null) continue;
+                device.HiddenContinueWatchingItems = null;
+                device.HiddenNextUpSeries = null;
+            }
+        }
+
+        private static string? UnionHiddenEntries(
+            MoonfinSettingsProfile?[] devices,
+            Func<MoonfinSettingsProfile, string?> selector)
+        {
+            Dictionary<string, string>? merged = null;
+            foreach (var device in devices)
+            {
+                if (device == null) continue;
+                var value = selector(device);
+                if (value == null) continue;
+
+                if (merged == null)
                 {
-                    settings.Global.HiddenContinueWatchingItems = settings.Desktop.HiddenContinueWatchingItems;
-                    settings.Desktop.HiddenContinueWatchingItems = null;
+                    merged = new Dictionary<string, string>();
                 }
-                if (settings.Desktop.HiddenNextUpSeries != null)
+                foreach (var pair in ParseHiddenEntries(value))
                 {
-                    settings.Global.HiddenNextUpSeries = settings.Desktop.HiddenNextUpSeries;
-                    settings.Desktop.HiddenNextUpSeries = null;
+                    merged[pair.Key] = pair.Value;
                 }
             }
 
-            // Check Mobile
-            if (settings.Mobile != null)
+            return merged == null ? null : JsonSerializer.Serialize(merged);
+        }
+
+        private static Dictionary<string, string> ParseHiddenEntries(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
             {
-                if (settings.Mobile.HiddenContinueWatchingItems != null)
-                {
-                    settings.Global.HiddenContinueWatchingItems = settings.Mobile.HiddenContinueWatchingItems;
-                    settings.Mobile.HiddenContinueWatchingItems = null;
-                }
-                if (settings.Mobile.HiddenNextUpSeries != null)
-                {
-                    settings.Global.HiddenNextUpSeries = settings.Mobile.HiddenNextUpSeries;
-                    settings.Mobile.HiddenNextUpSeries = null;
-                }
+                return new Dictionary<string, string>();
             }
 
-            // Check Tv
-            if (settings.Tv != null)
+            try
             {
-                if (settings.Tv.HiddenContinueWatchingItems != null)
-                {
-                    settings.Global.HiddenContinueWatchingItems = settings.Tv.HiddenContinueWatchingItems;
-                    settings.Tv.HiddenContinueWatchingItems = null;
-                }
-                if (settings.Tv.HiddenNextUpSeries != null)
-                {
-                    settings.Global.HiddenNextUpSeries = settings.Tv.HiddenNextUpSeries;
-                    settings.Tv.HiddenNextUpSeries = null;
-                }
+                return JsonSerializer.Deserialize<Dictionary<string, string>>(value)
+                    ?? new Dictionary<string, string>();
+            }
+            catch (JsonException)
+            {
+                return new Dictionary<string, string>();
             }
         }
 
