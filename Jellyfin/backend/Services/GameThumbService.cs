@@ -149,9 +149,9 @@ public class GameThumbService
     /// minus the extension. This is the filename rather than the display title, which for a game
     /// in its own folder is the folder name and would not match.
     /// </summary>
-    private static string LibretroThumbName(string romFileName)
+    private static string LibretroThumbName(string name)
     {
-        var chars = (Path.GetFileNameWithoutExtension(romFileName) ?? string.Empty).ToCharArray();
+        var chars = name.ToCharArray();
         for (var i = 0; i < chars.Length; i++)
         {
             if (Array.IndexOf(ReservedChars, chars[i]) >= 0)

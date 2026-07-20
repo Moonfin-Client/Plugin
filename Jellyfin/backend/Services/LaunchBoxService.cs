@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -102,6 +104,33 @@ public class LaunchBoxService
                 if (index.TryGetValue(candidate, out var record))
                 {
                     return record;
+                }
+
+                if (candidate.Length >= 5)
+                {
+                    string? bestKey = null;
+                    LaunchBoxRecord? bestRecord = null;
+                    var minDiff = int.MaxValue;
+                    
+                    foreach (var kv in index)
+                    {
+                        if (kv.Key.StartsWith(candidate, StringComparison.Ordinal) || 
+                            candidate.StartsWith(kv.Key, StringComparison.Ordinal))
+                        {
+                            var diff = Math.Abs(kv.Key.Length - candidate.Length);
+                            if (diff < minDiff)
+                            {
+                                minDiff = diff;
+                                bestKey = kv.Key;
+                                bestRecord = kv.Value;
+                            }
+                        }
+                    }
+                    
+                    if (bestRecord != null && minDiff <= 20)
+                    {
+                        return bestRecord;
+                    }
                 }
             }
 
@@ -320,10 +349,17 @@ public class LaunchBoxService
     /// filename and a clean LaunchBox title collapse to the same key.</summary>
     private static string NormalizeName(string value)
     {
+        var normalizedString = value.Normalize(NormalizationForm.FormD);
         var sb = new StringBuilder(value.Length);
         var depth = 0;
-        foreach (var ch in value)
+        foreach (var ch in normalizedString)
         {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(ch);
+            if (unicodeCategory == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
             if (ch is '(' or '[')
             {
                 depth++;
