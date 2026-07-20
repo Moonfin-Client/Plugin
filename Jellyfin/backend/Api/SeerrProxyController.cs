@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net.Mime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -252,6 +253,24 @@ public class SeerrProxyController : ControllerBase
             return Unauthorized(new { error = "User not authenticated" });
         }
 
+        var targetUserId = userId.Value;
+        var requestPath = path?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (method == HttpMethod.Get && (requestPath == "settings/radarr" || requestPath == "settings/sonarr"))
+        {
+            var currentSession = await _sessionService.GetSessionAsync(userId.Value);
+            bool isCurrentAdmin = currentSession != null && (currentSession.SeerrUserId == OwnerSeerrUserId || (currentSession.Permissions & AdminBit) != 0);
+
+            if (!isCurrentAdmin)
+            {
+                var adminSession = _sessionService.EnumerateSessions()
+                    .FirstOrDefault(s => s.SeerrUserId == OwnerSeerrUserId || (s.Permissions & AdminBit) != 0);
+                if (adminSession != null)
+                {
+                    targetUserId = adminSession.JellyfinUserId;
+                }
+            }
+        }
+
         byte[]? body = null;
         string? contentType = null;
 
@@ -264,9 +283,9 @@ public class SeerrProxyController : ControllerBase
         }
 
         var result = await _sessionService.ProxyRequestAsync(
-            userId.Value,
+            targetUserId,
             method,
-            path,
+            path ?? "",
             Request.QueryString.Value,
             body,
             contentType);
