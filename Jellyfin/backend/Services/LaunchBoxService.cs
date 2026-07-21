@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO.Compression;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -106,27 +105,28 @@ public class LaunchBoxService
                     return record;
                 }
 
+                // Fallback when the exact match misses: take the closest name where
+                // one side is a prefix of the other, to absorb region or edition
+                // suffixes. LaunchBox strips parentheticals, so it allows a tighter
+                // gap than Rdb.
                 if (candidate.Length >= 5)
                 {
-                    string? bestKey = null;
                     LaunchBoxRecord? bestRecord = null;
                     var minDiff = int.MaxValue;
-                    
                     foreach (var kv in index)
                     {
-                        if (kv.Key.StartsWith(candidate, StringComparison.Ordinal) || 
+                        if (kv.Key.StartsWith(candidate, StringComparison.Ordinal) ||
                             candidate.StartsWith(kv.Key, StringComparison.Ordinal))
                         {
                             var diff = Math.Abs(kv.Key.Length - candidate.Length);
                             if (diff < minDiff)
                             {
                                 minDiff = diff;
-                                bestKey = kv.Key;
                                 bestRecord = kv.Value;
                             }
                         }
                     }
-                    
+
                     if (bestRecord != null && minDiff <= 20)
                     {
                         return bestRecord;

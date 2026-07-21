@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -155,22 +154,22 @@ public class RdbService
             }
         }
 
-        // Partial match fallback for name lookups
+        // Fallback when the exact match misses: take the closest name where one
+        // side is a prefix of the other, to absorb region or edition suffixes.
+        // Rdb keeps region parentheticals, so it allows a wider gap than LaunchBox.
         if (fileName.Length >= 5)
         {
-            string? bestKey = null;
             RdbRecord? bestRecord = null;
             var minDiff = int.MaxValue;
             foreach (var kv in index.ByName)
             {
-                if (kv.Key.StartsWith(fileName, StringComparison.Ordinal) || 
+                if (kv.Key.StartsWith(fileName, StringComparison.Ordinal) ||
                     fileName.StartsWith(kv.Key, StringComparison.Ordinal))
                 {
                     var diff = Math.Abs(kv.Key.Length - fileName.Length);
                     if (diff < minDiff)
                     {
                         minDiff = diff;
-                        bestKey = kv.Key;
                         bestRecord = kv.Value;
                     }
                 }
