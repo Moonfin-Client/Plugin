@@ -515,8 +515,8 @@ public class GamesService
         var systemDir = FindSystemDir(library, romPath);
         var systemName = systemDir == null ? string.Empty : Path.GetFileName(systemDir);
         var core = ResolveSystemCore(systemName, new List<string> { romPath });
-        
-        // Resolve the exact No-Intro name from Rdb if available so region codes/tags (like (USA)) are included in the art URL.
+
+        // Resolve the exact No-Intro name from Rdb if available so region codes and tags (like (USA)) are included in the art URL.
         var title = ResolveTitle(systemDir, romPath);
         var rdb = _rdb?.TryLookup(core, romPath, title);
         var name = rdb?.Name ?? Path.GetFileNameWithoutExtension(romPath);
