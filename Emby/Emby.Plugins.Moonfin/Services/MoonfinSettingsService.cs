@@ -584,6 +584,59 @@ namespace Emby.Plugins.Moonfin.Services
             return File.Exists(path) || File.Exists(AtomicFile.BackupPath(path));
         }
 
+        /// <summary>
+        /// One-time healing sweep over every stored settings file. Files corrupted by the
+        /// in-place writes that shipped before AtomicFile are repaired through JsonSalvage when
+        /// a usable prefix survives, and quarantined otherwise. Healthy files are left untouched.
+        /// </summary>
+        public async Task<HealSummary> HealDataFilesAsync(CancellationToken cancellationToken)
+        {
+            (bool Ok, string Healed) Salvage(string raw) =>
+                (JsonSalvage.TrySalvage(raw, ValidateSalvagedEnvelope, out var healed), healed);
+
+            var summary = await FileHealer.HealDirectoryAsync(
+                _dataPath,
+                Path.Combine(_dataPath, "quarantine", "settings"),
+                _lock,
+                ValidateSalvagedEnvelope,
+                Salvage,
+                cancellationToken).ConfigureAwait(false);
+
+            foreach (var note in summary.Notes)
+            {
+                _logger.Warn("Settings heal: {0}", note);
+            }
+
+            return summary;
+        }
+
+        // The floor a salvaged envelope must clear before it replaces the corrupt file: it has
+        // to deserialize, carry a known schema version, and hold either a device profile or the
+        // v1 flat fields the lazy migration understands. Anything reduced to bare metadata is
+        // the same as data loss, so it goes to quarantine where the bytes stay recoverable by
+        // hand.
+        private bool ValidateSalvagedEnvelope(string text)
+        {
+            try
+            {
+                var envelope = JsonSerializer.Deserialize<MoonfinUserSettings>(text, _jsonOptions);
+                if (envelope == null || envelope.SchemaVersion < 1 || envelope.SchemaVersion > 2)
+                {
+                    return false;
+                }
+
+                return envelope.Global != null ||
+                    envelope.Desktop != null ||
+                    envelope.Mobile != null ||
+                    envelope.Tv != null ||
+                    envelope.NeedsMigration;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private MoonfinUserSettings MigrateV1ToV2(MoonfinUserSettings v1)
         {
             var global = new MoonfinSettingsProfile();

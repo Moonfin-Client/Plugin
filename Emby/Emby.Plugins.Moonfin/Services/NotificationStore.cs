@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Model.Logging;
 
 namespace Emby.Plugins.Moonfin.Services
@@ -157,6 +158,32 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 _lock.Release();
             }
+        }
+
+        /// <summary>
+        /// One-time healing sweep over stored notification prefs. Prefs are small and
+        /// re-creatable, so unparseable files are quarantined rather than repaired.
+        /// </summary>
+        public Task<HealSummary> HealDataFilesAsync(CancellationToken cancellationToken)
+        {
+            var dataPath = Path.GetDirectoryName(_prefsPath) ?? _prefsPath;
+            return FileHealer.HealDirectoryAsync(
+                _prefsPath,
+                Path.Combine(dataPath, "quarantine", "notifications"),
+                _lock,
+                text =>
+                {
+                    try
+                    {
+                        return JsonSerializer.Deserialize<NotificationPrefs>(text, _jsonOptions) != null;
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                },
+                salvage: null,
+                cancellationToken);
         }
     }
 

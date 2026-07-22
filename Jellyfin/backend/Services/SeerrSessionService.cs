@@ -978,6 +978,37 @@ public class SeerrSessionService
             _lock.Release();
         }
     }
+
+    /// <summary>
+    /// One-time healing sweep over stored Seerr sessions. A lost session only forces one
+    /// re-login, so unparseable files are quarantined rather than repaired.
+    /// </summary>
+    public Task<HealSummary> HealDataFilesAsync(CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(_sessionsPath))
+        {
+            return Task.FromResult(new HealSummary());
+        }
+
+        var dataPath = Path.GetDirectoryName(_sessionsPath) ?? _sessionsPath;
+        return FileHealer.HealDirectoryAsync(
+            _sessionsPath,
+            Path.Combine(dataPath, "quarantine", "seerr-sessions"),
+            _lock,
+            text =>
+            {
+                try
+                {
+                    return JsonSerializer.Deserialize<SeerrSession>(text, _jsonOptions) != null;
+                }
+                catch
+                {
+                    return false;
+                }
+            },
+            salvage: null,
+            cancellationToken);
+    }
 }
 
 /// <summary>

@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
@@ -35,6 +38,33 @@ namespace Emby.Plugins.Moonfin
 
             plugin.MigrateConfiguration();
             plugin.InitializeServices(_logManager, _appHost);
+
+            // Heal user data files corrupted before atomic writes shipped. Fire and forget so
+            // a slow disk can't hold up server startup, and never let it throw into boot.
+            var settingsService = plugin.SettingsService;
+            var notificationStore = plugin.NotificationStore;
+            var seerrService = plugin.SeerrService;
+            if (settingsService != null && notificationStore != null && seerrService != null)
+            {
+                var logger = _logManager.GetLogger("MoonfinDataHeal");
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Services.MoonfinDataHeal.RunAsync(
+                            settingsService,
+                            notificationStore,
+                            seerrService,
+                            logger,
+                            progress: null,
+                            CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.ErrorException("Moonfin data heal failed", ex);
+                    }
+                });
+            }
         }
 
         public void Dispose() { }
