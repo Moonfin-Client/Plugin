@@ -569,18 +569,6 @@
                             </div>
                         </div>
                         <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="GamesCoreZipUrl">Or download from a zip URL</label>
-                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                                <input type="url" id="GamesCoreZipUrl" is="emby-input" placeholder="https://.../emulatorjs-data.zip" style="flex:1;min-width:240px;" />
-                                <button type="button" id="GameCoresInstallBtn" is="emby-button" class="raised">Download to server</button>
-                            </div>
-                            <div class="fieldDescription">
-                                Downloads the zip in the background. Leave the URL blank to use an
-                                <code>emulatorjs-data.zip</code> asset on the plugin's GitHub release. Click Save below
-                                to persist the URL.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused">Game libraries</label>
                             <div id="GameLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
                             <div class="fieldDescription">
@@ -2775,7 +2763,6 @@
                     document.querySelector('#GamesEnabled').checked = config.GamesEnabled === true;
                     loadGameLibraryPicker(config.GameLibraryIds || []);
                     initGameCores();
-                    document.querySelector('#GamesCoreZipUrl').value = config.GamesCoreZipUrl || '';
 
                     var defaults = config.DefaultUserSettings || {};
                     setSelectValue('#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
@@ -2934,23 +2921,19 @@
 
                 function refreshCoresStatus() {
                     var statusEl = document.querySelector('#GameCoresStatus');
-                    var btn = document.querySelector('#GameCoresInstallBtn');
-                    if (!statusEl || !btn) return;
+                    if (!statusEl) return;
                     var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
                     fetch(serverUrl + '/Moonfin/Games/Cores/Status', { headers: gameCoresHeaders() })
                         .then(function(r) { return r.json(); })
                         .then(function(s) {
                             if (s.downloading) {
                                 statusEl.textContent = 'Downloading cores... (' + (s.filesInstalled || 0) + ' files so far)';
-                                btn.disabled = true;
                                 if (!gameCoresPollTimer) gameCoresPollTimer = setInterval(refreshCoresStatus, 4000);
                                 return;
                             }
                             if (gameCoresPollTimer) { clearInterval(gameCoresPollTimer); gameCoresPollTimer = null; }
-                            btn.disabled = false;
                             if (s.installed) {
                                 statusEl.textContent = 'Installed on server (offline ready).';
-                                btn.textContent = 'Re-download cores';
                             } else if (s.state === 'failed') {
                                 statusEl.textContent = 'Download failed: ' + (s.error || 'unknown error');
                             } else {
@@ -2961,24 +2944,9 @@
                 }
 
                 function initGameCores() {
-                    var btn = document.querySelector('#GameCoresInstallBtn');
-                    if (!btn || btn.dataset.wired === '1') { refreshCoresStatus(); return; }
-                    btn.dataset.wired = '1';
-                    btn.addEventListener('click', function() {
-                        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
-                        var statusEl = document.querySelector('#GameCoresStatus');
-                        if (statusEl) statusEl.textContent = 'Starting download...';
-                        btn.disabled = true;
-                        fetch(serverUrl + '/Moonfin/Games/Cores/Install', { method: 'POST', headers: gameCoresHeaders() })
-                            .then(function() { refreshCoresStatus(); })
-                            .catch(function() {
-                                if (statusEl) statusEl.textContent = 'Failed to start download.';
-                                btn.disabled = false;
-                            });
-                    });
-
                     var uploadBtn = document.querySelector('#GameCoresUploadBtn');
-                    if (uploadBtn) {
+                    if (uploadBtn && uploadBtn.dataset.wired !== '1') {
+                        uploadBtn.dataset.wired = '1';
                         uploadBtn.addEventListener('click', function() {
                             var fileInput = document.querySelector('#GameCoresFile');
                             var statusEl = document.querySelector('#GameCoresStatus');
@@ -3135,7 +3103,6 @@
                         config.GameLibraryIds = Array.prototype.slice.call(
                             document.querySelectorAll('.gameLibraryCb:checked')
                         ).map(function (cb) { return cb.getAttribute('data-id'); });
-                        config.GamesCoreZipUrl = document.querySelector('#GamesCoreZipUrl').value || null;
 
                         config.DefaultUserSettings = config.DefaultUserSettings || {};
                         config.DefaultUserSettings.visualTheme = document.querySelector('#DefaultVisualTheme').value || null;
