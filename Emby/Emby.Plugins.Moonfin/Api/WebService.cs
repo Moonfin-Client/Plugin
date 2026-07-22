@@ -19,6 +19,35 @@ namespace Emby.Plugins.Moonfin.Api
             "<base\\s+href=\"[^\"]*\"\\s*/?>",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        // Emby's static file server doesn't know the newer .mjs and .wasm extensions
+        // and serves them as application/octet-stream, which Chrome rejects for module
+        // scripts. Serve web assets with an explicit content type instead.
+        private static readonly IReadOnlyDictionary<string, string> ContentTypes =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [".html"] = "text/html; charset=utf-8",
+                [".htm"] = "text/html; charset=utf-8",
+                [".js"] = "application/javascript",
+                [".mjs"] = "text/javascript",
+                [".css"] = "text/css",
+                [".json"] = "application/json",
+                [".map"] = "application/json",
+                [".wasm"] = "application/wasm",
+                [".svg"] = "image/svg+xml",
+                [".png"] = "image/png",
+                [".jpg"] = "image/jpeg",
+                [".jpeg"] = "image/jpeg",
+                [".gif"] = "image/gif",
+                [".webp"] = "image/webp",
+                [".ico"] = "image/x-icon",
+                [".txt"] = "text/plain; charset=utf-8",
+                [".xml"] = "application/xml",
+                [".woff"] = "font/woff",
+                [".woff2"] = "font/woff2",
+                [".ttf"] = "font/ttf",
+                [".otf"] = "font/otf",
+            };
+
         public IRequest Request { get; set; } = null!;
         public IHttpResultFactory ResultFactory { get; set; } = null!;
 
@@ -129,6 +158,15 @@ namespace Emby.Plugins.Moonfin.Api
             var html = RewriteBaseHref(fullPath);
             if (html == null)
             {
+                var ext = Path.GetExtension(fullPath).ToLowerInvariant();
+                if (ContentTypes.TryGetValue(ext, out var contentType))
+                {
+                    return ResultFactory.GetStaticFileResult(Request, new StaticFileResultOptions
+                    {
+                        Path = fullPath,
+                        ContentType = contentType,
+                    });
+                }
                 return ResultFactory.GetStaticFileResult(Request, fullPath);
             }
 
