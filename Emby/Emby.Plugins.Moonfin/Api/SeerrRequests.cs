@@ -28,6 +28,24 @@ namespace Emby.Plugins.Moonfin.Api
     [Authenticated]
     public class SeerrLogoutRequest : IReturn<object> { }
 
+    [Route("/Moonfin/Seerr/Radarr/Calendar", "GET")]
+[Route("/Moonfin/Jellyseerr/Radarr/Calendar", "GET")]
+    [Authenticated]
+    public class GetRadarrCalendarRequest : IReturn<object>
+    {
+        public string? Start { get; set; }
+        public string? End { get; set; }
+    }
+
+    [Route("/Moonfin/Seerr/Sonarr/Calendar", "GET")]
+[Route("/Moonfin/Jellyseerr/Sonarr/Calendar", "GET")]
+    [Authenticated]
+    public class GetSonarrCalendarRequest : IReturn<object>
+    {
+        public string? Start { get; set; }
+        public string? End { get; set; }
+    }
+
     [Route("/Moonfin/Seerr/Api/{Path*}", "GET")]
 [Route("/Moonfin/Jellyseerr/Api/{Path*}", "GET")]
     [Authenticated]

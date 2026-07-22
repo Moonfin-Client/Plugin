@@ -109,6 +109,27 @@ namespace Emby.Plugins.Moonfin.Api
         public async Task<object?> Put(SeerrProxyPutRequest request) => await ProxyApiRequest(HttpMethod.Put, request.Path, request.RequestStream).ConfigureAwait(false);
         public async Task<object?> Delete(SeerrProxyDeleteRequest request) => await ProxyApiRequest(HttpMethod.Delete, request.Path, null).ConfigureAwait(false);
 
+        public Task<object?> Get(GetRadarrCalendarRequest request) => GetArrCalendar("radarr", request.Start, request.End);
+        public Task<object?> Get(GetSonarrCalendarRequest request) => GetArrCalendar("sonarr", request.Start, request.End);
+
+        private async Task<object?> GetArrCalendar(string service, string? start, string? end)
+        {
+            var config = Plugin.Instance?.Configuration;
+            if (config?.SeerrEnabled != true || string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()))
+            { Request.Response.StatusCode = 503; return new { error = "Seerr integration is not enabled" }; }
+
+            if (AuthHelpers.GetCurrentUserId(Request, _authContext) == null)
+            { Request.Response.StatusCode = 401; return new { error = "User not authenticated" }; }
+
+            var result = await Session.GetArrCalendarAsync(service, start, end).ConfigureAwait(false);
+
+            Request.Response.StatusCode = result.StatusCode;
+            if (result.Body == null) return null;
+
+            var responseContentType = string.IsNullOrWhiteSpace(result.ContentType) ? "application/octet-stream" : result.ContentType;
+            return ResultFactory.GetResult(Request, new MemoryStream(result.Body), responseContentType, null);
+        }
+
         private async Task<object?> ProxyApiRequest(HttpMethod method, string? path, System.IO.Stream? bodyStream)
         {
             var config = Plugin.Instance?.Configuration;
