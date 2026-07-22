@@ -1,4 +1,5 @@
 using System.Net.Mime;
+using MediaBrowser.Controller.QuickConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -59,6 +60,14 @@ public class SeerrProxyController : ControllerBase
             return Unauthorized(new { error = "User not authenticated" });
         }
 
+        // Password-less sign in for clients that never held a password, like Quick
+        // Connect and restored-token logins. Branches before the username check since
+        // the caller's identity comes from the claims, not the body.
+        if (string.Equals(request.AuthType, "quickconnect", StringComparison.OrdinalIgnoreCase))
+        {
+            return await LoginWithQuickConnect(userId.Value, request.Username);
+        }
+
         if (string.IsNullOrEmpty(request.Username))
         {
             return BadRequest(new { error = "Username is required" });
@@ -78,6 +87,73 @@ public class SeerrProxyController : ControllerBase
         }
 
         // Once an admin session exists, auto-register our webhook best-effort (throttled internally).
+        if (result.SeerrUserId == OwnerSeerrUserId || (result.Permissions & AdminBit) != 0)
+        {
+            _ = _provisioning.EnsureWebhookAsync(default);
+        }
+
+        return Ok(new
+        {
+            success = true,
+            seerrUserId = result.SeerrUserId,
+            jellyseerrUserId = result.SeerrUserId, // legacy alias for pre-rename clients
+            displayName = result.DisplayName,
+            avatar = result.Avatar,
+            permissions = result.Permissions
+        });
+    }
+
+    // Resolved lazily so a Jellyfin build without the service degrades to a clean error
+    // instead of failing controller construction, which would take down every Seerr
+    // endpoint including the password login.
+    private async Task<IActionResult> LoginWithQuickConnect(Guid userId, string? username)
+    {
+        var quickConnect = HttpContext.RequestServices.GetService(typeof(IQuickConnect)) as IQuickConnect;
+        if (quickConnect == null)
+        {
+            return Unauthorized(new
+            {
+                error = "Quick Connect sign in is not available on this server.",
+                errorCode = "sso_unsupported",
+                success = false
+            });
+        }
+
+        if (!quickConnect.IsEnabled)
+        {
+            return Unauthorized(new
+            {
+                error = "Quick Connect is disabled on this Jellyfin server. Enable it under Dashboard -> General, or sign in with your password.",
+                errorCode = "quickconnect_disabled",
+                success = false
+            });
+        }
+
+        var result = await _sessionService.AuthenticateViaQuickConnectAsync(
+            userId,
+            username,
+            async code =>
+            {
+                try
+                {
+                    return await quickConnect.AuthorizeRequest(userId, code);
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+
+        if (result == null || !result.Success)
+        {
+            return Unauthorized(new
+            {
+                error = result?.Error ?? "Authentication failed",
+                errorCode = result?.ErrorCode,
+                success = false
+            });
+        }
+
         if (result.SeerrUserId == OwnerSeerrUserId || (result.Permissions & AdminBit) != 0)
         {
             _ = _provisioning.EnsureWebhookAsync(default);
@@ -347,8 +423,8 @@ public class SeerrLoginRequest
     public string? Password { get; set; }
 
     /// <summary>
-    /// Authentication type: "jellyfin" (default) or "local".
-    /// Determines which Seerr auth endpoint is used.
+    /// Authentication type: "jellyfin" (default), "local", or "quickconnect" for the
+    /// password-less bridge. Determines which Seerr auth endpoint is used.
     /// </summary>
     public string? AuthType { get; set; }
 }

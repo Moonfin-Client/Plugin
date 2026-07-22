@@ -407,6 +407,224 @@ public class SeerrSessionService
     }
 
     /// <summary>
+    /// Mints a Seerr session without a password by bridging Quick Connect: initiate a
+    /// Quick Connect request through Seerr, approve the returned code in process as the
+    /// calling user through authorizeCode, then let Seerr redeem the secret and hand back
+    /// its session cookie. Kept separate from AuthenticateAsync so the password flow stays
+    /// untouched. The code and secret only ever come from our own initiate call, never
+    /// from the client, so a caller can never trick the server into approving a foreign
+    /// Quick Connect request.
+    /// </summary>
+    public async Task<SeerrAuthResult?> AuthenticateViaQuickConnectAsync(
+        Guid userId,
+        string? username,
+        Func<string, Task<bool>> authorizeCode)
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+        var seerrUrl = config?.GetEffectiveSeerrUrl();
+
+        if (string.IsNullOrEmpty(seerrUrl))
+        {
+            _logger.LogError("Seerr URL not configured");
+            return null;
+        }
+
+        try
+        {
+            var cookieContainer = new CookieContainer();
+            using var handler = new HttpClientHandler
+            {
+                CookieContainer = cookieContainer,
+                UseCookies = true,
+                AllowAutoRedirect = false
+            };
+            using var client = new HttpClient(handler);
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.TryAddWithoutValidation(
+                "User-Agent", "Moonfin-Server");
+
+            // One prefetch covers both posts. The csurf token is derived from the secret
+            // cookie, which stays constant in this jar, so it stays valid across requests.
+            var csrfToken = await FetchCsrfTokenAsync(client, seerrUrl, cookieContainer);
+            var originValue = new Uri(seerrUrl).GetLeftPart(UriPartial.Authority);
+
+            HttpRequestMessage BuildPost(string url, object payload)
+            {
+                var post = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(payload),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+                post.Headers.TryAddWithoutValidation("Origin", originValue);
+                post.Headers.TryAddWithoutValidation("Referer", seerrUrl.TrimEnd('/') + "/");
+                if (!string.IsNullOrEmpty(csrfToken))
+                {
+                    post.Headers.TryAddWithoutValidation("X-XSRF-TOKEN", csrfToken);
+                    post.Headers.TryAddWithoutValidation("X-CSRF-Token", csrfToken);
+                }
+
+                return post;
+            }
+
+            using var initiateRequest = BuildPost(
+                $"{seerrUrl}/api/v1/auth/jellyfin/quickconnect/initiate", new { });
+            var initiateResponse = await client.SendAsync(initiateRequest);
+
+            if (initiateResponse.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed)
+            {
+                return new SeerrAuthResult
+                {
+                    Success = false,
+                    ErrorCode = "sso_unsupported",
+                    Error = "This Seerr version does not support Quick Connect sign in."
+                };
+            }
+
+            if (!initiateResponse.IsSuccessStatusCode)
+            {
+                var initiateBody = await initiateResponse.Content.ReadAsStringAsync();
+                _logger.LogWarning(
+                    "Seerr Quick Connect initiate failed for Jellyfin user {UserId}: {Status} - {Error}",
+                    userId, initiateResponse.StatusCode, initiateBody);
+                return new SeerrAuthResult
+                {
+                    Success = false,
+                    ErrorCode = "initiate_failed",
+                    Error = $"Seerr could not start Quick Connect: {initiateResponse.StatusCode}"
+                };
+            }
+
+            var initiateJson = JsonSerializer.Deserialize<JsonElement>(
+                await initiateResponse.Content.ReadAsStringAsync());
+            var code = initiateJson.TryGetProperty("code", out var codeProp) ? codeProp.GetString() : null;
+            var secret = initiateJson.TryGetProperty("secret", out var secretProp) ? secretProp.GetString() : null;
+            if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(secret))
+            {
+                return new SeerrAuthResult
+                {
+                    Success = false,
+                    ErrorCode = "initiate_failed",
+                    Error = "Seerr did not return a Quick Connect code."
+                };
+            }
+
+            if (!await authorizeCode(code))
+            {
+                _logger.LogWarning(
+                    "Jellyfin refused to authorize the Quick Connect code for user {UserId}", userId);
+                return new SeerrAuthResult
+                {
+                    Success = false,
+                    ErrorCode = "authorize_failed",
+                    Error = "Jellyfin did not approve the Quick Connect request."
+                };
+            }
+
+            using var authRequest = BuildPost(
+                $"{seerrUrl}/api/v1/auth/jellyfin/quickconnect/authenticate", new { secret });
+            var response = await client.SendAsync(authRequest);
+
+            if ((int)response.StatusCode is >= 300 and < 400)
+            {
+                _logger.LogWarning(
+                    "Seerr Quick Connect auth redirected ({Status} -> {Location}). " +
+                    "Check the Seerr URL configured in Moonfin matches the public address (scheme + sub-path).",
+                    response.StatusCode, response.Headers.Location?.ToString());
+                return new SeerrAuthResult
+                {
+                    Success = false,
+                    ErrorCode = "authenticate_failed",
+                    Error = "Seerr redirected the login request. Verify the Seerr URL in Moonfin matches its public address (https and any sub-path)."
+                };
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning(
+                    "Seerr Quick Connect auth failed for Jellyfin user {UserId}: {Status} - {Error}",
+                    userId, response.StatusCode, errorBody);
+                return new SeerrAuthResult
+                {
+                    Success = false,
+                    ErrorCode = "authenticate_failed",
+                    Error = response.StatusCode == HttpStatusCode.Forbidden
+                        ? "Access denied. Make sure new Jellyfin sign-ins are allowed in Seerr."
+                        : $"Authentication failed: {response.StatusCode}"
+                };
+            }
+
+            var (sessionCookieName, sessionCookie) = ReadSessionCookie(response, cookieContainer, seerrUrl);
+            if (string.IsNullOrEmpty(sessionCookie))
+            {
+                _logger.LogWarning(
+                    "No session cookie received from Seerr Quick Connect auth for user {UserId}", userId);
+                return new SeerrAuthResult
+                {
+                    Success = false,
+                    ErrorCode = "authenticate_failed",
+                    Error = "No session cookie received from Seerr"
+                };
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var userInfo = JsonSerializer.Deserialize<JsonElement>(responseBody);
+            var displayName = userInfo.TryGetProperty("displayName", out var dnProp) ? dnProp.GetString() : null;
+
+            var session = new SeerrSession
+            {
+                JellyfinUserId = userId,
+                SessionCookie = sessionCookie,
+                SessionCookieName = sessionCookieName ?? "connect.sid",
+                SeerrUserId = userInfo.TryGetProperty("id", out var idProp) ? idProp.GetInt32() : 0,
+                Username = !string.IsNullOrEmpty(username) ? username : displayName ?? string.Empty,
+                DisplayName = displayName ?? username,
+                Avatar = userInfo.TryGetProperty("avatar", out var avProp) ? avProp.GetString() : null,
+                Permissions = userInfo.TryGetProperty("permissions", out var permProp) ? permProp.GetInt32() : 0,
+                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                LastValidated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            };
+
+            await SaveSessionAsync(session);
+
+            _logger.LogInformation(
+                "Seerr Quick Connect session created for Jellyfin user {UserId} (Seerr user {SeerrUserId})",
+                userId, session.SeerrUserId);
+
+            return new SeerrAuthResult
+            {
+                Success = true,
+                SeerrUserId = session.SeerrUserId,
+                DisplayName = session.DisplayName,
+                Avatar = session.Avatar,
+                Permissions = session.Permissions
+            };
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Failed to reach Seerr at {Url} for Quick Connect sign in", seerrUrl);
+            return new SeerrAuthResult
+            {
+                Success = false,
+                ErrorCode = "seerr_unreachable",
+                Error = $"Cannot reach Seerr: {ex.Message}"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error during Seerr Quick Connect sign in for user {UserId}", userId);
+            return new SeerrAuthResult
+            {
+                Success = false,
+                ErrorCode = "authenticate_failed",
+                Error = "An unexpected error occurred"
+            };
+        }
+    }
+
+    /// <summary>
     /// Gets the stored session for a user, optionally validating it.
     /// </summary>
     public async Task<SeerrSession?> GetSessionAsync(Guid userId, bool validate = false)
@@ -1071,6 +1289,12 @@ public class SeerrAuthResult
 
     /// <summary>Error message if auth failed.</summary>
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Machine readable failure code for the Quick Connect flow, so clients can tell an
+    /// unsupported server apart from a transient failure. Null on the password flow.
+    /// </summary>
+    public string? ErrorCode { get; set; }
 
     /// <summary>Seerr user ID if successful.</summary>
     public int SeerrUserId { get; set; }
