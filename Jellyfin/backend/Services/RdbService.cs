@@ -161,6 +161,7 @@ public class RdbService
         {
             RdbRecord? bestRecord = null;
             var minDiff = int.MaxValue;
+            var ambiguous = false;
             foreach (var kv in index.ByName)
             {
                 if (kv.Key.StartsWith(fileName, StringComparison.Ordinal) ||
@@ -171,10 +172,17 @@ public class RdbService
                     {
                         minDiff = diff;
                         bestRecord = kv.Value;
+                        ambiguous = false;
+                    }
+                    else if (diff == minDiff && !ReferenceEquals(kv.Value, bestRecord))
+                    {
+                        // Two different games are equally close, so a common prefix
+                        // can't be resolved to one. Skip rather than pick wrong art.
+                        ambiguous = true;
                     }
                 }
             }
-            if (bestRecord != null && minDiff <= 45)
+            if (bestRecord != null && !ambiguous && minDiff <= 45)
             {
                 return bestRecord;
             }
