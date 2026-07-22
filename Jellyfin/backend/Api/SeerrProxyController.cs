@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Net.Mime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -237,6 +236,56 @@ public class SeerrProxyController : ControllerBase
         return await ProxyApiRequest(HttpMethod.Delete, path);
     }
 
+    /// <summary>
+    /// The upcoming Radarr calendar, fetched server-side so the API key stays on the server and a
+    /// remote client can still see the calendar when Radarr is only reachable on the local network.
+    /// </summary>
+    [HttpGet("Radarr/Calendar")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public Task<IActionResult> GetRadarrCalendar() => GetArrCalendar("radarr");
+
+    /// <summary>
+    /// The upcoming Sonarr calendar, fetched server-side so the API key stays on the server and a
+    /// remote client can still see the calendar when Sonarr is only reachable on the local network.
+    /// </summary>
+    [HttpGet("Sonarr/Calendar")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public Task<IActionResult> GetSonarrCalendar() => GetArrCalendar("sonarr");
+
+    private async Task<IActionResult> GetArrCalendar(string service)
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+        var seerrUrl = config?.GetEffectiveSeerrUrl();
+        if (config?.SeerrEnabled != true || string.IsNullOrEmpty(seerrUrl))
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = "Seerr integration is not enabled" });
+        }
+
+        var userId = this.GetUserIdFromClaims();
+        if (userId == null)
+        {
+            return Unauthorized(new { error = "User not authenticated" });
+        }
+
+        var start = Request.Query["start"].ToString();
+        var end = Request.Query["end"].ToString();
+        var result = await _sessionService.GetArrCalendarAsync(service, start, end);
+        if (result.Body == null)
+        {
+            return StatusCode(result.StatusCode);
+        }
+
+        var responseContentType = string.IsNullOrWhiteSpace(result.ContentType)
+            ? MediaTypeNames.Application.Octet
+            : result.ContentType;
+
+        Response.StatusCode = result.StatusCode;
+        return File(result.Body, responseContentType);
+    }
+
     private async Task<IActionResult> ProxyApiRequest(HttpMethod method, string path)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
@@ -253,24 +302,6 @@ public class SeerrProxyController : ControllerBase
             return Unauthorized(new { error = "User not authenticated" });
         }
 
-        var targetUserId = userId.Value;
-        var requestPath = path?.Trim().ToLowerInvariant() ?? string.Empty;
-        if (method == HttpMethod.Get && (requestPath == "settings/radarr" || requestPath == "settings/sonarr"))
-        {
-            var currentSession = await _sessionService.GetSessionAsync(userId.Value);
-            bool isCurrentAdmin = currentSession != null && (currentSession.SeerrUserId == OwnerSeerrUserId || (currentSession.Permissions & AdminBit) != 0);
-
-            if (!isCurrentAdmin)
-            {
-                var adminSession = _sessionService.EnumerateSessions()
-                    .FirstOrDefault(s => s.SeerrUserId == OwnerSeerrUserId || (s.Permissions & AdminBit) != 0);
-                if (adminSession != null)
-                {
-                    targetUserId = adminSession.JellyfinUserId;
-                }
-            }
-        }
-
         byte[]? body = null;
         string? contentType = null;
 
@@ -283,9 +314,9 @@ public class SeerrProxyController : ControllerBase
         }
 
         var result = await _sessionService.ProxyRequestAsync(
-            targetUserId,
+            userId.Value,
             method,
-            path ?? "",
+            path,
             Request.QueryString.Value,
             body,
             contentType);

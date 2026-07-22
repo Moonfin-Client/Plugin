@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -520,6 +521,99 @@ namespace Emby.Plugins.Moonfin.Services
         }
 
         /// <summary>Enumerates all stored Seerr sessions.</summary>
+        // Seerr owner is user 1, and permissions bit 2 is the admin flag.
+        private const int OwnerSeerrUserId = 1;
+        private const int AdminBit = 2;
+
+        /// <summary>
+        /// Fetches the Radarr or Sonarr upcoming calendar server-side so the API key never reaches the
+        /// client. The arr connection is read from an admin Seerr session and the arr is called directly,
+        /// which also lets remote clients see the calendar when the arr host is only on the local network.
+        /// </summary>
+        public async Task<SeerrProxyResponse> GetArrCalendarAsync(string service, string? start, string? end)
+        {
+            var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
+            var settingsPath = isSonarr ? "settings/sonarr" : "settings/radarr";
+
+            var adminSession = EnumerateSessions().FirstOrDefault(
+                s => s.SeerrUserId == OwnerSeerrUserId || (s.Permissions & AdminBit) != 0);
+            if (adminSession == null)
+            {
+                return CalendarError(503, "No admin Seerr session is available to read the arr settings");
+            }
+
+            var settings = await ProxyRequestAsync(adminSession.JellyfinUserId, HttpMethod.Get, settingsPath).ConfigureAwait(false);
+            if (settings.Body == null || settings.StatusCode != 200)
+            {
+                return settings;
+            }
+
+            JsonElement server;
+            try
+            {
+                using var doc = JsonDocument.Parse(settings.Body);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
+                {
+                    return CalendarError(404, "No " + service + " server is configured in Seerr");
+                }
+                server = doc.RootElement[0].Clone();
+            }
+            catch (JsonException)
+            {
+                return CalendarError(502, "Could not read the arr settings from Seerr");
+            }
+
+            var hostname = server.TryGetProperty("hostname", out var h) ? h.GetString() ?? string.Empty : string.Empty;
+            if (hostname.Length == 0)
+            {
+                return CalendarError(404, "No " + service + " host is configured in Seerr");
+            }
+
+            var port = server.TryGetProperty("port", out var p) && p.TryGetInt32(out var portValue)
+                ? portValue
+                : (isSonarr ? 8989 : 7878);
+            var useSsl = server.TryGetProperty("useSsl", out var ssl) && ssl.ValueKind == JsonValueKind.True;
+            var baseUrl = (server.TryGetProperty("baseUrl", out var b) ? b.GetString() : null)?.TrimEnd('/') ?? string.Empty;
+            var apiKey = server.TryGetProperty("apiKey", out var k) ? k.GetString() ?? string.Empty : string.Empty;
+
+            var protocol = useSsl ? "https" : "http";
+            var startDate = string.IsNullOrWhiteSpace(start) ? DateTime.UtcNow.ToString("yyyy-MM-dd") : start;
+            var endDate = string.IsNullOrWhiteSpace(end) ? DateTime.UtcNow.AddDays(90).ToString("yyyy-MM-dd") : end;
+            var query = "start=" + Uri.EscapeDataString(startDate) + "&end=" + Uri.EscapeDataString(endDate);
+            if (isSonarr)
+            {
+                query += "&includeSeries=true";
+            }
+            var url = protocol + "://" + hostname + ":" + port + baseUrl + "/api/v3/calendar?" + query;
+
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("X-Api-Key", apiKey);
+                using var arrResponse = await client.SendAsync(request).ConfigureAwait(false);
+                var arrBody = await arrResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                return new SeerrProxyResponse
+                {
+                    StatusCode = (int)arrResponse.StatusCode,
+                    Body = arrBody,
+                    ContentType = arrResponse.Content.Headers.ContentType?.ToString() ?? "application/json"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Failed to fetch " + service + " calendar: " + ex.Message);
+                return CalendarError(502, "Could not reach the " + service + " server");
+            }
+        }
+
+        private static SeerrProxyResponse CalendarError(int statusCode, string message) => new SeerrProxyResponse
+        {
+            StatusCode = statusCode,
+            Body = JsonSerializer.SerializeToUtf8Bytes(new { error = message }),
+            ContentType = "application/json"
+        };
+
         public IEnumerable<SeerrSession> EnumerateSessions()
         {
             if (!Directory.Exists(_sessionsPath)) yield break;
