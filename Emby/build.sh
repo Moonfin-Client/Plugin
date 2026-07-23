@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-VERSION="${1:-2.0.0.0}"
+VERSION="${1:-2.0.1.0}"
 TARGET_ABI="${2:-4.9.1.90}"
 PROJECT="Emby.Plugins.Moonfin/Emby.Plugins.Moonfin.csproj"
 OUTPUT_DIR="release"

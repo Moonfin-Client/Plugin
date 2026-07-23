@@ -3,7 +3,7 @@
 # Usage: .\build.ps1 [-Version "1.1.0.0"] [-TargetAbi "10.10.0"] [-SourceUrl "https://..."] [-SkipManifestUpdate]
 
 param(
-    [string]$Version = "2.0.0.0",
+    [string]$Version = "2.0.1.0",
     [string]$TargetAbi = "10.10.0",
     [string]$SourceUrl = "",
     [switch]$SkipManifestUpdate
