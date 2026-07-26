@@ -751,13 +751,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         source.slice().sort(function (a, b) {
             return (a.order == null ? 0 : a.order) - (b.order == null ? 0 : b.order);
         }).forEach(function (section) {
-            if (!section || section.enabled === false) return;
+            if (!section) return;
             var normalized;
             if (section.kind === 'pluginDynamic') {
                 normalized = {
                     kind: 'pluginDynamic',
                     type: 'none',
-                    enabled: true,
+                    enabled: section.enabled !== false,
                     order: ordered.length,
                     serverId: section.serverId || '',
                     pluginSource: section.pluginSource || 'hss',
@@ -766,6 +766,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     pluginDisplayText: section.pluginDisplayText || section.pluginSection || 'Dynamic row'
                 };
             } else {
+                if (section.enabled === false) return;
                 var definition = homeSectionDefinition(section.type);
                 if (!definition) return;
                 normalized = {
