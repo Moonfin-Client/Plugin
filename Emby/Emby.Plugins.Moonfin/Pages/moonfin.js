@@ -1632,7 +1632,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function testMdblistKey(view) {
-        var resultEl = view.querySelector('#MdblistTestKeyResult');
+        var resultEl = view.querySelector('#MdblistActionResult');
         var key = (view.querySelector('#MdblistApiKey').value || '').trim();
         if (resultEl) resultEl.textContent = 'Testing…';
         ApiClient.getJSON(ApiClient.getUrl('Moonfin/MdbList/KeyInfo', key ? { key: key } : {})).then(function (info) {
@@ -1646,6 +1646,27 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             }
         }).catch(function () {
             if (resultEl) resultEl.textContent = 'Key test failed. Could not reach the server.';
+        });
+    }
+
+    function clearMdblistCache(view) {
+        var resultEl = view.querySelector('#MdblistActionResult');
+        var btn = view.querySelector('#MdblistClearCacheBtn');
+        if (btn) btn.disabled = true;
+        if (resultEl) resultEl.textContent = 'Clearing…';
+        ApiClient.ajax({
+            type: 'POST',
+            url: ApiClient.getUrl('Moonfin/MdbList/ClearCache'),
+            dataType: 'json'
+        }).then(function (result) {
+            if (resultEl) {
+                resultEl.textContent = 'Cleared ' + ((result && result.removed) || 0) +
+                    ' cached ratings. They will refetch as items are viewed.';
+            }
+        }).catch(function () {
+            if (resultEl) resultEl.textContent = 'Could not clear the ratings cache.';
+        }).finally(function () {
+            if (btn) btn.disabled = false;
         });
     }
 
@@ -1698,6 +1719,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         var mdblistTestBtn = view.querySelector('#MdblistTestKeyBtn');
         if (mdblistTestBtn) mdblistTestBtn.addEventListener('click', function () { testMdblistKey(view); });
+
+        var mdblistClearCacheBtn = view.querySelector('#MdblistClearCacheBtn');
+        if (mdblistClearCacheBtn) mdblistClearCacheBtn.addEventListener('click', function () { clearMdblistCache(view); });
     }
 
     function View(view, params) {

@@ -511,7 +511,14 @@
                             <button is="emby-button" type="button" id="MdblistTestKeyBtn" class="raised">
                                 <span>Test key</span>
                             </button>
-                            <div class="fieldDescription" id="MdblistTestKeyResult"></div>
+                            <button is="emby-button" type="button" id="MdblistClearCacheBtn" class="raised">
+                                <span>Clear MDBList cache</span>
+                            </button>
+                            <div class="fieldDescription" id="MdblistActionResult"></div>
+                            <div class="fieldDescription">
+                                Drops every cached rating so they refetch from MDBList. Use this if ratings look
+                                wrong or are missing after changing the key or updating the plugin.
+                            </div>
                         </div>
                         <div class="checkboxContainer">
                             <label>
@@ -2786,7 +2793,7 @@
                 if (mdblistTestButton && !mdblistTestButton.dataset.bound) {
                     mdblistTestButton.dataset.bound = 'true';
                     mdblistTestButton.addEventListener('click', function() {
-                        var resultEl = document.querySelector('#MdblistTestKeyResult');
+                        var resultEl = document.querySelector('#MdblistActionResult');
                         var key = document.querySelector('#MdblistApiKey').value.trim();
                         resultEl.textContent = 'Testing…';
                         ApiClient.getJSON(ApiClient.getUrl('Moonfin/MdbList/KeyInfo', key ? { key: key } : {})).then(function(info) {
@@ -2799,6 +2806,28 @@
                             }
                         }).catch(function() {
                             resultEl.textContent = 'Key test failed. Could not reach the server.';
+                        });
+                    });
+                }
+
+                var mdblistClearCacheButton = document.querySelector('#MdblistClearCacheBtn');
+                if (mdblistClearCacheButton && !mdblistClearCacheButton.dataset.bound) {
+                    mdblistClearCacheButton.dataset.bound = 'true';
+                    mdblistClearCacheButton.addEventListener('click', function() {
+                        var resultEl = document.querySelector('#MdblistActionResult');
+                        mdblistClearCacheButton.disabled = true;
+                        resultEl.textContent = 'Clearing…';
+                        ApiClient.ajax({
+                            type: 'POST',
+                            url: ApiClient.getUrl('Moonfin/MdbList/ClearCache'),
+                            dataType: 'json'
+                        }).then(function(result) {
+                            resultEl.textContent = 'Cleared ' + ((result && result.removed) || 0) +
+                                ' cached ratings. They will refetch as items are viewed.';
+                        }).catch(function() {
+                            resultEl.textContent = 'Could not clear the ratings cache.';
+                        }).finally(function() {
+                            mdblistClearCacheButton.disabled = false;
                         });
                     });
                 }

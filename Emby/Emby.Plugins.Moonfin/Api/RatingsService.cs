@@ -188,6 +188,18 @@ namespace Emby.Plugins.Moonfin.Api
             }
         }
 
+        /// <summary>
+        /// Drops every cached MDBList rating so lookups refetch from the API. Entries are only
+        /// judged on age, so this is the one way to retire ratings that are cached but wrong.
+        /// </summary>
+        public async Task<object?> Post(ClearMdbListCacheRequest request)
+        {
+            _negativeCache.Clear();
+            var cache = Plugin.Instance?.MdbListCache;
+            var removed = cache != null ? await cache.ClearAsync().ConfigureAwait(false) : 0;
+            return Json(new { success = true, removed });
+        }
+
         private static List<MdbListRating> FilterAndOrderRatings(List<MdbListRating> allRatings, List<string>? selectedSources)
         {
             var sources = (selectedSources != null && selectedSources.Count > 0)

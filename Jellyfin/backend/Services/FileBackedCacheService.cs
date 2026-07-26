@@ -65,6 +65,20 @@ public abstract class FileBackedCacheService<TEntry>
         }
     }
 
+    /// <summary>
+    /// Empties the cache and writes the cleared state to disk so it survives a restart.
+    /// Returns how many entries were dropped.
+    /// </summary>
+    public async Task<int> ClearAsync()
+    {
+        var cache = EnsureLoaded();
+        var removed = cache.Count;
+        cache.Clear();
+        await FlushAsync().ConfigureAwait(false);
+        _logger.LogInformation("{CacheName} cache cleared ({Count} entries removed)", _displayName, removed);
+        return removed;
+    }
+
     protected ConcurrentDictionary<string, TEntry> EnsureLoaded()
     {
         if (_cache != null) return _cache;

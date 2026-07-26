@@ -230,6 +230,20 @@ public class MdbListController : ControllerBase
     }
 
     /// <summary>
+    /// Drops every cached MDBList rating so lookups refetch from the API. Entries are only
+    /// judged on age, so this is the one way to retire ratings that are cached but wrong.
+    /// </summary>
+    [HttpPost("ClearCache")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<MdbListClearCacheResponse>> ClearCache()
+    {
+        _negativeCache.Clear();
+        var removed = await _cacheService.ClearAsync().ConfigureAwait(false);
+        return Ok(new MdbListClearCacheResponse { Success = true, Removed = removed });
+    }
+
+    /// <summary>
     /// Returns the catalog of MDBList official lists available to show as home rows.
     /// Read-only from the server-side cache populated by the lists sync task.
     /// </summary>
@@ -478,6 +492,15 @@ public class MdbListKeyInfoResponse
 
     [JsonPropertyName("rateLimitRemaining")]
     public int? RateLimitRemaining { get; set; }
+}
+
+public class MdbListClearCacheResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("removed")]
+    public int Removed { get; set; }
 }
 
 internal class MdbListUserInfo

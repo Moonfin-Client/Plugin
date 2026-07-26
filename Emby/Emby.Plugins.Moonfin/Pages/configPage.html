@@ -699,7 +699,14 @@
                             <button is="emby-button" type="button" id="MdblistTestKeyBtn" class="raised">
                                 <span>Test key</span>
                             </button>
-                            <div class="fieldDescription" id="MdblistTestKeyResult"></div>
+                            <button is="emby-button" type="button" id="MdblistClearCacheBtn" class="raised">
+                                <span>Clear MDBList cache</span>
+                            </button>
+                            <div class="fieldDescription" id="MdblistActionResult"></div>
+                            <div class="fieldDescription">
+                                Drops every cached rating so they refetch from MDBList. Use this if ratings look
+                                wrong or are missing after changing the key or updating the plugin.
+                            </div>
                         </div>
                         <div class="checkboxContainer">
                             <label>

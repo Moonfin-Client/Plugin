@@ -19,6 +19,12 @@ namespace Emby.Plugins.Moonfin.Api
         public string? Key { get; set; }
     }
 
+    [Route("/Moonfin/MdbList/ClearCache", "POST")]
+    [Authenticated(Roles = "Admin")]
+    public class ClearMdbListCacheRequest : IReturn<object>
+    {
+    }
+
     [Route("/Moonfin/Tmdb/EpisodeRating", "GET")]
     [Authenticated]
     public class GetTmdbEpisodeRatingRequest : IReturn<object>
