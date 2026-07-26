@@ -433,6 +433,42 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("osdLockEnabled")]
     public bool? OsdLockEnabled { get; set; }
 
+    [JsonPropertyName("detailButtonOrderTv")]
+    public List<string>? DetailButtonOrderTv { get; set; }
+
+    [JsonPropertyName("detailButtonOrderMobile")]
+    public List<string>? DetailButtonOrderMobile { get; set; }
+
+    [JsonPropertyName("detailButtonOrderDesktop")]
+    public List<string>? DetailButtonOrderDesktop { get; set; }
+
+    [JsonPropertyName("osdButtonOrderTv")]
+    public List<string>? OsdButtonOrderTv { get; set; }
+
+    [JsonPropertyName("osdButtonOrderMobile")]
+    public List<string>? OsdButtonOrderMobile { get; set; }
+
+    [JsonPropertyName("osdButtonOrderDesktop")]
+    public List<string>? OsdButtonOrderDesktop { get; set; }
+
+    [JsonPropertyName("hiddenDetailButtonsTv")]
+    public List<string>? HiddenDetailButtonsTv { get; set; }
+
+    [JsonPropertyName("hiddenDetailButtonsMobile")]
+    public List<string>? HiddenDetailButtonsMobile { get; set; }
+
+    [JsonPropertyName("hiddenDetailButtonsDesktop")]
+    public List<string>? HiddenDetailButtonsDesktop { get; set; }
+
+    [JsonPropertyName("hiddenOsdButtonsTv")]
+    public List<string>? HiddenOsdButtonsTv { get; set; }
+
+    [JsonPropertyName("hiddenOsdButtonsMobile")]
+    public List<string>? HiddenOsdButtonsMobile { get; set; }
+
+    [JsonPropertyName("hiddenOsdButtonsDesktop")]
+    public List<string>? HiddenOsdButtonsDesktop { get; set; }
+
     [JsonPropertyName("videoStartDelay")]
     public int? VideoStartDelay { get; set; }
 
