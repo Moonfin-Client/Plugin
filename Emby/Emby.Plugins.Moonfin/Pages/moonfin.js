@@ -14,7 +14,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'trakt', label: 'Trakt' },
         { id: 'letterboxd', label: 'Letterboxd' },
         { id: 'myAnimeList', label: 'MyAnimeList' },
-        { id: 'aniList', label: 'AniList' }
+        { id: 'rogerEbert', label: 'Roger Ebert' }
     ];
 
     var HOME_ROW_DEFINITIONS = [
@@ -1497,8 +1497,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.SeerrEnabled = view.querySelector('#SeerrEnabled').checked;
             config.SeerrUrl = view.querySelector('#SeerrUrl').value || null;
             config.SeerrDisplayName = view.querySelector('#SeerrDisplayName').value || null;
-            config.MdblistApiKey = view.querySelector('#MdblistApiKey').value || null;
-            config.TmdbApiKey = view.querySelector('#TmdbApiKey').value || null;
+            config.MdblistApiKey = (view.querySelector('#MdblistApiKey').value || '').trim() || null;
+            config.TmdbApiKey = (view.querySelector('#TmdbApiKey').value || '').trim() || null;
             config.ImdbListsEnabled = view.querySelector('#ImdbListsEnabled').checked;
             config.StudioLogosEnabled = view.querySelector('#StudioLogosEnabled').checked;
             config.FcmServiceAccountJson = view.querySelector('#FcmServiceAccountJson').value || null;
@@ -1631,6 +1631,24 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             .finally(function () { btn.disabled = false; loading.hide(); });
     }
 
+    function testMdblistKey(view) {
+        var resultEl = view.querySelector('#MdblistTestKeyResult');
+        var key = (view.querySelector('#MdblistApiKey').value || '').trim();
+        if (resultEl) resultEl.textContent = 'Testing…';
+        ApiClient.getJSON(ApiClient.getUrl('Moonfin/MdbList/KeyInfo', key ? { key: key } : {})).then(function (info) {
+            if (!resultEl) return;
+            if (info && info.success) {
+                resultEl.textContent = 'Key ok: ' + info.username +
+                    ' (' + (info.plan || (info.isSupporter ? 'Supporter' : 'Free')) + '), ' +
+                    (info.apiRequestsCount || 0) + '/' + (info.apiRequests || 0) + ' requests used today.';
+            } else {
+                resultEl.textContent = (info && info.error) || 'Key test failed.';
+            }
+        }).catch(function () {
+            if (resultEl) resultEl.textContent = 'Key test failed. Could not reach the server.';
+        });
+    }
+
     function bindOnce(view) {
         if (view.__moonfinBound) return;
         view.__moonfinBound = true;
@@ -1677,6 +1695,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         var broadcastBtn = view.querySelector('#BroadcastMessageBtn');
         if (broadcastBtn) broadcastBtn.addEventListener('click', function () { broadcast(view); });
+
+        var mdblistTestBtn = view.querySelector('#MdblistTestKeyBtn');
+        if (mdblistTestBtn) mdblistTestBtn.addEventListener('click', function () { testMdblistKey(view); });
     }
 
     function View(view, params) {

@@ -26,6 +26,15 @@ public class MdbListController : ControllerBase
     // Lenient read TTL so a stale cache still serves rows rather than returning nothing.
     private static readonly TimeSpan ListsReadTtl = TimeSpan.FromDays(30);
 
+    // Remember failed upstream lookups briefly so a burst of requests during a bad-key
+    // or rate-limit spell doesn't hammer api.mdblist.com.
+    private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromMinutes(10);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTimeOffset At, string Error)> _negativeCache = new();
+
+    // Debounced disk flush for on-demand cache writes (the batch task also flushes).
+    private static readonly TimeSpan FlushDebounce = TimeSpan.FromSeconds(30);
+    private static DateTimeOffset _lastFlushRequest = DateTimeOffset.MinValue;
+
     public MdbListController(MoonfinSettingsService settingsService, MdbListCacheService cacheService, MdbListListsCacheService listsCacheService, IHttpClientFactory httpClientFactory)
     {
         _settingsService = settingsService;
@@ -64,14 +73,10 @@ public class MdbListController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        // Resolve the full profile (device → global → admin defaults) to get user settings
+        // Resolve the full profile (device, then global, then admin defaults). The
+        // resolver already falls back to the server-wide key when the user has none.
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, "global");
         var apiKey = resolved?.MdblistApiKey;
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            apiKey = MoonfinPlugin.Instance?.Configuration?.MdblistApiKey;
-        }
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -87,10 +92,20 @@ public class MdbListController : ControllerBase
 
         if (allRatings == null)
         {
+            if (_negativeCache.TryGetValue(cacheKey, out var negative))
+            {
+                if (DateTimeOffset.UtcNow - negative.At < NegativeCacheTtl)
+                {
+                    return Ok(new MdbListResponse { Success = false, Error = negative.Error });
+                }
+
+                _negativeCache.TryRemove(cacheKey, out _);
+            }
+
             // On-demand fallback: fetch single item from MDBList
             try
             {
-                var url = $"https://api.mdblist.com/tmdb/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(tmdbId.Trim())}?apikey={Uri.EscapeDataString(apiKey)}";
+                var url = $"https://api.mdblist.com/tmdb/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(tmdbId.Trim())}/?apikey={Uri.EscapeDataString(apiKey)}";
 
                 var client = _httpClientFactory.CreateClient();
                 client.Timeout = TimeSpan.FromSeconds(15);
@@ -100,20 +115,12 @@ public class MdbListController : ControllerBase
 
                 if ((int)response.StatusCode == 429)
                 {
-                    return Ok(new MdbListResponse
-                    {
-                        Success = false,
-                        Error = "MDBList rate limit reached. Try again later."
-                    });
+                    return NegativeResult(cacheKey, "MDBList rate limit reached. Try again later.");
                 }
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    return Ok(new MdbListResponse
-                    {
-                        Success = false,
-                        Error = $"MDBList returned status {(int)response.StatusCode}"
-                    });
+                    return NegativeResult(cacheKey, $"MDBList returned status {(int)response.StatusCode}");
                 }
 
                 var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -121,6 +128,7 @@ public class MdbListController : ControllerBase
 
                 allRatings = data?.Ratings ?? new List<MdbListRating>();
                 _cacheService.Set(cacheKey, allRatings);
+                RequestFlush();
             }
             catch (OperationCanceledException)
             {
@@ -128,11 +136,7 @@ public class MdbListController : ControllerBase
             }
             catch (Exception ex)
             {
-                return Ok(new MdbListResponse
-                {
-                    Success = false,
-                    Error = $"Failed to fetch from MDBList: {ex.Message}"
-                });
+                return NegativeResult(cacheKey, $"Failed to fetch from MDBList: {ex.Message}");
             }
         }
 
@@ -143,6 +147,86 @@ public class MdbListController : ControllerBase
             Success = true,
             Ratings = filteredRatings
         });
+    }
+
+    private ActionResult<MdbListResponse> NegativeResult(string cacheKey, string error)
+    {
+        _negativeCache[cacheKey] = (DateTimeOffset.UtcNow, error);
+        return Ok(new MdbListResponse { Success = false, Error = error });
+    }
+
+    private void RequestFlush()
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastFlushRequest < FlushDebounce)
+        {
+            return;
+        }
+
+        _lastFlushRequest = now;
+        _ = Task.Run(() => _cacheService.FlushAsync());
+    }
+
+    /// <summary>
+    /// Validates an MDBList API key by proxying GET /user and returning plan/quota info.
+    /// Admin-only, used by the "Test key" button on the plugin config page.
+    /// Pass <paramref name="key"/> to test an unsaved key, otherwise the server-wide key is used.
+    /// </summary>
+    [HttpGet("KeyInfo")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<MdbListKeyInfoResponse>> GetKeyInfo(
+        [FromQuery] string? key,
+        CancellationToken cancellationToken)
+    {
+        var apiKey = string.IsNullOrWhiteSpace(key) ? MoonfinPlugin.Instance?.Configuration?.MdblistApiKey : key.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return Ok(new MdbListKeyInfoResponse { Success = false, Error = "No MDBList API key configured." });
+        }
+
+        try
+        {
+            var url = $"https://api.mdblist.com/user?apikey={Uri.EscapeDataString(apiKey)}";
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
+
+            using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var reason = (int)response.StatusCode == 429
+                    ? "MDBList rate limit reached. Try again later."
+                    : $"MDBList rejected the key (status {(int)response.StatusCode}).";
+                return Ok(new MdbListKeyInfoResponse { Success = false, Error = reason });
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var info = JsonSerializer.Deserialize<MdbListUserInfo>(json, JsonOptions);
+            if (info == null || string.IsNullOrEmpty(info.Username))
+            {
+                return Ok(new MdbListKeyInfoResponse { Success = false, Error = "Unexpected response from MDBList." });
+            }
+
+            return Ok(new MdbListKeyInfoResponse
+            {
+                Success = true,
+                Username = info.Username,
+                Plan = info.Plan,
+                IsSupporter = info.IsSupporter,
+                ApiRequests = info.ApiRequests,
+                ApiRequestsCount = info.ApiRequestsCount,
+                RateLimitRemaining = info.RateLimitRemaining
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return Ok(new MdbListKeyInfoResponse { Success = false, Error = $"Failed to reach MDBList: {ex.Message}" });
+        }
     }
 
     /// <summary>
@@ -240,15 +324,14 @@ public class MdbListController : ControllerBase
         var result = new List<MdbListRating>();
         foreach (var source in sources)
         {
+            // MDBList's raw source names are imdb, metacritic, metacriticuser, trakt,
+            // tomatoes, popcorn, tmdb, letterboxd, rogerebert, and myanimelist. RT
+            // critics arrive as "tomatoes" and RT audience as "popcorn".
             var lookupSource = source;
             if (string.Equals(source, "rtAudience", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(source, "tomatoes_audience", StringComparison.OrdinalIgnoreCase))
             {
                 lookupSource = "popcorn";
-            }
-            else if (string.Equals(source, "tomatoes", StringComparison.OrdinalIgnoreCase))
-            {
-                lookupSource = "tomato";
             }
 
             if (ratingsBySource.TryGetValue(lookupSource, out var rating))
@@ -368,6 +451,54 @@ internal class MdbListApiResponse
 
     [JsonPropertyName("ratings")]
     public List<MdbListRating>? Ratings { get; set; }
+}
+
+public class MdbListKeyInfoResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+
+    [JsonPropertyName("username")]
+    public string? Username { get; set; }
+
+    [JsonPropertyName("plan")]
+    public string? Plan { get; set; }
+
+    [JsonPropertyName("isSupporter")]
+    public bool IsSupporter { get; set; }
+
+    [JsonPropertyName("apiRequests")]
+    public int? ApiRequests { get; set; }
+
+    [JsonPropertyName("apiRequestsCount")]
+    public int? ApiRequestsCount { get; set; }
+
+    [JsonPropertyName("rateLimitRemaining")]
+    public int? RateLimitRemaining { get; set; }
+}
+
+internal class MdbListUserInfo
+{
+    [JsonPropertyName("username")]
+    public string? Username { get; set; }
+
+    [JsonPropertyName("plan")]
+    public string? Plan { get; set; }
+
+    [JsonPropertyName("is_supporter")]
+    public bool IsSupporter { get; set; }
+
+    [JsonPropertyName("api_requests")]
+    public int? ApiRequests { get; set; }
+
+    [JsonPropertyName("api_requests_count")]
+    public int? ApiRequestsCount { get; set; }
+
+    [JsonPropertyName("rate_limit_remaining")]
+    public int? RateLimitRemaining { get; set; }
 }
 
 public class MdbListCatalogResponse

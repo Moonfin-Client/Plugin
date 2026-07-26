@@ -25,11 +25,16 @@ public class MdbListBatchTask : IScheduledTask
     public string Description => "Batch-fetches MDBList ratings for all movies and shows in the library. Only fetches items not already cached.";
     public string Category => "Moonfin";
 
+    // The batch media-info endpoint accepts 100 ids even on non-supporter keys.
     private const int ApiBatchSize = 100;
     private const int LibraryPageSize = 2000;
     private const int DelayBetweenApiBatchesMs = 2000;
     private const int FlushEveryNBatches = 20;
     private static readonly TimeSpan CacheMaxAge = TimeSpan.FromDays(7);
+
+    // Entries older than this are never served (the read TTL is 7 days), they're just
+    // dead weight from removed library items and one-off lookups.
+    private static readonly TimeSpan PruneAge = TimeSpan.FromDays(14);
 
     private readonly ILibraryManager _libraryManager;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -54,6 +59,17 @@ public class MdbListBatchTask : IScheduledTask
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogInformation("MDBList batch sync skipped: no server-wide API key configured");
+            return;
+        }
+
+        // Validate the key and log quota state before spending requests on a full sync.
+        var accountClient = _httpClientFactory.CreateClient();
+        accountClient.Timeout = TimeSpan.FromSeconds(30);
+        accountClient.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
+        var account = await MdbListApiHelper.GetAccountInfoAsync(accountClient, apiKey, _logger, cancellationToken).ConfigureAwait(false);
+        if (account == null)
+        {
+            _logger.LogWarning("MDBList batch sync skipped: API key could not be validated");
             return;
         }
 
@@ -98,16 +114,36 @@ public class MdbListBatchTask : IScheduledTask
             return;
         }
 
-        var movieItems = uncachedItems.Where(i => i.Type == "movie").ToList();
-        var showItems = uncachedItems.Where(i => i.Type == "show").ToList();
+        // Multiple library versions of the same title share a TMDB id, so dedupe to
+        // avoid spending two batch slots on one id.
+        var movieItems = uncachedItems.Where(i => i.Type == "movie").DistinctBy(i => i.CacheKey).ToList();
+        var showItems = uncachedItems.Where(i => i.Type == "show").DistinctBy(i => i.CacheKey).ToList();
 
         uncachedItems = null!;
 
         var totalItems = movieItems.Count + showItems.Count;
         var processedItems = 0;
 
-        processedItems = await FetchBatchesAsync(movieItems, "movie", apiKey, processedItems, totalItems, progress, cancellationToken);
-        processedItems = await FetchBatchesAsync(showItems, "show", apiKey, processedItems, totalItems, progress, cancellationToken);
+        try
+        {
+            processedItems = await FetchBatchesAsync(movieItems, "movie", apiKey, processedItems, totalItems, progress, cancellationToken);
+            processedItems = await FetchBatchesAsync(showItems, "show", apiKey, processedItems, totalItems, progress, cancellationToken);
+        }
+        catch (MdbListRateLimitException)
+        {
+            // Keep what was fetched. The daily trigger picks up the remainder once
+            // the quota resets.
+            await _cacheService.FlushAsync();
+            _logger.LogWarning("MDBList batch sync aborted after rate limit: processed {Count}/{Total} items, will resume next run", processedItems, totalItems);
+            progress.Report(100);
+            return;
+        }
+
+        var pruned = _cacheService.PruneOlderThan(PruneAge);
+        if (pruned > 0)
+        {
+            _logger.LogInformation("MDBList ratings cache: pruned {Count} entries older than {Days} days", pruned, PruneAge.TotalDays);
+        }
 
         await _cacheService.FlushAsync();
 
@@ -193,7 +229,7 @@ public class MdbListBatchTask : IScheduledTask
                     _logger.LogDebug("Cached {Count} {Type} ratings from batch", ratings.Count, type);
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException and not MdbListRateLimitException)
             {
                 _logger.LogWarning(ex, "Batch fetch failed for {Type} batch, continuing...", type);
             }
@@ -223,9 +259,22 @@ public class MdbListBatchTask : IScheduledTask
         string apiKey,
         CancellationToken cancellationToken)
     {
-        var url = $"https://api.mdblist.com/tmdb/{Uri.EscapeDataString(type)}?apikey={Uri.EscapeDataString(apiKey)}";
+        // Use the canonical trailing-slash path so a redirect can't turn the POST
+        // into a GET. The endpoint expects integer ids.
+        var url = $"{MdbListApiHelper.BaseUrl}/tmdb/{Uri.EscapeDataString(type)}/?apikey={Uri.EscapeDataString(apiKey)}";
 
-        var requestBody = new MdbListBatchRequest { Ids = tmdbIds };
+        var numericIds = new List<long>(tmdbIds.Count);
+        foreach (var id in tmdbIds)
+        {
+            if (long.TryParse(id, out var numeric))
+            {
+                numericIds.Add(numeric);
+            }
+        }
+
+        if (numericIds.Count == 0) return null;
+
+        var requestBody = new MdbListBatchRequest { Ids = numericIds };
         var jsonBody = JsonSerializer.Serialize(requestBody, MdbListController.JsonOptions);
 
         var client = _httpClientFactory.CreateClient();
@@ -237,8 +286,7 @@ public class MdbListBatchTask : IScheduledTask
 
         if ((int)response.StatusCode == 429)
         {
-            _logger.LogWarning("MDBList rate limit hit during batch fetch, will retry next run");
-            return null;
+            throw new MdbListRateLimitException();
         }
 
         if (!response.IsSuccessStatusCode)
@@ -256,7 +304,9 @@ public class MdbListBatchTask : IScheduledTask
 
         foreach (var item in batchResponse)
         {
-            var tmdbId = item.Ids?.Tmdb?.ToString();
+            // Prefer the nested ids object and fall back to the top-level id, which
+            // batch items sometimes carry instead.
+            var tmdbId = (item.Ids?.Tmdb ?? item.Id)?.ToString();
             if (string.IsNullOrEmpty(tmdbId)) continue;
 
             var cacheKey = $"{type}:{tmdbId}";
@@ -290,11 +340,14 @@ public class MdbListBatchTask : IScheduledTask
     private class MdbListBatchRequest
     {
         [JsonPropertyName("ids")]
-        public List<string> Ids { get; set; } = new();
+        public List<long> Ids { get; set; } = new();
     }
 
     private class MdbListBatchItem
     {
+        [JsonPropertyName("id")]
+        public long? Id { get; set; }
+
         [JsonPropertyName("ids")]
         public MdbListBatchIds? Ids { get; set; }
 

@@ -27,6 +27,23 @@ namespace Emby.Plugins.Moonfin.Services
             var cache = EnsureLoaded();
             cache[cacheKey] = new CustomRowCacheEntry { Items = items, CachedAt = DateTimeOffset.UtcNow };
         }
+
+        /// <summary>
+        /// Removes entries older than <paramref name="maxAge"/> so abandoned row configs
+        /// (changed lists, removed rows) don't accumulate in the cache file forever.
+        /// </summary>
+        public int PruneOlderThan(TimeSpan maxAge)
+        {
+            var cache = EnsureLoaded();
+            var cutoff = DateTimeOffset.UtcNow - maxAge;
+            var removed = 0;
+            foreach (var kvp in cache)
+            {
+                if (kvp.Value.CachedAt < cutoff && cache.TryRemove(kvp.Key, out _))
+                    removed++;
+            }
+            return removed;
+        }
     }
 
     public class CustomRowCacheEntry

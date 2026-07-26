@@ -11,6 +11,14 @@ namespace Emby.Plugins.Moonfin.Api
         public string? TmdbId { get; set; }
     }
 
+    [Route("/Moonfin/MdbList/KeyInfo", "GET")]
+    [Authenticated(Roles = "Admin")]
+    public class GetMdbListKeyInfoRequest : IReturn<object>
+    {
+        /// <summary>Optional key to test before saving. Falls back to the server-wide key.</summary>
+        public string? Key { get; set; }
+    }
+
     [Route("/Moonfin/Tmdb/EpisodeRating", "GET")]
     [Authenticated]
     public class GetTmdbEpisodeRatingRequest : IReturn<object>

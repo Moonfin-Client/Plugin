@@ -28,10 +28,11 @@ namespace Emby.Plugins.Moonfin.Services
         private const int DelayBetweenApiBatchesMs = 2000;
         private const int FlushEveryNLists = 10;
         private const int DefaultMaxItemsPerList = 250;
+        private static readonly TimeSpan FreshnessSkipWindow = TimeSpan.FromHours(6);
 
         private readonly ILogger _logger;
 
-        private static readonly JsonSerializerOptions JsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        private static readonly JsonSerializerOptions JsonOpts = MdbListApiHelper.JsonOptions;
 
         // Resolved lazily: Emby constructs IScheduledTask instances at plugin-load time, before
         // ServerEntryPoint.Run() initializes the service singletons, so this cannot be read in the ctor.
@@ -62,15 +63,45 @@ namespace Emby.Plugins.Moonfin.Services
                 return;
             }
 
+            // The startup trigger can fire before ServerEntryPoint.Run() initializes the
+            // service singletons, so skip the run instead of throwing.
+            try { _ = CacheService; }
+            catch (InvalidOperationException)
+            {
+                _logger.Warn("MDBList official lists sync skipped: plugin services not initialized yet");
+                return;
+            }
+
+            // The sync tasks fire on server startup, so skip when the cache is still fresh.
+            // Repeated boots shouldn't burst the MDBList API, and the daily trigger still
+            // refreshes once the cache ages out.
+            var catalogAge = CacheService.GetCatalogAge();
+            if (catalogAge.HasValue && catalogAge.Value < FreshnessSkipWindow)
+            {
+                _logger.Info("MDBList official lists sync skipped: cache is only " + catalogAge.Value.TotalHours.ToString("F1") + "h old", 0);
+                return;
+            }
+
             var maxItemsPerList = config?.MdblistOfficialListsMaxItems ?? DefaultMaxItemsPerList;
             if (maxItemsPerList <= 0) maxItemsPerList = DefaultMaxItemsPerList;
 
-            // Poster enrichment is best-effort: only runs when a server TMDB key is set, and seeds
+            // Poster fallback is best-effort: only runs when a server TMDB key is set, and seeds
             // from the existing cache so it only calls TMDB for ids it has not resolved before.
             var tmdbKey = config?.TmdbApiKey;
             var knownPosters = CacheService.GetKnownPosters();
 
             progress.Report(0);
+
+            // Validate the key and log quota state before spending requests on a full sync.
+            using (var accountClient = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(30), "Moonfin/1.0"))
+            {
+                var account = await MdbListApiHelper.GetAccountInfoAsync(accountClient, apiKey!, _logger, cancellationToken).ConfigureAwait(false);
+                if (account == null)
+                {
+                    _logger.Warn("MDBList official lists sync skipped: API key could not be validated");
+                    return;
+                }
+            }
 
             var rawCatalog = await FetchCatalogAsync(apiKey!, cancellationToken).ConfigureAwait(false);
             if (rawCatalog == null || rawCatalog.Count == 0)
@@ -91,6 +122,10 @@ namespace Emby.Plugins.Moonfin.Services
                 .ToList();
 
             CacheService.SetCatalog(catalog);
+            var pruned = CacheService.PruneItemsNotIn(catalog.Select(c => c.Slug).ToList());
+            if (pruned > 0)
+                _logger.Info("MDBList official lists: pruned " + pruned + " delisted list caches", 0);
+
             await CacheService.FlushAsync().ConfigureAwait(false);
             _logger.Info("MDBList official lists: cached catalog of " + catalog.Count + " lists", 0);
 
@@ -169,15 +204,18 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var url = $"https://api.mdblist.com/lists/official/{Uri.EscapeDataString(slug)}/items?apikey={Uri.EscapeDataString(apiKey)}&limit={PageLimit}";
+                var url = $"https://api.mdblist.com/lists/official/{Uri.EscapeDataString(slug)}/items" +
+                          $"?apikey={Uri.EscapeDataString(apiKey)}&limit={PageLimit}&append_to_response=poster";
                 if (!string.IsNullOrEmpty(cursor)) url += "&cursor=" + Uri.EscapeDataString(cursor!);
 
                 using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
 
                 if ((int)response.StatusCode == 429)
                 {
-                    _logger.Warn("MDBList rate limit hit fetching items for " + slug + ", keeping what was fetched");
-                    break;
+                    _logger.Warn("MDBList rate limit hit fetching items for " + slug);
+                    // Keep partial results, but when nothing was fetched yet fail hard so the
+                    // last-good cache isn't overwritten with an empty list.
+                    return fetchedAnyPage ? collected : null;
                 }
                 if (!response.IsSuccessStatusCode)
                 {
@@ -192,30 +230,38 @@ namespace Emby.Plugins.Moonfin.Services
 
                 if (page == null) break;
 
-                AppendItems(collected, page.Movies, "movie", maxItems);
-                AppendItems(collected, page.Shows, "show", maxItems);
+                // Append full pages (no per-bucket cap): movies and shows arrive in separate
+                // arrays, so capping mid-page would drop shows disproportionately on combined
+                // lists. The rank-sorted truncation below enforces maxItems fairly.
+                AppendItems(collected, page.Movies, "movie");
+                AppendItems(collected, page.Shows, "show");
 
+                // Follow pagination.next_cursor until it's absent, that's the only
+                // continuation signal the MDBList API guarantees.
                 cursor = page.Pagination?.NextCursor;
-                var hasMore = response.Headers.TryGetValues("X-Has-More", out var values)
-                              && values.Any(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
-
-                if (string.IsNullOrEmpty(cursor) || !hasMore) break;
+                if (string.IsNullOrEmpty(cursor)) break;
 
                 if (collected.Count < maxItems)
                     await Task.Delay(DelayBetweenApiBatchesMs, cancellationToken).ConfigureAwait(false);
             }
 
+            if (collected.Count > maxItems)
+            {
+                collected = collected
+                    .OrderBy(i => i.Rank ?? int.MaxValue)
+                    .Take(maxItems)
+                    .ToList();
+            }
+
             return collected;
         }
 
-        private static void AppendItems(List<MdbListItem> target, List<RawListItem>? source, string bucketType, int maxItems)
+        private static void AppendItems(List<MdbListItem> target, List<RawListItem>? source, string bucketType)
         {
             if (source == null) return;
 
             foreach (var raw in source)
             {
-                if (target.Count >= maxItems) return;
-
                 var tmdb = raw.Ids?.Tmdb ?? raw.Id;
                 var imdb = raw.Ids?.Imdb ?? raw.ImdbId;
                 var tvdb = raw.Ids?.Tvdb ?? raw.TvdbId;
@@ -227,6 +273,7 @@ namespace Emby.Plugins.Moonfin.Services
                     Type = string.IsNullOrWhiteSpace(raw.Mediatype) ? bucketType : raw.Mediatype!,
                     ProductionYear = raw.ReleaseYear,
                     Rank = raw.Rank,
+                    Poster = MdbListApiHelper.NormalizeTmdbImagePath(raw.Poster),
                     ProviderIds = new MdbListItemProviderIds
                     {
                         Imdb = string.IsNullOrWhiteSpace(imdb) ? null : imdb,
@@ -238,20 +285,20 @@ namespace Emby.Plugins.Moonfin.Services
         }
 
         /// <summary>
-        /// Resolves each item's TMDB poster path so the client can load artwork from TMDB directly.
-        /// Reuses posters already known this run (and from the prior cache) so only new ids hit TMDB.
-        /// No-op when no server TMDB key is configured.
+        /// Fallback poster resolution for items MDBList returned without a poster
+        /// (append_to_response=poster covers the vast majority). Reuses already-resolved
+        /// posters and only calls TMDB for unseen ids. No-op without a server TMDB key.
         /// </summary>
         private async Task EnrichPostersAsync(List<MdbListItem> items, string? tmdbKey, Dictionary<string, string> knownPosters, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(tmdbKey)) return;
-
             HttpClient? client = null;
             try
             {
                 foreach (var item in items)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+
+                    if (!string.IsNullOrEmpty(item.Poster)) continue;
 
                     var tmdbId = item.ProviderIds.Tmdb;
                     if (string.IsNullOrEmpty(tmdbId)) continue;
@@ -263,12 +310,19 @@ namespace Emby.Plugins.Moonfin.Services
                         continue;
                     }
 
+                    if (string.IsNullOrWhiteSpace(tmdbKey)) continue;
+
                     if (client == null)
                     {
                         client = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(15), "Moonfin/1.0");
                     }
 
                     var poster = await FetchTmdbPosterAsync(client, item.Type, tmdbId!, tmdbKey!, cancellationToken).ConfigureAwait(false);
+
+                    // Fallback lookups are rare once MDBList supplies posters, but still keep
+                    // a light touch on the TMDB API between misses.
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+
                     if (string.IsNullOrEmpty(poster)) continue;
 
                     item.Poster = poster;
@@ -344,6 +398,7 @@ namespace Emby.Plugins.Moonfin.Services
             [JsonPropertyName("tvdb_id")] public long? TvdbId { get; set; }
             [JsonPropertyName("mediatype")] public string? Mediatype { get; set; }
             [JsonPropertyName("release_year")] public int? ReleaseYear { get; set; }
+            [JsonPropertyName("poster")] public string? Poster { get; set; }
             [JsonPropertyName("ids")] public RawIds? Ids { get; set; }
         }
 

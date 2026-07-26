@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 using MediaBrowser.Model.Logging;
 
@@ -45,6 +46,32 @@ namespace Emby.Plugins.Moonfin.Services
         }
 
         private static string ItemsKey(string slug) => "items:" + slug;
+
+        /// <summary>Age of the cached catalog, or null when nothing is cached yet.</summary>
+        public TimeSpan? GetCatalogAge()
+        {
+            var cache = EnsureLoaded();
+            return cache.TryGetValue(CatalogKey, out var entry)
+                ? DateTimeOffset.UtcNow - entry.CachedAt
+                : (TimeSpan?)null;
+        }
+
+        /// <summary>
+        /// Drops items entries for lists no longer present in the current catalog so
+        /// delisted charts don't accumulate in the cache file forever.
+        /// </summary>
+        public int PruneItemsNotIn(IReadOnlyCollection<string> currentSlugs)
+        {
+            var cache = EnsureLoaded();
+            var keep = new HashSet<string>(currentSlugs.Select(ItemsKey), StringComparer.OrdinalIgnoreCase);
+            var removed = 0;
+            foreach (var key in cache.Keys.Where(k => k.StartsWith("items:", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                if (!keep.Contains(key) && cache.TryRemove(key, out _))
+                    removed++;
+            }
+            return removed;
+        }
 
         /// <summary>
         /// Returns already-resolved posters from the current cache, keyed by "{type}:{tmdbId}",

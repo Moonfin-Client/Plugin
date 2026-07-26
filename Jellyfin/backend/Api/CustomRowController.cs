@@ -26,6 +26,11 @@ public class CustomRowController : ControllerBase
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
 
+    // Page through MDBList user lists 100 at a time and stop at 500 so a huge
+    // list can't burn the whole API quota.
+    private const int MdbListPageSize = 100;
+    private const int MdbListMaxItems = 500;
+
     public CustomRowController(
         MoonfinSettingsService settingsService,
         CustomRowCacheService cacheService,
@@ -50,6 +55,7 @@ public class CustomRowController : ControllerBase
         [FromQuery] string source,
         [FromQuery] string type,
         [FromQuery] string @params,
+        [FromQuery] bool refresh,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(@params))
@@ -84,22 +90,46 @@ public class CustomRowController : ControllerBase
             }
         }
 
-        var paramHash = GetStringSha256Hash(@params);
+        Dictionary<string, string> parsedParams;
+        try
+        {
+            parsedParams = JsonSerializer.Deserialize<Dictionary<string, string>>(@params) ?? new();
+        }
+        catch (JsonException)
+        {
+            return BadRequest(new { Error = "params must be a JSON object of string values" });
+        }
+
+        // Older clients force a refresh by putting a "_nocache" timestamp in params.
+        // Treat that as refresh=true and strip underscore-prefixed keys so the same
+        // list always maps to the same cache entry.
+        if (parsedParams.Keys.Any(k => k.StartsWith('_')))
+        {
+            refresh = true;
+            parsedParams = parsedParams.Where(kv => !kv.Key.StartsWith('_'))
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+        }
+
+        var canonicalParams = JsonSerializer.Serialize(
+            new SortedDictionary<string, string>(parsedParams, StringComparer.Ordinal));
+        var paramHash = GetStringSha256Hash(canonicalParams);
         var cacheKey = $"{source}:{type}:{paramHash}";
 
-        var cachedItems = _cacheService.TryGet(cacheKey, CacheTtl);
-        if (cachedItems != null)
+        if (!refresh)
         {
-            return Ok(new CustomRowResponse
+            var cachedItems = _cacheService.TryGet(cacheKey, CacheTtl);
+            if (cachedItems != null)
             {
-                Success = true,
-                Items = cachedItems
-            });
+                return Ok(new CustomRowResponse
+                {
+                    Success = true,
+                    Items = cachedItems
+                });
+            }
         }
 
         try
         {
-            var parsedParams = JsonSerializer.Deserialize<Dictionary<string, string>>(@params) ?? new();
             List<CustomRowItem> items = new();
 
             switch (source)
@@ -120,8 +150,14 @@ public class CustomRowController : ControllerBase
                     return BadRequest(new { Error = $"Unsupported custom row source: {source}" });
             }
 
-            _cacheService.Set(cacheKey, items);
-            await _cacheService.FlushAsync();
+            // Don't cache empty results. An empty row cached for 24h looks like a
+            // broken list when the real cause was an upstream hiccup.
+            if (items.Count > 0)
+            {
+                _cacheService.Set(cacheKey, items);
+                _cacheService.PruneOlderThan(TimeSpan.FromDays(7));
+                await _cacheService.FlushAsync();
+            }
 
             return Ok(new CustomRowResponse
             {
@@ -150,11 +186,6 @@ public class CustomRowController : ControllerBase
         var apiKey = resolved?.MdblistApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            apiKey = MoonfinPlugin.Instance?.Configuration?.MdblistApiKey;
-        }
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
             throw new InvalidOperationException("MDBList API key is not configured.");
         }
 
@@ -166,105 +197,85 @@ public class CustomRowController : ControllerBase
             throw new ArgumentException("MDBList requires both username and listname parameters.");
         }
 
-        var url = $"https://api.mdblist.com/lists/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(listname)}/items?apikey={Uri.EscapeDataString(apiKey)}&limit=250";
+        var baseUrl = $"https://api.mdblist.com/lists/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(listname)}/items?apikey={Uri.EscapeDataString(apiKey)}&limit={MdbListPageSize}&append_to_response=poster";
         var client = CreateClient();
 
-        using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new Exception($"MDBList API returned status {(int)response.StatusCode}");
-        }
-
-        var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-
         var items = new List<CustomRowItem>();
-        JsonElement itemsArray;
+        string? cursor = null;
 
-        if (root.ValueKind == JsonValueKind.Array)
+        // Follow pagination.next_cursor until it's absent, that's the only
+        // continuation signal the MDBList API guarantees.
+        while (items.Count < MdbListMaxItems)
         {
-            itemsArray = root;
-        }
-        else if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("movies", out var moviesProp) && moviesProp.ValueKind == JsonValueKind.Array)
-        {
-            itemsArray = moviesProp;
-        }
-        else
-        {
-            return items;
-        }
+            var url = cursor == null ? baseUrl : $"{baseUrl}&cursor={Uri.EscapeDataString(cursor)}";
 
-        int rank = 1;
-        foreach (var item in itemsArray.EnumerateArray())
-        {
-            string? imdbId = null;
-            string? tmdbId = null;
-
-            if (item.TryGetProperty("ids", out var idsObj))
+            using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if ((int)response.StatusCode == 429)
             {
-                if (idsObj.TryGetProperty("imdb", out var imdbProp) && imdbProp.ValueKind == JsonValueKind.String)
-                {
-                    imdbId = imdbProp.GetString();
-                }
-                if (idsObj.TryGetProperty("tmdb", out var tmdbProp))
-                {
-                    tmdbId = tmdbProp.ValueKind == JsonValueKind.Number 
-                        ? tmdbProp.GetInt64().ToString() 
-                        : tmdbProp.GetString();
-                }
+                throw new Exception("MDBList rate limit reached. Try again later.");
             }
 
-            if (string.IsNullOrWhiteSpace(imdbId) && item.TryGetProperty("imdb_id", out var imdbIdProp) && imdbIdProp.ValueKind == JsonValueKind.String)
+            if (!response.IsSuccessStatusCode)
             {
-                imdbId = imdbIdProp.GetString();
+                throw new Exception($"MDBList API returned status {(int)response.StatusCode}");
             }
 
-            var title = item.TryGetProperty("title", out var titleProp) ? titleProp.GetString() ?? "Unknown" : "Unknown";
-            
-            int? year = null;
-            if (item.TryGetProperty("release_year", out var yrProp) && yrProp.ValueKind == JsonValueKind.Number)
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+
+            var countBefore = items.Count;
+
+            if (root.ValueKind == JsonValueKind.Array)
             {
-                year = yrProp.GetInt32();
+                // A flat array is a single page with no pagination object.
+                AppendMdbListItems(root, items);
+                break;
             }
 
-            var mediaType = item.TryGetProperty("mediatype", out var mediaProp) ? mediaProp.GetString()?.ToLowerInvariant() : null;
-            var finalType = (mediaType == "show" || mediaType == "shows" || mediaType == "series" || mediaType == "tv") ? "Series" : "Movie";
-
-            string? posterUrl = null;
-            if (item.TryGetProperty("poster", out var pProp) && pProp.ValueKind == JsonValueKind.String)
+            if (root.ValueKind != JsonValueKind.Object)
             {
-                posterUrl = pProp.GetString();
-            }
-            else if (item.TryGetProperty("ids", out var idsVal) && idsVal.TryGetProperty("poster", out var idpProp) && idpProp.ValueKind == JsonValueKind.String)
-            {
-                posterUrl = idpProp.GetString();
+                break;
             }
 
-            items.Add(new CustomRowItem
+            if (root.TryGetProperty("movies", out var moviesProp) && moviesProp.ValueKind == JsonValueKind.Array)
             {
-                Id = long.TryParse(tmdbId, out var lbTmdbId) ? lbTmdbId : null,
-                Name = title,
-                Type = finalType,
-                ProductionYear = year,
-                Rank = rank++,
-                ProviderIds = new CustomRowItemProviderIds
-                {
-                    Imdb = imdbId,
-                    Tmdb = tmdbId
-                },
-                PosterUrl = posterUrl
-            });
+                AppendMdbListItems(moviesProp, items);
+            }
+
+            if (root.TryGetProperty("shows", out var showsProp) && showsProp.ValueKind == JsonValueKind.Array)
+            {
+                AppendMdbListItems(showsProp, items);
+            }
+
+            cursor = null;
+            if (root.TryGetProperty("pagination", out var paginationProp)
+                && paginationProp.ValueKind == JsonValueKind.Object
+                && paginationProp.TryGetProperty("next_cursor", out var cursorProp)
+                && cursorProp.ValueKind == JsonValueKind.String)
+            {
+                cursor = cursorProp.GetString();
+            }
+
+            if (string.IsNullOrEmpty(cursor) || items.Count == countBefore)
+            {
+                break;
+            }
         }
 
-        // Fetch posters and backdrops from TMDb API in parallel to support high-res and backdrops
+        // Movies and shows arrive as separate arrays per page, so restore true list order.
+        items = items
+            .OrderBy(i => i.Rank ?? int.MaxValue)
+            .Take(MdbListMaxItems)
+            .ToList();
+        for (var i = 0; i < items.Count; i++)
+        {
+            items[i].Rank = i + 1;
+        }
+
+        // Fetch backdrops (and any posters MDBList didn't provide) from TMDb in parallel
         var resolvedProfile = await _settingsService.GetResolvedProfileAsync(userId, "global");
         var tmdbKey = resolvedProfile?.TmdbApiKey;
-        if (string.IsNullOrWhiteSpace(tmdbKey))
-        {
-            tmdbKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
-        }
-
         if (!string.IsNullOrWhiteSpace(tmdbKey))
         {
             using var tmdbSemaphore = new SemaphoreSlim(15, 15);
@@ -279,7 +290,7 @@ public class CustomRowController : ControllerBase
                         : $"https://api.themoviedb.org/3/movie/{rowItem.Id}";
 
                     using var req = new HttpRequestMessage(HttpMethod.Get, tmdbUrl);
-                    ApplyTmdbAuth(req, tmdbKey);
+                    TmdbRequestHelper.ApplyAuth(req, tmdbKey);
                     using var resp = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
                     if (resp.IsSuccessStatusCode)
                     {
@@ -287,7 +298,8 @@ public class CustomRowController : ControllerBase
                         using var doc = JsonDocument.Parse(detailsJson);
                         var detailsRoot = doc.RootElement;
                         
-                        if (detailsRoot.TryGetProperty("poster_path", out var pProp) && pProp.ValueKind == JsonValueKind.String)
+                        if (string.IsNullOrEmpty(rowItem.PosterUrl)
+                            && detailsRoot.TryGetProperty("poster_path", out var pProp) && pProp.ValueKind == JsonValueKind.String)
                         {
                             rowItem.PosterUrl = pProp.GetString();
                         }
@@ -312,6 +324,82 @@ public class CustomRowController : ControllerBase
         return items;
     }
 
+    /// <summary>
+    /// Parses one MDBList list-items array (movies or shows) into <paramref name="items"/>.
+    /// Keeps each item's own MDBList rank so movies and shows can be re-merged in list order.
+    /// </summary>
+    private static void AppendMdbListItems(JsonElement itemsArray, List<CustomRowItem> items)
+    {
+        foreach (var item in itemsArray.EnumerateArray())
+        {
+            string? imdbId = null;
+            string? tmdbId = null;
+
+            if (item.TryGetProperty("ids", out var idsObj) && idsObj.ValueKind == JsonValueKind.Object)
+            {
+                if (idsObj.TryGetProperty("imdb", out var imdbProp) && imdbProp.ValueKind == JsonValueKind.String)
+                {
+                    imdbId = imdbProp.GetString();
+                }
+
+                if (idsObj.TryGetProperty("tmdb", out var tmdbProp))
+                {
+                    tmdbId = tmdbProp.ValueKind == JsonValueKind.Number
+                        ? tmdbProp.GetInt64().ToString()
+                        : tmdbProp.ValueKind == JsonValueKind.String ? tmdbProp.GetString() : null;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(imdbId) && item.TryGetProperty("imdb_id", out var imdbIdProp) && imdbIdProp.ValueKind == JsonValueKind.String)
+            {
+                imdbId = imdbIdProp.GetString();
+            }
+
+            if (string.IsNullOrWhiteSpace(tmdbId) && item.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.Number)
+            {
+                tmdbId = idProp.GetInt64().ToString();
+            }
+
+            var title = item.TryGetProperty("title", out var titleProp) ? titleProp.GetString() ?? "Unknown" : "Unknown";
+
+            int? year = null;
+            if (item.TryGetProperty("release_year", out var yrProp) && yrProp.ValueKind == JsonValueKind.Number)
+            {
+                year = yrProp.GetInt32();
+            }
+
+            var mediaType = item.TryGetProperty("mediatype", out var mediaProp) ? mediaProp.GetString()?.ToLowerInvariant() : null;
+            var finalType = (mediaType == "show" || mediaType == "shows" || mediaType == "series" || mediaType == "tv") ? "Series" : "Movie";
+
+            int? rank = null;
+            if (item.TryGetProperty("rank", out var rankProp) && rankProp.ValueKind == JsonValueKind.Number)
+            {
+                rank = rankProp.GetInt32();
+            }
+
+            string? posterUrl = null;
+            if (item.TryGetProperty("poster", out var pProp) && pProp.ValueKind == JsonValueKind.String)
+            {
+                posterUrl = MdbListApiHelper.NormalizeTmdbImagePath(pProp.GetString());
+            }
+
+            items.Add(new CustomRowItem
+            {
+                Id = long.TryParse(tmdbId, out var parsedTmdbId) ? parsedTmdbId : null,
+                Name = title,
+                Type = finalType,
+                ProductionYear = year,
+                Rank = rank,
+                ProviderIds = new CustomRowItemProviderIds
+                {
+                    Imdb = imdbId,
+                    Tmdb = tmdbId
+                },
+                PosterUrl = posterUrl
+            });
+        }
+    }
+
     private async Task<List<CustomRowItem>> FetchTmdb(
         string type,
         Dictionary<string, string> paramsMap,
@@ -320,11 +408,6 @@ public class CustomRowController : ControllerBase
     {
         var resolved = await _settingsService.GetResolvedProfileAsync(userId, "global");
         var apiKey = resolved?.TmdbApiKey;
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            apiKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
-        }
-
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException("TMDB API Key is not configured.");
@@ -343,7 +426,7 @@ public class CustomRowController : ControllerBase
 
         var client = CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        ApplyTmdbAuth(request, apiKey);
+        TmdbRequestHelper.ApplyAuth(request, apiKey);
 
         using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
@@ -459,11 +542,6 @@ public class CustomRowController : ControllerBase
         var apiKey = resolved?.TmdbApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            apiKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
-        }
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
             throw new InvalidOperationException("TMDB API Key is not configured.");
         }
 
@@ -471,7 +549,7 @@ public class CustomRowController : ControllerBase
         var url = $"https://api.themoviedb.org/3/{type}";
         var client = CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        ApplyTmdbAuth(request, apiKey);
+        TmdbRequestHelper.ApplyAuth(request, apiKey);
 
         using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
@@ -617,11 +695,6 @@ public class CustomRowController : ControllerBase
         // Fetch full details/posters from TMDb API in parallel (max 15 concurrent requests)
         var resolvedProfile = await _settingsService.GetResolvedProfileAsync(userId, "global");
         var tmdbKey = resolvedProfile?.TmdbApiKey;
-        if (string.IsNullOrWhiteSpace(tmdbKey))
-        {
-            tmdbKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
-        }
-
         if (!string.IsNullOrWhiteSpace(tmdbKey))
         {
             using var tmdbSemaphore = new SemaphoreSlim(15, 15);
@@ -632,7 +705,7 @@ public class CustomRowController : ControllerBase
                 {
                     var tmdbUrl = $"https://api.themoviedb.org/3/movie/{pItem.TmdbId}";
                     using var req = new HttpRequestMessage(HttpMethod.Get, tmdbUrl);
-                    ApplyTmdbAuth(req, tmdbKey);
+                    TmdbRequestHelper.ApplyAuth(req, tmdbKey);
                     using var resp = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
                     if (resp.IsSuccessStatusCode)
                     {
@@ -719,22 +792,6 @@ public class CustomRowController : ControllerBase
         client.Timeout = TimeSpan.FromSeconds(15);
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         return client;
-    }
-
-    private static void ApplyTmdbAuth(HttpRequestMessage request, string apiKey)
-    {
-        if (apiKey.StartsWith("eyJ", StringComparison.Ordinal))
-        {
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-        }
-        else
-        {
-            var uriBuilder = new UriBuilder(request.RequestUri!);
-            var query = System.Web.HttpUtility.ParseQueryString(uriBuilder.Query);
-            query["api_key"] = apiKey;
-            uriBuilder.Query = query.ToString();
-            request.RequestUri = uriBuilder.Uri;
-        }
     }
 
     // One gate per chart so a burst of clients on an expired chart triggers a single scrape

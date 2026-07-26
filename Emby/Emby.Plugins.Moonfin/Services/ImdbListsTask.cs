@@ -46,6 +46,15 @@ namespace Emby.Plugins.Moonfin.Services
                 return;
             }
 
+            // The startup trigger can fire before ServerEntryPoint.Run() initializes the
+            // service singletons, so skip the run instead of throwing.
+            try { _ = CacheService; }
+            catch (InvalidOperationException)
+            {
+                _logger.Warn("IMDb lists sync skipped: plugin services not initialized yet");
+                return;
+            }
+
             progress.Report(0);
             var keys = ImdbChartFetcher.ChartMap.Keys.ToList();
             var processed = 0;

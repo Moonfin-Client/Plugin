@@ -21,13 +21,19 @@ namespace Emby.Plugins.Moonfin.Api
         private static readonly ConcurrentDictionary<string, (object Response, DateTimeOffset CachedAt)> _tmdbSeasonCache = new ConcurrentDictionary<string, (object, DateTimeOffset)>();
         private static readonly ConcurrentDictionary<string, (object Response, DateTimeOffset CachedAt)> _tmdbEpisodeCache = new ConcurrentDictionary<string, (object, DateTimeOffset)>();
 
+        // Remember failed upstream lookups briefly so a burst of requests during a bad-key
+        // or rate-limit spell doesn't hammer api.mdblist.com.
+        private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromMinutes(10);
+        private static readonly ConcurrentDictionary<string, (DateTimeOffset At, string Error)> _negativeCache =
+            new ConcurrentDictionary<string, (DateTimeOffset, string)>();
+
+        // Debounced disk flush for on-demand cache writes (the batch task also flushes).
+        private static readonly TimeSpan FlushDebounce = TimeSpan.FromSeconds(30);
+        private static DateTimeOffset _lastFlushRequest = DateTimeOffset.MinValue;
+
         private static readonly string[] DefaultRatingSources = { "imdb", "tmdb", "tomatoes", "metacritic" };
 
-        private static readonly JsonSerializerOptions JsonOpts = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            NumberHandling = JsonNumberHandling.AllowReadingFromString
-        };
+        private static readonly JsonSerializerOptions JsonOpts = MdbListApiHelper.JsonOptions;
 
         private readonly IAuthorizationContext _authContext;
 
@@ -82,28 +88,104 @@ namespace Emby.Plugins.Moonfin.Api
 
             if (allRatings == null)
             {
+                if (_negativeCache.TryGetValue(cacheKey, out var negative))
+                {
+                    if (DateTimeOffset.UtcNow - negative.At < NegativeCacheTtl)
+                        return Json(new { success = false, error = negative.Error, ratings = Array.Empty<object>() });
+
+                    _negativeCache.TryRemove(cacheKey, out _);
+                }
+
                 try
                 {
-                    var url = $"https://api.mdblist.com/tmdb/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(request.TmdbId.Trim())}?apikey={Uri.EscapeDataString(apiKey!)}";
+                    // The canonical path has a trailing slash, without it a redirect can drop the query.
+                    var url = $"{MdbListApiHelper.BaseUrl}/tmdb/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(request.TmdbId.Trim())}/?apikey={Uri.EscapeDataString(apiKey!)}";
                     using var client = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(15), "Moonfin/1.0");
 
                     var response = await client.GetAsync(url).ConfigureAwait(false);
-                    if ((int)response.StatusCode == 429) return Json(new { success = false, error = "MDBList rate limit reached.", ratings = Array.Empty<object>() });
-                    if (!response.IsSuccessStatusCode) return Json(new { success = false, error = $"MDBList returned status {(int)response.StatusCode}", ratings = Array.Empty<object>() });
+                    if ((int)response.StatusCode == 429) return NegativeResult(cacheKey, "MDBList rate limit reached. Try again later.");
+                    if (!response.IsSuccessStatusCode) return NegativeResult(cacheKey, $"MDBList returned status {(int)response.StatusCode}");
 
                     var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     var data = JsonSerializer.Deserialize<MdbListApiResponse>(json, JsonOpts);
                     allRatings = data?.Ratings ?? new List<MdbListRating>();
                     MdbListCache.Set(cacheKey, allRatings);
+                    RequestFlush();
                 }
                 catch (Exception ex) when (!(ex is OperationCanceledException))
                 {
-                    return Json(new { success = false, error = "Failed to fetch from MDBList: " + ex.Message, ratings = Array.Empty<object>() });
+                    return NegativeResult(cacheKey, "Failed to fetch from MDBList: " + ex.Message);
                 }
             }
 
             var filtered = FilterAndOrderRatings(allRatings, resolved?.MdblistRatingSources);
             return Json(new { success = true, ratings = filtered });
+        }
+
+        private object NegativeResult(string cacheKey, string error)
+        {
+            _negativeCache[cacheKey] = (DateTimeOffset.UtcNow, error);
+            return Json(new { success = false, error, ratings = Array.Empty<object>() });
+        }
+
+        private void RequestFlush()
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (now - _lastFlushRequest < FlushDebounce) return;
+
+            _lastFlushRequest = now;
+            var cache = Plugin.Instance?.MdbListCache;
+            if (cache != null)
+                _ = Task.Run(() => cache.FlushAsync());
+        }
+
+        /// <summary>
+        /// Validates an MDBList API key by proxying GET /user and returning plan/quota info.
+        /// Admin-only, used by the "Test key" button on the plugin config page.
+        /// Pass Key to test an unsaved key, otherwise the server-wide key is used.
+        /// </summary>
+        public async Task<object?> Get(GetMdbListKeyInfoRequest request)
+        {
+            var apiKey = string.IsNullOrWhiteSpace(request.Key)
+                ? Plugin.Instance?.Configuration?.MdblistApiKey
+                : request.Key!.Trim();
+            if (string.IsNullOrWhiteSpace(apiKey))
+                return Json(new { success = false, error = "No MDBList API key configured." });
+
+            try
+            {
+                var url = $"{MdbListApiHelper.BaseUrl}/user?apikey={Uri.EscapeDataString(apiKey!)}";
+                using var client = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(15), "Moonfin/1.0");
+
+                using var response = await client.GetAsync(url).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var reason = (int)response.StatusCode == 429
+                        ? "MDBList rate limit reached. Try again later."
+                        : $"MDBList rejected the key (status {(int)response.StatusCode}).";
+                    return Json(new { success = false, error = reason });
+                }
+
+                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var info = JsonSerializer.Deserialize<MdbListAccountInfo>(json, JsonOpts);
+                if (info == null || string.IsNullOrEmpty(info.Username))
+                    return Json(new { success = false, error = "Unexpected response from MDBList." });
+
+                return Json(new
+                {
+                    success = true,
+                    username = info.Username,
+                    plan = info.Plan,
+                    isSupporter = info.IsSupporter,
+                    apiRequests = info.ApiRequests,
+                    apiRequestsCount = info.ApiRequestsCount,
+                    rateLimitRemaining = info.RateLimitRemaining
+                });
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                return Json(new { success = false, error = "Failed to reach MDBList: " + ex.Message });
+            }
         }
 
         private static List<MdbListRating> FilterAndOrderRatings(List<MdbListRating> allRatings, List<string>? selectedSources)
@@ -118,17 +200,16 @@ namespace Emby.Plugins.Moonfin.Api
             var result = new List<MdbListRating>();
             foreach (var src in sources)
             {
-                // rtAudience (legacy web) and tomatoes_audience (client) both come from MDBList's
-                // "popcorn" source. Look it up there but return it under the key the caller asked for.
+                // MDBList's raw source names are imdb, metacritic, metacriticuser, trakt,
+                // tomatoes, popcorn, tmdb, letterboxd, rogerebert, and myanimelist. RT
+                // critics arrive as "tomatoes" and RT audience as "popcorn". Callers ask
+                // for popcorn as rtAudience or tomatoes_audience, so look it up there but
+                // return it under the key they asked for.
                 var lookupSource = src;
                 if (string.Equals(src, "rtAudience", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(src, "tomatoes_audience", StringComparison.OrdinalIgnoreCase))
                 {
                     lookupSource = "popcorn";
-                }
-                else if (string.Equals(src, "tomatoes", StringComparison.OrdinalIgnoreCase))
-                {
-                    lookupSource = "tomato";
                 }
 
                 if (bySource.TryGetValue(lookupSource, out var r))

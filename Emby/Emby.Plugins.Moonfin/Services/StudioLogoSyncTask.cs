@@ -60,6 +60,15 @@ namespace Emby.Plugins.Moonfin.Services
                 return;
             }
 
+            // The startup trigger can fire before ServerEntryPoint.Run() initializes the
+            // service singletons, so skip the run instead of throwing.
+            try { _ = CacheService; _ = FetchService; }
+            catch (InvalidOperationException)
+            {
+                _logger.Warn("Studio images sync skipped: plugin services not initialized yet");
+                return;
+            }
+
             progress.Report(0);
 
             var cacheMaxAge = TimeSpan.FromDays(config?.StudioLogosMaxAgeDays ?? 30);

@@ -12,5 +12,8 @@ namespace Emby.Plugins.Moonfin.Api
 
         // "params" is a C# keyword-adjacent name but binds fine on Emby (case-insensitive).
         public string? Params { get; set; }
+
+        /// <summary>Bypass the server-side cache and refetch from the upstream source.</summary>
+        public bool Refresh { get; set; }
     }
 }

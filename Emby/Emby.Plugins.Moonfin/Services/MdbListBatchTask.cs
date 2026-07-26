@@ -21,11 +21,16 @@ namespace Emby.Plugins.Moonfin.Services
         public string Description => "Batch-fetches MDBList ratings for all movies and shows in the library.";
         public string Category => "Moonfin";
 
+        // The batch media-info endpoint accepts 100 ids even on non-supporter keys.
         private const int ApiBatchSize = 100;
         private const int LibraryPageSize = 2000;
         private const int DelayBetweenApiBatchesMs = 2000;
         private const int FlushEveryNBatches = 20;
         private static readonly TimeSpan CacheMaxAge = TimeSpan.FromDays(7);
+
+        // Entries older than this are never served (the read TTL is 7 days), they're just
+        // dead weight from removed library items and one-off lookups.
+        private static readonly TimeSpan PruneAge = TimeSpan.FromDays(14);
 
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
@@ -51,6 +56,26 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 _logger.Info("MDBList batch sync skipped: no server-wide API key configured", 0);
                 return;
+            }
+
+            // The startup trigger can fire before ServerEntryPoint.Run() initializes the
+            // service singletons, so skip the run instead of throwing.
+            try { _ = CacheService; }
+            catch (InvalidOperationException)
+            {
+                _logger.Warn("MDBList batch sync skipped: plugin services not initialized yet");
+                return;
+            }
+
+            // Validate the key and log quota state before spending requests on a full sync.
+            using (var accountClient = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(30), "Moonfin/1.0"))
+            {
+                var account = await MdbListApiHelper.GetAccountInfoAsync(accountClient, apiKey!, _logger, cancellationToken).ConfigureAwait(false);
+                if (account == null)
+                {
+                    _logger.Warn("MDBList batch sync skipped: API key could not be validated");
+                    return;
+                }
             }
 
             _logger.Info("MDBList batch sync starting...", 0);
@@ -81,15 +106,37 @@ namespace Emby.Plugins.Moonfin.Services
                 return;
             }
 
-            var movieItems = uncachedItems.Where(i => i.Type == "movie").ToList();
-            var showItems = uncachedItems.Where(i => i.Type == "show").ToList();
+            // Multiple library versions of the same title share a TMDB id, so dedupe to
+            // avoid spending two batch slots on one id.
+            var movieItems = uncachedItems.Where(i => i.Type == "movie")
+                .GroupBy(i => i.CacheKey, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
+            var showItems = uncachedItems.Where(i => i.Type == "show")
+                .GroupBy(i => i.CacheKey, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
+
             var totalItems = movieItems.Count + showItems.Count;
             var processedItems = 0;
 
-            processedItems = await FetchBatchesAsync(movieItems, "movie", apiKey, processedItems, totalItems, progress, cancellationToken).ConfigureAwait(false);
-            await FetchBatchesAsync(showItems, "show", apiKey, processedItems, totalItems, progress, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                processedItems = await FetchBatchesAsync(movieItems, "movie", apiKey!, processedItems, totalItems, progress, cancellationToken).ConfigureAwait(false);
+                processedItems = await FetchBatchesAsync(showItems, "show", apiKey!, processedItems, totalItems, progress, cancellationToken).ConfigureAwait(false);
+            }
+            catch (MdbListRateLimitException)
+            {
+                // Keep what was fetched. The daily trigger picks up the remainder once
+                // the quota resets.
+                await CacheService.FlushAsync().ConfigureAwait(false);
+                _logger.Warn("MDBList batch sync aborted after rate limit: processed " + processedItems + "/" + totalItems + " items, will resume next run");
+                progress.Report(100);
+                return;
+            }
+
+            var pruned = CacheService.PruneOlderThan(PruneAge);
+            if (pruned > 0)
+                _logger.Info("MDBList ratings cache: pruned " + pruned + " entries older than " + PruneAge.TotalDays + " days", 0);
 
             await CacheService.FlushAsync().ConfigureAwait(false);
+            _logger.Info("MDBList batch sync complete: processed " + processedItems + " items", 0);
             progress.Report(100);
         }
 
@@ -141,7 +188,7 @@ namespace Emby.Plugins.Moonfin.Services
                     var ratings = await FetchBatchFromApiAsync(type, tmdbIds, apiKey, cancellationToken).ConfigureAwait(false);
                     if (ratings != null) CacheService.SetMany(ratings);
                 }
-                catch (Exception ex) when (!(ex is OperationCanceledException))
+                catch (Exception ex) when (!(ex is OperationCanceledException) && !(ex is MdbListRateLimitException))
                 {
                     _logger.Warn("Batch fetch failed for " + type + " batch, continuing: " + ex.Message);
                 }
@@ -166,8 +213,17 @@ namespace Emby.Plugins.Moonfin.Services
         private async Task<Dictionary<string, List<MdbListRating>>?> FetchBatchFromApiAsync(
             string type, List<string> tmdbIds, string apiKey, CancellationToken cancellationToken)
         {
-            var url = $"https://api.mdblist.com/tmdb/{Uri.EscapeDataString(type)}?apikey={Uri.EscapeDataString(apiKey)}";
-            var requestBody = JsonSerializer.Serialize(new { ids = tmdbIds });
+            // Use the canonical trailing-slash path so a redirect can't turn the POST
+            // into a GET. The endpoint expects integer ids.
+            var url = $"{MdbListApiHelper.BaseUrl}/tmdb/{Uri.EscapeDataString(type)}/?apikey={Uri.EscapeDataString(apiKey)}";
+
+            var numericIds = new List<long>(tmdbIds.Count);
+            foreach (var id in tmdbIds)
+                if (long.TryParse(id, out var numeric)) numericIds.Add(numeric);
+
+            if (numericIds.Count == 0) return null;
+
+            var requestBody = JsonSerializer.Serialize(new MdbListBatchRequest { Ids = numericIds }, MdbListApiHelper.JsonOptions);
 
             using var client = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(60), "Moonfin/1.0");
 
@@ -176,19 +232,24 @@ namespace Emby.Plugins.Moonfin.Services
 
             if ((int)response.StatusCode == 429)
             {
-                _logger.Warn("MDBList rate limit hit during batch fetch");
+                throw new MdbListRateLimitException();
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.Warn("MDBList batch returned status " + (int)response.StatusCode);
                 return null;
             }
-            if (!response.IsSuccessStatusCode) return null;
 
             var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            var batchResponse = JsonSerializer.Deserialize<List<MdbListBatchItem>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var batchResponse = JsonSerializer.Deserialize<List<MdbListBatchItem>>(json, MdbListApiHelper.JsonOptions);
             if (batchResponse == null) return null;
 
             var result = new Dictionary<string, List<MdbListRating>>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in batchResponse)
             {
-                var tmdbId = item.Ids?.Tmdb?.ToString();
+                // Prefer the nested ids object and fall back to the top-level id, which
+                // batch items sometimes carry instead.
+                var tmdbId = (item.Ids?.Tmdb ?? item.Id)?.ToString();
                 if (string.IsNullOrEmpty(tmdbId)) continue;
                 result[$"{type}:{tmdbId}"] = item.Ratings ?? new List<MdbListRating>();
             }
@@ -216,8 +277,14 @@ namespace Emby.Plugins.Moonfin.Services
             public string CacheKey { get; set; } = string.Empty;
         }
 
+        private class MdbListBatchRequest
+        {
+            [JsonPropertyName("ids")] public List<long> Ids { get; set; } = new List<long>();
+        }
+
         private class MdbListBatchItem
         {
+            [JsonPropertyName("id")] public long? Id { get; set; }
             [JsonPropertyName("ids")] public MdbListBatchIds? Ids { get; set; }
             [JsonPropertyName("ratings")] public List<MdbListRating>? Ratings { get; set; }
         }

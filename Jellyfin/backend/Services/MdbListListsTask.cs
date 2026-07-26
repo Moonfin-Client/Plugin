@@ -1,5 +1,4 @@
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediaBrowser.Model.Tasks;
@@ -25,6 +24,7 @@ public class MdbListListsTask : IScheduledTask
     private const int DelayBetweenApiBatchesMs = 2000;
     private const int FlushEveryNLists = 10;
     private const int DefaultMaxItemsPerList = 250;
+    private static readonly TimeSpan FreshnessSkipWindow = TimeSpan.FromHours(6);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly MdbListListsCacheService _cacheService;
@@ -57,15 +57,37 @@ public class MdbListListsTask : IScheduledTask
             return;
         }
 
+        // The sync tasks fire on server startup, so skip when the cache is still fresh.
+        // Repeated boots shouldn't burst the MDBList API, and the daily trigger still
+        // refreshes once the cache ages out.
+        var catalogAge = _cacheService.GetCatalogAge();
+        if (catalogAge.HasValue && catalogAge.Value < FreshnessSkipWindow)
+        {
+            _logger.LogInformation(
+                "MDBList official lists sync skipped: cache is only {Age:F1}h old",
+                catalogAge.Value.TotalHours);
+            return;
+        }
+
         var maxItemsPerList = config?.MdblistOfficialListsMaxItems ?? DefaultMaxItemsPerList;
         if (maxItemsPerList <= 0) maxItemsPerList = DefaultMaxItemsPerList;
 
-        // Poster enrichment is best-effort: only runs when a server TMDB key is set, and seeds
+        // Poster fallback is best-effort: only runs when a server TMDB key is set, and seeds
         // from the existing cache so it only calls TMDB for ids it has not resolved before.
         var tmdbKey = config?.TmdbApiKey;
         var knownPosters = _cacheService.GetKnownPosters();
 
         progress.Report(0);
+
+        var accountClient = _httpClientFactory.CreateClient();
+        accountClient.Timeout = TimeSpan.FromSeconds(30);
+        accountClient.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
+        var account = await MdbListApiHelper.GetAccountInfoAsync(accountClient, apiKey, _logger, cancellationToken).ConfigureAwait(false);
+        if (account == null)
+        {
+            _logger.LogWarning("MDBList official lists sync skipped: API key could not be validated");
+            return;
+        }
 
         var rawCatalog = await FetchCatalogAsync(apiKey, cancellationToken).ConfigureAwait(false);
         if (rawCatalog == null || rawCatalog.Count == 0)
@@ -86,6 +108,12 @@ public class MdbListListsTask : IScheduledTask
             .ToList();
 
         _cacheService.SetCatalog(catalog);
+        var pruned = _cacheService.PruneItemsNotIn(catalog.Select(c => c.Slug).ToList());
+        if (pruned > 0)
+        {
+            _logger.LogInformation("MDBList official lists: pruned {Count} delisted list caches", pruned);
+        }
+
         await _cacheService.FlushAsync().ConfigureAwait(false);
         _logger.LogInformation("MDBList official lists: cached catalog of {Count} lists", catalog.Count);
 
@@ -181,7 +209,7 @@ public class MdbListListsTask : IScheduledTask
             cancellationToken.ThrowIfCancellationRequested();
 
             var url = $"https://api.mdblist.com/lists/official/{Uri.EscapeDataString(slug)}/items" +
-                      $"?apikey={Uri.EscapeDataString(apiKey)}&limit={PageLimit}";
+                      $"?apikey={Uri.EscapeDataString(apiKey)}&limit={PageLimit}&append_to_response=poster";
             if (!string.IsNullOrEmpty(cursor))
             {
                 url += $"&cursor={Uri.EscapeDataString(cursor)}";
@@ -191,8 +219,10 @@ public class MdbListListsTask : IScheduledTask
 
             if ((int)response.StatusCode == 429)
             {
-                _logger.LogWarning("MDBList rate limit hit fetching items for {Slug}, keeping what was fetched", slug);
-                break;
+                _logger.LogWarning("MDBList rate limit hit fetching items for {Slug}", slug);
+                // Keep partial results, but when nothing was fetched yet fail hard so the
+                // last-good cache isn't overwritten with an empty list.
+                return fetchedAnyPage ? collected : null;
             }
 
             if (!response.IsSuccessStatusCode)
@@ -208,14 +238,16 @@ public class MdbListListsTask : IScheduledTask
 
             if (page == null) break;
 
-            AppendItems(collected, page.Movies, "movie", maxItems);
-            AppendItems(collected, page.Shows, "show", maxItems);
+            // Append full pages (no per-bucket cap): movies and shows arrive in separate
+            // arrays, so capping mid-page would drop shows disproportionately on combined
+            // lists. The rank-sorted truncation below enforces maxItems fairly.
+            AppendItems(collected, page.Movies, "movie");
+            AppendItems(collected, page.Shows, "show");
 
+            // Follow pagination.next_cursor until it's absent, that's the only
+            // continuation signal the MDBList API guarantees.
             cursor = page.Pagination?.NextCursor;
-            var hasMore = response.Headers.TryGetValues("X-Has-More", out var values) &&
-                          values.Any(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
-
-            if (string.IsNullOrEmpty(cursor) || !hasMore)
+            if (string.IsNullOrEmpty(cursor))
             {
                 break;
             }
@@ -226,17 +258,23 @@ public class MdbListListsTask : IScheduledTask
             }
         }
 
+        if (collected.Count > maxItems)
+        {
+            collected = collected
+                .OrderBy(i => i.Rank ?? int.MaxValue)
+                .Take(maxItems)
+                .ToList();
+        }
+
         return collected;
     }
 
-    private static void AppendItems(List<MdbListItem> target, List<RawListItem>? source, string bucketType, int maxItems)
+    private static void AppendItems(List<MdbListItem> target, List<RawListItem>? source, string bucketType)
     {
         if (source == null) return;
 
         foreach (var raw in source)
         {
-            if (target.Count >= maxItems) return;
-
             var tmdb = raw.Ids?.Tmdb ?? raw.Id;
             var imdb = raw.Ids?.Imdb ?? raw.ImdbId;
             var tvdb = raw.Ids?.Tvdb ?? raw.TvdbId;
@@ -248,6 +286,7 @@ public class MdbListListsTask : IScheduledTask
                 Type = string.IsNullOrWhiteSpace(raw.Mediatype) ? bucketType : raw.Mediatype!,
                 ProductionYear = raw.ReleaseYear,
                 Rank = raw.Rank,
+                Poster = MdbListApiHelper.NormalizeTmdbImagePath(raw.Poster),
                 ProviderIds = new MdbListItemProviderIds
                 {
                     Imdb = string.IsNullOrWhiteSpace(imdb) ? null : imdb,
@@ -259,17 +298,18 @@ public class MdbListListsTask : IScheduledTask
     }
 
     /// <summary>
-    /// Fills each item's Poster from TMDB (best-effort), reusing already-resolved posters so the
-    /// sync only calls TMDB for ids it has not seen. No-op when no server TMDB key is configured.
+    /// Fallback poster resolution for items MDBList returned without a poster
+    /// (append_to_response=poster covers the vast majority). Reuses already-resolved
+    /// posters and only calls TMDB for unseen ids. No-op without a server TMDB key.
     /// </summary>
     private async Task EnrichPostersAsync(List<MdbListItem> items, string? tmdbKey, Dictionary<string, string> knownPosters, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(tmdbKey)) return;
-
         HttpClient? client = null;
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (!string.IsNullOrEmpty(item.Poster)) continue;
 
             var tmdbId = item.ProviderIds?.Tmdb;
             if (string.IsNullOrEmpty(tmdbId)) continue;
@@ -281,6 +321,8 @@ public class MdbListListsTask : IScheduledTask
                 continue;
             }
 
+            if (string.IsNullOrWhiteSpace(tmdbKey)) continue;
+
             if (client == null)
             {
                 client = _httpClientFactory.CreateClient();
@@ -289,6 +331,11 @@ public class MdbListListsTask : IScheduledTask
             }
 
             var poster = await FetchTmdbPosterAsync(client, item.Type, tmdbId!, tmdbKey!, cancellationToken).ConfigureAwait(false);
+
+            // Fallback lookups are rare once MDBList supplies posters, but still keep
+            // a light touch on the TMDB API between misses.
+            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+
             if (string.IsNullOrEmpty(poster)) continue;
 
             item.Poster = poster;
@@ -304,7 +351,7 @@ public class MdbListListsTask : IScheduledTask
             var url = $"https://api.themoviedb.org/3/{path}/{Uri.EscapeDataString(tmdbId)}";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            ApplyTmdbAuth(request, tmdbKey);
+            TmdbRequestHelper.ApplyAuth(request, tmdbKey);
 
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode) return null;
@@ -317,20 +364,6 @@ public class MdbListListsTask : IScheduledTask
         {
             _logger.LogDebug(ex, "TMDB poster fetch failed for {Type}/{TmdbId}", type, tmdbId);
             return null;
-        }
-    }
-
-    private static void ApplyTmdbAuth(HttpRequestMessage request, string apiKey)
-    {
-        // v4 read tokens are JWTs (eyJ...) and use a Bearer header. v3 keys go in the query.
-        if (apiKey.StartsWith("eyJ", StringComparison.Ordinal))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        }
-        else
-        {
-            var sep = request.RequestUri!.Query.Length > 0 ? "&" : "?";
-            request.RequestUri = new Uri(request.RequestUri + sep + "api_key=" + Uri.EscapeDataString(apiKey));
         }
     }
 
@@ -409,6 +442,9 @@ public class MdbListListsTask : IScheduledTask
 
         [JsonPropertyName("release_year")]
         public int? ReleaseYear { get; set; }
+
+        [JsonPropertyName("poster")]
+        public string? Poster { get; set; }
 
         [JsonPropertyName("ids")]
         public RawIds? Ids { get; set; }

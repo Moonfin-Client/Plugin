@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Moonfin.Server.Api;
@@ -12,33 +10,11 @@ namespace Moonfin.Server.Services;
 /// The batch task populates this cache; the controller reads from it.
 /// Uses stream-based JSON I/O to handle large caches without string allocation spikes.
 /// </summary>
-public class MdbListCacheService
+public class MdbListCacheService : FileBackedCacheService<MdbListCacheEntry>
 {
-    private readonly string _cacheFilePath;
-    private readonly ILogger<MdbListCacheService> _logger;
-    private readonly SemaphoreSlim _fileLock = new(1, 1);
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = false,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
-    private ConcurrentDictionary<string, MdbListCacheEntry>? _cache;
-
     public MdbListCacheService(ILogger<MdbListCacheService> logger)
+        : base(logger, "mdblist_cache.json", "MDBList")
     {
-        _logger = logger;
-        var dataPath = MoonfinPlugin.Instance?.DataFolderPath
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
-
-        if (!Directory.Exists(dataPath))
-        {
-            Directory.CreateDirectory(dataPath);
-        }
-
-        _cacheFilePath = Path.Combine(dataPath, "mdblist_cache.json");
     }
 
     public List<MdbListRating>? TryGet(string cacheKey, TimeSpan maxAge)
@@ -91,69 +67,29 @@ public class MdbListCacheService
         return keys;
     }
 
-    public async Task FlushAsync()
+    /// <summary>
+    /// Removes entries older than <paramref name="maxAge"/>. Entries beyond the read TTL
+    /// are never served, so anything well past it (removed library items, one-off
+    /// on-demand lookups) is dead weight in the cache file.
+    /// </summary>
+    public int PruneOlderThan(TimeSpan maxAge)
     {
-        var cache = _cache;
-        if (cache == null) return;
-
-        await _fileLock.WaitAsync().ConfigureAwait(false);
-        try
+        var cache = EnsureLoaded();
+        var cutoff = DateTimeOffset.UtcNow - maxAge;
+        var removed = 0;
+        foreach (var (key, entry) in cache)
         {
-            await using var stream = File.Create(_cacheFilePath);
-            await JsonSerializer.SerializeAsync(stream, cache, JsonOptions).ConfigureAwait(false);
-            _logger.LogDebug("MDBList cache flushed to disk ({Count} entries)", cache.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to flush MDBList cache to disk");
-        }
-        finally
-        {
-            _fileLock.Release();
-        }
-    }
-
-    private ConcurrentDictionary<string, MdbListCacheEntry> EnsureLoaded()
-    {
-        if (_cache != null) return _cache;
-
-        _fileLock.Wait();
-        try
-        {
-            if (_cache != null) return _cache;
-
-            if (File.Exists(_cacheFilePath))
+            if (entry.CachedAt < cutoff && cache.TryRemove(key, out _))
             {
-                try
-                {
-                    using var stream = File.OpenRead(_cacheFilePath);
-                    var loaded = JsonSerializer.Deserialize<Dictionary<string, MdbListCacheEntry>>(stream, JsonOptions);
-                    _cache = loaded != null
-                        ? new ConcurrentDictionary<string, MdbListCacheEntry>(loaded, StringComparer.OrdinalIgnoreCase)
-                        : new ConcurrentDictionary<string, MdbListCacheEntry>(StringComparer.OrdinalIgnoreCase);
-                    _logger.LogInformation("MDBList cache loaded from disk ({Count} entries)", _cache.Count);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to load MDBList cache from disk, starting fresh");
-                    _cache = new ConcurrentDictionary<string, MdbListCacheEntry>(StringComparer.OrdinalIgnoreCase);
-                }
-            }
-            else
-            {
-                _cache = new ConcurrentDictionary<string, MdbListCacheEntry>(StringComparer.OrdinalIgnoreCase);
+                removed++;
             }
         }
-        finally
-        {
-            _fileLock.Release();
-        }
 
-        return _cache;
+        return removed;
     }
 }
 
-internal class MdbListCacheEntry
+public class MdbListCacheEntry
 {
     [JsonPropertyName("ratings")]
     public List<MdbListRating> Ratings { get; set; } = new();

@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 
@@ -9,33 +7,11 @@ namespace Moonfin.Server.Services;
 /// Persistent file-backed cache for fully custom home rows.
 /// Keyed by source:type:paramHash.
 /// </summary>
-public class CustomRowCacheService
+public class CustomRowCacheService : FileBackedCacheService<CustomRowCacheEntry>
 {
-    private readonly string _cacheFilePath;
-    private readonly ILogger<CustomRowCacheService> _logger;
-    private readonly SemaphoreSlim _fileLock = new(1, 1);
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = false,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
-    private ConcurrentDictionary<string, CustomRowCacheEntry>? _cache;
-
     public CustomRowCacheService(ILogger<CustomRowCacheService> logger)
+        : base(logger, "custom_rows_cache.json", "Custom rows")
     {
-        _logger = logger;
-        var dataPath = MoonfinPlugin.Instance?.DataFolderPath
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
-
-        if (!Directory.Exists(dataPath))
-        {
-            Directory.CreateDirectory(dataPath);
-        }
-
-        _cacheFilePath = Path.Combine(dataPath, "custom_rows_cache.json");
     }
 
     public List<CustomRowItem>? TryGet(string cacheKey, TimeSpan maxAge)
@@ -59,65 +35,24 @@ public class CustomRowCacheService
         };
     }
 
-    public async Task FlushAsync()
+    /// <summary>
+    /// Removes entries older than <paramref name="maxAge"/> so abandoned row configs
+    /// (changed lists, removed rows) don't accumulate in the cache file forever.
+    /// </summary>
+    public int PruneOlderThan(TimeSpan maxAge)
     {
-        var cache = _cache;
-        if (cache == null) return;
-
-        await _fileLock.WaitAsync().ConfigureAwait(false);
-        try
+        var cache = EnsureLoaded();
+        var cutoff = DateTimeOffset.UtcNow - maxAge;
+        var removed = 0;
+        foreach (var (key, entry) in cache)
         {
-            await using var stream = File.Create(_cacheFilePath);
-            await JsonSerializer.SerializeAsync(stream, cache, JsonOptions).ConfigureAwait(false);
-            _logger.LogDebug("Custom rows cache flushed to disk ({Count} entries)", cache.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to flush Custom rows cache to disk");
-        }
-        finally
-        {
-            _fileLock.Release();
-        }
-    }
-
-    private ConcurrentDictionary<string, CustomRowCacheEntry> EnsureLoaded()
-    {
-        if (_cache != null) return _cache;
-
-        _fileLock.Wait();
-        try
-        {
-            if (_cache != null) return _cache;
-
-            if (File.Exists(_cacheFilePath))
+            if (entry.CachedAt < cutoff && cache.TryRemove(key, out _))
             {
-                try
-                {
-                    using var stream = File.OpenRead(_cacheFilePath);
-                    var loaded = JsonSerializer.Deserialize<Dictionary<string, CustomRowCacheEntry>>(stream, JsonOptions);
-                    _cache = loaded != null
-                        ? new ConcurrentDictionary<string, CustomRowCacheEntry>(loaded, StringComparer.OrdinalIgnoreCase)
-                        : new ConcurrentDictionary<string, CustomRowCacheEntry>(StringComparer.OrdinalIgnoreCase);
-                    _logger.LogInformation("Custom rows cache loaded from disk ({Count} entries)", _cache.Count);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to load Custom rows cache from disk, starting fresh");
-                    _cache = new ConcurrentDictionary<string, CustomRowCacheEntry>(StringComparer.OrdinalIgnoreCase);
-                }
-            }
-            else
-            {
-                _cache = new ConcurrentDictionary<string, CustomRowCacheEntry>(StringComparer.OrdinalIgnoreCase);
+                removed++;
             }
         }
-        finally
-        {
-            _fileLock.Release();
-        }
 
-        return _cache;
+        return removed;
     }
 }
 

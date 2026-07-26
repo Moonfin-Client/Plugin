@@ -507,6 +507,63 @@
                                 Users who set their own key in their Moonfin client settings will use that instead.
                             </div>
                         </div>
+                        <div class="inputContainer">
+                            <button is="emby-button" type="button" id="MdblistTestKeyBtn" class="raised">
+                                <span>Test key</span>
+                            </button>
+                            <div class="fieldDescription" id="MdblistTestKeyResult"></div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="MdblistOfficialListsEnabled" is="emby-checkbox" />
+                                <span>Sync MDBList official lists</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Nightly task that caches MDBList's official charts (e.g. IMDb Top 250) so clients can
+                                show them as home rows without their own key.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MdblistOfficialListsMaxItems">Max items per official list</label>
+                            <input type="number" id="MdblistOfficialListsMaxItems" is="emby-input" min="10" max="1000" step="10" />
+                            <div class="fieldDescription">
+                                Cap on items cached per official list (default 250).
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">IMDb Charts</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="ImdbListsEnabled" is="emby-checkbox" />
+                                <span>Sync IMDb charts</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Nightly task that caches IMDb charts (Top 250, Popular, etc.) for IMDb custom rows.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Studio Logos</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="StudioLogosEnabled" is="emby-checkbox" />
+                                <span>Sync studio logos from TMDB</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Nightly task that caches production-company logos for the studio row on detail pages.
+                                Requires the server-wide TMDB key below.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="StudioLogosMaxAgeDays">Studio logo refresh age (days)</label>
+                            <input type="number" id="StudioLogosMaxAgeDays" is="emby-input" min="1" max="365" step="1" />
+                            <div class="fieldDescription">
+                                Logos older than this are re-fetched (default 30).
+                            </div>
+                        </div>
                     </div>
 
                     <div class="verticalSection">
@@ -1697,7 +1754,7 @@
                 { id: 'trakt',          label: 'Trakt' },
                 { id: 'letterboxd',     label: 'Letterboxd' },
                 { id: 'myAnimeList',    label: 'MyAnimeList' },
-                { id: 'aniList',        label: 'AniList' },
+                { id: 'rogerEbert',     label: 'Roger Ebert' },
             ];
 
             var HOME_SECTION_DEFINITIONS = [
@@ -2725,6 +2782,27 @@
                     });
                 }
 
+                var mdblistTestButton = document.querySelector('#MdblistTestKeyBtn');
+                if (mdblistTestButton && !mdblistTestButton.dataset.bound) {
+                    mdblistTestButton.dataset.bound = 'true';
+                    mdblistTestButton.addEventListener('click', function() {
+                        var resultEl = document.querySelector('#MdblistTestKeyResult');
+                        var key = document.querySelector('#MdblistApiKey').value.trim();
+                        resultEl.textContent = 'Testing…';
+                        ApiClient.getJSON(ApiClient.getUrl('Moonfin/MdbList/KeyInfo', key ? { key: key } : {})).then(function(info) {
+                            if (info && info.success) {
+                                resultEl.textContent = 'Key ok: ' + info.username +
+                                    ' (' + (info.plan || (info.isSupporter ? 'Supporter' : 'Free')) + '), ' +
+                                    (info.apiRequestsCount || 0) + '/' + (info.apiRequests || 0) + ' requests used today.';
+                            } else {
+                                resultEl.textContent = (info && info.error) || 'Key test failed.';
+                            }
+                        }).catch(function() {
+                            resultEl.textContent = 'Key test failed. Could not reach the server.';
+                        });
+                    });
+                }
+
                 if (themesListContainer && !themesListContainer.dataset.bound) {
                     themesListContainer.dataset.bound = 'true';
                     themesListContainer.addEventListener('click', function(event) {
@@ -2756,6 +2834,11 @@
                     document.querySelector('#FcmServiceAccountPath').value = config.FcmServiceAccountPath || '';
                     document.querySelector('#MdblistApiKey').value = config.MdblistApiKey || '';
                     document.querySelector('#TmdbApiKey').value = config.TmdbApiKey || '';
+                    document.querySelector('#MdblistOfficialListsEnabled').checked = config.MdblistOfficialListsEnabled !== false;
+                    document.querySelector('#MdblistOfficialListsMaxItems').value = config.MdblistOfficialListsMaxItems || 250;
+                    document.querySelector('#ImdbListsEnabled').checked = config.ImdbListsEnabled !== false;
+                    document.querySelector('#StudioLogosEnabled').checked = config.StudioLogosEnabled !== false;
+                    document.querySelector('#StudioLogosMaxAgeDays').value = config.StudioLogosMaxAgeDays || 30;
                     document.querySelector('#WebDefaultServerUrl').value = config.WebDefaultServerUrl || '';
                     document.querySelector('#WebForcedServerUrl').value = config.WebForcedServerUrl || '';
                     document.querySelector('#WebEnableWebRtcScan').checked = config.WebEnableWebRtcScan !== false;
@@ -3093,8 +3176,14 @@
                         config.PushRelayAppKey = document.querySelector('#PushRelayAppKey').value || null;
                         config.FcmServiceAccountJson = document.querySelector('#FcmServiceAccountJson').value || null;
                         config.FcmServiceAccountPath = document.querySelector('#FcmServiceAccountPath').value || null;
-                        config.MdblistApiKey = document.querySelector('#MdblistApiKey').value || null;
-                        config.TmdbApiKey = document.querySelector('#TmdbApiKey').value || null;
+                        // Trim pasted keys so a stray trailing space doesn't break every API call.
+                        config.MdblistApiKey = document.querySelector('#MdblistApiKey').value.trim() || null;
+                        config.TmdbApiKey = document.querySelector('#TmdbApiKey').value.trim() || null;
+                        config.MdblistOfficialListsEnabled = document.querySelector('#MdblistOfficialListsEnabled').checked;
+                        config.MdblistOfficialListsMaxItems = parseInt(document.querySelector('#MdblistOfficialListsMaxItems').value, 10) || 250;
+                        config.ImdbListsEnabled = document.querySelector('#ImdbListsEnabled').checked;
+                        config.StudioLogosEnabled = document.querySelector('#StudioLogosEnabled').checked;
+                        config.StudioLogosMaxAgeDays = parseInt(document.querySelector('#StudioLogosMaxAgeDays').value, 10) || 30;
                         config.WebDefaultServerUrl = document.querySelector('#WebDefaultServerUrl').value || null;
                         config.WebForcedServerUrl = document.querySelector('#WebForcedServerUrl').value || null;
                         config.WebEnableWebRtcScan = document.querySelector('#WebEnableWebRtcScan').checked;
