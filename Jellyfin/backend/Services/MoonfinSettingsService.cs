@@ -241,6 +241,7 @@ public class MoonfinSettingsService
             finalSettings.SchemaVersion = 2;
 
             MoveContentHidingToGlobal(finalSettings);
+            PropagateCustomHomeSectionsAcrossProfiles(finalSettings);
 
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
@@ -293,6 +294,7 @@ public class MoonfinSettingsService
             settings.SchemaVersion = 2;
 
             MoveContentHidingToGlobal(settings);
+            PropagateCustomHomeSectionsAcrossProfiles(settings);
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
@@ -662,7 +664,57 @@ public class MoonfinSettingsService
             }
         }
 
+        PropagateCustomHomeSectionsAcrossProfiles(existing);
         return existing;
+    }
+
+    private static void PropagateCustomHomeSectionsAcrossProfiles(MoonfinUserSettings settings)
+    {
+        var profiles = new[] { settings.Global, settings.Desktop, settings.Mobile, settings.Tv };
+        var allCustomSections = new List<MoonfinHomeSectionConfig>();
+
+        foreach (var profile in profiles)
+        {
+            if (profile?.HomeSections == null) continue;
+            foreach (var section in profile.HomeSections)
+            {
+                if (string.Equals(section.Kind, "pluginDynamic", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(section.PluginSource, "custom", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(section.PluginSection))
+                {
+                    if (!allCustomSections.Any(s => string.Equals(s.PluginSection, section.PluginSection, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        allCustomSections.Add(section);
+                    }
+                }
+            }
+        }
+
+        if (allCustomSections.Count == 0) return;
+
+        foreach (var profile in profiles)
+        {
+            if (profile == null) continue;
+            profile.HomeSections ??= new List<MoonfinHomeSectionConfig>();
+            foreach (var custom in allCustomSections)
+            {
+                if (!profile.HomeSections.Any(s => string.Equals(s.PluginSection, custom.PluginSection, StringComparison.OrdinalIgnoreCase)))
+                {
+                    profile.HomeSections.Add(new MoonfinHomeSectionConfig
+                    {
+                        Kind = "pluginDynamic",
+                        Type = "none",
+                        Enabled = false,
+                        Order = profile.HomeSections.Count,
+                        ServerId = string.IsNullOrWhiteSpace(custom.ServerId) ? "custom" : custom.ServerId,
+                        PluginSource = "custom",
+                        PluginSection = custom.PluginSection,
+                        PluginAdditionalData = custom.PluginAdditionalData,
+                        PluginDisplayText = custom.PluginDisplayText
+                    });
+                }
+            }
+        }
     }
 
     /// <summary>
