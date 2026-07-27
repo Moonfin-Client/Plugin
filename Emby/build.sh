@@ -21,11 +21,27 @@ if ! command -v dotnet &>/dev/null; then
     fi
 fi
 
+# Optional push relay key, read from a gitignored .env at the repo root. Without
+# one the build still succeeds and the plugin ships with push disabled.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RELAY_APP_KEY=""
+ENV_FILE="$SCRIPT_DIR/../.env"
+if [ -f "$ENV_FILE" ]; then
+    RELAY_APP_KEY="$(grep -E '^[[:space:]]*MOONFIN_RELAY_APP_KEY[[:space:]]*=' "$ENV_FILE" \
+        | tail -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
+fi
+if [ -n "$RELAY_APP_KEY" ]; then
+    echo "Push relay key found, stamping it into this build."
+else
+    echo "No push relay key, building with push disabled."
+fi
+
 # Build
 $DOTNET_CMD build "$PROJECT" \
     -c Release \
     /p:AssemblyVersion="$VERSION" \
-    /p:FileVersion="$VERSION"
+    /p:FileVersion="$VERSION" \
+    /p:MoonfinRelayAppKey="$RELAY_APP_KEY"
 
 BUILD_OUT="Emby.Plugins.Moonfin/bin/Release/netstandard2.1"
 DLL_PATH="$BUILD_OUT/${PLUGIN_NAME}.dll"

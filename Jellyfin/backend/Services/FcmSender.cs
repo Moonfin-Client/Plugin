@@ -15,6 +15,10 @@ public class FcmSender
     private const string Scope = "https://www.googleapis.com/auth/firebase.messaging";
     private const string DefaultTokenUri = "https://oauth2.googleapis.com/token";
 
+    // Must match the channel the app creates at startup, otherwise pushes land
+    // in the generic channel Android makes up and lose their importance.
+    private const string AndroidChannelId = "seerr_notifications";
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<FcmSender> _logger;
 
@@ -81,7 +85,11 @@ public class FcmSender
                     token = deviceToken,
                     notification = new { title, body },
                     data = new { route, requestId = requestId!, kind = "request" },
-                    android = new { priority = "high" },
+                    android = new
+                    {
+                        priority = "high",
+                        notification = new { channel_id = AndroidChannelId }
+                    },
                     apns = new
                     {
                         headers = new Dictionary<string, string> { ["apns-priority"] = "10" },
@@ -101,7 +109,11 @@ public class FcmSender
                     token = deviceToken,
                     notification = new { title, body },
                     data = new { route },
-                    android = new { priority = "high" }
+                    android = new
+                    {
+                        priority = "high",
+                        notification = new { channel_id = AndroidChannelId }
+                    }
                 }
             };
         }
@@ -114,7 +126,11 @@ public class FcmSender
                     token = deviceToken,
                     notification = new { title, body },
                     data = new { route },
-                    android = new { priority = "high" },
+                    android = new
+                    {
+                        priority = "high",
+                        notification = new { channel_id = AndroidChannelId }
+                    },
                     apns = new
                     {
                         headers = new Dictionary<string, string> { ["apns-priority"] = "10" },

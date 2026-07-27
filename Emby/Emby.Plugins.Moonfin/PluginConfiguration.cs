@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using Emby.Plugins.Moonfin.Models;
 using MediaBrowser.Model.Plugins;
 
@@ -29,20 +31,24 @@ namespace Emby.Plugins.Moonfin
         /// <summary>Optional path to a Firebase service-account JSON file on the server. When both this and FcmServiceAccountJson are set, the file path wins.</summary>
         public string? FcmServiceAccountPath { get; set; }
 
-        /// <summary>Compile-time default relay key baked into distributed builds. The owner replaces this literal before publishing. While it stays the placeholder, the relay is treated as not configured.</summary>
-        public const string DefaultRelayAppKey = "7e0f7287a3bd310ea0d2ff9c30e55027941062bf19806f2aeac56d32f64b1cba";
+        /// <summary>The relay key this build was stamped with, or empty when it was built without one. Set by passing -p:MoonfinRelayAppKey=... at build time, which the build scripts read from a gitignored .env. A build without a key simply leaves push disabled.</summary>
+        private static readonly string BuiltInRelayAppKey =
+            typeof(PluginConfiguration).Assembly
+                .GetCustomAttributes<AssemblyMetadataAttribute>()
+                .FirstOrDefault(a => a.Key == "MoonfinRelayAppKey")?.Value
+            ?? string.Empty;
 
         /// <summary>URL of the hosted push relay that holds the shared service account and forwards to FCM. The plugin posts tokens plus payload here by default so self-hosters need no service account.</summary>
         public string PushRelayUrl { get; set; } = "https://push.moonfin.io/send";
 
-        /// <summary>Optional override for the relay app key. When empty, the compile-time DefaultRelayAppKey is used. Secret: never logged.</summary>
+        /// <summary>Optional override for the relay app key, for anyone running their own relay. When empty the key stamped into the build is used. Secret: never logged.</summary>
         public string? PushRelayAppKey { get; set; }
 
-        /// <summary>Effective relay app key: the admin override when set, otherwise the compile-time default. Returns null when empty or still the unreplaced placeholder, meaning the relay is not usable.</summary>
+        /// <summary>Effective relay app key: the admin override when set, otherwise whatever this build was stamped with. Returns null when neither is available, meaning the relay isn't usable.</summary>
         public string? GetRelayAppKey()
         {
-            var key = !string.IsNullOrWhiteSpace(PushRelayAppKey) ? PushRelayAppKey : DefaultRelayAppKey;
-            if (string.IsNullOrWhiteSpace(key) || string.Equals(key, DefaultRelayAppKey, StringComparison.Ordinal))
+            var key = !string.IsNullOrWhiteSpace(PushRelayAppKey) ? PushRelayAppKey : BuiltInRelayAppKey;
+            if (string.IsNullOrWhiteSpace(key))
                 return null;
             return key;
         }

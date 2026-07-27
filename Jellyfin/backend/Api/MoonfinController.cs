@@ -28,6 +28,8 @@ public class MoonfinController : ControllerBase
 
     private readonly MoonfinSettingsService _settingsService;
     private readonly ILibraryManager _libraryManager;
+    private readonly NotificationStore _notificationStore;
+    private readonly PushDeliveryService _pushDelivery;
     private readonly ILogger<MoonfinController> _logger;
     
     private static readonly Type? _userManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
@@ -46,10 +48,14 @@ public class MoonfinController : ControllerBase
     public MoonfinController(
         MoonfinSettingsService settingsService,
         ILibraryManager libraryManager,
+        NotificationStore notificationStore,
+        PushDeliveryService pushDelivery,
         ILogger<MoonfinController> logger)
     {
         _settingsService = settingsService;
         _libraryManager = libraryManager;
+        _notificationStore = notificationStore;
+        _pushDelivery = pushDelivery;
         _logger = logger;
     }
 
@@ -498,7 +504,18 @@ public class MoonfinController : ControllerBase
         }
 
         var deliveries = _settingsService.BroadcastMessage(message);
-        return Ok(new { Success = true, Deliveries = deliveries });
+
+        // SSE only reaches clients that are open right now, so push covers
+        // backgrounded and killed apps. The route is left blank because the
+        // client ignores blank routes and just opens the app on a tap.
+        var pushTargets = 0;
+        foreach (var userId in _notificationStore.GetUsersWithDevices())
+        {
+            _pushDelivery.QueueToUser(userId, "Message from your server", message, route: "");
+            pushTargets++;
+        }
+
+        return Ok(new { Success = true, Deliveries = deliveries, PushTargets = pushTargets });
     }
 
     /// <summary>

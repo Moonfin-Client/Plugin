@@ -55,3 +55,6 @@ Jellyfin/frontend/*
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Local build secrets. Copy .env.example to .env and keep it out of commits.
+.env

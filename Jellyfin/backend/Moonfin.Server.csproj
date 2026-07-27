@@ -45,6 +45,15 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!-- Stamps the push relay key into the assembly. The build scripts read it from a
+       gitignored .env, so a checkout without one still builds and simply has push off. -->
+  <ItemGroup Condition="'$(MoonfinRelayAppKey)' != ''">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MoonfinRelayAppKey</_Parameter1>
+      <_Parameter2>$(MoonfinRelayAppKey)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <Target Name="ValidateEmbeddedResourceSources" BeforeTargets="BeforeBuild">
     <Error Condition="!Exists('Pages/configPage.html')" Text="Required embedded resource Pages/configPage.html was not found." />
     <Error Condition="!Exists('Web/loader.js')" Text="Required embedded resource Web/loader.js was not found." />

@@ -53,7 +53,8 @@ public class NotificationsController : ControllerBase
             userId.Value,
             request.NotifyOnNewRequests,
             request.NotifyOnLibraryAdded,
-            request.NotifyOnIssues);
+            request.NotifyOnIssues,
+            request.NotifyOnNewMedia);
         return Ok(new { success = true });
     }
 
@@ -76,7 +77,8 @@ public class NotificationsController : ControllerBase
         {
             notifyOnNewRequests = prefs.NotifyOnNewRequests,
             notifyOnLibraryAdded = prefs.NotifyOnLibraryAdded,
-            notifyOnIssues = prefs.NotifyOnIssues
+            notifyOnIssues = prefs.NotifyOnIssues,
+            notifyOnNewMedia = prefs.NotifyOnNewMedia
         });
     }
 
@@ -243,6 +245,7 @@ public class NotificationPrefsRequest
 
     // Nullable so payloads from clients that predate the field keep the stored value.
     public bool? NotifyOnIssues { get; set; }
+    public bool? NotifyOnNewMedia { get; set; }
 }
 
 /// <summary>Request body for registering or removing a push device.</summary>

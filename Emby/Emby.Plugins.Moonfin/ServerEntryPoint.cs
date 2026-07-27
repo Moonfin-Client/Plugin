@@ -17,6 +17,7 @@ namespace Emby.Plugins.Moonfin
         private readonly IUserManager _userManager;
         private readonly ISessionManager _sessionManager;
         private readonly IServerApplicationHost _appHost;
+        private Services.NewMediaNotifier? _newMediaNotifier;
 
         public ServerEntryPoint(ILogManager logManager, ILibraryManager libraryManager, IUserManager userManager, ISessionManager sessionManager, IServerApplicationHost appHost)
         {
@@ -38,6 +39,21 @@ namespace Emby.Plugins.Moonfin
 
             plugin.MigrateConfiguration();
             plugin.InitializeServices(_logManager, _appHost);
+
+            // New-media notifications: ItemAdded -> coalesced websocket + push fan-out.
+            var pushDelivery = plugin.PushDelivery;
+            var newMediaStore = plugin.NotificationStore;
+            var newMediaSettings = plugin.SettingsService;
+            if (pushDelivery != null && newMediaStore != null && newMediaSettings != null)
+            {
+                _newMediaNotifier = new Services.NewMediaNotifier(
+                    _libraryManager,
+                    newMediaSettings,
+                    newMediaStore,
+                    pushDelivery,
+                    _logManager.GetLogger("MoonfinNewMedia"));
+                _newMediaNotifier.Start();
+            }
 
             // Heal user data files corrupted before atomic writes shipped. Fire and forget so
             // a slow disk can't hold up server startup, and never let it throw into boot.
@@ -67,7 +83,11 @@ namespace Emby.Plugins.Moonfin
             }
         }
 
-        public void Dispose() { }
+        public void Dispose()
+        {
+            _newMediaNotifier?.Dispose();
+            _newMediaNotifier = null;
+        }
     }
 
     /// <summary>Holds server-level services that stateless API request handlers access statically.</summary>

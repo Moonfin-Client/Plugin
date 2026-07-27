@@ -335,7 +335,23 @@ namespace Emby.Plugins.Moonfin.Api
             if (string.IsNullOrWhiteSpace(message)) return Json(400, new { Error = "message is required" });
 
             var deliveries = Settings.BroadcastMessage(message);
-            return Json(new { Success = true, Deliveries = deliveries });
+
+            // The websocket only reaches clients that are open right now, so push
+            // covers backgrounded and killed apps. The route is left blank because
+            // the client ignores blank routes and just opens the app on a tap.
+            var pushTargets = 0;
+            var store = Plugin.Instance?.NotificationStore;
+            var pushDelivery = Plugin.Instance?.PushDelivery;
+            if (store != null && pushDelivery != null)
+            {
+                foreach (var userId in store.GetUsersWithDevices())
+                {
+                    pushDelivery.QueueToUser(userId, "Message from your server", message, route: "");
+                    pushTargets++;
+                }
+            }
+
+            return Json(new { Success = true, Deliveries = deliveries, PushTargets = pushTargets });
         }
 
         public object Get(GetGenresRequest request)

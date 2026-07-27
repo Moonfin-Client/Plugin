@@ -35,6 +35,7 @@ namespace Emby.Plugins.Moonfin
         public NotificationStore? NotificationStore { get; private set; }
         public RelaySender? RelaySender { get; private set; }
         public FcmSender? FcmSender { get; private set; }
+        public PushDeliveryService? PushDelivery { get; private set; }
         public SeerrWebhookService? SeerrWebhook { get; private set; }
         public SeerrProvisioningService? SeerrProvisioning { get; private set; }
 
@@ -156,7 +157,8 @@ namespace Emby.Plugins.Moonfin
             NotificationStore = new NotificationStore(notifyLogger);
             RelaySender = new RelaySender(notifyLogger);
             FcmSender = new FcmSender(notifyLogger);
-            SeerrWebhook = new SeerrWebhookService(SeerrService, SettingsService, NotificationStore, RelaySender, FcmSender, notifyLogger);
+            PushDelivery = new PushDeliveryService(NotificationStore, RelaySender, FcmSender, notifyLogger);
+            SeerrWebhook = new SeerrWebhookService(SeerrService, SettingsService, NotificationStore, PushDelivery, notifyLogger);
             SeerrProvisioning = new SeerrProvisioningService(SeerrService, appHost, notifyLogger);
 
             // Ensure a webhook secret exists before provisioning tries to publish it.

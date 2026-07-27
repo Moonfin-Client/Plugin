@@ -46,7 +46,8 @@ namespace Emby.Plugins.Moonfin.Api
             {
                 notifyOnNewRequests = prefs.NotifyOnNewRequests,
                 notifyOnLibraryAdded = prefs.NotifyOnLibraryAdded,
-                notifyOnIssues = prefs.NotifyOnIssues
+                notifyOnIssues = prefs.NotifyOnIssues,
+                notifyOnNewMedia = prefs.NotifyOnNewMedia
             });
         }
 
@@ -58,7 +59,7 @@ namespace Emby.Plugins.Moonfin.Api
             var body = await MoonfinJson.ReadBodyAsync<NotificationPrefsBody>(request.RequestStream).ConfigureAwait(false)
                 ?? new NotificationPrefsBody();
 
-            Store.SavePrefs(userId.Value, body.NotifyOnNewRequests, body.NotifyOnLibraryAdded, body.NotifyOnIssues);
+            Store.SavePrefs(userId.Value, body.NotifyOnNewRequests, body.NotifyOnLibraryAdded, body.NotifyOnIssues, body.NotifyOnNewMedia);
             return Json(new { success = true });
         }
 

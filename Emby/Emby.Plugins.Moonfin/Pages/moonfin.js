@@ -1407,6 +1407,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#StudioLogosEnabled').checked = config.StudioLogosEnabled !== false;
             view.querySelector('#FcmServiceAccountJson').value = config.FcmServiceAccountJson || '';
             view.querySelector('#FcmServiceAccountPath').value = config.FcmServiceAccountPath || '';
+            view.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
+            view.querySelector('#PushRelayAppKey').value = config.PushRelayAppKey || '';
             view.querySelector('#WebDefaultServerUrl').value = config.WebDefaultServerUrl || '';
             view.querySelector('#WebForcedServerUrl').value = config.WebForcedServerUrl || '';
             view.querySelector('#WebEnableWebRtcScan').checked = config.WebEnableWebRtcScan !== false;
@@ -1503,6 +1505,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.StudioLogosEnabled = view.querySelector('#StudioLogosEnabled').checked;
             config.FcmServiceAccountJson = view.querySelector('#FcmServiceAccountJson').value || null;
             config.FcmServiceAccountPath = view.querySelector('#FcmServiceAccountPath').value || null;
+            config.PushRelayUrl = (view.querySelector('#PushRelayUrl').value || '').trim()
+                || 'https://push.moonfin.io/send';
+            config.PushRelayAppKey = (view.querySelector('#PushRelayAppKey').value || '').trim() || null;
             config.WebDefaultServerUrl = view.querySelector('#WebDefaultServerUrl').value || null;
             config.WebForcedServerUrl = view.querySelector('#WebForcedServerUrl').value || null;
             config.WebEnableWebRtcScan = view.querySelector('#WebEnableWebRtcScan').checked;

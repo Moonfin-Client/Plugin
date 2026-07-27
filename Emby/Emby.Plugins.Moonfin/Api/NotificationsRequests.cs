@@ -55,6 +55,7 @@ namespace Emby.Plugins.Moonfin.Api
 
         // Nullable so payloads from clients that predate the field keep the stored value.
         public bool? NotifyOnIssues { get; set; }
+        public bool? NotifyOnNewMedia { get; set; }
     }
 
     /// <summary>Body for registering or removing a push device.</summary>

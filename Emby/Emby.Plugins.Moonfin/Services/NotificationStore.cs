@@ -76,13 +76,15 @@ namespace Emby.Plugins.Moonfin.Services
             return new NotificationPrefs { JellyfinUserId = userId };
         }
 
-        public void SavePrefs(Guid userId, bool notifyOnNewRequests, bool notifyOnLibraryAdded, bool? notifyOnIssues = null)
+        public void SavePrefs(Guid userId, bool notifyOnNewRequests, bool notifyOnLibraryAdded, bool? notifyOnIssues = null, bool? notifyOnNewMedia = null)
         {
             var prefs = GetPrefs(userId);
             prefs.NotifyOnNewRequests = notifyOnNewRequests;
             prefs.NotifyOnLibraryAdded = notifyOnLibraryAdded;
             if (notifyOnIssues.HasValue)
                 prefs.NotifyOnIssues = notifyOnIssues.Value;
+            if (notifyOnNewMedia.HasValue)
+                prefs.NotifyOnNewMedia = notifyOnNewMedia.Value;
             Write(userId, prefs);
         }
 
@@ -126,6 +128,12 @@ namespace Emby.Plugins.Moonfin.Services
 
         /// <summary>Enumerates users who opted in to new-request notifications.</summary>
         public IEnumerable<Guid> GetUsersWantingNewRequests() => EnumerateUsers(p => p.NotifyOnNewRequests);
+
+        /// <summary>Enumerates users who opted in to new-media (any library addition) notifications.</summary>
+        public IEnumerable<Guid> GetUsersWantingNewMedia() => EnumerateUsers(p => p.NotifyOnNewMedia);
+
+        /// <summary>Enumerates users with at least one registered push device.</summary>
+        public IEnumerable<Guid> GetUsersWithDevices() => EnumerateUsers(p => p.Devices.Count > 0);
 
         private IEnumerable<Guid> EnumerateUsers(Func<NotificationPrefs, bool> predicate)
         {
@@ -196,6 +204,8 @@ namespace Emby.Plugins.Moonfin.Services
         // first prefs sync ever reaches the server.
         [JsonPropertyName("notifyOnLibraryAdded")] public bool NotifyOnLibraryAdded { get; set; } = true;
         [JsonPropertyName("notifyOnIssues")] public bool NotifyOnIssues { get; set; } = true;
+        // Defaults false (opt-in): fires for ANY library addition, not just requested media.
+        [JsonPropertyName("notifyOnNewMedia")] public bool NotifyOnNewMedia { get; set; }
         [JsonPropertyName("devices")] public List<DeviceRegistration> Devices { get; set; } = new List<DeviceRegistration>();
     }
 

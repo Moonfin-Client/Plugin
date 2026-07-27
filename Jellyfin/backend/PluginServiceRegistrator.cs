@@ -20,6 +20,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<NotificationStore>();
         serviceCollection.AddSingleton<FcmSender>();
         serviceCollection.AddSingleton<RelaySender>();
+        serviceCollection.AddSingleton<PushDeliveryService>();
         serviceCollection.AddSingleton<SeerrWebhookService>();
         serviceCollection.AddSingleton<SeerrProvisioningService>();
         serviceCollection.AddSingleton<MdbListCacheService>();
@@ -42,5 +43,6 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         // Auto-register the Seerr webhook shortly after startup when an admin session exists.
         serviceCollection.AddHostedService<SeerrProvisioningStartupService>();
+        serviceCollection.AddHostedService<NewMediaNotifier>();
     }
 }

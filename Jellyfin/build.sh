@@ -43,6 +43,20 @@ if [ ! -f "$FRONTEND_DIR/index.html" ]; then
     echo "Run Mobile-Desktop/build-web-plugin.sh before packaging if you need bundled web assets."
 fi
 
+# Optional push relay key, read from a gitignored .env at the repo root. Without
+# one the build still succeeds and the plugin ships with push disabled.
+RELAY_APP_KEY=""
+ENV_FILE="$ROOT_DIR/../.env"
+if [ -f "$ENV_FILE" ]; then
+    RELAY_APP_KEY="$(grep -E '^[[:space:]]*MOONFIN_RELAY_APP_KEY[[:space:]]*=' "$ENV_FILE" \
+        | tail -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
+fi
+if [ -n "$RELAY_APP_KEY" ]; then
+    echo "Push relay key found, stamping it into this build."
+else
+    echo "No push relay key, building with push disabled."
+fi
+
 # Build the .NET plugin from clean Release state so the package cannot reuse an
 # assembly produced from an older project or checkout path.
 echo ""
@@ -55,7 +69,8 @@ rm -rf "$VERIFY_DIR/bin/Release" "$VERIFY_DIR/obj/Release"
     -o "$PUBLISH_DIR" \
     -p:AssemblyVersion="$VERSION" \
     -p:FileVersion="$VERSION" \
-    -p:Version="$VERSION"
+    -p:Version="$VERSION" \
+    -p:MoonfinRelayAppKey="$RELAY_APP_KEY"
 
 echo ""
 echo "--- Verifying server plugin ---"

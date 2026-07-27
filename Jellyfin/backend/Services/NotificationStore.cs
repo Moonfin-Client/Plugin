@@ -79,7 +79,8 @@ public class NotificationStore
         Guid userId,
         bool notifyOnNewRequests,
         bool notifyOnLibraryAdded,
-        bool? notifyOnIssues = null)
+        bool? notifyOnIssues = null,
+        bool? notifyOnNewMedia = null)
     {
         var prefs = GetPrefs(userId);
         prefs.NotifyOnNewRequests = notifyOnNewRequests;
@@ -87,6 +88,11 @@ public class NotificationStore
         if (notifyOnIssues.HasValue)
         {
             prefs.NotifyOnIssues = notifyOnIssues.Value;
+        }
+
+        if (notifyOnNewMedia.HasValue)
+        {
+            prefs.NotifyOnNewMedia = notifyOnNewMedia.Value;
         }
 
         Write(userId, prefs);
@@ -147,6 +153,12 @@ public class NotificationStore
 
     /// <summary>Enumerates users who opted in to library-added notifications.</summary>
     public IEnumerable<Guid> GetUsersWantingLibraryAdded() => EnumerateUsers(p => p.NotifyOnLibraryAdded);
+
+    /// <summary>Enumerates users who opted in to new-media (any library addition) notifications.</summary>
+    public IEnumerable<Guid> GetUsersWantingNewMedia() => EnumerateUsers(p => p.NotifyOnNewMedia);
+
+    /// <summary>Enumerates users with at least one registered push device.</summary>
+    public IEnumerable<Guid> GetUsersWithDevices() => EnumerateUsers(p => p.Devices.Count > 0);
 
     private IEnumerable<Guid> EnumerateUsers(Func<NotificationPrefs, bool> predicate)
     {
@@ -235,6 +247,11 @@ public class NotificationPrefs
 
     [JsonPropertyName("notifyOnIssues")]
     public bool NotifyOnIssues { get; set; } = true;
+
+    // Defaults false (opt-in): fires for ANY library addition, not just
+    // requested media, so library churn would be noisy if on by default.
+    [JsonPropertyName("notifyOnNewMedia")]
+    public bool NotifyOnNewMedia { get; set; }
 
     [JsonPropertyName("devices")]
     public List<DeviceRegistration> Devices { get; set; } = new();

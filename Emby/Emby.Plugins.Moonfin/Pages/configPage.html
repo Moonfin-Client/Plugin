@@ -765,6 +765,22 @@
                                 are set, the file path wins.
                             </div>
                         </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="PushRelayUrl">Push Relay URL (Optional)</label>
+                            <input type="text" id="PushRelayUrl" is="emby-input" placeholder="https://push.moonfin.io/send" />
+                            <div class="fieldDescription">
+                                Where push notifications are forwarded when no service account is set. Leave blank to use the
+                                hosted Moonfin relay.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="PushRelayAppKey">Push Relay Key (Optional)</label>
+                            <input type="text" id="PushRelayAppKey" is="emby-input" placeholder="Leave blank to use the built-in key" />
+                            <div class="fieldDescription">
+                                Overrides the key this build ships with, for anyone running their own relay.
+                                Secret: never logged.
+                            </div>
+                        </div>
                     </div>
 
                     </section>

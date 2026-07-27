@@ -43,10 +43,25 @@ if (Test-Path $ReleaseBinDir) { Remove-Item $ReleaseBinDir -Recurse -Force }
 if (Test-Path $ReleaseObjDir) { Remove-Item $ReleaseObjDir -Recurse -Force }
 if (Test-Path $VerifyReleaseBinDir) { Remove-Item $VerifyReleaseBinDir -Recurse -Force }
 if (Test-Path $VerifyReleaseObjDir) { Remove-Item $VerifyReleaseObjDir -Recurse -Force }
+# Optional push relay key, read from a gitignored .env at the repo root. Without
+# one the build still succeeds and the plugin ships with push disabled.
+$RelayAppKey = ""
+$EnvFile = Join-Path $PSScriptRoot "..\.env"
+if (Test-Path $EnvFile) {
+    $match = Select-String -Path $EnvFile -Pattern '^\s*MOONFIN_RELAY_APP_KEY\s*=' | Select-Object -Last 1
+    if ($match) { $RelayAppKey = ($match.Line -split '=', 2)[1].Trim().Trim('"').Trim("'") }
+}
+if ($RelayAppKey) {
+    Write-Host "Push relay key found, stamping it into this build."
+} else {
+    Write-Host "No push relay key, building with push disabled."
+}
+
 dotnet publish $CsprojPath -c Release -o $PublishDir `
     -p:AssemblyVersion=$Version `
     -p:FileVersion=$Version `
-    -p:Version=$Version
+    -p:Version=$Version `
+    "-p:MoonfinRelayAppKey=$RelayAppKey"
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
 Write-Host ""
