@@ -1187,6 +1187,11 @@
                             </label>
                             <div class="fieldDescription">Combine Continue Watching and Next Up into a single home row by default.</div>
                         </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpMaxDays">Max Days In Next Up</label>
+                            <input type="number" id="DefaultNextUpMaxDays" is="emby-input" min="0" max="3650" step="1" placeholder="Not set" />
+                            <div class="fieldDescription">How long a show stays in Next Up after it was last watched. Use 0 for no limit. Leaving this empty lets the client decide.</div>
+                        </div>
 
                         <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Toolbar Buttons</h4>
                         <div class="checkboxContainer checkboxContainer-withDescription">

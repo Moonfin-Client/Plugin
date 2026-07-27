@@ -40,6 +40,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("showLibrariesInToolbar")] public bool? ShowLibrariesInToolbar { get; set; }
         [JsonPropertyName("shuffleContentType")] public string? ShuffleContentType { get; set; }
         [JsonPropertyName("mergeContinueWatchingNextUp")] public bool? MergeContinueWatchingNextUp { get; set; }
+        [JsonPropertyName("nextUpMaxDays")] public int? NextUpMaxDays { get; set; }
         [JsonPropertyName("enableMultiServerLibraries")] public bool? EnableMultiServerLibraries { get; set; }
         [JsonPropertyName("enableFolderView")] public bool? EnableFolderView { get; set; }
         [JsonPropertyName("useDetailedSubHeadings")] public bool? UseDetailedSubHeadings { get; set; }

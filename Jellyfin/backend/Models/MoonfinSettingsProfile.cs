@@ -122,6 +122,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mergeContinueWatchingNextUp")]
     public bool? MergeContinueWatchingNextUp { get; set; }
 
+    [JsonPropertyName("nextUpMaxDays")]
+    public int? NextUpMaxDays { get; set; }
+
     [JsonPropertyName("enableMultiServerLibraries")]
     public bool? EnableMultiServerLibraries { get; set; }
 

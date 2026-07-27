@@ -1452,6 +1452,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultHomeImageUseSeriesImage', defaults.homeImageUseSeriesImage);
             loadHomeSectionsEditor(view, defaults.homeSections || null, defaults.homeRowOrder || null);
             view.querySelector('#DefaultMergeContinueWatchingNextUp').checked = !!defaults.mergeContinueWatchingNextUp;
+            setNullableIntInput(view, '#DefaultNextUpMaxDays', defaults.nextUpMaxDays);
 
             view.querySelector('#DefaultShowShuffleButton').checked = !!defaults.showShuffleButton;
             view.querySelector('#DefaultShowGenresButton').checked = !!defaults.showGenresButton;
@@ -1560,6 +1561,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.homeSections = homeSections;
             d.homeRowOrder = getHomeRowOrderValue(view, homeSections);
             d.mergeContinueWatchingNextUp = view.querySelector('#DefaultMergeContinueWatchingNextUp').checked;
+            d.nextUpMaxDays = getNullableIntInput(view, '#DefaultNextUpMaxDays');
 
             d.showShuffleButton = view.querySelector('#DefaultShowShuffleButton').checked;
             d.showGenresButton = view.querySelector('#DefaultShowGenresButton').checked;

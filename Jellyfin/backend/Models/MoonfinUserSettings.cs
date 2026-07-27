@@ -91,6 +91,8 @@ public class MoonfinUserSettings
     public string? ShuffleContentType { get; set; }
     [JsonPropertyName("mergeContinueWatchingNextUp")]
     public bool? MergeContinueWatchingNextUp { get; set; }
+    [JsonPropertyName("nextUpMaxDays")]
+    public int? NextUpMaxDays { get; set; }
     [JsonPropertyName("enableMultiServerLibraries")]
     public bool? EnableMultiServerLibraries { get; set; }
     [JsonPropertyName("enableFolderView")]

@@ -1005,6 +1005,11 @@
                                     </label>
                                     <div class="fieldDescription">Combine Continue Watching and Next Up into a single home row by default.</div>
                                 </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpMaxDays">Max Days In Next Up</label>
+                                    <input type="number" id="DefaultNextUpMaxDays" is="emby-input" min="0" max="3650" step="1" placeholder="Not set" />
+                                    <div class="fieldDescription">How long a show stays in Next Up after it was last watched. Use 0 for no limit. Leaving this empty lets the client decide.</div>
+                                </div>
                         <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Home Row Layout</h4>
                                 <div class="inputContainer">
                                     <label class="inputLabel inputLabelUnfocused">Default Home Layout</label>
@@ -2912,6 +2917,7 @@
                     setNullableBoolSelect('#DefaultHomeImageUseSeriesImage', defaults.homeImageUseSeriesImage);
                     loadHomeSectionsEditor(defaults.homeSections || null, defaults.homeRowOrder || null);
                     document.querySelector('#DefaultMergeContinueWatchingNextUp').checked = !!defaults.mergeContinueWatchingNextUp;
+                    setNullableIntInput('#DefaultNextUpMaxDays', defaults.nextUpMaxDays);
 
                     document.querySelector('#DefaultShowShuffleButton').checked = !!defaults.showShuffleButton;
                     document.querySelector('#DefaultShowGenresButton').checked = !!defaults.showGenresButton;
@@ -3279,6 +3285,7 @@
                         config.DefaultUserSettings.homeSections = homeSections;
                         config.DefaultUserSettings.homeRowOrder = getHomeRowOrderValue(homeSections);
                         config.DefaultUserSettings.mergeContinueWatchingNextUp = document.querySelector('#DefaultMergeContinueWatchingNextUp').checked;
+                        config.DefaultUserSettings.nextUpMaxDays = getNullableIntInput('#DefaultNextUpMaxDays');
 
                         config.DefaultUserSettings.showShuffleButton = document.querySelector('#DefaultShowShuffleButton').checked;
                         config.DefaultUserSettings.showGenresButton = document.querySelector('#DefaultShowGenresButton').checked;

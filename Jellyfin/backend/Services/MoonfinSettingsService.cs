@@ -476,6 +476,7 @@ public class MoonfinSettingsService
         settings.ShowLibrariesInToolbar = null;
         settings.ShuffleContentType = null;
         settings.MergeContinueWatchingNextUp = null;
+        settings.NextUpMaxDays = null;
         settings.EnableMultiServerLibraries = null;
         settings.EnableFolderView = null;
         settings.ConfirmExit = null;
