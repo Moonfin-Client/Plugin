@@ -9,6 +9,9 @@ namespace Emby.Plugins.Moonfin.Api
     {
         public string? Type { get; set; }
         public string? TmdbId { get; set; }
+
+        /// <summary>Device profile to filter with. Falls back to global when absent or unknown.</summary>
+        public string? Profile { get; set; }
     }
 
     [Route("/Moonfin/MdbList/KeyInfo", "GET")]

@@ -54,6 +54,7 @@ public class MdbListController : ControllerBase
     public async Task<ActionResult<MdbListResponse>> GetRatings(
         [FromQuery] string type,
         [FromQuery] string tmdbId,
+        [FromQuery] string? profile,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(tmdbId))
@@ -73,9 +74,12 @@ public class MdbListController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        // Resolve the full profile (device, then global, then admin defaults). The
-        // resolver already falls back to the server-wide key when the user has none.
-        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, "global");
+        // Resolving against the caller's device profile lets the sources they picked in
+        // the app drive the filtering. Clients that send no profile keep the global-only
+        // view they had before.
+        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, NormalizeProfileName(profile));
+
+        // The resolver already falls back to the server-wide key when the user has none.
         var apiKey = resolved?.MdblistApiKey;
 
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -321,6 +325,12 @@ public class MdbListController : ControllerBase
     }
 
     private static readonly string[] DefaultRatingSources = ["imdb", "tmdb", "tomatoes", "metacritic"];
+
+    private static string NormalizeProfileName(string? profile)
+    {
+        var name = profile?.Trim().ToLowerInvariant();
+        return name is "desktop" or "mobile" or "tv" ? name : "global";
+    }
 
     private static List<MdbListRating> FilterAndOrderRatings(List<MdbListRating> allRatings, List<string>? selectedSources)
     {

@@ -76,7 +76,10 @@ namespace Emby.Plugins.Moonfin.Api
             var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
             if (userId == null) return Json(401, new { error = "User not authenticated" });
 
-            var resolved = await Settings.GetResolvedProfileAsync(userId.Value, "global").ConfigureAwait(false);
+            // Resolving against the caller's device profile lets the sources they picked in
+            // the app drive the filtering. Clients that send no profile keep the global-only
+            // view they had before.
+            var resolved = await Settings.GetResolvedProfileAsync(userId.Value, NormalizeProfileName(request.Profile)).ConfigureAwait(false);
             var apiKey = resolved?.MdblistApiKey;
             if (string.IsNullOrWhiteSpace(apiKey)) apiKey = Plugin.Instance?.Configuration?.MdblistApiKey;
 
@@ -120,6 +123,12 @@ namespace Emby.Plugins.Moonfin.Api
 
             var filtered = FilterAndOrderRatings(allRatings, resolved?.MdblistRatingSources);
             return Json(new { success = true, ratings = filtered });
+        }
+
+        private static string NormalizeProfileName(string? profile)
+        {
+            var name = profile?.Trim().ToLowerInvariant();
+            return name is "desktop" or "mobile" or "tv" ? name : "global";
         }
 
         private object NegativeResult(string cacheKey, string error)
