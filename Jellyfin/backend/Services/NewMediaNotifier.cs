@@ -130,7 +130,7 @@ public class NewMediaNotifier : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "New-media event handling failed");
+            _logger.LogWarning(ex, "New-media event handling failed");
         }
     }
 
@@ -162,7 +162,12 @@ public class NewMediaNotifier : IHostedService, IDisposable
                 return;
             }
 
+            // The one line that says the notifier ran and whether anyone asked for it,
+            // since every way this can end quietly happens after this point.
             var recipients = _store.GetUsersWantingNewMedia().ToList();
+            _logger.LogInformation(
+                "newMedia: {Groups} groups ready for {Users} opted in users",
+                due.Count, recipients.Count);
             if (recipients.Count == 0)
             {
                 return;
@@ -205,7 +210,7 @@ public class NewMediaNotifier : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "New-media flush failed");
+            _logger.LogWarning(ex, "New-media flush failed");
         }
     }
 
@@ -243,28 +248,28 @@ public class NewMediaNotifier : IHostedService, IDisposable
         try
         {
             var userManager = _serviceProvider.GetService(_userManagerType!);
-            return userManager == null
-                ? null
-                : _userManagerGetUserById!.Invoke(userManager, [userId]);
+            if (userManager == null)
+            {
+                _logger.LogWarning("newMedia: no user manager, skipping the visibility check");
+                return null;
+            }
+
+            return _userManagerGetUserById!.Invoke(userManager, [userId]);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "newMedia: could not resolve user {UserId}", userId);
             return null;
         }
     }
 
-    // Fails open when the check can't be made, so a host we can't inspect still
-    // gets its notifications rather than silently dropping them.
+    // Fails open whenever the check can't be made, so a host or a user we can't
+    // read still gets notifications rather than losing every one of them.
     private static bool IsVisibleToUser(BaseItem? item, object? user)
     {
-        if (item == null || !CanCheckVisibility)
+        if (item == null || !CanCheckVisibility || user == null)
         {
             return true;
-        }
-
-        if (user == null)
-        {
-            return false;
         }
 
         if (!_baseItemIsVisibleUserType!.IsInstanceOfType(user))

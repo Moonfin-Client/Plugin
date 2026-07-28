@@ -85,7 +85,7 @@ public class PushDeliveryService
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogDebug(ex, "Push delivery failed for user {UserId}", userId);
+                        _logger.LogWarning(ex, "Push delivery failed for user {UserId}", userId);
                     }
                 }
 
@@ -104,7 +104,7 @@ public class PushDeliveryService
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Relay push delivery failed for user {UserId}", userId);
+                _logger.LogWarning(ex, "Relay push delivery failed for user {UserId}", userId);
             }
         });
     }
@@ -171,7 +171,7 @@ public class PushDeliveryService
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Relay push delivery failed for user {UserId}", userId);
+                _logger.LogWarning(ex, "Relay push delivery failed for user {UserId}", userId);
             }
         });
     }
@@ -190,7 +190,7 @@ public class PushDeliveryService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Push delivery failed for user {UserId}", userId);
+            _logger.LogWarning(ex, "Push delivery failed for user {UserId}", userId);
         }
 
         return 0;

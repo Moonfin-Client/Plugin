@@ -492,10 +492,14 @@ public class SeerrWebhookService
                 IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series },
                 IsVirtualItem = false,
                 Recursive = true,
-                Limit = 1
+                Limit = 1,
+                EnableTotalRecordCount = false
             };
 
-            var item = _libraryManager.GetItemList(query).FirstOrDefault();
+            // GetItemList changed its return type in Jellyfin 10.11, so a compiled call
+            // only binds on the version it was built against. GetItemsResult has the same
+            // signature everywhere and answers the same question.
+            var item = _libraryManager.GetItemsResult(query).Items.FirstOrDefault();
             return item?.Id.ToString("N");
         }
         catch (Exception ex)
