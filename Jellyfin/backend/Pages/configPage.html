@@ -2378,15 +2378,21 @@
                 if (HOME_LAYOUT_STATE.sections.length === 0) return null;
                 renumberHomeLayoutSections();
                 return HOME_LAYOUT_STATE.sections.map(function(section) {
+                    var isDynamic = section.kind === 'pluginDynamic';
                     var result = {
-                        type: section.kind === 'pluginDynamic' ? 'none' : section.type,
-                        enabled: true,
+                        type: isDynamic ? 'none' : section.type,
+                        // Dynamic rows stay in the editor when disabled, unlike builtins, so
+                        // writing them all back as enabled would switch every custom row on.
+                        enabled: isDynamic ? section.enabled !== false : true,
                         order: section.order
                     };
-                    if (section.kind === 'pluginDynamic') {
+                    if (isDynamic) {
                         result.kind = 'pluginDynamic';
                         result.pluginSource = section.pluginSource;
+                        // Custom rows have no server of their own and the client keys them on
+                        // this, so send the placeholder it uses rather than nothing.
                         if (section.serverId) result.serverId = section.serverId;
+                        else if (result.pluginSource === 'custom') result.serverId = 'custom';
                         if (section.pluginSection) result.pluginSection = section.pluginSection;
                         if (section.pluginAdditionalData) result.pluginAdditionalData = section.pluginAdditionalData;
                         if (section.pluginDisplayText) result.pluginDisplayText = section.pluginDisplayText;

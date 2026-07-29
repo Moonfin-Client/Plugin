@@ -216,6 +216,7 @@ public class MoonfinSettingsService
         try
         {
             MoonfinUserSettings finalSettings;
+            var customSectionsBefore = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (mergeMode == "merge")
             {
@@ -227,6 +228,9 @@ public class MoonfinSettingsService
                     existingSettings = MigrateV1ToV2(existingSettings);
                 }
 
+                // MergeSettings writes into the stored object, so note which custom rows
+                // were on file first or there's nothing left to compare against.
+                customSectionsBefore = CustomHomeSectionIds(existingSettings);
                 finalSettings = MergeSettings(existingSettings, settings);
             }
             else
@@ -241,7 +245,11 @@ public class MoonfinSettingsService
             finalSettings.SchemaVersion = 2;
 
             MoveContentHidingToGlobal(finalSettings);
-            PropagateCustomHomeSectionsAcrossProfiles(finalSettings);
+            PropagateCustomHomeSectionsAcrossProfiles(
+                finalSettings,
+                removed: RemovedCustomHomeSections(
+                    customSectionsBefore,
+                    CustomHomeSectionIds(finalSettings)));
 
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
@@ -278,6 +286,13 @@ public class MoonfinSettingsService
                 ? settings.Global 
                 : settings.GetProfile(profileName);
 
+            // Note the custom rows this profile held before the merge overwrites them. Only a
+            // push carrying a layout can express a deletion, since a partial push leaves
+            // HomeSections null and mustn't read as the user clearing every custom row.
+            var customSectionsBefore = profile.HomeSections == null
+                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                : CustomHomeSectionIds(existingProfile);
+
             if (existingProfile != null)
             {
                 MergeProfile(existingProfile, profile);
@@ -287,6 +302,8 @@ public class MoonfinSettingsService
                 settings.SetProfile(profileName, profile);
             }
 
+            var savedProfile = existingProfile ?? profile;
+
             // Update metadata
             StripServerWideKeys(settings);
             settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -294,7 +311,12 @@ public class MoonfinSettingsService
             settings.SchemaVersion = 2;
 
             MoveContentHidingToGlobal(settings);
-            PropagateCustomHomeSectionsAcrossProfiles(settings);
+            PropagateCustomHomeSectionsAcrossProfiles(
+                settings,
+                savedProfile,
+                RemovedCustomHomeSections(
+                    customSectionsBefore,
+                    CustomHomeSectionIds(savedProfile)));
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
@@ -663,55 +685,125 @@ public class MoonfinSettingsService
             }
         }
 
-        PropagateCustomHomeSectionsAcrossProfiles(existing);
         return existing;
     }
 
-    private static void PropagateCustomHomeSectionsAcrossProfiles(MoonfinUserSettings settings)
+    private static bool IsCustomHomeSection(MoonfinHomeSectionConfig section) =>
+        string.Equals(section.Kind, "pluginDynamic", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(section.PluginSource, "custom", StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrWhiteSpace(section.PluginSection);
+
+    // Custom rows belong to no server, and the client keys them on this, so stand in for
+    // an empty value rather than letting the same row end up with two identities.
+    private static string CustomHomeSectionServerId(MoonfinHomeSectionConfig section) =>
+        string.IsNullOrWhiteSpace(section.ServerId) ? "custom" : section.ServerId!;
+
+    private static Dictionary<string, MoonfinHomeSectionConfig> CustomHomeSections(
+        MoonfinSettingsProfile? profile)
+    {
+        var sections = new Dictionary<string, MoonfinHomeSectionConfig>(StringComparer.OrdinalIgnoreCase);
+        if (profile?.HomeSections == null) return sections;
+
+        foreach (var section in profile.HomeSections)
+        {
+            if (IsCustomHomeSection(section)) sections.TryAdd(section.PluginSection!, section);
+        }
+
+        return sections;
+    }
+
+    private static HashSet<string> CustomHomeSectionIds(MoonfinSettingsProfile? profile) =>
+        new(CustomHomeSections(profile).Keys, StringComparer.OrdinalIgnoreCase);
+
+    private static HashSet<string> CustomHomeSectionIds(MoonfinUserSettings? settings)
+    {
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (settings == null) return ids;
+
+        foreach (var profile in new[] { settings.Global, settings.Desktop, settings.Mobile, settings.Tv })
+        {
+            ids.UnionWith(CustomHomeSectionIds(profile));
+        }
+
+        return ids;
+    }
+
+    private static HashSet<string> RemovedCustomHomeSections(HashSet<string> before, HashSet<string> after)
+    {
+        var removed = new HashSet<string>(before, StringComparer.OrdinalIgnoreCase);
+        removed.ExceptWith(after);
+        return removed;
+    }
+
+    /// <summary>
+    /// Mirrors custom rows onto the other device profiles so a row created on one device can
+    /// be switched on from another. Rows listed in <c>removed</c> are taken out everywhere,
+    /// because the copies sitting on the other profiles would otherwise put a row the user
+    /// just deleted straight back. The <c>authoritative</c> profile is the one that was just
+    /// written and its copy of a row wins, so editing a row on one device updates the copies
+    /// the other devices hold.
+    /// </summary>
+    private static void PropagateCustomHomeSectionsAcrossProfiles(
+        MoonfinUserSettings settings,
+        MoonfinSettingsProfile? authoritative = null,
+        HashSet<string>? removed = null)
     {
         var profiles = new[] { settings.Global, settings.Desktop, settings.Mobile, settings.Tv };
-        var allCustomSections = new List<MoonfinHomeSectionConfig>();
 
-        foreach (var profile in profiles)
+        if (removed is { Count: > 0 })
         {
-            if (profile?.HomeSections == null) continue;
-            foreach (var section in profile.HomeSections)
+            foreach (var profile in profiles)
             {
-                if (string.Equals(section.Kind, "pluginDynamic", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(section.PluginSource, "custom", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(section.PluginSection))
-                {
-                    if (!allCustomSections.Any(s => string.Equals(s.PluginSection, section.PluginSection, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        allCustomSections.Add(section);
-                    }
-                }
+                profile?.HomeSections?.RemoveAll(
+                    section => IsCustomHomeSection(section) && removed.Contains(section.PluginSection!));
             }
         }
 
-        if (allCustomSections.Count == 0) return;
+        // The profile that was just written goes first so its copy of a row wins.
+        var known = new Dictionary<string, MoonfinHomeSectionConfig>(StringComparer.OrdinalIgnoreCase);
+        foreach (var profile in profiles.Prepend(authoritative))
+        {
+            foreach (var section in CustomHomeSections(profile))
+            {
+                known.TryAdd(section.Key, section.Value);
+            }
+        }
+
+        if (known.Count == 0) return;
 
         foreach (var profile in profiles)
         {
-            if (profile == null) continue;
-            profile.HomeSections ??= new List<MoonfinHomeSectionConfig>();
-            foreach (var custom in allCustomSections)
+            // A profile with no layout of its own falls back to the global or admin one, and
+            // a list holding nothing but custom rows would end that fallback and leave the
+            // device with no rows at all. Wait until it saves a layout of its own.
+            if (profile?.HomeSections == null) continue;
+
+            var present = CustomHomeSections(profile);
+
+            foreach (var custom in known.Values)
             {
-                if (!profile.HomeSections.Any(s => string.Equals(s.PluginSection, custom.PluginSection, StringComparison.OrdinalIgnoreCase)))
+                if (present.TryGetValue(custom.PluginSection!, out var match))
                 {
-                    profile.HomeSections.Add(new MoonfinHomeSectionConfig
-                    {
-                        Kind = "pluginDynamic",
-                        Type = "none",
-                        Enabled = false,
-                        Order = profile.HomeSections.Count,
-                        ServerId = string.IsNullOrWhiteSpace(custom.ServerId) ? "custom" : custom.ServerId,
-                        PluginSource = "custom",
-                        PluginSection = custom.PluginSection,
-                        PluginAdditionalData = custom.PluginAdditionalData,
-                        PluginDisplayText = custom.PluginDisplayText
-                    });
+                    // Take the newer definition but leave on/off state and position alone,
+                    // since those belong to the device.
+                    match.ServerId = CustomHomeSectionServerId(custom);
+                    match.PluginAdditionalData = custom.PluginAdditionalData;
+                    match.PluginDisplayText = custom.PluginDisplayText;
+                    continue;
                 }
+
+                profile.HomeSections.Add(new MoonfinHomeSectionConfig
+                {
+                    Kind = "pluginDynamic",
+                    Type = "none",
+                    Enabled = false,
+                    Order = profile.HomeSections.Count,
+                    ServerId = CustomHomeSectionServerId(custom),
+                    PluginSource = "custom",
+                    PluginSection = custom.PluginSection,
+                    PluginAdditionalData = custom.PluginAdditionalData,
+                    PluginDisplayText = custom.PluginDisplayText
+                });
             }
         }
     }
