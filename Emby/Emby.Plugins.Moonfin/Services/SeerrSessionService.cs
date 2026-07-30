@@ -461,9 +461,24 @@ namespace Emby.Plugins.Moonfin.Services
             if (upstreamFailure != null)
                 return upstreamFailure;
 
+            // Seerr answers 401 for permission denials as well as for dead
+            // sessions, so the session has to be confirmed dead before it is
+            // cleared. Clearing on a denial logged the user out for pressing a
+            // button the server refused.
             if (evictUserIdOn401.HasValue &&
                 (response.StatusCode == HttpStatusCode.Unauthorized))
             {
+                if (await ValidateSessionAsync(session).ConfigureAwait(false))
+                {
+                    _logger.Info("Seerr refused " + path + " for user " + evictUserIdOn401.Value + " on a valid session");
+                    return new SeerrProxyResponse
+                    {
+                        StatusCode = 401,
+                        Body = responseBody,
+                        ContentType = responseContentType
+                    };
+                }
+
                 await ClearSessionAsync(evictUserIdOn401.Value).ConfigureAwait(false);
                 return ErrorResponse(401, "Seerr session expired", "SESSION_EXPIRED");
             }

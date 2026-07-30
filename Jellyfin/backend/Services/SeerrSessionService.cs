@@ -841,9 +841,26 @@ public class SeerrSessionService
                 return upstreamFailure;
             }
 
-            // If auth expired, clear session
+            // Seerr answers 401 for permission denials as well as for dead
+            // sessions, so the session has to be confirmed dead before it is
+            // cleared. Clearing on a denial logged the user out for pressing a
+            // button the server refused.
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
+                if (await ValidateSessionAsync(session))
+                {
+                    _logger.LogInformation(
+                        "Seerr refused {Path} for user {UserId} on a valid session",
+                        path,
+                        userId);
+                    return new SeerrProxyResponse
+                    {
+                        StatusCode = 401,
+                        Body = responseBody,
+                        ContentType = responseContentType
+                    };
+                }
+
                 _logger.LogInformation("Seerr session expired for user {UserId}", userId);
                 await ClearSessionAsync(userId);
 
