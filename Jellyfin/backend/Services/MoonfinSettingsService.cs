@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Moonfin.Server.Models;
 
@@ -211,12 +212,14 @@ public class MoonfinSettingsService
     public async Task SaveUserSettingsAsync(Guid userId, MoonfinUserSettings settings, string? clientId = null, string mergeMode = "merge")
     {
         var filePath = GetUserSettingsPath(userId);
+        var settingsChanged = true;
 
         await _lock.WaitAsync();
         try
         {
             MoonfinUserSettings finalSettings;
             var customSectionsBefore = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string? beforeComparisonJson = null;
 
             if (mergeMode == "merge")
             {
@@ -231,6 +234,7 @@ public class MoonfinSettingsService
                 // MergeSettings writes into the stored object, so note which custom rows
                 // were on file first or there's nothing left to compare against.
                 customSectionsBefore = CustomHomeSectionIds(existingSettings);
+                beforeComparisonJson = SerializeForComparison(existingSettings ?? new MoonfinUserSettings());
                 finalSettings = MergeSettings(existingSettings, settings);
             }
             else
@@ -251,6 +255,11 @@ public class MoonfinSettingsService
                     customSectionsBefore,
                     CustomHomeSectionIds(finalSettings)));
 
+            if (beforeComparisonJson != null)
+            {
+                settingsChanged = SerializeForComparison(finalSettings) != beforeComparisonJson;
+            }
+
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
         }
@@ -259,7 +268,13 @@ public class MoonfinSettingsService
             _lock.Release();
         }
 
-          NotifySettingsChanged(userId);
+        // A merge that changed nothing is the client echoing state it already
+        // holds. Broadcasting it anyway sends the echo straight back and keeps
+        // a push-apply loop alive on the other end.
+        if (settingsChanged)
+        {
+            NotifySettingsChanged(userId);
+        }
     }
 
       public async Task SaveProfileAsync(
@@ -270,6 +285,7 @@ public class MoonfinSettingsService
           bool notifySettingsChanged = true)
     {
         var filePath = GetUserSettingsPath(userId);
+        bool settingsChanged;
 
         await _lock.WaitAsync();
         try
@@ -280,6 +296,8 @@ public class MoonfinSettingsService
             {
                 settings = MigrateV1ToV2(settings);
             }
+
+            var beforeComparisonJson = SerializeForComparison(settings);
 
             // Merge profile properties
             var existingProfile = profileName.ToLowerInvariant() == "global" 
@@ -318,6 +336,8 @@ public class MoonfinSettingsService
                     customSectionsBefore,
                     CustomHomeSectionIds(savedProfile)));
 
+            settingsChanged = SerializeForComparison(settings) != beforeComparisonJson;
+
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
         }
@@ -326,10 +346,29 @@ public class MoonfinSettingsService
             _lock.Release();
         }
 
-        if (notifySettingsChanged)
+        // Same echo guard as SaveUserSettingsAsync.
+        if (notifySettingsChanged && settingsChanged)
         {
             NotifySettingsChanged(userId);
         }
+    }
+
+    /// <summary>
+    /// Serializes settings for change detection. The metadata stamped on every
+    /// save is left out, since it would otherwise mask a merge that changed
+    /// nothing else.
+    /// </summary>
+    private string SerializeForComparison(MoonfinUserSettings settings)
+    {
+        if (JsonSerializer.SerializeToNode(settings, _jsonOptions) is not JsonObject node)
+        {
+            return string.Empty;
+        }
+
+        node.Remove("schemaVersion");
+        node.Remove("lastUpdated");
+        node.Remove("lastUpdatedBy");
+        return node.ToJsonString();
     }
 
     public Channel<string> RegisterSseChannel(Guid userId)
