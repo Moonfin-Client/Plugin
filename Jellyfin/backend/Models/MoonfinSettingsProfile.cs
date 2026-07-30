@@ -763,6 +763,12 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("updateNotificationsEnabled")]
     public bool? UpdateNotificationsEnabled { get; set; }
+
+    [JsonPropertyName("mediaSegmentActions")]
+    public bool? MediaSegmentActions { get; set; }
+
+    [JsonPropertyName("showClock")]
+    public bool? showClock { get; set; }
 }
 
 
