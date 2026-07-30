@@ -212,7 +212,7 @@ public class MoonfinSettingsService
     public async Task SaveUserSettingsAsync(Guid userId, MoonfinUserSettings settings, string? clientId = null, string mergeMode = "merge")
     {
         var filePath = GetUserSettingsPath(userId);
-        var settingsChanged = true;
+        bool settingsChanged;
 
         await _lock.WaitAsync();
         try
@@ -255,10 +255,7 @@ public class MoonfinSettingsService
                     customSectionsBefore,
                     CustomHomeSectionIds(finalSettings)));
 
-            if (beforeComparisonJson != null)
-            {
-                settingsChanged = SerializeForComparison(finalSettings) != beforeComparisonJson;
-            }
+            settingsChanged = SettingsDiffer(beforeComparisonJson, finalSettings);
 
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
@@ -336,7 +333,7 @@ public class MoonfinSettingsService
                     customSectionsBefore,
                     CustomHomeSectionIds(savedProfile)));
 
-            settingsChanged = SerializeForComparison(settings) != beforeComparisonJson;
+            settingsChanged = SettingsDiffer(beforeComparisonJson, settings);
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
@@ -354,15 +351,26 @@ public class MoonfinSettingsService
     }
 
     /// <summary>
-    /// Serializes settings for change detection. The metadata stamped on every
-    /// save is left out, since it would otherwise mask a merge that changed
-    /// nothing else.
+    /// Whether the save altered anything a client would act on. A snapshot that
+    /// could not be taken counts as changed, so an unknown answer still reaches
+    /// the clients rather than silently holding the broadcast back.
     /// </summary>
-    private string SerializeForComparison(MoonfinUserSettings settings)
+    private bool SettingsDiffer(string? before, MoonfinUserSettings after)
+    {
+        var afterJson = SerializeForComparison(after);
+        return before == null || afterJson == null || before != afterJson;
+    }
+
+    /// <summary>
+    /// Serializes settings for change detection, leaving out the metadata
+    /// stamped on every save since it would mask a merge that changed nothing
+    /// else. Null when the settings cannot be read back as an object.
+    /// </summary>
+    private string? SerializeForComparison(MoonfinUserSettings settings)
     {
         if (JsonSerializer.SerializeToNode(settings, _jsonOptions) is not JsonObject node)
         {
-            return string.Empty;
+            return null;
         }
 
         node.Remove("schemaVersion");
