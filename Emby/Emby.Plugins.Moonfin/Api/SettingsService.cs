@@ -63,20 +63,25 @@ namespace Emby.Plugins.Moonfin.Api
         public object Get(GetPingRequest request)
         {
             var config = Plugin.Instance?.Configuration;
+            var seerrEnabled = config?.SeerrEnabled ?? false;
+            var seerrUrl = seerrEnabled ? config?.SeerrUrl : null;
+
+            // Member names serialize verbatim, so these spell the documented
+            // camelCase.
             return Json(new
             {
-                Installed = true,
-                Version = Plugin.Instance?.Version.ToString() ?? "1.0.0.0",
-                SettingsSyncEnabled = config?.EnableSettingsSync ?? false,
-                ServerName = "Emby",
-                SeerrEnabled = config?.SeerrEnabled ?? false,
-                SeerrUrl = (config?.SeerrEnabled == true) ? config.SeerrUrl : null,
+                installed = true,
+                version = Plugin.Instance?.Version.ToString() ?? "1.0.0.0",
+                settingsSyncEnabled = config?.EnableSettingsSync ?? false,
+                serverName = "Emby",
+                seerrEnabled,
+                seerrUrl,
                 // Legacy field names so clients from before the Seerr rename keep reading these.
-                JellyseerrEnabled = config?.SeerrEnabled ?? false,
-                JellyseerrUrl = (config?.SeerrEnabled == true) ? config.SeerrUrl : null,
-                MdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey),
-                TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
-                DefaultSettings = config?.DefaultUserSettings
+                jellyseerrEnabled = seerrEnabled,
+                jellyseerrUrl = seerrUrl,
+                mdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey),
+                tmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
+                defaultSettings = config?.DefaultUserSettings
             });
         }
 
@@ -583,20 +588,22 @@ namespace Emby.Plugins.Moonfin.Api
             foreach (var bd in item.GetImages(ImageType.Backdrop))
                 backdropTags.Add(bd.DateModified.Ticks.ToString("X"));
 
+            // PascalCase because clients read these as a BaseItemDto, the
+            // shape the core item APIs return.
             return new
             {
-                id = item.Id,
-                name = item.Name,
-                type = item.GetType().Name,
-                productionYear = item.ProductionYear,
-                officialRating = item.OfficialRating,
-                runTimeTicks = item.RunTimeTicks,
-                genres = item.Genres,
-                overview = item.Overview,
-                communityRating = item.CommunityRating,
-                criticRating = item.CriticRating,
-                imageTags,
-                backdropImageTags = backdropTags
+                Id = item.Id,
+                Name = item.Name,
+                Type = item.GetType().Name,
+                ProductionYear = item.ProductionYear,
+                OfficialRating = item.OfficialRating,
+                RunTimeTicks = item.RunTimeTicks,
+                Genres = item.Genres,
+                Overview = item.Overview,
+                CommunityRating = item.CommunityRating,
+                CriticRating = item.CriticRating,
+                ImageTags = imageTags,
+                BackdropImageTags = backdropTags
             };
         }
 

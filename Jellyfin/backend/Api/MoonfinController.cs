@@ -1,6 +1,7 @@
 using System.Net.Mime;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Dto;
 using Jellyfin.Data.Enums;
@@ -1498,18 +1499,40 @@ public class MoonfinController : ControllerBase
 /// </summary>
 public class MoonfinPingResponse
 {
+    // The host serializes member names verbatim, so the documented camelCase
+    // is pinned here.
+    [JsonPropertyName("installed")]
     public bool Installed { get; set; }
+
+    [JsonPropertyName("version")]
     public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("settingsSyncEnabled")]
     public bool? SettingsSyncEnabled { get; set; }
+
+    [JsonPropertyName("serverName")]
     public string? ServerName { get; set; }
+
+    [JsonPropertyName("seerrEnabled")]
     public bool? SeerrEnabled { get; set; }
+
+    [JsonPropertyName("seerrUrl")]
     public string? SeerrUrl { get; set; }
+
+    [JsonPropertyName("mdblistAvailable")]
     public bool? MdblistAvailable { get; set; }
+
+    [JsonPropertyName("tmdbAvailable")]
     public bool? TmdbAvailable { get; set; }
+
+    [JsonPropertyName("defaultSettings")]
     public MoonfinSettingsProfile? DefaultSettings { get; set; }
 
     // Legacy field names so clients from before the Seerr rename keep reading these.
+    [JsonPropertyName("jellyseerrEnabled")]
     public bool? JellyseerrEnabled => SeerrEnabled;
+
+    [JsonPropertyName("jellyseerrUrl")]
     public string? JellyseerrUrl => SeerrUrl;
 }
 
