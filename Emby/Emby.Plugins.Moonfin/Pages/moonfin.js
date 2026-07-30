@@ -1194,21 +1194,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     function refreshCoresStatus(view, state) {
         var statusEl = view.querySelector('#GameCoresStatus');
-        var btn = view.querySelector('#GameCoresInstallBtn');
-        if (!statusEl || !btn) return;
+        if (!statusEl) return;
         var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
         fetch(serverUrl + '/Moonfin/Games/Cores/Status', { headers: moonfinAuthHeaders() })
             .then(function (r) { return r.json(); })
             .then(function (s) {
                 if (s.downloading) {
                     statusEl.textContent = 'Downloading cores... (' + (s.filesInstalled || 0) + ' files so far)';
-                    btn.disabled = true;
                     if (!state.timer) state.timer = setInterval(function () { refreshCoresStatus(view, state); }, 4000);
                     return;
                 }
                 if (state.timer) { clearInterval(state.timer); state.timer = null; }
-                btn.disabled = false;
-                if (s.installed) { statusEl.textContent = 'Installed on server (offline ready).'; btn.textContent = 'Re-download cores'; }
+                if (s.installed) { statusEl.textContent = 'Installed on server (offline ready).'; }
                 else if (s.state === 'failed') { statusEl.textContent = 'Download failed: ' + (s.error || 'unknown error'); }
                 else { statusEl.textContent = 'Using EmulatorJS CDN (no local cores).'; }
             })
@@ -1216,38 +1213,24 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function initGameCores(view, state) {
-        var btn = view.querySelector('#GameCoresInstallBtn');
-        if (!btn) return;
-        if (btn.dataset.wired !== '1') {
-            btn.dataset.wired = '1';
-            btn.addEventListener('click', function () {
-                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        var uploadBtn = view.querySelector('#GameCoresUploadBtn');
+        if (uploadBtn && uploadBtn.dataset.wired !== '1') {
+            uploadBtn.dataset.wired = '1';
+            uploadBtn.addEventListener('click', function () {
+                var fileInput = view.querySelector('#GameCoresFile');
                 var statusEl = view.querySelector('#GameCoresStatus');
-                if (statusEl) statusEl.textContent = 'Starting download...';
-                btn.disabled = true;
-                fetch(serverUrl + '/Moonfin/Games/Cores/Install', { method: 'POST', headers: moonfinAuthHeaders() })
+                var file = fileInput && fileInput.files ? fileInput.files[0] : null;
+                if (!file) { if (statusEl) statusEl.textContent = 'Choose a .zip file first.'; return; }
+                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                var headers = moonfinAuthHeaders();
+                headers['Content-Type'] = 'application/octet-stream';
+                if (statusEl) statusEl.textContent = 'Uploading cores zip... (this can take a while)';
+                uploadBtn.disabled = true;
+                fetch(serverUrl + '/Moonfin/Games/Cores/Upload', { method: 'POST', headers: headers, body: file })
                     .then(function () { refreshCoresStatus(view, state); })
-                    .catch(function () { if (statusEl) statusEl.textContent = 'Failed to start download.'; btn.disabled = false; });
+                    .catch(function () { if (statusEl) statusEl.textContent = 'Upload failed.'; })
+                    .finally(function () { uploadBtn.disabled = false; });
             });
-
-            var uploadBtn = view.querySelector('#GameCoresUploadBtn');
-            if (uploadBtn) {
-                uploadBtn.addEventListener('click', function () {
-                    var fileInput = view.querySelector('#GameCoresFile');
-                    var statusEl = view.querySelector('#GameCoresStatus');
-                    var file = fileInput && fileInput.files ? fileInput.files[0] : null;
-                    if (!file) { if (statusEl) statusEl.textContent = 'Choose a .zip file first.'; return; }
-                    var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
-                    var token = ApiClient.accessToken ? ApiClient.accessToken() : '';
-                    var headers = token ? { 'X-Emby-Token': token, 'Content-Type': 'application/octet-stream' } : { 'Content-Type': 'application/octet-stream' };
-                    if (statusEl) statusEl.textContent = 'Uploading cores zip... (this can take a while)';
-                    uploadBtn.disabled = true;
-                    fetch(serverUrl + '/Moonfin/Games/Cores/Upload', { method: 'POST', headers: headers, body: file })
-                        .then(function () { refreshCoresStatus(view, state); })
-                        .catch(function () { if (statusEl) statusEl.textContent = 'Upload failed.'; })
-                        .finally(function () { uploadBtn.disabled = false; });
-                });
-            }
         }
         refreshCoresStatus(view, state);
     }
@@ -1401,6 +1384,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     // ── Load / save ─────────────────────────────────────────────────────────
 
+    // Load and save hide the spinner on their last line, so without this a
+    // throw anywhere above leaves the page spinning with nothing on screen.
+    function reportConfigError(error) {
+        loading.hide();
+        var message = error && error.message ? error.message : 'The Moonfin settings page hit an error. Check the browser console.';
+        if (Dashboard.alert) Dashboard.alert(message);
+        console.error('Moonfin config page error:', error);
+    }
+
     function loadConfig(view) {
         loading.show();
         ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
@@ -1423,7 +1415,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#GamesEnabled').checked = config.GamesEnabled === true;
             loadGameLibraryPicker(view, config.GameLibraryIds || []);
             initGameCores(view, view.__moonfinState);
-            view.querySelector('#GamesCoreZipUrl').value = config.GamesCoreZipUrl || '';
 
             var defaults = camelKeysDeep(config.DefaultUserSettings) || {};
             setSelectValue(view, '#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
@@ -1497,7 +1488,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             loadAdminGenrePicker(view, defaults.mediaBarExcludedGenres || []);
 
             loading.hide();
-        });
+        }).catch(reportConfigError);
     }
 
     function saveConfig(view) {
@@ -1523,7 +1514,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.GamesEnabled = view.querySelector('#GamesEnabled').checked;
             config.GameLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.gameLibraryCb:checked'))
                 .map(function (cb) { return cb.getAttribute('data-id'); });
-            config.GamesCoreZipUrl = view.querySelector('#GamesCoreZipUrl').value || null;
 
             var d = camelKeysDeep(config.DefaultUserSettings) || {};
             d.visualTheme = view.querySelector('#DefaultVisualTheme').value || null;
@@ -1592,6 +1582,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             return ApiClient.updatePluginConfiguration(PluginUniqueId, config).then(function (result) {
                 Dashboard.processPluginConfigurationUpdateResult(result);
             });
+        }).catch(function (error) {
+            // Rethrown so pushDefaults, which chains on this, stops rather than
+            // pushing defaults the save never persisted.
+            reportConfigError(error);
+            return Promise.reject(error);
         });
     }
 
@@ -1695,7 +1690,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         if (form) {
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
-                saveConfig(view);
+                // saveConfig already reported it. Swallowed so the rethrow it
+                // makes for pushDefaults does not land as unhandled here.
+                saveConfig(view).catch(function () {});
                 return false;
             });
         }
