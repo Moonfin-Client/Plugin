@@ -34,6 +34,7 @@ On **Jellyfin**, you can optionally add a one-click Moonfin button to the stock 
 - **Media bar and home screen data** resolved on the server and shared across clients.
 - **Extra rating sources** through MDBList and TMDB, with the API keys kept on the server.
 - **Seerr integration** with a built-in proxy, single sign-on, and optional request and issue notifications.
+- **Push notifications** that reach Moonfin apps even when they're closed, covering Seerr activity, new media added to your library, and admin broadcasts, with support for a self-hosted relay or your own FCM service account. See [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications).
 - **Admin tools** for setting server-wide defaults, pushing them to existing users, and broadcasting messages to everyone at once.
 - **Custom themes** with a built-in editor, plus server-side upload and validation.
 - **Retro games** support for browsing and playing game libraries in the browser. See [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games).
@@ -88,7 +89,7 @@ The Emby plugin is a drop-in zip, not a catalog plugin.
 Open your server dashboard, go to Plugins, and select **Moonbase** to configure things like:
 
 - Your Seerr URL and whether Seerr is enabled
-- Shared MDBList and TMDB API keys, so individual users do not need their own
+- Shared MDBList and TMDB API keys, so individual users don't need their own
 - Default user settings that new users inherit, with a button to push them to existing users
 - A broadcast message to announce something to everyone at once
 - Web startup options and custom theme uploads
@@ -104,6 +105,7 @@ The deeper reference material lives in the [Wiki](https://github.com/Moonfin-Cli
 | [API Reference](https://github.com/Moonfin-Client/Plugin/wiki/API-Reference) | Every plugin endpoint, with methods, auth, and the Seerr config response |
 | [Settings Sync](https://github.com/Moonfin-Client/Plugin/wiki/Settings-Sync) | How sync works, the settings envelope, and the full list of synced settings |
 | [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games) | Game libraries, cores, ROMs, BIOS, saves, and in-browser play |
+| [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications) | Push delivery, webhooks, notification types, and self-hosted relays |
 | [Themes](https://github.com/Moonfin-Client/Plugin/wiki/Themes) | The theme editor and custom theme uploads |
 | [Reverse Proxy and Seerr](https://github.com/Moonfin-Client/Plugin/wiki/Reverse-Proxy-and-Seerr) | Path forwarding and Seerr single sign-on behind a proxy |
 | [Building from Source](https://github.com/Moonfin-Client/Plugin/wiki/Building-from-Source) | Building the Jellyfin and Emby plugins from this repo |
