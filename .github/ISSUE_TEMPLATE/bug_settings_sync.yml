@@ -1,5 +1,5 @@
 name: "Bug: Settings Sync"
-description: A setting is not syncing, not persisting, or an admin default is not applying
+description: A setting isn't syncing, isn't persisting, or an admin default isn't applying
 title: "[Settings] "
 labels: ["Bug", "Settings Sync"]
 body:
@@ -12,7 +12,7 @@ body:
     id: plugin_version
     attributes:
       label: Plugin version
-      description: The Moonbase plugin version (from the Jellyfin plugins page)
+      description: The Moonbase plugin version, listed as Moonfin on your server's plugins page
       placeholder: 1.0.0
     validations:
       required: true
@@ -21,8 +21,8 @@ body:
     id: server_version
     attributes:
       label: Server type and version
-      description: "e.g. Jellyfin 10.10.0"
-      placeholder: Jellyfin 10.x.x
+      description: "e.g. Jellyfin 10.10.0 or Emby 4.9.1.90"
+      placeholder: Jellyfin 10.x.x / Emby 4.x.x
     validations:
       required: true
 
@@ -80,9 +80,22 @@ body:
       required: true
 
   - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshot of the problem
+      description: |
+        Drag in a screenshot of the setting as it looks on each client you mentioned. Seeing the same setting side by side is usually what makes a sync problem obvious.
+        The plugin keeps no diagnostic log of its own, so a picture plus the server log below is all we have to go on.
+        If a screenshot genuinely doesn't apply, say why here instead.
+    validations:
+      required: true
+
+  - type: textarea
     id: logs
     attributes:
       label: Server logs / errors (optional)
-      description: Paste any relevant Jellyfin server log lines, especially around the settings profile save or resolve.
+      description: |
+        Paste any relevant log lines from your server's Logs page, especially around the settings profile save or resolve. The plugin logs under the Moonfin name, so search for that.
+      render: shell
     validations:
       required: false
