@@ -273,6 +273,16 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("showSeerrButton")] public bool? ShowSeerrButton { get; set; }
         [JsonPropertyName("diagnosticLoggingEnabled")] public bool? DiagnosticLoggingEnabled { get; set; }
         [JsonPropertyName("updateNotificationsEnabled")] public bool? UpdateNotificationsEnabled { get; set; }
+        [JsonPropertyName("musicPlaybackTimeDisplay")] public string? MusicPlaybackTimeDisplay { get; set; }
+        [JsonPropertyName("playbackTimeAboveLeft")] public string? PlaybackTimeAboveLeft { get; set; }
+        [JsonPropertyName("playbackTimeAboveCenter")] public string? PlaybackTimeAboveCenter { get; set; }
+        [JsonPropertyName("playbackTimeAboveRight")] public string? PlaybackTimeAboveRight { get; set; }
+        [JsonPropertyName("playbackTimeBelowLeft")] public string? PlaybackTimeBelowLeft { get; set; }
+        [JsonPropertyName("playbackTimeBelowCenter")] public string? PlaybackTimeBelowCenter { get; set; }
+        [JsonPropertyName("playbackTimeBelowRight")] public string? PlaybackTimeBelowRight { get; set; }
+        [JsonPropertyName("collectionsRowShowEpisodes")] public bool? CollectionsRowShowEpisodes { get; set; }
+        [JsonPropertyName("mergeRecentRowsByType")] public bool? MergeRecentRowsByType { get; set; }
+        [JsonPropertyName("playlistsRowShowEpisodes")] public bool? PlaylistsRowShowEpisodes { get; set; }
     }
 
     /// <summary>
