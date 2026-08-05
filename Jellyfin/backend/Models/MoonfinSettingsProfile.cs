@@ -92,6 +92,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("customThemeId")]
     public string? CustomThemeId { get; set; }
 
+    [JsonPropertyName("oledMode")]
+    public string? OledMode { get; set; }
+
     [JsonPropertyName("watchedIndicator")]
     public string? WatchedIndicator { get; set; }
 
