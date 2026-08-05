@@ -43,6 +43,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mergeContinueWatchingNextUp")] public bool? MergeContinueWatchingNextUp { get; set; }
         [JsonPropertyName("nextUpMaxDays")] public int? NextUpMaxDays { get; set; }
         [JsonPropertyName("enableMultiServerLibraries")] public bool? EnableMultiServerLibraries { get; set; }
+        [JsonPropertyName("mergeRecentRowsByType")] public bool? MergeRecentRowsByType { get; set; }
         [JsonPropertyName("enableFolderView")] public bool? EnableFolderView { get; set; }
         [JsonPropertyName("useDetailedSubHeadings")] public bool? UseDetailedSubHeadings { get; set; }
         [JsonPropertyName("confirmExit")] public bool? ConfirmExit { get; set; }
@@ -90,8 +91,13 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("genresRowSortBy")] public string? GenresRowSortBy { get; set; }
         [JsonPropertyName("genresRowItemFilter")] public string? GenresRowItemFilter { get; set; }
         [JsonPropertyName("navbarAlwaysExpanded")] public bool? NavbarAlwaysExpanded { get; set; }
+        [JsonPropertyName("mediaBarTrailerCaptions")] public bool? MediaBarTrailerCaptions { get; set; }
         [JsonPropertyName("detailScreenStyle")] public string? DetailScreenStyle { get; set; }
         [JsonPropertyName("detailExpandedTabs")] public bool? DetailExpandedTabs { get; set; }
+        [JsonPropertyName("detailButtonOrder")] public List<string>? DetailButtonOrder { get; set; }
+        [JsonPropertyName("hiddenDetailButtons")] public List<string>? HiddenDetailButtons { get; set; }
+        [JsonPropertyName("seerrRowOrder")] public List<string>? SeerrRowOrder { get; set; }
+        [JsonPropertyName("hiddenSeerrRows")] public List<string>? HiddenSeerrRows { get; set; }
         [JsonPropertyName("themeMusicLoop")] public bool? ThemeMusicLoop { get; set; }
         [JsonPropertyName("displaySinceYouWatchedRows")] public bool? DisplaySinceYouWatchedRows { get; set; }
         [JsonPropertyName("sinceYouWatchedSource")] public string? SinceYouWatchedSource { get; set; }
