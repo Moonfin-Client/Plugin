@@ -1684,7 +1684,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setSelectValue(view, '#DefaultSeasonalSurprise', defaults.seasonalSurprise, 'Configured surprise');
 
             // Playback
-            setNullableBoolSelect(view, '#DefaultShowDescriptionOnPause', defaults.showDescriptionOnPause);
             setSelectValue(view, '#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
             setSelectValue(view, '#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
             setSelectValue(view, '#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
@@ -1839,7 +1838,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.seasonalSurprise = view.querySelector('#DefaultSeasonalSurprise').value || null;
 
             // Playback
-            d.showDescriptionOnPause = getNullableBoolSelect(view, '#DefaultShowDescriptionOnPause');
             d.resumeSubtractDuration = getNullableIntInput(view, '#DefaultResumeSubtractDuration');
             d.unpauseRewindDuration = getNullableIntInput(view, '#DefaultUnpauseRewindDuration');
             d.skipBackLength = getNullableIntInput(view, '#DefaultSkipBackLength');
