@@ -1700,10 +1700,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
             setSelectValue(view, '#DefaultIntroAction', defaults.introAction, 'Configured action');
-            setSelectValue(view, '#DefaultNextUpCountdownStyle', defaults.nextUpCountdownStyle, 'Configured style');
             setNullableBoolSelect(view, '#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
             setSelectValue(view, '#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
-            setNullableBoolSelect(view, '#DefaultReplaceSkipOutroWithNextUp', defaults.replaceSkipOutroWithNextUp);
             setSelectValue(view, '#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
 
             setSelectValue(view, '#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
@@ -1858,10 +1856,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
             d.introAction = view.querySelector('#DefaultIntroAction').value || null;
             d.outroAction = view.querySelector('#DefaultIntroAction').value || null;
-            d.nextUpCountdownStyle = view.querySelector('#DefaultNextUpCountdownStyle').value || null;
             d.autoplayNextEpisode = getNullableBoolSelect(view, '#DefaultAutoplayNextEpisode');
             d.nextUpTimeout = getNullableIntInput(view, '#DefaultNextUpTimeout');
-            d.replaceSkipOutroWithNextUp = getNullableBoolSelect(view, '#DefaultReplaceSkipOutroWithNextUp');
             d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;
 
             var collectionIds = Array.prototype.slice.call(view.querySelectorAll('.adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });

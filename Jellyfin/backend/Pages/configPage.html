@@ -1345,15 +1345,6 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpCountdownStyle">Media Segment Countdown</label>
-                                <select id="DefaultNextUpCountdownStyle" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="both">Both</option>
-                                    <option value="countdown">Countdown Only</option>
-                                    <option value="button">Button Only</option>
-                                </select>
-                            </div>
-                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultAutoplayNextEpisode">Autoplay Next Episode</label>
                                 <select id="DefaultAutoplayNextEpisode" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -1370,14 +1361,6 @@
                                     <option value="10">10 seconds</option>
                                     <option value="15">15 seconds</option>
                                     <option value="30">30 seconds</option>
-                                </select>
-                            </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultReplaceSkipOutroWithNextUp">Replace Skip Outro with Next Up Display</label>
-                                <select id="DefaultReplaceSkipOutroWithNextUp" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="true">Yes</option>
-                                    <option value="false">No</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -3703,10 +3686,8 @@
 
                     setNullableBoolSelect('#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
                     setSelectValue('#DefaultIntroAction', defaults.introAction, 'Configured action');
-                    setSelectValue('#DefaultNextUpCountdownStyle', defaults.nextUpCountdownStyle, 'Configured style');
                     setNullableBoolSelect('#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
                     setSelectValue('#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
-                    setNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp', defaults.replaceSkipOutroWithNextUp);
                     setSelectValue('#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
 
                     setCheckbox('#DefaultMdblistEnabled', defaults.mdblistEnabled);
@@ -4032,10 +4013,8 @@
                         config.DefaultUserSettings.cinemaModeEnabled = getNullableBoolSelect('#DefaultCinemaModeEnabled');
                         config.DefaultUserSettings.introAction = document.querySelector('#DefaultIntroAction').value || null;
                         config.DefaultUserSettings.outroAction = document.querySelector('#DefaultIntroAction').value || null;
-                        config.DefaultUserSettings.nextUpCountdownStyle = document.querySelector('#DefaultNextUpCountdownStyle').value || null;
                         config.DefaultUserSettings.autoplayNextEpisode = getNullableBoolSelect('#DefaultAutoplayNextEpisode');
                         config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
-                        config.DefaultUserSettings.replaceSkipOutroWithNextUp = getNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp');
                         config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;
 
                         var collectionCbs = document.querySelectorAll('.adminCollectionCb:checked');
