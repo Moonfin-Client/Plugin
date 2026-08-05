@@ -1325,40 +1325,6 @@
                                     <option value="false">No</option>
                                 </select>
                             </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitlesTextColor">Text Color</label>
-                                <select id="DefaultSubtitlesTextColor" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="#FFFFFFFF">White</option>
-                                    <option value="#FFFF00FF">Yellow</option>
-                                    <option value="#00FF00FF">Green</option>
-                                    <option value="#00FFFFFF">Cyan</option>
-                                    <option value="#0000FFFF">Blue</option>
-                                    <option value="#FF00FFFF">Magenta</option>
-                                    <option value="#FF0000FF">Red</option>
-                                    <option value="#000000FF">Black</option>
-                                </select>
-                            </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitlesBackgroundColor">Background Color</label>
-                                <select id="DefaultSubtitlesBackgroundColor" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="#000000FF">Black</option>
-                                    <option value="#00000080">Dark Gray</option>
-                                    <option value="#80808080">Light Gray</option>
-                                    <option value="#00000000">Transparent</option>
-                                </select>
-                            </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitlesTextSize">Text Size</label>
-                                <select id="DefaultSubtitlesTextSize" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="0.75">Small (75%)</option>
-                                    <option value="1.0">Normal (100%)</option>
-                                    <option value="1.25">Large (125%)</option>
-                                    <option value="1.5">Huge (150%)</option>
-                                </select>
-                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Automation &amp; Queue</h4>
                             <div class="inputContainer">
@@ -3734,9 +3700,6 @@
                     setSelectValue('#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
                     setSelectValue('#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
                     setNullableBoolSelect('#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
-                    setSelectValue('#DefaultSubtitlesTextColor', defaults.subtitlesTextColor, 'Configured color');
-                    setSelectValue('#DefaultSubtitlesBackgroundColor', defaults.subtitlesBackgroundColor, 'Configured color');
-                    setSelectValue('#DefaultSubtitlesTextSize', defaults.subtitlesTextSize != null ? String(defaults.subtitlesTextSize) : '', 'Configured size');
 
                     setNullableBoolSelect('#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
                     setSelectValue('#DefaultIntroAction', defaults.introAction, 'Configured action');
@@ -4065,10 +4028,6 @@
                         config.DefaultUserSettings.subtitleMode = document.querySelector('#DefaultSubtitleMode').value || null;
                         config.DefaultUserSettings.defaultSubtitleLanguage = document.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
                         config.DefaultUserSettings.preferSdhSubtitles = getNullableBoolSelect('#DefaultPreferSdhSubtitles');
-                        config.DefaultUserSettings.subtitlesTextColor = document.querySelector('#DefaultSubtitlesTextColor').value || null;
-                        config.DefaultUserSettings.subtitlesBackgroundColor = document.querySelector('#DefaultSubtitlesBackgroundColor').value || null;
-                        var subSizeVal = document.querySelector('#DefaultSubtitlesTextSize').value;
-                        config.DefaultUserSettings.subtitlesTextSize = subSizeVal ? parseFloat(subSizeVal) : null;
 
                         config.DefaultUserSettings.cinemaModeEnabled = getNullableBoolSelect('#DefaultCinemaModeEnabled');
                         config.DefaultUserSettings.introAction = document.querySelector('#DefaultIntroAction').value || null;

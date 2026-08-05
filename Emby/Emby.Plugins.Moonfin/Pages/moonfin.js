@@ -1697,9 +1697,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setSelectValue(view, '#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
             setSelectValue(view, '#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
             setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
-            setSelectValue(view, '#DefaultSubtitlesTextColor', defaults.subtitlesTextColor, 'Configured color');
-            setSelectValue(view, '#DefaultSubtitlesBackgroundColor', defaults.subtitlesBackgroundColor, 'Configured color');
-            setSelectValue(view, '#DefaultSubtitlesTextSize', defaults.subtitlesTextSize != null ? String(defaults.subtitlesTextSize) : '', 'Configured size');
 
             setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
             setSelectValue(view, '#DefaultIntroAction', defaults.introAction, 'Configured action');
@@ -1857,10 +1854,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.subtitleMode = view.querySelector('#DefaultSubtitleMode').value || null;
             d.defaultSubtitleLanguage = view.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
             d.preferSdhSubtitles = getNullableBoolSelect(view, '#DefaultPreferSdhSubtitles');
-            d.subtitlesTextColor = view.querySelector('#DefaultSubtitlesTextColor').value || null;
-            d.subtitlesBackgroundColor = view.querySelector('#DefaultSubtitlesBackgroundColor').value || null;
-            var subSizeVal = view.querySelector('#DefaultSubtitlesTextSize').value;
-            d.subtitlesTextSize = subSizeVal ? parseFloat(subSizeVal) : null;
 
             d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
             d.introAction = view.querySelector('#DefaultIntroAction').value || null;
