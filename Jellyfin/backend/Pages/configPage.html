@@ -3390,7 +3390,6 @@
                     setNullableRangeInput('#DefaultThemeMusicVolume', defaults.themeMusicVolume, '%');
                     setSelectValue('#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
                     setNullableBoolSelect('#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
-                    setSelectValue('#DefaultScreensaverMode', defaults.screensaverMode, 'Configured mode');
 
                     setSelectValue('#DefaultNavbarPosition', defaults.navbarPosition, 'Configured position');
                     setSelectValue('#DefaultNavbarColor', defaults.navbarColor, 'Configured color');
@@ -3446,7 +3445,6 @@
                     setNullableBoolSelect('#DefaultShowShuffleButton', defaults.showShuffleButton);
                     setNullableBoolSelect('#DefaultShowGenresButton', defaults.showGenresButton);
                     setNullableBoolSelect('#DefaultShowFavoritesButton', defaults.showFavoritesButton);
-                    setCheckbox('#DefaultShowCastButton', defaults.showCastButton);
                     setCheckbox('#DefaultShowSyncPlayButton', defaults.showSyncPlayButton);
                     setNullableBoolSelect('#DefaultShowLibrariesInToolbar', defaults.showLibrariesInToolbar);
 
@@ -3738,7 +3736,6 @@
                         config.DefaultUserSettings.themeMusicLoop = getNullableBoolSelect('#DefaultThemeMusicLoop');
                         config.DefaultUserSettings.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
                         config.DefaultUserSettings.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
-                        config.DefaultUserSettings.screensaverMode = document.querySelector('#DefaultScreensaverMode').value || null;
 
                         config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
                         config.DefaultUserSettings.navbarColor = document.querySelector('#DefaultNavbarColor').value || null;
@@ -3805,7 +3802,6 @@
                         config.DefaultUserSettings.showShuffleButton = getNullableBoolSelect('#DefaultShowShuffleButton');
                         config.DefaultUserSettings.showGenresButton = getNullableBoolSelect('#DefaultShowGenresButton');
                         config.DefaultUserSettings.showFavoritesButton = getNullableBoolSelect('#DefaultShowFavoritesButton');
-                        config.DefaultUserSettings.showCastButton = getCheckbox('#DefaultShowCastButton');
                         config.DefaultUserSettings.showSyncPlayButton = getCheckbox('#DefaultShowSyncPlayButton');
                         config.DefaultUserSettings.showLibrariesInToolbar = getNullableBoolSelect('#DefaultShowLibrariesInToolbar');
 
