@@ -717,6 +717,7 @@
                             <button type="button" class="defaultsSubtabBtn" data-subtab="home-screen">Home Screen</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="home-sections">Home Sections</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="libraries">Libraries</button>
+                            <button type="button" class="defaultsSubtabBtn" data-subtab="playback">Playback</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="extras">Extras</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="integrations">Integrations</button>
                         </div>
@@ -1160,7 +1161,212 @@
                             </div>
                         </div>
 
-                        <!-- 7. Extras -->
+                        <!-- 7. Playback -->
+                        <div class="defaultsSubtabPanel" data-subtab="playback">
+                            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Video Playback</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowDescriptionOnPause">Show Description on Pause</label>
+                                <select id="DefaultShowDescriptionOnPause" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Display media title and overview when playback is paused.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultResumeSubtractDuration">Resume Rewind</label>
+                                <select id="DefaultResumeSubtractDuration" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">Off (0s)</option>
+                                    <option value="1">1 second</option>
+                                    <option value="2">2 seconds</option>
+                                    <option value="3">3 seconds</option>
+                                    <option value="5">5 seconds</option>
+                                </select>
+                                <div class="fieldDescription">Automatically rewinds slightly when resuming an in-progress video.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultUnpauseRewindDuration">Unpause Rewind</label>
+                                <select id="DefaultUnpauseRewindDuration" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">Off (0s)</option>
+                                    <option value="1">1 second</option>
+                                    <option value="2">2 seconds</option>
+                                    <option value="3">3 seconds</option>
+                                    <option value="5">5 seconds</option>
+                                </select>
+                                <div class="fieldDescription">Rewinds slightly when unpausing playback.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSkipBackLength">Skip Back Length</label>
+                                <select id="DefaultSkipBackLength" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5">5 seconds</option>
+                                    <option value="10">10 seconds</option>
+                                    <option value="15">15 seconds</option>
+                                    <option value="30">30 seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSkipForwardLength">Skip Forward Length</label>
+                                <select id="DefaultSkipForwardLength" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5">5 seconds</option>
+                                    <option value="10">10 seconds</option>
+                                    <option value="15">15 seconds</option>
+                                    <option value="30">30 seconds</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Audio Playback</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultAudioLanguage">Default Audio Language</label>
+                                <input type="text" id="DefaultDefaultAudioLanguage" is="emby-input" placeholder="e.g. eng, spa, fre (or empty)" />
+                                <div class="fieldDescription">Preferred audio language ISO code.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferDefaultAudioTrack">Prefer Default Audio Track</label>
+                                <select id="DefaultPreferDefaultAudioTrack" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferAudioDescription">Prefer Audio Description</label>
+                                <select id="DefaultPreferAudioDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Subtitle Preferences</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitleMode">Subtitle Mode</label>
+                                <select id="DefaultSubtitleMode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="default">Default</option>
+                                    <option value="always">Always</option>
+                                    <option value="onlyforced">Only Forced</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultSubtitleLanguage">Default Subtitle Language</label>
+                                <input type="text" id="DefaultDefaultSubtitleLanguage" is="emby-input" placeholder="e.g. eng, spa, fre (or empty)" />
+                                <div class="fieldDescription">Preferred subtitle language ISO code.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferSdhSubtitles">Prefer SDH Subtitles</label>
+                                <select id="DefaultPreferSdhSubtitles" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitlesTextColor">Text Color</label>
+                                <select id="DefaultSubtitlesTextColor" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="#FFFFFFFF">White</option>
+                                    <option value="#FFFF00FF">Yellow</option>
+                                    <option value="#00FF00FF">Green</option>
+                                    <option value="#00FFFFFF">Cyan</option>
+                                    <option value="#0000FFFF">Blue</option>
+                                    <option value="#FF00FFFF">Magenta</option>
+                                    <option value="#FF0000FF">Red</option>
+                                    <option value="#000000FF">Black</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitlesBackgroundColor">Background Color</label>
+                                <select id="DefaultSubtitlesBackgroundColor" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="#000000FF">Black</option>
+                                    <option value="#00000080">Dark Gray</option>
+                                    <option value="#80808080">Light Gray</option>
+                                    <option value="#00000000">Transparent</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitlesTextSize">Text Size</label>
+                                <select id="DefaultSubtitlesTextSize" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0.75">Small (75%)</option>
+                                    <option value="1.0">Normal (100%)</option>
+                                    <option value="1.25">Large (125%)</option>
+                                    <option value="1.5">Huge (150%)</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Automation &amp; Queue</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeEnabled">Cinema Mode</label>
+                                <select id="DefaultCinemaModeEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultIntroAction">Skip Intros and Outros</label>
+                                <select id="DefaultIntroAction" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ask">Prompt</option>
+                                    <option value="skip">Auto-skip</option>
+                                    <option value="disabled">Off</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpCountdownStyle">Media Segment Countdown</label>
+                                <select id="DefaultNextUpCountdownStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Both</option>
+                                    <option value="countdown">Countdown Only</option>
+                                    <option value="button">Button Only</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAutoplayNextEpisode">Autoplay Next Episode</label>
+                                <select id="DefaultAutoplayNextEpisode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpTimeout">Next Up Timeout</label>
+                                <select id="DefaultNextUpTimeout" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5">5 seconds</option>
+                                    <option value="7">7 seconds</option>
+                                    <option value="10">10 seconds</option>
+                                    <option value="15">15 seconds</option>
+                                    <option value="30">30 seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultReplaceSkipOutroWithNextUp">Replace Skip Outro with Next Up Display</label>
+                                <select id="DefaultReplaceSkipOutroWithNextUp" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStillWatchingBehavior">Still Watching Prompt</label>
+                                <select id="DefaultStillWatchingBehavior" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="disabled">Off</option>
+                                    <option value="short">After 2 episodes</option>
+                                    <option value="medium">After 3 episodes</option>
+                                    <option value="long">After 4 episodes</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 8. Extras -->
                         <div class="defaultsSubtabPanel" data-subtab="extras">
                             <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Media Bar</h4>
                             <div class="inputContainer">
@@ -3454,6 +3660,32 @@
                     setNullableBoolSelect('#DefaultEpisodePreviewEnabled', defaults.episodePreviewEnabled);
                     setNullableBoolSelect('#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
 
+                    // Playback
+                    setNullableBoolSelect('#DefaultShowDescriptionOnPause', defaults.showDescriptionOnPause);
+                    setSelectValue('#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
+                    setSelectValue('#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
+                    setSelectValue('#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
+                    setSelectValue('#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
+
+                    document.querySelector('#DefaultDefaultAudioLanguage').value = defaults.defaultAudioLanguage || '';
+                    setNullableBoolSelect('#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
+                    setNullableBoolSelect('#DefaultPreferAudioDescription', defaults.preferAudioDescription);
+
+                    setSelectValue('#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
+                    document.querySelector('#DefaultDefaultSubtitleLanguage').value = defaults.defaultSubtitleLanguage || '';
+                    setNullableBoolSelect('#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
+                    setSelectValue('#DefaultSubtitlesTextColor', defaults.subtitlesTextColor, 'Configured color');
+                    setSelectValue('#DefaultSubtitlesBackgroundColor', defaults.subtitlesBackgroundColor, 'Configured color');
+                    setSelectValue('#DefaultSubtitlesTextSize', defaults.subtitlesTextSize != null ? String(defaults.subtitlesTextSize) : '', 'Configured size');
+
+                    setNullableBoolSelect('#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+                    setSelectValue('#DefaultIntroAction', defaults.introAction, 'Configured action');
+                    setSelectValue('#DefaultNextUpCountdownStyle', defaults.nextUpCountdownStyle, 'Configured style');
+                    setNullableBoolSelect('#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
+                    setSelectValue('#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
+                    setNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp', defaults.replaceSkipOutroWithNextUp);
+                    setSelectValue('#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
+
                     setCheckbox('#DefaultMdblistEnabled', defaults.mdblistEnabled);
                     setCheckbox('#DefaultTmdbEpisodeRatingsEnabled', defaults.tmdbEpisodeRatingsEnabled);
                     setNullableBoolSelect('#DefaultMdblistShowRatingBadges', defaults.mdblistShowRatingBadges);
@@ -3758,6 +3990,34 @@
                         config.DefaultUserSettings.episodePreviewEnabled = getNullableBoolSelect('#DefaultEpisodePreviewEnabled');
                         config.DefaultUserSettings.previewAudioEnabled = getNullableBoolSelect('#DefaultPreviewAudioEnabled');
                         config.DefaultUserSettings.seasonalSurprise = document.querySelector('#DefaultSeasonalSurprise').value || null;
+
+                        // Playback
+                        config.DefaultUserSettings.showDescriptionOnPause = getNullableBoolSelect('#DefaultShowDescriptionOnPause');
+                        config.DefaultUserSettings.resumeSubtractDuration = getNullableIntInput('#DefaultResumeSubtractDuration');
+                        config.DefaultUserSettings.unpauseRewindDuration = getNullableIntInput('#DefaultUnpauseRewindDuration');
+                        config.DefaultUserSettings.skipBackLength = getNullableIntInput('#DefaultSkipBackLength');
+                        config.DefaultUserSettings.skipForwardLength = getNullableIntInput('#DefaultSkipForwardLength');
+
+                        config.DefaultUserSettings.defaultAudioLanguage = document.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
+                        config.DefaultUserSettings.preferDefaultAudioTrack = getNullableBoolSelect('#DefaultPreferDefaultAudioTrack');
+                        config.DefaultUserSettings.preferAudioDescription = getNullableBoolSelect('#DefaultPreferAudioDescription');
+
+                        config.DefaultUserSettings.subtitleMode = document.querySelector('#DefaultSubtitleMode').value || null;
+                        config.DefaultUserSettings.defaultSubtitleLanguage = document.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
+                        config.DefaultUserSettings.preferSdhSubtitles = getNullableBoolSelect('#DefaultPreferSdhSubtitles');
+                        config.DefaultUserSettings.subtitlesTextColor = document.querySelector('#DefaultSubtitlesTextColor').value || null;
+                        config.DefaultUserSettings.subtitlesBackgroundColor = document.querySelector('#DefaultSubtitlesBackgroundColor').value || null;
+                        var subSizeVal = document.querySelector('#DefaultSubtitlesTextSize').value;
+                        config.DefaultUserSettings.subtitlesTextSize = subSizeVal ? parseFloat(subSizeVal) : null;
+
+                        config.DefaultUserSettings.cinemaModeEnabled = getNullableBoolSelect('#DefaultCinemaModeEnabled');
+                        config.DefaultUserSettings.introAction = document.querySelector('#DefaultIntroAction').value || null;
+                        config.DefaultUserSettings.outroAction = document.querySelector('#DefaultIntroAction').value || null;
+                        config.DefaultUserSettings.nextUpCountdownStyle = document.querySelector('#DefaultNextUpCountdownStyle').value || null;
+                        config.DefaultUserSettings.autoplayNextEpisode = getNullableBoolSelect('#DefaultAutoplayNextEpisode');
+                        config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
+                        config.DefaultUserSettings.replaceSkipOutroWithNextUp = getNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp');
+                        config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;
 
                         var collectionCbs = document.querySelectorAll('.adminCollectionCb:checked');
                         var collectionIds = [];

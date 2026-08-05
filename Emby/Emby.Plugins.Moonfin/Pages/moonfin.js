@@ -1683,6 +1683,32 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
             setSelectValue(view, '#DefaultSeasonalSurprise', defaults.seasonalSurprise, 'Configured surprise');
 
+            // Playback
+            setNullableBoolSelect(view, '#DefaultShowDescriptionOnPause', defaults.showDescriptionOnPause);
+            setSelectValue(view, '#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
+            setSelectValue(view, '#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
+            setSelectValue(view, '#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
+            setSelectValue(view, '#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
+
+            view.querySelector('#DefaultDefaultAudioLanguage').value = defaults.defaultAudioLanguage || '';
+            setNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
+            setNullableBoolSelect(view, '#DefaultPreferAudioDescription', defaults.preferAudioDescription);
+
+            setSelectValue(view, '#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
+            view.querySelector('#DefaultDefaultSubtitleLanguage').value = defaults.defaultSubtitleLanguage || '';
+            setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
+            setSelectValue(view, '#DefaultSubtitlesTextColor', defaults.subtitlesTextColor, 'Configured color');
+            setSelectValue(view, '#DefaultSubtitlesBackgroundColor', defaults.subtitlesBackgroundColor, 'Configured color');
+            setSelectValue(view, '#DefaultSubtitlesTextSize', defaults.subtitlesTextSize != null ? String(defaults.subtitlesTextSize) : '', 'Configured size');
+
+            setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+            setSelectValue(view, '#DefaultIntroAction', defaults.introAction, 'Configured action');
+            setSelectValue(view, '#DefaultNextUpCountdownStyle', defaults.nextUpCountdownStyle, 'Configured style');
+            setNullableBoolSelect(view, '#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
+            setSelectValue(view, '#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
+            setNullableBoolSelect(view, '#DefaultReplaceSkipOutroWithNextUp', defaults.replaceSkipOutroWithNextUp);
+            setSelectValue(view, '#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
+
             setSelectValue(view, '#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
             setNullableBoolSelect(view, '#DefaultFullScreenRows', defaults.fullScreenRows);
             setNullableBoolSelect(view, '#DefaultHomeRowInfoOverlay', defaults.homeRowInfoOverlay);
@@ -1816,6 +1842,34 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.episodePreviewEnabled = getNullableBoolSelect(view, '#DefaultEpisodePreviewEnabled');
             d.previewAudioEnabled = getNullableBoolSelect(view, '#DefaultPreviewAudioEnabled');
             d.seasonalSurprise = view.querySelector('#DefaultSeasonalSurprise').value || null;
+
+            // Playback
+            d.showDescriptionOnPause = getNullableBoolSelect(view, '#DefaultShowDescriptionOnPause');
+            d.resumeSubtractDuration = getNullableIntInput(view, '#DefaultResumeSubtractDuration');
+            d.unpauseRewindDuration = getNullableIntInput(view, '#DefaultUnpauseRewindDuration');
+            d.skipBackLength = getNullableIntInput(view, '#DefaultSkipBackLength');
+            d.skipForwardLength = getNullableIntInput(view, '#DefaultSkipForwardLength');
+
+            d.defaultAudioLanguage = view.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
+            d.preferDefaultAudioTrack = getNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack');
+            d.preferAudioDescription = getNullableBoolSelect(view, '#DefaultPreferAudioDescription');
+
+            d.subtitleMode = view.querySelector('#DefaultSubtitleMode').value || null;
+            d.defaultSubtitleLanguage = view.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
+            d.preferSdhSubtitles = getNullableBoolSelect(view, '#DefaultPreferSdhSubtitles');
+            d.subtitlesTextColor = view.querySelector('#DefaultSubtitlesTextColor').value || null;
+            d.subtitlesBackgroundColor = view.querySelector('#DefaultSubtitlesBackgroundColor').value || null;
+            var subSizeVal = view.querySelector('#DefaultSubtitlesTextSize').value;
+            d.subtitlesTextSize = subSizeVal ? parseFloat(subSizeVal) : null;
+
+            d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
+            d.introAction = view.querySelector('#DefaultIntroAction').value || null;
+            d.outroAction = view.querySelector('#DefaultIntroAction').value || null;
+            d.nextUpCountdownStyle = view.querySelector('#DefaultNextUpCountdownStyle').value || null;
+            d.autoplayNextEpisode = getNullableBoolSelect(view, '#DefaultAutoplayNextEpisode');
+            d.nextUpTimeout = getNullableIntInput(view, '#DefaultNextUpTimeout');
+            d.replaceSkipOutroWithNextUp = getNullableBoolSelect(view, '#DefaultReplaceSkipOutroWithNextUp');
+            d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;
 
             var collectionIds = Array.prototype.slice.call(view.querySelectorAll('.adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
             d.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
