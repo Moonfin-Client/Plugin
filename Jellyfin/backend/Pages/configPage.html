@@ -1190,10 +1190,10 @@
                                 <select id="DefaultUnpauseRewindDuration" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="0">Disabled</option>
-                                    <option value="1">1 second</option>
-                                    <option value="2">2 seconds</option>
-                                    <option value="3">3 seconds</option>
                                     <option value="5">5 seconds</option>
+                                    <option value="10">10 seconds</option>
+                                    <option value="15">15 seconds</option>
+                                    <option value="30">30 seconds</option>
                                 </select>
                                 <div class="fieldDescription">Rewinds slightly when unpausing playback.</div>
                             </div>
@@ -1221,8 +1221,38 @@
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Audio Playback</h4>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultAudioLanguage">Default Audio Language</label>
-                                <input type="text" id="DefaultDefaultAudioLanguage" is="emby-input" placeholder="e.g. eng, spa, fre (or empty)" />
-                                <div class="fieldDescription">Preferred audio language ISO code.</div>
+                                <select id="DefaultDefaultAudioLanguage" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="auto">Server Default</option>
+                                    <option value="eng">English (eng)</option>
+                                    <option value="spa">Spanish (spa)</option>
+                                    <option value="fra">French (fra)</option>
+                                    <option value="deu">German (deu)</option>
+                                    <option value="ita">Italian (ita)</option>
+                                    <option value="jpn">Japanese (jpn)</option>
+                                    <option value="kor">Korean (kor)</option>
+                                    <option value="zho">Chinese (zho)</option>
+                                    <option value="rus">Russian (rus)</option>
+                                    <option value="por">Portuguese (por)</option>
+                                    <option value="ara">Arabic (ara)</option>
+                                    <option value="hin">Hindi (hin)</option>
+                                    <option value="nld">Dutch (nld)</option>
+                                    <option value="pol">Polish (pol)</option>
+                                    <option value="swe">Swedish (swe)</option>
+                                    <option value="nor">Norwegian (nor)</option>
+                                    <option value="dan">Danish (dan)</option>
+                                    <option value="fin">Finnish (fin)</option>
+                                    <option value="tha">Thai (tha)</option>
+                                    <option value="tur">Turkish (tur)</option>
+                                    <option value="heb">Hebrew (heb)</option>
+                                    <option value="ces">Czech (ces)</option>
+                                    <option value="ell">Greek (ell)</option>
+                                    <option value="ron">Romanian (ron)</option>
+                                    <option value="hun">Hungarian (hun)</option>
+                                    <option value="ukr">Ukrainian (ukr)</option>
+                                    <option value="ind">Indonesian (ind)</option>
+                                    <option value="vie">Vietnamese (vie)</option>
+                                </select>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPreferDefaultAudioTrack">Prefer Default Audio Track</label>
@@ -1254,8 +1284,38 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultSubtitleLanguage">Default Subtitle Language</label>
-                                <input type="text" id="DefaultDefaultSubtitleLanguage" is="emby-input" placeholder="e.g. eng, spa, fre (or empty)" />
-                                <div class="fieldDescription">Preferred subtitle language ISO code.</div>
+                                <select id="DefaultDefaultSubtitleLanguage" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="auto">Server Default</option>
+                                    <option value="eng">English (eng)</option>
+                                    <option value="spa">Spanish (spa)</option>
+                                    <option value="fra">French (fra)</option>
+                                    <option value="deu">German (deu)</option>
+                                    <option value="ita">Italian (ita)</option>
+                                    <option value="jpn">Japanese (jpn)</option>
+                                    <option value="kor">Korean (kor)</option>
+                                    <option value="zho">Chinese (zho)</option>
+                                    <option value="rus">Russian (rus)</option>
+                                    <option value="por">Portuguese (por)</option>
+                                    <option value="ara">Arabic (ara)</option>
+                                    <option value="hin">Hindi (hin)</option>
+                                    <option value="nld">Dutch (nld)</option>
+                                    <option value="pol">Polish (pol)</option>
+                                    <option value="swe">Swedish (swe)</option>
+                                    <option value="nor">Norwegian (nor)</option>
+                                    <option value="dan">Danish (dan)</option>
+                                    <option value="fin">Finnish (fin)</option>
+                                    <option value="tha">Thai (tha)</option>
+                                    <option value="tur">Turkish (tur)</option>
+                                    <option value="heb">Hebrew (heb)</option>
+                                    <option value="ces">Czech (ces)</option>
+                                    <option value="ell">Greek (ell)</option>
+                                    <option value="ron">Romanian (ron)</option>
+                                    <option value="hun">Hungarian (hun)</option>
+                                    <option value="ukr">Ukrainian (ukr)</option>
+                                    <option value="ind">Indonesian (ind)</option>
+                                    <option value="vie">Vietnamese (vie)</option>
+                                </select>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPreferSdhSubtitles">Prefer SDH Subtitles</label>
@@ -3667,12 +3727,12 @@
                     setSelectValue('#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
                     setSelectValue('#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
 
-                    document.querySelector('#DefaultDefaultAudioLanguage').value = defaults.defaultAudioLanguage || '';
+                    setSelectValue('#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
                     setNullableBoolSelect('#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
                     setNullableBoolSelect('#DefaultPreferAudioDescription', defaults.preferAudioDescription);
 
                     setSelectValue('#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
-                    document.querySelector('#DefaultDefaultSubtitleLanguage').value = defaults.defaultSubtitleLanguage || '';
+                    setSelectValue('#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
                     setNullableBoolSelect('#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
                     setSelectValue('#DefaultSubtitlesTextColor', defaults.subtitlesTextColor, 'Configured color');
                     setSelectValue('#DefaultSubtitlesBackgroundColor', defaults.subtitlesBackgroundColor, 'Configured color');

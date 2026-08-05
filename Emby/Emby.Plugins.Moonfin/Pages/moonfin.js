@@ -1690,12 +1690,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setSelectValue(view, '#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
             setSelectValue(view, '#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
 
-            view.querySelector('#DefaultDefaultAudioLanguage').value = defaults.defaultAudioLanguage || '';
+            setSelectValue(view, '#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
             setNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
             setNullableBoolSelect(view, '#DefaultPreferAudioDescription', defaults.preferAudioDescription);
 
             setSelectValue(view, '#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
-            view.querySelector('#DefaultDefaultSubtitleLanguage').value = defaults.defaultSubtitleLanguage || '';
+            setSelectValue(view, '#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
             setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
             setSelectValue(view, '#DefaultSubtitlesTextColor', defaults.subtitlesTextColor, 'Configured color');
             setSelectValue(view, '#DefaultSubtitlesBackgroundColor', defaults.subtitlesBackgroundColor, 'Configured color');
