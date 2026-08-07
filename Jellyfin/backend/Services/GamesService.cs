@@ -152,32 +152,30 @@ public class GamesService
             : ExtractRomFromZip(archivePath);
     }
 
+    /// <summary>
+    /// The size the extracted ROM will have, read from the archive index rather than by
+    /// unpacking it, so answering a HEAD costs nothing. Returns null when the archive holds no
+    /// usable ROM or can't be read.
+    /// </summary>
+    public static long? GetExtractedRomLength(string archivePath)
+    {
+        try
+        {
+            return ".7z".Equals(Path.GetExtension(archivePath), StringComparison.OrdinalIgnoreCase)
+                ? SharpCompressRomLength(archivePath)
+                : ZipRomLength(archivePath);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // .zip via System.IO.Compression (shared framework; no third-party assembly to load).
     private static byte[]? ExtractRomFromZip(string archivePath)
     {
         using var zip = System.IO.Compression.ZipFile.OpenRead(archivePath);
-        System.IO.Compression.ZipArchiveEntry? romEntry = null;
-        System.IO.Compression.ZipArchiveEntry? largest = null;
-        foreach (var entry in zip.Entries)
-        {
-            if (string.IsNullOrEmpty(entry.Name))
-            {
-                continue; // directory entry
-            }
-
-            if (ExtensionToCore.ContainsKey(Path.GetExtension(entry.Name)))
-            {
-                romEntry = entry;
-                break;
-            }
-
-            if (largest == null || entry.Length > largest.Length)
-            {
-                largest = entry;
-            }
-        }
-
-        var chosen = romEntry ?? largest;
+        var chosen = ChooseZipEntry(zip);
         if (chosen == null)
         {
             return null;
@@ -189,12 +187,64 @@ public class GamesService
         return ms.ToArray();
     }
 
-    // .7z via SharpCompress. Kept in its own method so the assembly only needs to load when a .7z is
-    // actually served; if it cannot load, the caller catches and returns 404 (zip is unaffected).
+    private static long? ZipRomLength(string archivePath)
+    {
+        using var zip = System.IO.Compression.ZipFile.OpenRead(archivePath);
+        return ChooseZipEntry(zip)?.Length;
+    }
+
+    // The entry a client is served: the first with a known ROM extension, else the largest file.
+    private static System.IO.Compression.ZipArchiveEntry? ChooseZipEntry(
+        System.IO.Compression.ZipArchive zip)
+    {
+        System.IO.Compression.ZipArchiveEntry? largest = null;
+        foreach (var entry in zip.Entries)
+        {
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                continue; // directory entry
+            }
+
+            if (ExtensionToCore.ContainsKey(Path.GetExtension(entry.Name)))
+            {
+                return entry;
+            }
+
+            if (largest == null || entry.Length > largest.Length)
+            {
+                largest = entry;
+            }
+        }
+
+        return largest;
+    }
+
+    // .7z via SharpCompress. Kept in its own method so the assembly only needs to load when a .7z
+    // is actually served, and if it can't load the caller catches and returns 404 (zip is
+    // unaffected).
     private static byte[]? ExtractRomWithSharpCompress(string archivePath)
     {
         using var archive = ArchiveFactory.Open(archivePath);
-        IArchiveEntry? romEntry = null;
+        var chosen = ChooseArchiveEntry(archive);
+        if (chosen == null)
+        {
+            return null;
+        }
+
+        using var entryStream = chosen.OpenEntryStream();
+        using var ms = new MemoryStream();
+        entryStream.CopyTo(ms);
+        return ms.ToArray();
+    }
+
+    private static long? SharpCompressRomLength(string archivePath)
+    {
+        using var archive = ArchiveFactory.Open(archivePath);
+        return ChooseArchiveEntry(archive)?.Size;
+    }
+
+    private static IArchiveEntry? ChooseArchiveEntry(IArchive archive)
+    {
         IArchiveEntry? largest = null;
         foreach (var entry in archive.Entries)
         {
@@ -205,8 +255,7 @@ public class GamesService
 
             if (ExtensionToCore.ContainsKey(Path.GetExtension(entry.Key ?? string.Empty)))
             {
-                romEntry = entry;
-                break;
+                return entry;
             }
 
             if (largest == null || entry.Size > largest.Size)
@@ -215,16 +264,7 @@ public class GamesService
             }
         }
 
-        var chosen = romEntry ?? largest;
-        if (chosen == null)
-        {
-            return null;
-        }
-
-        using var entryStream = chosen.OpenEntryStream();
-        using var ms = new MemoryStream();
-        entryStream.CopyTo(ms);
-        return ms.ToArray();
+        return largest;
     }
 
     public GamesService(

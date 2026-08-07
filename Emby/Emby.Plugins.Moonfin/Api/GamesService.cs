@@ -7,6 +7,7 @@ using Emby.Plugins.Moonfin.Services;
 using MediaBrowser.Common;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
+using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Services;
 
 namespace Emby.Plugins.Moonfin.Api
@@ -129,6 +130,43 @@ namespace Emby.Plugins.Moonfin.Api
             var path = scanner.ResolveFilePath(request.LibraryId, request.Token, allowBios: true);
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return NotFound();
             return ResultFactory.GetStaticFileResult(Request, path);
+        }
+
+        public object Head(HeadGameRomRequest request) =>
+            SizeOnly(request.LibraryId, request.Token, allowBios: false);
+
+        public object Head(HeadGameBiosRequest request) =>
+            SizeOnly(request.LibraryId, request.Token, allowBios: true);
+
+        // Answers with the length the matching GET would send and no body. An archived ROM is
+        // measured from the archive index, since the GET serves the unpacked entry.
+        private object SizeOnly(string libraryId, string token, bool allowBios)
+        {
+            var scanner = Scanner();
+            if (!GamesEnabled() || scanner == null) return NotFound();
+            var path = scanner.ResolveFilePath(libraryId, token, allowBios);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return NotFound();
+
+            var length = !allowBios && GamesScanner.IsArchive(path)
+                ? GamesScanner.GetExtractedRomLength(path)
+                : new FileInfo(path).Length;
+            if (length == null) return NotFound();
+
+            return ResultFactory.GetStaticResult(Request, new StaticResultOptions
+            {
+                ContentType = "application/octet-stream",
+                ContentLength = length,
+                IsHeadRequest = true,
+                SupportsRangeRequests = true,
+                // A head request has no body to produce, but a factory is supplied so nothing
+                // can trip over a missing one.
+                ContentFactory = (start, end, cancel) => Task.FromResult(new StreamHandler
+                {
+                    Stream = Stream.Null,
+                    Length = 0,
+                    TotalLength = length.Value,
+                }),
+            });
         }
 
         public object Get(GetGameSaveRequest request)

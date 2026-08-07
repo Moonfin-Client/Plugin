@@ -30,6 +30,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("focusColor")] public string? FocusColor { get; set; }
         [JsonPropertyName("visualTheme")] public string? VisualTheme { get; set; }
         [JsonPropertyName("customThemeId")] public string? CustomThemeId { get; set; }
+        [JsonPropertyName("oledMode")] public string? OledMode { get; set; }
         [JsonPropertyName("watchedIndicator")] public string? WatchedIndicator { get; set; }
         [JsonPropertyName("cardFocusExpansion")] public bool? CardFocusExpansion { get; set; }
         [JsonPropertyName("showShuffleButton")] public bool? ShowShuffleButton { get; set; }
@@ -42,7 +43,6 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mergeContinueWatchingNextUp")] public bool? MergeContinueWatchingNextUp { get; set; }
         [JsonPropertyName("nextUpMaxDays")] public int? NextUpMaxDays { get; set; }
         [JsonPropertyName("enableMultiServerLibraries")] public bool? EnableMultiServerLibraries { get; set; }
-        [JsonPropertyName("mergeRecentRowsByType")] public bool? MergeRecentRowsByType { get; set; }
         [JsonPropertyName("enableFolderView")] public bool? EnableFolderView { get; set; }
         [JsonPropertyName("useDetailedSubHeadings")] public bool? UseDetailedSubHeadings { get; set; }
         [JsonPropertyName("confirmExit")] public bool? ConfirmExit { get; set; }
@@ -93,10 +93,6 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaBarTrailerCaptions")] public bool? MediaBarTrailerCaptions { get; set; }
         [JsonPropertyName("detailScreenStyle")] public string? DetailScreenStyle { get; set; }
         [JsonPropertyName("detailExpandedTabs")] public bool? DetailExpandedTabs { get; set; }
-        [JsonPropertyName("detailButtonOrder")] public List<string>? DetailButtonOrder { get; set; }
-        [JsonPropertyName("hiddenDetailButtons")] public List<string>? HiddenDetailButtons { get; set; }
-        [JsonPropertyName("seerrRowOrder")] public List<string>? SeerrRowOrder { get; set; }
-        [JsonPropertyName("hiddenSeerrRows")] public List<string>? HiddenSeerrRows { get; set; }
         [JsonPropertyName("themeMusicLoop")] public bool? ThemeMusicLoop { get; set; }
         [JsonPropertyName("displaySinceYouWatchedRows")] public bool? DisplaySinceYouWatchedRows { get; set; }
         [JsonPropertyName("sinceYouWatchedSource")] public string? SinceYouWatchedSource { get; set; }
@@ -279,6 +275,16 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("showSeerrButton")] public bool? ShowSeerrButton { get; set; }
         [JsonPropertyName("diagnosticLoggingEnabled")] public bool? DiagnosticLoggingEnabled { get; set; }
         [JsonPropertyName("updateNotificationsEnabled")] public bool? UpdateNotificationsEnabled { get; set; }
+        [JsonPropertyName("musicPlaybackTimeDisplay")] public string? MusicPlaybackTimeDisplay { get; set; }
+        [JsonPropertyName("playbackTimeAboveLeft")] public string? PlaybackTimeAboveLeft { get; set; }
+        [JsonPropertyName("playbackTimeAboveCenter")] public string? PlaybackTimeAboveCenter { get; set; }
+        [JsonPropertyName("playbackTimeAboveRight")] public string? PlaybackTimeAboveRight { get; set; }
+        [JsonPropertyName("playbackTimeBelowLeft")] public string? PlaybackTimeBelowLeft { get; set; }
+        [JsonPropertyName("playbackTimeBelowCenter")] public string? PlaybackTimeBelowCenter { get; set; }
+        [JsonPropertyName("playbackTimeBelowRight")] public string? PlaybackTimeBelowRight { get; set; }
+        [JsonPropertyName("collectionsRowShowEpisodes")] public bool? CollectionsRowShowEpisodes { get; set; }
+        [JsonPropertyName("mergeRecentRowsByType")] public bool? MergeRecentRowsByType { get; set; }
+        [JsonPropertyName("playlistsRowShowEpisodes")] public bool? PlaylistsRowShowEpisodes { get; set; }
     }
 
     /// <summary>

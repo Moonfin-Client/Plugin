@@ -57,6 +57,24 @@ namespace Emby.Plugins.Moonfin.Api
         public string Token { get; set; } = string.Empty;
     }
 
+    // EmulatorJS sizes a ROM or BIOS before reusing its cached copy, and treats a refused HEAD
+    // as a fatal error rather than a cache miss.
+    [Route("/Moonfin/Games/{LibraryId}/Rom/{Token}", "HEAD")]
+    [Authenticated]
+    public class HeadGameRomRequest : IReturn<object>
+    {
+        public string LibraryId { get; set; } = string.Empty;
+        public string Token { get; set; } = string.Empty;
+    }
+
+    [Route("/Moonfin/Games/{LibraryId}/Bios/{Token}", "HEAD")]
+    [Authenticated]
+    public class HeadGameBiosRequest : IReturn<object>
+    {
+        public string LibraryId { get; set; } = string.Empty;
+        public string Token { get; set; } = string.Empty;
+    }
+
     [Route("/Moonfin/Games/Saves/{GameId}", "GET")]
     [Authenticated]
     public class GetGameSaveRequest : IReturn<object>
