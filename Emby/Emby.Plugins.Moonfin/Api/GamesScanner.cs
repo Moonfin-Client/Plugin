@@ -97,16 +97,58 @@ namespace Emby.Plugins.Moonfin.Api
         /// </summary>
         public static byte[]? ExtractRomFromArchive(string archivePath)
         {
-            // .zip uses the built-in ZipArchive. .7z needs SharpCompress. The shared selection and
-            // copy logic lives in PickAndCopyRom, so the two adapters only translate the entry API.
+            // .zip uses the built-in ZipArchive. .7z needs SharpCompress. Picking the entry lives
+            // in PickRom and copying it in PickAndCopyRom, so the two adapters only translate the
+            // entry API.
             return ".7z".Equals(Path.GetExtension(archivePath), StringComparison.OrdinalIgnoreCase)
                 ? ExtractRomWithSharpCompress(archivePath)
                 : ExtractRomFromZip(archivePath);
         }
 
-        // Picks the first entry with a recognized ROM extension, otherwise the largest entry, then
-        // copies it to a byte array. Entry access is via delegates so the SharpCompress types stay
-        // inside ExtractRomWithSharpCompress.
+        /// <summary>
+        /// The size the extracted ROM will have, read from the archive index rather than by
+        /// unpacking it, so answering a HEAD costs nothing. Null when the archive holds no usable
+        /// ROM or can't be read.
+        /// </summary>
+        public static long? GetExtractedRomLength(string archivePath)
+        {
+            try
+            {
+                if (".7z".Equals(Path.GetExtension(archivePath), StringComparison.OrdinalIgnoreCase))
+                {
+                    using var archive = ArchiveFactory.Open(archivePath);
+                    return PickRom(archive.Entries, e => e.IsDirectory, e => e.Key ?? string.Empty, e => e.Size)?.Size;
+                }
+
+                using var fs = File.OpenRead(archivePath);
+                using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
+                return PickRom(zip.Entries, e => string.IsNullOrEmpty(e.Name), e => e.Name, e => e.Length)?.Length;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // Picks the first entry with a recognized ROM extension, otherwise the largest entry.
+        // Entry access is via delegates so the SharpCompress types stay inside their adapter.
+        private static T? PickRom<T>(
+            IEnumerable<T> entries,
+            Func<T, bool> isDirectory,
+            Func<T, string> nameOf,
+            Func<T, long> sizeOf) where T : class
+        {
+            T? largest = null;
+            foreach (var entry in entries)
+            {
+                if (isDirectory(entry)) continue;
+                if (ExtensionToCore.ContainsKey(Path.GetExtension(nameOf(entry)))) return entry;
+                if (largest == null || sizeOf(entry) > sizeOf(largest)) largest = entry;
+            }
+
+            return largest;
+        }
+
         private static byte[]? PickAndCopyRom<T>(
             IEnumerable<T> entries,
             Func<T, bool> isDirectory,
@@ -114,16 +156,7 @@ namespace Emby.Plugins.Moonfin.Api
             Func<T, long> sizeOf,
             Func<T, Stream> openStream) where T : class
         {
-            T? romEntry = null;
-            T? largest = null;
-            foreach (var entry in entries)
-            {
-                if (isDirectory(entry)) continue;
-                if (ExtensionToCore.ContainsKey(Path.GetExtension(nameOf(entry)))) { romEntry = entry; break; }
-                if (largest == null || sizeOf(entry) > sizeOf(largest)) largest = entry;
-            }
-
-            var chosen = romEntry ?? largest;
+            var chosen = PickRom(entries, isDirectory, nameOf, sizeOf);
             if (chosen == null) return null;
 
             using var es = openStream(chosen);

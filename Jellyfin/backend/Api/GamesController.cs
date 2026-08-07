@@ -107,10 +107,13 @@ public class GamesController : ControllerBase
     }
 
     /// <summary>
-    /// Streams a ROM file. EmulatorJS fetches this via XHR; clients append the Jellyfin
+    /// Streams a ROM file. EmulatorJS fetches this via XHR, and clients append the Jellyfin
     /// access token as an <c>ApiKey</c> query parameter so the WebView request authenticates.
+    /// HEAD is answered too: EmulatorJS compares the size against its cached copy before
+    /// reusing it, and treats a refusal as a fatal error rather than a cache miss.
     /// </summary>
     [HttpGet("{libraryId}/Rom/{token}")]
+    [HttpHead("{libraryId}/Rom/{token}")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -124,7 +127,9 @@ public class GamesController : ControllerBase
         var path = _gamesService.ResolveFilePath(libraryId, token, allowBios: false);
         if (!string.IsNullOrEmpty(path) && GamesService.IsArchive(path))
         {
-            return StreamExtractedRom(path);
+            return HttpMethods.IsHead(Request.Method)
+                ? ExtractedRomSize(path)
+                : StreamExtractedRom(path);
         }
 
         return StreamFile(path);
@@ -168,8 +173,10 @@ public class GamesController : ControllerBase
         return PhysicalFile(path, "image/png");
     }
 
-    /// <summary>Streams a BIOS file required by a system's core.</summary>
+    /// <summary>Streams a BIOS file required by a system's core, HEAD included for the same
+    /// cache check EmulatorJS runs on ROMs.</summary>
     [HttpGet("{libraryId}/Bios/{token}")]
+    [HttpHead("{libraryId}/Bios/{token}")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -267,6 +274,22 @@ public class GamesController : ControllerBase
         }
 
         return File(rom, "application/octet-stream", enableRangeProcessing: true);
+    }
+
+    // Answers a HEAD from the archive index, so it never unpacks anything. The length has to
+    // match what StreamExtractedRom sends, since that is what the client compares against.
+    private IActionResult ExtractedRomSize(string path)
+    {
+        var length = GamesService.GetExtractedRomLength(path);
+        if (length == null)
+        {
+            return NotFound();
+        }
+
+        Response.ContentType = "application/octet-stream";
+        Response.ContentLength = length.Value;
+        Response.Headers.AcceptRanges = "bytes";
+        return new EmptyResult();
     }
 
     private static bool GamesEnabled()
