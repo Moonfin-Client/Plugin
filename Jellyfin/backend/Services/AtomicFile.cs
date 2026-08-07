@@ -37,6 +37,36 @@ public static class AtomicFile
             fs.Flush(flushToDisk: true);
         }
 
+        ReplaceTarget(tmp, path);
+    }
+
+    /// <summary>
+    /// Same tmp/flush/rename discipline as <see cref="WriteAllText"/>, but the calling thread is
+    /// returned to the pool while the I/O runs. Callers that write large documents while holding a
+    /// lock need this: blocking here holds their lock on a thread parked in the kernel.
+    /// </summary>
+    public static async Task WriteAllTextAsync(string path, string contents, CancellationToken cancellationToken = default)
+    {
+        var tmp = TempPath(path);
+        var bytes = Utf8NoBom.GetBytes(contents);
+
+        var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024, useAsync: true);
+        await using (fs.ConfigureAwait(false))
+        {
+            await fs.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+
+            // FlushAsync only drains the managed buffer; the crash safety this type exists for
+            // needs the real fsync, which has no async form. Push it off the calling thread so the
+            // durability guarantee costs an I/O completion rather than a parked thread.
+            await Task.Run(() => fs.Flush(flushToDisk: true), cancellationToken).ConfigureAwait(false);
+        }
+
+        await Task.Run(() => ReplaceTarget(tmp, path), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Moves an already-flushed temp file over its target, keeping the previous copy as a .bak.</summary>
+    private static void ReplaceTarget(string tmp, string path)
+    {
         if (!File.Exists(path))
         {
             File.Move(tmp, path);
