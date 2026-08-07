@@ -1084,6 +1084,16 @@
                                     <option value="extraLarge">Extra Large</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHomeImageTypeContinueWatching">Continue Watching Image Type</label>
+                                <select id="DefaultHomeImageTypeContinueWatching" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="Primary">Poster</option>
+                                    <option value="Backdrop">Backdrop</option>
+                                    <option value="Thumb">Thumbnail</option>
+                                    <option value="Banner">Banner</option>
+                                </select>
+                            </div>
                         </div>
 
                         <!-- 5. Home Sections -->
@@ -1277,6 +1287,11 @@
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
                                 </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Excluded Genres</label>
+                                <div id="DefaultGenrePicker" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                                <div class="fieldDescription">Titles in these genres never appear in the media bar.</div>
                             </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Seasonal Effects</h4>
@@ -2098,6 +2113,40 @@
                 { type: 'sonarr_calendar', label: 'Sonarr Upcoming' }
             ];
 
+            function loadAdminGenrePicker(selectedIds) {
+                var picker = document.querySelector('#DefaultGenrePicker');
+                if (!picker) return;
+                picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
+
+                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                var token = ApiClient.accessToken ? ApiClient.accessToken() : '';
+                var headers = token ? { 'Authorization': 'MediaBrowser Token="' + token + '"' } : {};
+
+                fetch(serverUrl + '/Moonfin/Genres', { method: 'GET', headers: headers })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        var genres = data.Items || data.items || [];
+                        if (genres.length === 0) {
+                            picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No genres found.</div>';
+                            return;
+                        }
+                        var html = '';
+                        for (var i = 0; i < genres.length; i++) {
+                            var g = genres[i];
+                            var gId = g.id || g.Id;
+                            var gName = g.name || g.Name;
+                            var isChecked = selectedIds.indexOf(gId) !== -1;
+                            html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
+                                '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gId) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                                '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(gName) + '</div></div></label>';
+                        }
+                        picker.innerHTML = html;
+                    })
+                    .catch(function() {
+                        picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Failed to load genres.</div>';
+                    });
+            }
+
             function loadRatingSourcesPicker(selectedIds) {
                 var container = document.querySelector('#DefaultMdblistRatingSourcesList');
                 if (!container) return;
@@ -2152,10 +2201,14 @@
                 return result.length > 0 ? result : null;
             }
 
+            // Same ids and declaration order as DetailButton in Core, so an untouched
+            // arrangement here matches what a fresh client shows.
             var DETAIL_BUTTONS = [
+                { id: 'seerrRequest', label: 'Request' },
+                { id: 'seerrRequest4k', label: 'Request 4K' },
                 { id: 'shuffle', label: 'Shuffle' },
-                { id: 'restart', label: 'Restart' },
-                { id: 'playOffline', label: 'Play Offline' },
+                { id: 'restart', label: 'Restart', canHide: false },
+                { id: 'playOffline', label: 'Play Offline', canHide: false },
                 { id: 'audio', label: 'Audio' },
                 { id: 'subtitles', label: 'Subtitles' },
                 { id: 'version', label: 'Version' },
@@ -2168,6 +2221,9 @@
                 { id: 'download', label: 'Download' },
                 { id: 'deleteFiles', label: 'Delete files' },
                 { id: 'goToSeries', label: 'Go to series' },
+                { id: 'seerrWatchlist', label: 'Watchlist' },
+                { id: 'seerrReportIssue', label: 'Report Issue' },
+                { id: 'seerrManage', label: 'Manage Requests' },
                 { id: 'admin', label: 'Admin' }
             ];
 
@@ -2182,11 +2238,21 @@
                 var ordered = [];
                 var addedSet = {};
 
+                function entryFor(btn) {
+                    var hideable = btn.canHide !== false;
+                    return {
+                        id: btn.id,
+                        label: btn.label,
+                        hideable: hideable,
+                        checked: hideable ? !hiddenSet[btn.id] : true
+                    };
+                }
+
                 if (order && Array.isArray(order) && order.length > 0) {
                     order.forEach(function(id) {
                         var btn = DETAIL_BUTTONS.find(function(b) { return b.id === id; });
                         if (btn) {
-                            ordered.push({ id: btn.id, label: btn.label, checked: !hiddenSet[btn.id] });
+                            ordered.push(entryFor(btn));
                             addedSet[btn.id] = true;
                         }
                     });
@@ -2194,7 +2260,7 @@
 
                 DETAIL_BUTTONS.forEach(function(btn) {
                     if (!addedSet[btn.id]) {
-                        ordered.push({ id: btn.id, label: btn.label, checked: !hiddenSet[btn.id] });
+                        ordered.push(entryFor(btn));
                     }
                 });
 
@@ -2205,7 +2271,9 @@
                     row.dataset.id = item.id;
                     row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;margin-bottom:2px;background:rgba(255,255,255,0.03);';
                     row.innerHTML =
-                        '<input type="checkbox"' + (item.checked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;flex-shrink:0;">'
+                        (item.hideable
+                            ? '<input type="checkbox"' + (item.checked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;flex-shrink:0;">'
+                            : '<span title="Always shown" style="width:16px;height:16px;flex-shrink:0;text-align:center;color:rgba(255,255,255,0.35);">&#x2713;</span>')
                         + '<span style="flex:1;font-size:0.9em;color:rgba(255,255,255,0.9);">' + esc(item.label) + '</span>'
                         + '<button type="button" class="detailButtonMoveBtn" data-dir="up" style="background:none;border:1px solid rgba(255,255,255,0.2);border-radius:3px;color:rgba(255,255,255,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2191;</button>'
                         + '<button type="button" class="detailButtonMoveBtn" data-dir="down" style="background:none;border:1px solid rgba(255,255,255,0.2);border-radius:3px;color:rgba(255,255,255,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2193;</button>';
@@ -2318,22 +2386,30 @@
                 }
             }
 
-            function getSeerrDiscoveryValue() {
+            // Clients carry Seerr rows as seerrRows.rowOrder, which lists the visible
+            // rows in order and treats every row it leaves out as switched off.
+            function getSeerrDiscoveryRowOrder() {
                 var items = document.querySelectorAll('#DefaultSeerrDiscoveryList .seerrDiscoveryItem');
-                var order = [];
-                var hidden = [];
+                var rowOrder = [];
                 items.forEach(function(item) {
                     var cb = item.querySelector('input[type=checkbox]');
-                    var id = item.dataset.id;
-                    order.push(id);
-                    if (cb && !cb.checked) {
-                        hidden.push(id);
+                    if (!cb || cb.checked) {
+                        rowOrder.push(item.dataset.id);
                     }
                 });
-                return {
-                    order: order.length > 0 ? order : null,
-                    hidden: hidden.length > 0 ? hidden : null
-                };
+                return rowOrder.length > 0 ? rowOrder : null;
+            }
+
+            // Turns a stored rowOrder back into the picker's order plus hidden pair.
+            function seerrRowsToPicker(seerrRows) {
+                var rowOrder = seerrRows && Array.isArray(seerrRows.rowOrder) ? seerrRows.rowOrder : null;
+                if (!rowOrder || rowOrder.length === 0) return { order: null, hidden: null };
+                var visible = {};
+                rowOrder.forEach(function(id) { visible[id] = true; });
+                var hidden = SEERR_DISCOVERY_ROWS
+                    .filter(function(row) { return !visible[row.id]; })
+                    .map(function(row) { return row.id; });
+                return { order: rowOrder, hidden: hidden.length > 0 ? hidden : null };
             }
 
             var HOME_LAYOUT_TABS = [
@@ -3373,7 +3449,10 @@
                     setNullableBoolSelect('#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
                     setSelectValue('#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
                     setNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
-                    loadDetailButtonsPicker(defaults.detailButtonOrder || null, defaults.hiddenDetailButtons || null);
+                    // One picker stands in for all three form factors.
+                    loadDetailButtonsPicker(
+                        defaults.detailButtonOrderTv || defaults.detailButtonOrderMobile || defaults.detailButtonOrderDesktop || null,
+                        defaults.hiddenDetailButtonsTv || defaults.hiddenDetailButtonsMobile || defaults.hiddenDetailButtonsDesktop || null);
                     setSelectValue('#DefaultFocusColor', defaults.focusColor, 'Configured color');
                     setSelectValue('#DefaultClockBehavior', defaults.clockBehavior, 'Configured clock');
                     setNullableBoolSelect('#DefaultUse24HourClock', defaults.use24HourClock);
@@ -3400,6 +3479,7 @@
                     setNullableBoolSelect('#DefaultShowSeerrButton', defaults.showSeerrButton);
 
                     setSelectValue('#DefaultMediaBarSourceType', defaults.mediaBarSourceType, 'Configured source');
+                    loadAdminGenrePicker(defaults.mediaBarExcludedGenres || []);
                     setSelectValue('#DefaultMediaBarMode', defaults.mediaBarMode, 'Configured mode');
                     setSelectValue('#DefaultMediaBarContentType', defaults.mediaBarContentType, 'Configured content type');
                     setSelectValue('#DefaultMediaBarItemCount', defaults.mediaBarItemCount, 'Configured item count');
@@ -3458,7 +3538,8 @@
                     setNullableBoolSelect('#DefaultMdblistShowRatingNames', defaults.mdblistShowRatingNames);
                     loadRatingSourcesPicker(defaults.mdblistRatingSources || null);
                     setNullableBoolSelect('#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
-                    loadSeerrDiscoveryPicker(defaults.seerrRowOrder || null, defaults.hiddenSeerrRows || null);
+                    var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
+                    loadSeerrDiscoveryPicker(seerrPicker.order, seerrPicker.hidden);
 
                     var sourceSelect = document.querySelector('#DefaultMediaBarSourceType');
                     var collectionPickerSection = document.querySelector('#DefaultCollectionPickerSection');
@@ -3721,9 +3802,14 @@
                         config.DefaultUserSettings.detailShowTechnicalDetails = getNullableBoolSelect('#DefaultDetailShowTechnicalDetails');
                         config.DefaultUserSettings.recommendationSystemSource = document.querySelector('#DefaultRecommendationSystemSource').value || null;
                         config.DefaultUserSettings.recommendationsApplyParentalRatingCap = getNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap');
+                        // Clients read a different key per form factor, so one arrangement covers all three.
                         var btnVal = getDetailButtonsValue();
-                        config.DefaultUserSettings.detailButtonOrder = btnVal.order;
-                        config.DefaultUserSettings.hiddenDetailButtons = btnVal.hidden;
+                        config.DefaultUserSettings.detailButtonOrderTv = btnVal.order;
+                        config.DefaultUserSettings.detailButtonOrderMobile = btnVal.order;
+                        config.DefaultUserSettings.detailButtonOrderDesktop = btnVal.order;
+                        config.DefaultUserSettings.hiddenDetailButtonsTv = btnVal.hidden;
+                        config.DefaultUserSettings.hiddenDetailButtonsMobile = btnVal.hidden;
+                        config.DefaultUserSettings.hiddenDetailButtonsDesktop = btnVal.hidden;
                         config.DefaultUserSettings.focusColor = document.querySelector('#DefaultFocusColor').value || null;
                         config.DefaultUserSettings.clockBehavior = document.querySelector('#DefaultClockBehavior').value || null;
                         config.DefaultUserSettings.use24HourClock = getNullableBoolSelect('#DefaultUse24HourClock');
@@ -3745,6 +3831,12 @@
                         config.DefaultUserSettings.showSeerrButton = getNullableBoolSelect('#DefaultShowSeerrButton');
 
                         config.DefaultUserSettings.mediaBarSourceType = document.querySelector('#DefaultMediaBarSourceType').value || null;
+                        var genreIds = [];
+                        var genreCbs = document.querySelectorAll('#DefaultGenrePicker .adminGenreCb:checked');
+                        for (var gi = 0; gi < genreCbs.length; gi++) {
+                            genreIds.push(genreCbs[gi].dataset.id);
+                        }
+                        config.DefaultUserSettings.mediaBarExcludedGenres = genreIds.length > 0 ? genreIds : null;
                         config.DefaultUserSettings.mediaBarMode = document.querySelector('#DefaultMediaBarMode').value || null;
                         config.DefaultUserSettings.mediaBarContentType = document.querySelector('#DefaultMediaBarContentType').value || null;
                         config.DefaultUserSettings.mediaBarItemCount = getNullableIntInput('#DefaultMediaBarItemCount');
@@ -3776,6 +3868,7 @@
                         config.DefaultUserSettings.classicHomeRowsPadding = getNullableIntInput('#DefaultClassicHomeRowsPadding');
                         config.DefaultUserSettings.modernHomeRowsPadding = getNullableIntInput('#DefaultModernHomeRowsPadding');
                         config.DefaultUserSettings.posterSize = document.querySelector('#DefaultPosterSize').value || null;
+                        config.DefaultUserSettings.homeImageTypeContinueWatching = document.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
                         config.DefaultUserSettings.displayFavoritesRows = getNullableBoolSelect('#DefaultDisplayFavoritesRows');
                         config.DefaultUserSettings.displayCollectionsRows = getNullableBoolSelect('#DefaultDisplayCollectionsRows');
                         config.DefaultUserSettings.displayGenresRows = getNullableBoolSelect('#DefaultDisplayGenresRows');
@@ -3814,9 +3907,10 @@
                         config.DefaultUserSettings.mdblistShowRatingNames = getNullableBoolSelect('#DefaultMdblistShowRatingNames');
                         config.DefaultUserSettings.mdblistRatingSources = getRatingSourcesValue();
                         config.DefaultUserSettings.seerrBlockNsfw = getNullableBoolSelect('#DefaultSeerrBlockNsfw');
-                        var seerrVal = getSeerrDiscoveryValue();
-                        config.DefaultUserSettings.seerrRowOrder = seerrVal.order;
-                        config.DefaultUserSettings.hiddenSeerrRows = seerrVal.hidden;
+                        // seerrRows carries more than the ordering, so merge rather than replace.
+                        var seerrRows = Object.assign({}, config.DefaultUserSettings.seerrRows || {});
+                        seerrRows.rowOrder = getSeerrDiscoveryRowOrder();
+                        config.DefaultUserSettings.seerrRows = seerrRows;
 
                         return ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);

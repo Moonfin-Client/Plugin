@@ -1299,6 +1299,16 @@
                                     <option value="extraLarge">Extra Large</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHomeImageTypeContinueWatching">Continue Watching Image Type</label>
+                                <select id="DefaultHomeImageTypeContinueWatching" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="Primary">Poster</option>
+                                    <option value="Backdrop">Backdrop</option>
+                                    <option value="Thumb">Thumbnail</option>
+                                    <option value="Banner">Banner</option>
+                                </select>
+                            </div>
                         </div>
 
                         <!-- 5. Home Sections -->
@@ -1492,6 +1502,11 @@
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
                                 </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Excluded Genres</label>
+                                <div id="DefaultGenrePicker" style="max-height:260px;overflow-y:auto;border:1px solid rgba(128,128,128,0.3);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                                <div class="fieldDescription">Titles in these genres never appear in the media bar.</div>
                             </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Seasonal Effects</h4>
