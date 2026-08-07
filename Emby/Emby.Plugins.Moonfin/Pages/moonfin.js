@@ -559,6 +559,36 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
 
 
+    function loadAdminGenrePicker(view, selectedIds) {
+        var picker = view.querySelector('#DefaultGenrePicker');
+        if (!picker) return;
+        picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">Loading...</div>';
+        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        fetch(serverUrl + '/Moonfin/Genres', { method: 'GET', headers: moonfinAuthHeaders() })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var genres = data.Items || data.items || [];
+                if (genres.length === 0) {
+                    picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">No genres found.</div>';
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < genres.length; i++) {
+                    var g = genres[i];
+                    var gId = g.id || g.Id;
+                    var gName = g.name || g.Name;
+                    var isChecked = selectedIds.indexOf(gId) !== -1;
+                    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
+                        '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gId) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                        '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(128,128,128,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(gName) + '</div></div></label>';
+                }
+                picker.innerHTML = html;
+            })
+            .catch(function () {
+                picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">Failed to load genres.</div>';
+            });
+    }
+
     function loadRatingSourcesPicker(view, selectedIds) {
         var container = view.querySelector('#DefaultMdblistRatingSourcesList');
         if (!container) return;
@@ -613,10 +643,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return result.length > 0 ? result : null;
     }
 
+    // Same ids and declaration order as DetailButton in Core, so an untouched
+    // arrangement here matches what a fresh client shows.
     var DETAIL_BUTTONS = [
+        { id: 'seerrRequest', label: 'Request' },
+        { id: 'seerrRequest4k', label: 'Request 4K' },
         { id: 'shuffle', label: 'Shuffle' },
-        { id: 'restart', label: 'Restart' },
-        { id: 'playOffline', label: 'Play Offline' },
+        { id: 'restart', label: 'Restart', canHide: false },
+        { id: 'playOffline', label: 'Play Offline', canHide: false },
         { id: 'audio', label: 'Audio' },
         { id: 'subtitles', label: 'Subtitles' },
         { id: 'version', label: 'Version' },
@@ -629,6 +663,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'download', label: 'Download' },
         { id: 'deleteFiles', label: 'Delete files' },
         { id: 'goToSeries', label: 'Go to series' },
+        { id: 'seerrWatchlist', label: 'Watchlist' },
+        { id: 'seerrReportIssue', label: 'Report Issue' },
+        { id: 'seerrManage', label: 'Manage Requests' },
         { id: 'admin', label: 'Admin' }
     ];
 
@@ -643,11 +680,21 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var ordered = [];
         var addedSet = {};
 
+        function entryFor(btn) {
+            var hideable = btn.canHide !== false;
+            return {
+                id: btn.id,
+                label: btn.label,
+                hideable: hideable,
+                checked: hideable ? !hiddenSet[btn.id] : true
+            };
+        }
+
         if (order && Array.isArray(order) && order.length > 0) {
             order.forEach(function (id) {
                 var btn = DETAIL_BUTTONS.find(function (b) { return b.id === id; });
                 if (btn) {
-                    ordered.push({ id: btn.id, label: btn.label, checked: !hiddenSet[btn.id] });
+                    ordered.push(entryFor(btn));
                     addedSet[btn.id] = true;
                 }
             });
@@ -655,7 +702,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         DETAIL_BUTTONS.forEach(function (btn) {
             if (!addedSet[btn.id]) {
-                ordered.push({ id: btn.id, label: btn.label, checked: !hiddenSet[btn.id] });
+                ordered.push(entryFor(btn));
             }
         });
 
@@ -666,7 +713,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             row.dataset.id = item.id;
             row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;margin-bottom:2px;background:rgba(128,128,128,0.03);';
             row.innerHTML =
-                '<input type="checkbox"' + (item.checked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;flex-shrink:0;">' +
+                (item.hideable
+                    ? '<input type="checkbox"' + (item.checked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;flex-shrink:0;">'
+                    : '<span title="Always shown" style="width:16px;height:16px;flex-shrink:0;text-align:center;color:rgba(128,128,128,0.35);">&#x2713;</span>') +
                 '<span style="flex:1;font-size:0.9em;color:rgba(128,128,128,0.9);">' + esc(item.label) + '</span>' +
                 '<button type="button" class="detailButtonMoveBtn" data-dir="up" style="background:none;border:1px solid rgba(128,128,128,0.2);border-radius:3px;color:rgba(128,128,128,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2191;</button>' +
                 '<button type="button" class="detailButtonMoveBtn" data-dir="down" style="background:none;border:1px solid rgba(128,128,128,0.2);border-radius:3px;color:rgba(128,128,128,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2193;</button>';
@@ -779,22 +828,30 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }
     }
 
-    function getSeerrDiscoveryValue(view) {
+    // Clients carry Seerr rows as seerrRows.rowOrder, which lists the visible rows in
+    // order and treats every row it leaves out as switched off.
+    function getSeerrDiscoveryRowOrder(view) {
         var items = view.querySelectorAll('#DefaultSeerrDiscoveryList .seerrDiscoveryItem');
-        var order = [];
-        var hidden = [];
+        var rowOrder = [];
         items.forEach(function (item) {
             var cb = item.querySelector('input[type=checkbox]');
-            var id = item.dataset.id;
-            order.push(id);
-            if (cb && !cb.checked) {
-                hidden.push(id);
+            if (!cb || cb.checked) {
+                rowOrder.push(item.dataset.id);
             }
         });
-        return {
-            order: order.length > 0 ? order : null,
-            hidden: hidden.length > 0 ? hidden : null
-        };
+        return rowOrder.length > 0 ? rowOrder : null;
+    }
+
+    // Turns a stored rowOrder back into the picker's order plus hidden pair.
+    function seerrRowsToPicker(seerrRows) {
+        var rowOrder = seerrRows && Array.isArray(seerrRows.rowOrder) ? seerrRows.rowOrder : null;
+        if (!rowOrder || rowOrder.length === 0) return { order: null, hidden: null };
+        var visible = {};
+        rowOrder.forEach(function (id) { visible[id] = true; });
+        var hidden = SEERR_DISCOVERY_ROWS
+            .filter(function (row) { return !visible[row.id]; })
+            .map(function (row) { return row.id; });
+        return { order: rowOrder, hidden: hidden.length > 0 ? hidden : null };
     }
 
     // ── Home layout builder ─────────────────────────────────────────────────
@@ -1643,7 +1700,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
             setSelectValue(view, '#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
             setNullableBoolSelect(view, '#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
-            loadDetailButtonsPicker(view, defaults.detailButtonOrder || null, defaults.hiddenDetailButtons || null);
+            // One picker stands in for all three form factors.
+            loadDetailButtonsPicker(view,
+                defaults.detailButtonOrderTv || defaults.detailButtonOrderMobile || defaults.detailButtonOrderDesktop || null,
+                defaults.hiddenDetailButtonsTv || defaults.hiddenDetailButtonsMobile || defaults.hiddenDetailButtonsDesktop || null);
             setSelectValue(view, '#DefaultFocusColor', defaults.focusColor, 'Configured color');
             setSelectValue(view, '#DefaultClockBehavior', defaults.clockBehavior, 'Configured clock');
             setNullableBoolSelect(view, '#DefaultUse24HourClock', defaults.use24HourClock);
@@ -1671,6 +1731,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultShowSeerrButton', defaults.showSeerrButton);
 
             setSelectValue(view, '#DefaultMediaBarSourceType', defaults.mediaBarSourceType, 'Configured source');
+            loadAdminGenrePicker(view, defaults.mediaBarExcludedGenres || []);
             setSelectValue(view, '#DefaultMediaBarMode', defaults.mediaBarMode, 'Configured mode');
             setSelectValue(view, '#DefaultMediaBarContentType', defaults.mediaBarContentType, 'Configured content type');
             setSelectValue(view, '#DefaultMediaBarItemCount', defaults.mediaBarItemCount, 'Configured item count');
@@ -1691,6 +1752,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             bindNullableRangeInput(view, '#DefaultModernHomeRowsPadding', 'px');
             setNullableRangeInput(view, '#DefaultModernHomeRowsPadding', defaults.modernHomeRowsPadding, 'px');
             setSelectValue(view, '#DefaultPosterSize', defaults.posterSize, 'Configured size');
+            setSelectValue(view, '#DefaultHomeImageTypeContinueWatching', defaults.homeImageTypeContinueWatching, 'Configured image type');
             setNullableBoolSelect(view, '#DefaultDisplayFavoritesRows', defaults.displayFavoritesRows);
             setNullableBoolSelect(view, '#DefaultDisplayCollectionsRows', defaults.displayCollectionsRows);
             setNullableBoolSelect(view, '#DefaultDisplayGenresRows', defaults.displayGenresRows);
@@ -1724,7 +1786,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultMdblistShowRatingBadges', defaults.mdblistShowRatingBadges);
             loadRatingSourcesPicker(view, defaults.mdblistRatingSources || null);
             setNullableBoolSelect(view, '#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
-            loadSeerrDiscoveryPicker(view, defaults.seerrRowOrder || null, defaults.hiddenSeerrRows || null);
+            var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
+            loadSeerrDiscoveryPicker(view, seerrPicker.order, seerrPicker.hidden);
 
             var sourceSelect = view.querySelector('#DefaultMediaBarSourceType');
             var collectionPickerSection = view.querySelector('#DefaultCollectionPickerSection');
@@ -1780,8 +1843,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.recommendationSystemSource = view.querySelector('#DefaultRecommendationSystemSource').value || null;
             d.recommendationsApplyParentalRatingCap = getNullableBoolSelect(view, '#DefaultRecommendationsApplyParentalRatingCap');
             var btnVal = getDetailButtonsValue(view);
-            d.detailButtonOrder = btnVal.order;
-            d.hiddenDetailButtons = btnVal.hidden;
+            // Clients read a different key per form factor, so one arrangement covers all three.
+            d.detailButtonOrderTv = btnVal.order;
+            d.detailButtonOrderMobile = btnVal.order;
+            d.detailButtonOrderDesktop = btnVal.order;
+            d.hiddenDetailButtonsTv = btnVal.hidden;
+            d.hiddenDetailButtonsMobile = btnVal.hidden;
+            d.hiddenDetailButtonsDesktop = btnVal.hidden;
             d.focusColor = view.querySelector('#DefaultFocusColor').value || null;
             d.clockBehavior = view.querySelector('#DefaultClockBehavior').value || null;
             d.use24HourClock = getNullableBoolSelect(view, '#DefaultUse24HourClock');
@@ -1805,6 +1873,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.showSeerrButton = getNullableBoolSelect(view, '#DefaultShowSeerrButton');
 
             d.mediaBarSourceType = view.querySelector('#DefaultMediaBarSourceType').value || null;
+            var genreIds = Array.prototype.slice.call(view.querySelectorAll('.adminGenreCb:checked')).map(function (cb) { return cb.dataset.id; });
+            d.mediaBarExcludedGenres = genreIds.length > 0 ? genreIds : null;
             d.mediaBarMode = view.querySelector('#DefaultMediaBarMode').value || null;
             d.mediaBarContentType = view.querySelector('#DefaultMediaBarContentType').value || null;
             d.mediaBarItemCount = getNullableIntInput(view, '#DefaultMediaBarItemCount');
@@ -1828,6 +1898,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.classicHomeRowsPadding = getNullableIntInput(view, '#DefaultClassicHomeRowsPadding');
             d.modernHomeRowsPadding = getNullableIntInput(view, '#DefaultModernHomeRowsPadding');
             d.posterSize = view.querySelector('#DefaultPosterSize').value || null;
+            d.homeImageTypeContinueWatching = view.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
             d.displayFavoritesRows = getNullableBoolSelect(view, '#DefaultDisplayFavoritesRows');
             d.displayCollectionsRows = getNullableBoolSelect(view, '#DefaultDisplayCollectionsRows');
             d.displayGenresRows = getNullableBoolSelect(view, '#DefaultDisplayGenresRows');
@@ -1867,9 +1938,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.mdblistShowRatingBadges = getNullableBoolSelect(view, '#DefaultMdblistShowRatingBadges');
             d.mdblistRatingSources = getRatingSourcesValue(view);
             d.seerrBlockNsfw = getNullableBoolSelect(view, '#DefaultSeerrBlockNsfw');
-            var seerrVal = getSeerrDiscoveryValue(view);
-            d.seerrRowOrder = seerrVal.order;
-            d.hiddenSeerrRows = seerrVal.hidden;
+            // seerrRows carries more than the ordering, so merge rather than replace.
+            var seerrRows = Object.assign({}, d.seerrRows || {});
+            seerrRows.rowOrder = getSeerrDiscoveryRowOrder(view);
+            d.seerrRows = seerrRows;
 
             config.DefaultUserSettings = d;
 

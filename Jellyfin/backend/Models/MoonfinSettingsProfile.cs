@@ -104,18 +104,6 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("cardFocusExpansion")]
     public bool? CardFocusExpansion { get; set; }
 
-    [JsonPropertyName("detailButtonOrder")]
-    public List<string>? DetailButtonOrder { get; set; }
-
-    [JsonPropertyName("hiddenDetailButtons")]
-    public List<string>? HiddenDetailButtons { get; set; }
-
-    [JsonPropertyName("seerrRowOrder")]
-    public List<string>? SeerrRowOrder { get; set; }
-
-    [JsonPropertyName("hiddenSeerrRows")]
-    public List<string>? HiddenSeerrRows { get; set; }
-
     [JsonPropertyName("showShuffleButton")]
     public bool? ShowShuffleButton { get; set; }
 
@@ -145,9 +133,6 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("enableMultiServerLibraries")]
     public bool? EnableMultiServerLibraries { get; set; }
-
-    [JsonPropertyName("mergeRecentRowsByType")]
-    public bool? MergeRecentRowsByType { get; set; }
 
     [JsonPropertyName("enableFolderView")]
     public bool? EnableFolderView { get; set; }
