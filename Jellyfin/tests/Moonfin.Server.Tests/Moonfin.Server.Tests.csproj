@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!--
+      Moonfin.Server references Jellyfin.Controller with ExcludeAssets=runtime/PrivateAssets=all
+      (host-provided by Jellyfin at runtime, deliberately not shipped with the plugin), so
+      ILibraryManager and friends don't flow transitively via the ProjectReference below.
+      GamesServiceTests needs an actual ILibraryManager (plus the VirtualFolderInfo/User/enum
+      types its members reference) loadable at test-run time for FakeLibraryManager, so this test
+      project takes its own ordinary PackageReference (runtime assets included, matching the
+      version the backend project restores against).
+    -->
+    <PackageReference Include="Jellyfin.Controller" Version="10.10.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\backend\Moonfin.Server.csproj" />
+  </ItemGroup>
+
+</Project>
