@@ -1,9 +1,8 @@
-using System.IO.Compression;
-using System.Net.Http;
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Moonfin.Server.Services;
 
 namespace Moonfin.Server.Api;
 
@@ -16,8 +15,7 @@ namespace Moonfin.Server.Api;
 [Route("Moonfin/EmulatorJS")]
 public class EmulatorController : ControllerBase
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly Assembly _assembly;
+    private static readonly Assembly Assembly = typeof(EmulatorController).Assembly;
 
     private static readonly IReadOnlyDictionary<string, string> ContentTypes =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -39,11 +37,9 @@ public class EmulatorController : ControllerBase
             [".woff2"] = "font/woff2",
         };
 
-    public EmulatorController(IHttpClientFactory httpClientFactory)
-    {
-        _httpClientFactory = httpClientFactory;
-        _assembly = typeof(EmulatorController).Assembly;
-    }
+    /// <summary>Cores whose WASM build needs SharedArrayBuffer, i.e. a cross-origin isolated document.</summary>
+    private static readonly HashSet<string> ThreadRequiredCores =
+        new(StringComparer.Ordinal) { "psp" };
 
     /// <summary>
     /// Serves the Moonfin EmulatorJS player shell (embedded resource). Anonymous: the shell
@@ -56,7 +52,7 @@ public class EmulatorController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult GetPlayer()
     {
-        using var stream = _assembly.GetManifestResourceStream("Moonfin.Server.EmulatorJS.player.html");
+        using var stream = Assembly.GetManifestResourceStream("Moonfin.Server.EmulatorJS.player.html");
         if (stream == null)
         {
             return NotFound(new { Error = "player.html not found" });
@@ -79,8 +75,25 @@ public class EmulatorController : ControllerBase
         return Content(html, "text/html; charset=utf-8");
     }
 
-    private static readonly HashSet<string> ThreadRequiredCores =
-        new(StringComparer.Ordinal) { "psp" };
+    /// <summary>
+    /// Serves the Moonfin host/controller bridge used by the anonymous player shell.
+    /// </summary>
+    [HttpGet("moonfin-bridge.js")]
+    [AllowAnonymous]
+    [Produces("application/javascript")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetMoonfinBridge()
+    {
+        using var stream = Assembly.GetManifestResourceStream("Moonfin.Server.EmulatorJS.moonfin-bridge.js");
+        if (stream == null)
+        {
+            return NotFound(new { Error = "moonfin-bridge.js not found" });
+        }
+
+        using var reader = new StreamReader(stream);
+        return Content(reader.ReadToEnd(), "application/javascript");
+    }
 
     /// <summary>
     /// Resolves where EmulatorJS should load its runtime + cores from. Order: an admin
@@ -96,12 +109,17 @@ public class EmulatorController : ControllerBase
         }
 
         var dataRoot = GetDataRoot();
-        if (!string.IsNullOrEmpty(dataRoot) && System.IO.File.Exists(Path.Combine(dataRoot, "loader.js")))
+        if (CoresService.IsDataInstalled(dataRoot))
         {
             // Relative to /Moonfin/EmulatorJS/player.html -> /Moonfin/EmulatorJS/data/.
             return "./data/";
         }
 
+        // Tracks EmulatorJS's "stable" channel rather than a fixed release tag, so this URL can
+        // silently change out from under player.html's internals-reaching navigation adapter.
+        // See CoresService.ExpectedEmulatorJsVersion for what version that code was last
+        // verified against; moonfinAssertEmulatorContract in player.html is the runtime guard
+        // against drift here.
         return "https://cdn.emulatorjs.org/stable/data/";
     }
 
@@ -119,11 +137,15 @@ public class EmulatorController : ControllerBase
         var dataRoot = GetDataRoot();
         if (string.IsNullOrEmpty(dataRoot) || !Directory.Exists(dataRoot))
         {
+            // This endpoint is [AllowAnonymous] (the player shell fetches it with no auth
+            // header), so the 404 body must not disclose server filesystem layout - the absolute
+            // ExpectedPath previously returned here reveals the plugin data folder and, on
+            // Windows, the OS account name embedded in it (e.g. C:\Users\<name>\AppData\...).
+            // The hint stays; only the concrete path is removed.
             return NotFound(new
             {
                 Error = "Self-hosted EmulatorJS data folder not installed.",
-                ExpectedPath = dataRoot,
-                Hint = "Optional: drop the EmulatorJS data/ folder there for offline use. Otherwise the CDN is used automatically."
+                Hint = "Optional: install the EmulatorJS data/ folder in the plugin's data directory for offline use. Otherwise the CDN is used automatically."
             });
         }
 
