@@ -910,6 +910,7 @@
                             <button type="button" class="defaultsSubtabBtn" data-subtab="home-screen">Home Screen</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="home-sections">Home Sections</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="libraries">Libraries</button>
+                            <button type="button" class="defaultsSubtabBtn" data-subtab="playback">Playback</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="extras">Extras</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="integrations">Integrations</button>
                         </div>
@@ -1385,7 +1386,143 @@
                             </div>
                         </div>
 
-                        <!-- 7. Extras -->
+                        <!-- 7. Playback -->
+                        <div class="defaultsSubtabPanel" data-subtab="playback">
+                            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Video Playback</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultResumeSubtractDuration">Resume Rewind</label>
+                                <select id="DefaultResumeSubtractDuration" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">Disabled</option>
+                                    <option value="5">5 seconds</option>
+                                    <option value="10">10 seconds</option>
+                                    <option value="15">15 seconds</option>
+                                    <option value="30">30 seconds</option>
+                                </select>
+                                <div class="fieldDescription">Automatically rewinds slightly when resuming an in-progress video.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultUnpauseRewindDuration">Unpause Rewind</label>
+                                <select id="DefaultUnpauseRewindDuration" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">Disabled</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
+                                </select>
+                                <div class="fieldDescription">Rewinds slightly when unpausing playback.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSkipBackLength">Skip Back Length</label>
+                                <select id="DefaultSkipBackLength" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSkipForwardLength">Skip Forward Length</label>
+                                <select id="DefaultSkipForwardLength" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Audio Playback</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultAudioLanguage">Default Audio Language</label>
+                                <select id="DefaultDefaultAudioLanguage" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferDefaultAudioTrack">Prefer Default Audio Track</label>
+                                <select id="DefaultPreferDefaultAudioTrack" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferAudioDescription">Prefer Audio Description</label>
+                                <select id="DefaultPreferAudioDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Subtitle Preferences</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitleMode">Subtitle Mode</label>
+                                <select id="DefaultSubtitleMode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="flagged">Flagged</option>
+                                    <option value="always">Always</option>
+                                    <option value="foreign">Foreign</option>
+                                    <option value="forced">Forced</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultSubtitleLanguage">Default Subtitle Language</label>
+                                <select id="DefaultDefaultSubtitleLanguage" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferSdhSubtitles">Prefer SDH Subtitles</label>
+                                <select id="DefaultPreferSdhSubtitles" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Automation &amp; Queue</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeEnabled">Cinema Mode</label>
+                                <select id="DefaultCinemaModeEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAutoplayNextEpisode">Autoplay Next Episode</label>
+                                <select id="DefaultAutoplayNextEpisode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpTimeout">Next Up Timeout</label>
+                                <select id="DefaultNextUpTimeout" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="7000">7 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStillWatchingBehavior">Still Watching Prompt</label>
+                                <select id="DefaultStillWatchingBehavior" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="disabled">Off</option>
+                                    <option value="short_">After 2 episodes</option>
+                                    <option value="medium">After 3 episodes</option>
+                                    <option value="long_">After 5 episodes</option>
+                                    <option value="veryLong">After 8 episodes</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 8. Extras -->
                         <div class="defaultsSubtabPanel" data-subtab="extras">
                             <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Media Bar</h4>
                             <div class="inputContainer">

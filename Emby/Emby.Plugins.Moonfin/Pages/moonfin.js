@@ -643,6 +643,35 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return result.length > 0 ? result : null;
     }
 
+    // ISO 639-2 codes, matching the table Core resolves track languages against.
+    // The audio and subtitle pickers share the list so the two stay in sync.
+    var LANGUAGE_OPTIONS = [
+        ['auto', 'Server Default'], ['eng', 'English'], ['spa', 'Spanish'],
+        ['fra', 'French'], ['deu', 'German'], ['ita', 'Italian'],
+        ['jpn', 'Japanese'], ['kor', 'Korean'], ['zho', 'Chinese'],
+        ['rus', 'Russian'], ['por', 'Portuguese'], ['ara', 'Arabic'],
+        ['hin', 'Hindi'], ['nld', 'Dutch'], ['pol', 'Polish'],
+        ['swe', 'Swedish'], ['nor', 'Norwegian'], ['dan', 'Danish'],
+        ['fin', 'Finnish'], ['tha', 'Thai'], ['tur', 'Turkish'],
+        ['heb', 'Hebrew'], ['ces', 'Czech'], ['ell', 'Greek'],
+        ['ron', 'Romanian'], ['hun', 'Hungarian'], ['ukr', 'Ukrainian'],
+        ['ind', 'Indonesian'], ['vie', 'Vietnamese']
+    ];
+
+    function fillLanguageSelect(view, selector) {
+        var select = view.querySelector(selector);
+        if (!select || select.dataset.filled) return;
+        select.dataset.filled = 'true';
+        var html = '<option value="">Not set (user decides)</option>';
+        for (var i = 0; i < LANGUAGE_OPTIONS.length; i++) {
+            var code = LANGUAGE_OPTIONS[i][0];
+            var label = LANGUAGE_OPTIONS[i][1];
+            html += '<option value="' + esc(code) + '">'
+                + esc(code === 'auto' ? label : label + ' (' + code + ')') + '</option>';
+        }
+        select.innerHTML = html;
+    }
+
     // Same ids and declaration order as DetailButton in Core, so an untouched
     // arrangement here matches what a fresh client shows.
     var DETAIL_BUTTONS = [
@@ -1744,6 +1773,26 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
             setSelectValue(view, '#DefaultSeasonalSurprise', defaults.seasonalSurprise, 'Configured surprise');
 
+            setSelectValue(view, '#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
+            setSelectValue(view, '#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
+            setSelectValue(view, '#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
+            setSelectValue(view, '#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
+
+            fillLanguageSelect(view, '#DefaultDefaultAudioLanguage');
+            fillLanguageSelect(view, '#DefaultDefaultSubtitleLanguage');
+            setSelectValue(view, '#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
+            setNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
+            setNullableBoolSelect(view, '#DefaultPreferAudioDescription', defaults.preferAudioDescription);
+
+            setSelectValue(view, '#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
+            setSelectValue(view, '#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
+            setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
+
+            setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+            setNullableBoolSelect(view, '#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
+            setSelectValue(view, '#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
+            setSelectValue(view, '#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
+
             setSelectValue(view, '#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
             setNullableBoolSelect(view, '#DefaultFullScreenRows', defaults.fullScreenRows);
             setNullableBoolSelect(view, '#DefaultHomeRowInfoOverlay', defaults.homeRowInfoOverlay);
@@ -1886,6 +1935,25 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.episodePreviewEnabled = getNullableBoolSelect(view, '#DefaultEpisodePreviewEnabled');
             d.previewAudioEnabled = getNullableBoolSelect(view, '#DefaultPreviewAudioEnabled');
             d.seasonalSurprise = view.querySelector('#DefaultSeasonalSurprise').value || null;
+
+            // Clients store this one as text, unlike the millisecond fields below.
+            d.resumeSubtractDuration = view.querySelector('#DefaultResumeSubtractDuration').value || null;
+            d.unpauseRewindDuration = getNullableIntInput(view, '#DefaultUnpauseRewindDuration');
+            d.skipBackLength = getNullableIntInput(view, '#DefaultSkipBackLength');
+            d.skipForwardLength = getNullableIntInput(view, '#DefaultSkipForwardLength');
+
+            d.defaultAudioLanguage = view.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
+            d.preferDefaultAudioTrack = getNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack');
+            d.preferAudioDescription = getNullableBoolSelect(view, '#DefaultPreferAudioDescription');
+
+            d.subtitleMode = view.querySelector('#DefaultSubtitleMode').value || null;
+            d.defaultSubtitleLanguage = view.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
+            d.preferSdhSubtitles = getNullableBoolSelect(view, '#DefaultPreferSdhSubtitles');
+
+            d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
+            d.autoplayNextEpisode = getNullableBoolSelect(view, '#DefaultAutoplayNextEpisode');
+            d.nextUpTimeout = getNullableIntInput(view, '#DefaultNextUpTimeout');
+            d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;
 
             var collectionIds = Array.prototype.slice.call(view.querySelectorAll('.adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
             d.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;

@@ -717,6 +717,7 @@
                             <button type="button" class="defaultsSubtabBtn" data-subtab="home-screen">Home Screen</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="home-sections">Home Sections</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="libraries">Libraries</button>
+                            <button type="button" class="defaultsSubtabBtn" data-subtab="playback">Playback</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="extras">Extras</button>
                             <button type="button" class="defaultsSubtabBtn" data-subtab="integrations">Integrations</button>
                         </div>
@@ -1170,7 +1171,143 @@
                             </div>
                         </div>
 
-                        <!-- 7. Extras -->
+                        <!-- 7. Playback -->
+                        <div class="defaultsSubtabPanel" data-subtab="playback">
+                            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Video Playback</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultResumeSubtractDuration">Resume Rewind</label>
+                                <select id="DefaultResumeSubtractDuration" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">Disabled</option>
+                                    <option value="5">5 seconds</option>
+                                    <option value="10">10 seconds</option>
+                                    <option value="15">15 seconds</option>
+                                    <option value="30">30 seconds</option>
+                                </select>
+                                <div class="fieldDescription">Automatically rewinds slightly when resuming an in-progress video.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultUnpauseRewindDuration">Unpause Rewind</label>
+                                <select id="DefaultUnpauseRewindDuration" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">Disabled</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
+                                </select>
+                                <div class="fieldDescription">Rewinds slightly when unpausing playback.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSkipBackLength">Skip Back Length</label>
+                                <select id="DefaultSkipBackLength" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSkipForwardLength">Skip Forward Length</label>
+                                <select id="DefaultSkipForwardLength" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Audio Playback</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultAudioLanguage">Default Audio Language</label>
+                                <select id="DefaultDefaultAudioLanguage" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferDefaultAudioTrack">Prefer Default Audio Track</label>
+                                <select id="DefaultPreferDefaultAudioTrack" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferAudioDescription">Prefer Audio Description</label>
+                                <select id="DefaultPreferAudioDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Subtitle Preferences</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitleMode">Subtitle Mode</label>
+                                <select id="DefaultSubtitleMode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="flagged">Flagged</option>
+                                    <option value="always">Always</option>
+                                    <option value="foreign">Foreign</option>
+                                    <option value="forced">Forced</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultSubtitleLanguage">Default Subtitle Language</label>
+                                <select id="DefaultDefaultSubtitleLanguage" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferSdhSubtitles">Prefer SDH Subtitles</label>
+                                <select id="DefaultPreferSdhSubtitles" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Automation &amp; Queue</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeEnabled">Cinema Mode</label>
+                                <select id="DefaultCinemaModeEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAutoplayNextEpisode">Autoplay Next Episode</label>
+                                <select id="DefaultAutoplayNextEpisode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpTimeout">Next Up Timeout</label>
+                                <select id="DefaultNextUpTimeout" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="7000">7 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStillWatchingBehavior">Still Watching Prompt</label>
+                                <select id="DefaultStillWatchingBehavior" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="disabled">Off</option>
+                                    <option value="short_">After 2 episodes</option>
+                                    <option value="medium">After 3 episodes</option>
+                                    <option value="long_">After 5 episodes</option>
+                                    <option value="veryLong">After 8 episodes</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 8. Extras -->
                         <div class="defaultsSubtabPanel" data-subtab="extras">
                             <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Media Bar</h4>
                             <div class="inputContainer">
@@ -2199,6 +2336,35 @@
                     if (cb && cb.checked) { result.push(item.dataset.id); }
                 });
                 return result.length > 0 ? result : null;
+            }
+
+            // ISO 639-2 codes, matching the table Core resolves track languages against.
+            // The audio and subtitle pickers share the list so the two stay in sync.
+            var LANGUAGE_OPTIONS = [
+                ['auto', 'Server Default'], ['eng', 'English'], ['spa', 'Spanish'],
+                ['fra', 'French'], ['deu', 'German'], ['ita', 'Italian'],
+                ['jpn', 'Japanese'], ['kor', 'Korean'], ['zho', 'Chinese'],
+                ['rus', 'Russian'], ['por', 'Portuguese'], ['ara', 'Arabic'],
+                ['hin', 'Hindi'], ['nld', 'Dutch'], ['pol', 'Polish'],
+                ['swe', 'Swedish'], ['nor', 'Norwegian'], ['dan', 'Danish'],
+                ['fin', 'Finnish'], ['tha', 'Thai'], ['tur', 'Turkish'],
+                ['heb', 'Hebrew'], ['ces', 'Czech'], ['ell', 'Greek'],
+                ['ron', 'Romanian'], ['hun', 'Hungarian'], ['ukr', 'Ukrainian'],
+                ['ind', 'Indonesian'], ['vie', 'Vietnamese']
+            ];
+
+            function fillLanguageSelect(selector) {
+                var select = document.querySelector(selector);
+                if (!select || select.dataset.filled) return;
+                select.dataset.filled = 'true';
+                var html = '<option value="">Not set (user decides)</option>';
+                for (var i = 0; i < LANGUAGE_OPTIONS.length; i++) {
+                    var code = LANGUAGE_OPTIONS[i][0];
+                    var label = LANGUAGE_OPTIONS[i][1];
+                    html += '<option value="' + esc(code) + '">'
+                        + esc(code === 'auto' ? label : label + ' (' + code + ')') + '</option>';
+                }
+                select.innerHTML = html;
             }
 
             // Same ids and declaration order as DetailButton in Core, so an untouched
@@ -3532,6 +3698,26 @@
                     setNullableBoolSelect('#DefaultEpisodePreviewEnabled', defaults.episodePreviewEnabled);
                     setNullableBoolSelect('#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
 
+                    setSelectValue('#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
+                    setSelectValue('#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
+                    setSelectValue('#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
+                    setSelectValue('#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
+
+                    fillLanguageSelect('#DefaultDefaultAudioLanguage');
+                    fillLanguageSelect('#DefaultDefaultSubtitleLanguage');
+                    setSelectValue('#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
+                    setNullableBoolSelect('#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
+                    setNullableBoolSelect('#DefaultPreferAudioDescription', defaults.preferAudioDescription);
+
+                    setSelectValue('#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
+                    setSelectValue('#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
+                    setNullableBoolSelect('#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
+
+                    setNullableBoolSelect('#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+                    setNullableBoolSelect('#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
+                    setSelectValue('#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
+                    setSelectValue('#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
+
                     setCheckbox('#DefaultMdblistEnabled', defaults.mdblistEnabled);
                     setCheckbox('#DefaultTmdbEpisodeRatingsEnabled', defaults.tmdbEpisodeRatingsEnabled);
                     setNullableBoolSelect('#DefaultMdblistShowRatingBadges', defaults.mdblistShowRatingBadges);
@@ -3847,6 +4033,25 @@
                         config.DefaultUserSettings.episodePreviewEnabled = getNullableBoolSelect('#DefaultEpisodePreviewEnabled');
                         config.DefaultUserSettings.previewAudioEnabled = getNullableBoolSelect('#DefaultPreviewAudioEnabled');
                         config.DefaultUserSettings.seasonalSurprise = document.querySelector('#DefaultSeasonalSurprise').value || null;
+
+                        // Clients store this one as text, unlike the millisecond fields below.
+                        config.DefaultUserSettings.resumeSubtractDuration = document.querySelector('#DefaultResumeSubtractDuration').value || null;
+                        config.DefaultUserSettings.unpauseRewindDuration = getNullableIntInput('#DefaultUnpauseRewindDuration');
+                        config.DefaultUserSettings.skipBackLength = getNullableIntInput('#DefaultSkipBackLength');
+                        config.DefaultUserSettings.skipForwardLength = getNullableIntInput('#DefaultSkipForwardLength');
+
+                        config.DefaultUserSettings.defaultAudioLanguage = document.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
+                        config.DefaultUserSettings.preferDefaultAudioTrack = getNullableBoolSelect('#DefaultPreferDefaultAudioTrack');
+                        config.DefaultUserSettings.preferAudioDescription = getNullableBoolSelect('#DefaultPreferAudioDescription');
+
+                        config.DefaultUserSettings.subtitleMode = document.querySelector('#DefaultSubtitleMode').value || null;
+                        config.DefaultUserSettings.defaultSubtitleLanguage = document.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
+                        config.DefaultUserSettings.preferSdhSubtitles = getNullableBoolSelect('#DefaultPreferSdhSubtitles');
+
+                        config.DefaultUserSettings.cinemaModeEnabled = getNullableBoolSelect('#DefaultCinemaModeEnabled');
+                        config.DefaultUserSettings.autoplayNextEpisode = getNullableBoolSelect('#DefaultAutoplayNextEpisode');
+                        config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
+                        config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;
 
                         var collectionCbs = document.querySelectorAll('.adminCollectionCb:checked');
                         var collectionIds = [];
