@@ -1191,10 +1191,10 @@
                                 <select id="DefaultUnpauseRewindDuration" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="0">Disabled</option>
-                                    <option value="5">5 seconds</option>
-                                    <option value="10">10 seconds</option>
-                                    <option value="15">15 seconds</option>
-                                    <option value="30">30 seconds</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
                                 </select>
                                 <div class="fieldDescription">Rewinds slightly when unpausing playback.</div>
                             </div>
@@ -1202,58 +1202,27 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSkipBackLength">Skip Back Length</label>
                                 <select id="DefaultSkipBackLength" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="5">5 seconds</option>
-                                    <option value="10">10 seconds</option>
-                                    <option value="15">15 seconds</option>
-                                    <option value="30">30 seconds</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSkipForwardLength">Skip Forward Length</label>
                                 <select id="DefaultSkipForwardLength" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="5">5 seconds</option>
-                                    <option value="10">10 seconds</option>
-                                    <option value="15">15 seconds</option>
-                                    <option value="30">30 seconds</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
                                 </select>
                             </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Audio Playback</h4>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultAudioLanguage">Default Audio Language</label>
-                                <select id="DefaultDefaultAudioLanguage" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="auto">Server Default</option>
-                                    <option value="eng">English (eng)</option>
-                                    <option value="spa">Spanish (spa)</option>
-                                    <option value="fra">French (fra)</option>
-                                    <option value="deu">German (deu)</option>
-                                    <option value="ita">Italian (ita)</option>
-                                    <option value="jpn">Japanese (jpn)</option>
-                                    <option value="kor">Korean (kor)</option>
-                                    <option value="zho">Chinese (zho)</option>
-                                    <option value="rus">Russian (rus)</option>
-                                    <option value="por">Portuguese (por)</option>
-                                    <option value="ara">Arabic (ara)</option>
-                                    <option value="hin">Hindi (hin)</option>
-                                    <option value="nld">Dutch (nld)</option>
-                                    <option value="pol">Polish (pol)</option>
-                                    <option value="swe">Swedish (swe)</option>
-                                    <option value="nor">Norwegian (nor)</option>
-                                    <option value="dan">Danish (dan)</option>
-                                    <option value="fin">Finnish (fin)</option>
-                                    <option value="tha">Thai (tha)</option>
-                                    <option value="tur">Turkish (tur)</option>
-                                    <option value="heb">Hebrew (heb)</option>
-                                    <option value="ces">Czech (ces)</option>
-                                    <option value="ell">Greek (ell)</option>
-                                    <option value="ron">Romanian (ron)</option>
-                                    <option value="hun">Hungarian (hun)</option>
-                                    <option value="ukr">Ukrainian (ukr)</option>
-                                    <option value="ind">Indonesian (ind)</option>
-                                    <option value="vie">Vietnamese (vie)</option>
-                                </select>
+                                <select id="DefaultDefaultAudioLanguage" is="emby-select"></select>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPreferDefaultAudioTrack">Prefer Default Audio Track</label>
@@ -1277,46 +1246,16 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSubtitleMode">Subtitle Mode</label>
                                 <select id="DefaultSubtitleMode" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="default">Default</option>
+                                    <option value="flagged">Flagged</option>
                                     <option value="always">Always</option>
-                                    <option value="onlyforced">Only Forced</option>
+                                    <option value="foreign">Foreign</option>
+                                    <option value="forced">Forced</option>
                                     <option value="none">None</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDefaultSubtitleLanguage">Default Subtitle Language</label>
-                                <select id="DefaultDefaultSubtitleLanguage" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="auto">Server Default</option>
-                                    <option value="eng">English (eng)</option>
-                                    <option value="spa">Spanish (spa)</option>
-                                    <option value="fra">French (fra)</option>
-                                    <option value="deu">German (deu)</option>
-                                    <option value="ita">Italian (ita)</option>
-                                    <option value="jpn">Japanese (jpn)</option>
-                                    <option value="kor">Korean (kor)</option>
-                                    <option value="zho">Chinese (zho)</option>
-                                    <option value="rus">Russian (rus)</option>
-                                    <option value="por">Portuguese (por)</option>
-                                    <option value="ara">Arabic (ara)</option>
-                                    <option value="hin">Hindi (hin)</option>
-                                    <option value="nld">Dutch (nld)</option>
-                                    <option value="pol">Polish (pol)</option>
-                                    <option value="swe">Swedish (swe)</option>
-                                    <option value="nor">Norwegian (nor)</option>
-                                    <option value="dan">Danish (dan)</option>
-                                    <option value="fin">Finnish (fin)</option>
-                                    <option value="tha">Thai (tha)</option>
-                                    <option value="tur">Turkish (tur)</option>
-                                    <option value="heb">Hebrew (heb)</option>
-                                    <option value="ces">Czech (ces)</option>
-                                    <option value="ell">Greek (ell)</option>
-                                    <option value="ron">Romanian (ron)</option>
-                                    <option value="hun">Hungarian (hun)</option>
-                                    <option value="ukr">Ukrainian (ukr)</option>
-                                    <option value="ind">Indonesian (ind)</option>
-                                    <option value="vie">Vietnamese (vie)</option>
-                                </select>
+                                <select id="DefaultDefaultSubtitleLanguage" is="emby-select"></select>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPreferSdhSubtitles">Prefer SDH Subtitles</label>
@@ -1337,15 +1276,6 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultIntroAction">Skip Intros and Outros</label>
-                                <select id="DefaultIntroAction" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="ask">Prompt</option>
-                                    <option value="skip">Auto-skip</option>
-                                    <option value="disabled">Off</option>
-                                </select>
-                            </div>
-                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultAutoplayNextEpisode">Autoplay Next Episode</label>
                                 <select id="DefaultAutoplayNextEpisode" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -1357,11 +1287,11 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpTimeout">Next Up Timeout</label>
                                 <select id="DefaultNextUpTimeout" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="5">5 seconds</option>
-                                    <option value="7">7 seconds</option>
-                                    <option value="10">10 seconds</option>
-                                    <option value="15">15 seconds</option>
-                                    <option value="30">30 seconds</option>
+                                    <option value="5000">5 seconds</option>
+                                    <option value="7000">7 seconds</option>
+                                    <option value="10000">10 seconds</option>
+                                    <option value="15000">15 seconds</option>
+                                    <option value="30000">30 seconds</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1369,9 +1299,10 @@
                                 <select id="DefaultStillWatchingBehavior" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="disabled">Off</option>
-                                    <option value="short">After 2 episodes</option>
+                                    <option value="short_">After 2 episodes</option>
                                     <option value="medium">After 3 episodes</option>
-                                    <option value="long">After 4 episodes</option>
+                                    <option value="long_">After 5 episodes</option>
+                                    <option value="veryLong">After 8 episodes</option>
                                 </select>
                             </div>
                         </div>
@@ -2405,6 +2336,35 @@
                     if (cb && cb.checked) { result.push(item.dataset.id); }
                 });
                 return result.length > 0 ? result : null;
+            }
+
+            // ISO 639-2 codes, matching the table Core resolves track languages against.
+            // The audio and subtitle pickers share the list so the two stay in sync.
+            var LANGUAGE_OPTIONS = [
+                ['auto', 'Server Default'], ['eng', 'English'], ['spa', 'Spanish'],
+                ['fra', 'French'], ['deu', 'German'], ['ita', 'Italian'],
+                ['jpn', 'Japanese'], ['kor', 'Korean'], ['zho', 'Chinese'],
+                ['rus', 'Russian'], ['por', 'Portuguese'], ['ara', 'Arabic'],
+                ['hin', 'Hindi'], ['nld', 'Dutch'], ['pol', 'Polish'],
+                ['swe', 'Swedish'], ['nor', 'Norwegian'], ['dan', 'Danish'],
+                ['fin', 'Finnish'], ['tha', 'Thai'], ['tur', 'Turkish'],
+                ['heb', 'Hebrew'], ['ces', 'Czech'], ['ell', 'Greek'],
+                ['ron', 'Romanian'], ['hun', 'Hungarian'], ['ukr', 'Ukrainian'],
+                ['ind', 'Indonesian'], ['vie', 'Vietnamese']
+            ];
+
+            function fillLanguageSelect(selector) {
+                var select = document.querySelector(selector);
+                if (!select || select.dataset.filled) return;
+                select.dataset.filled = 'true';
+                var html = '<option value="">Not set (user decides)</option>';
+                for (var i = 0; i < LANGUAGE_OPTIONS.length; i++) {
+                    var code = LANGUAGE_OPTIONS[i][0];
+                    var label = LANGUAGE_OPTIONS[i][1];
+                    html += '<option value="' + esc(code) + '">'
+                        + esc(code === 'auto' ? label : label + ' (' + code + ')') + '</option>';
+                }
+                select.innerHTML = html;
             }
 
             // Same ids and declaration order as DetailButton in Core, so an untouched
@@ -3738,12 +3698,13 @@
                     setNullableBoolSelect('#DefaultEpisodePreviewEnabled', defaults.episodePreviewEnabled);
                     setNullableBoolSelect('#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
 
-                    // Playback
                     setSelectValue('#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
                     setSelectValue('#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
                     setSelectValue('#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
                     setSelectValue('#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
 
+                    fillLanguageSelect('#DefaultDefaultAudioLanguage');
+                    fillLanguageSelect('#DefaultDefaultSubtitleLanguage');
                     setSelectValue('#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
                     setNullableBoolSelect('#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
                     setNullableBoolSelect('#DefaultPreferAudioDescription', defaults.preferAudioDescription);
@@ -3753,7 +3714,6 @@
                     setNullableBoolSelect('#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
 
                     setNullableBoolSelect('#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
-                    setSelectValue('#DefaultIntroAction', defaults.introAction, 'Configured action');
                     setNullableBoolSelect('#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
                     setSelectValue('#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
                     setSelectValue('#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
@@ -4074,8 +4034,8 @@
                         config.DefaultUserSettings.previewAudioEnabled = getNullableBoolSelect('#DefaultPreviewAudioEnabled');
                         config.DefaultUserSettings.seasonalSurprise = document.querySelector('#DefaultSeasonalSurprise').value || null;
 
-                        // Playback
-                        config.DefaultUserSettings.resumeSubtractDuration = getNullableIntInput('#DefaultResumeSubtractDuration');
+                        // Clients store this one as text, unlike the millisecond fields below.
+                        config.DefaultUserSettings.resumeSubtractDuration = document.querySelector('#DefaultResumeSubtractDuration').value || null;
                         config.DefaultUserSettings.unpauseRewindDuration = getNullableIntInput('#DefaultUnpauseRewindDuration');
                         config.DefaultUserSettings.skipBackLength = getNullableIntInput('#DefaultSkipBackLength');
                         config.DefaultUserSettings.skipForwardLength = getNullableIntInput('#DefaultSkipForwardLength');
@@ -4089,8 +4049,6 @@
                         config.DefaultUserSettings.preferSdhSubtitles = getNullableBoolSelect('#DefaultPreferSdhSubtitles');
 
                         config.DefaultUserSettings.cinemaModeEnabled = getNullableBoolSelect('#DefaultCinemaModeEnabled');
-                        config.DefaultUserSettings.introAction = document.querySelector('#DefaultIntroAction').value || null;
-                        config.DefaultUserSettings.outroAction = document.querySelector('#DefaultIntroAction').value || null;
                         config.DefaultUserSettings.autoplayNextEpisode = getNullableBoolSelect('#DefaultAutoplayNextEpisode');
                         config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
                         config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;
