@@ -9,12 +9,12 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/backend/assets/logo.png",
     "versions": [
       {
-        "version": "2.0.0.0",
+        "version": "2.0.3.0",
         "changelog": "Features:\n\n- The web theme editor gained a random theme generator that builds a complete, coherent palette from a random base and accent hue, while keeping your theme id, name, and description. The theme id validation message was also clarified.\n\nBug Fixes:\n\n- Media Bar trailers on web were reworked so YouTube trailer playback and advancing to the next slide now work correctly.\n- Web playback sessions are now reported as stopped when you close or navigate away from the browser tab, using a page exit beacon, so they no longer linger as active on the server.\n- The sidebar now follows desktop behavior in desktop browsers, instead of using the mobile layout.\n- Preferences are now parsed and type coerced more robustly for web compatibility, fixing settings that could fail to load or save when stored as browser strings.\n- The refresh rate switching and audio output mode settings are now hidden on the web build, where they do not apply.\n- ASS and PGS subtitles now render correctly on web, with the necessary fonts bundled.",
         "targetAbi": "10.10.0.0",
-        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.9.1/Moonfin.Server-2.0.0.0.zip",
-        "checksum": "0C6EB7D9693C8F841C58F96210F3AD21",
-        "timestamp": "2026-07-16T20:03:35",
+        "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/1.9.1/Moonfin.Server-2.0.3.0.zip",
+        "checksum": "D428459362D57D5F6113DA08EAD167E2",
+        "timestamp": "2026-08-08T04:37:23",
         "dependencies": []
       },
       {
