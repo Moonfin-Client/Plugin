@@ -3672,10 +3672,6 @@
                     setNullableBoolSelect('#DefaultDisplayGenresRows', defaults.displayGenresRows);
                     setNullableBoolSelect('#DefaultDisplayPlaylistsRows', defaults.displayPlaylistsRows);
                     setNullableBoolSelect('#DefaultDisplayAudioRows', defaults.displayAudioRows);
-                    setSelectValue('#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
-                    setSelectValue('#DefaultCollectionsRowSortBy', defaults.collectionsRowSortBy, 'Configured sort');
-                    setSelectValue('#DefaultGenresRowSortBy', defaults.genresRowSortBy, 'Configured sort');
-                    setSelectValue('#DefaultGenresRowItemFilter', defaults.genresRowItemFilter, 'Configured filter');
                     setNullableBoolSelect('#DefaultHomeImageUseSeriesImage', defaults.homeImageUseSeriesImage);
                     loadHomeSectionsEditor(defaults.homeSections || null, defaults.homeRowOrder || null);
                     setNullableBoolSelect('#DefaultMergeContinueWatchingNextUp', defaults.mergeContinueWatchingNextUp);
@@ -4079,10 +4075,6 @@
                         config.DefaultUserSettings.displayGenresRows = getNullableBoolSelect('#DefaultDisplayGenresRows');
                         config.DefaultUserSettings.displayPlaylistsRows = getNullableBoolSelect('#DefaultDisplayPlaylistsRows');
                         config.DefaultUserSettings.displayAudioRows = getNullableBoolSelect('#DefaultDisplayAudioRows');
-                        config.DefaultUserSettings.favoritesRowSortBy = document.querySelector('#DefaultFavoritesRowSortBy').value || null;
-                        config.DefaultUserSettings.collectionsRowSortBy = document.querySelector('#DefaultCollectionsRowSortBy').value || null;
-                        config.DefaultUserSettings.genresRowSortBy = document.querySelector('#DefaultGenresRowSortBy').value || null;
-                        config.DefaultUserSettings.genresRowItemFilter = document.querySelector('#DefaultGenresRowItemFilter').value || null;
                         config.DefaultUserSettings.homeImageUseSeriesImage = getNullableBoolSelect('#DefaultHomeImageUseSeriesImage');
                         var homeSections = getHomeSectionsValue();
                         config.DefaultUserSettings.homeSections = homeSections;
