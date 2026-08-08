@@ -13,8 +13,8 @@
         "changelog": "Features:\n\n- Added a Playback tab to the admin defaults page, covering autoplay, audio and subtitle language, subtitle mode, skip lengths, intro action, still watching behavior, Next Up timeout, and rewind durations.\n- Added default pickers for Action Buttons and Seerr Discovery row order.\n- Added profile properties for OLED mode, the player time labels, and the new home row options, so those settings sync between devices.\n- Game ROM and BIOS routes answer HEAD requests, which is how clients check a file's size before downloading it.\n\nBug Fixes:\n\n- The Playback admin tab now writes the keys, values, and units clients actually read. Several pickers were saving under names no client looked for, so those defaults silently did nothing.\n- Resume Rewind and Unpause Rewind options match what the client offers, instead of listing durations it has no setting for.\n- Removed admin controls that no longer map to anything a client syncs. The underlying profile properties stay in place, so device to device sync is unaffected.\n- Fixed the label text on the Details Screen Blur setting.",
         "targetAbi": "10.10.0.0",
         "sourceUrl": "https://github.com/Moonfin-Client/Plugin/releases/download/2.0.3/Moonfin.Server-2.0.3.0.zip",
-        "checksum": "D428459362D57D5F6113DA08EAD167E2",
-        "timestamp": "2026-08-08 00:37:16",
+        "checksum": "6007204425AD1318DE1E96A03E302619",
+        "timestamp": "2026-08-08 04:36:03",
         "dependencies": []
       },
       {
