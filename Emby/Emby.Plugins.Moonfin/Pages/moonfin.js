@@ -1949,10 +1949,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.nextUpTimeout = getNullableIntInput(view, '#DefaultNextUpTimeout');
             d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;
 
-            var collectionIds = Array.prototype.slice.call(view.querySelectorAll('.adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
-            d.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
-            var libraryIds = Array.prototype.slice.call(view.querySelectorAll('.adminLibraryCb:checked')).map(function (cb) { return cb.dataset.id; });
-            d.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
+            if (view.querySelector('#DefaultCollectionPicker .adminCollectionCb')) {
+                var collectionIds = Array.prototype.slice.call(view.querySelectorAll('.adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
+                d.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
+            }
+            if (view.querySelector('#DefaultLibraryPicker .adminLibraryCb')) {
+                var libraryIds = Array.prototype.slice.call(view.querySelectorAll('.adminLibraryCb:checked')).map(function (cb) { return cb.dataset.id; });
+                d.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
+            }
 
             d.homeRowsStyle = view.querySelector('#DefaultHomeRowsStyle').value || null;
             d.fullScreenRows = getNullableBoolSelect(view, '#DefaultFullScreenRows');

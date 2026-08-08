@@ -328,6 +328,15 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("detailShowTechnicalDetails")]
     public bool? DetailShowTechnicalDetails { get; set; }
 
+    [JsonPropertyName("hideDetailsMediaDescription")]
+    public bool? HideDetailsMediaDescription { get; set; }
+
+    [JsonPropertyName("detailUseSeriesThumbnails")]
+    public bool? DetailUseSeriesThumbnails { get; set; }
+
+    [JsonPropertyName("hideHomeMediaDescription")]
+    public bool? HideHomeMediaDescription { get; set; }
+
     [JsonPropertyName("recommendationSystemSource")]
     public string? RecommendationSystemSource { get; set; }
 
