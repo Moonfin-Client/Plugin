@@ -299,11 +299,20 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("favoritesRowSortBy")]
     public string? FavoritesRowSortBy { get; set; }
 
+    [JsonPropertyName("favoritesRowSortOrder")]
+    public string? FavoritesRowSortOrder { get; set; }
+
     [JsonPropertyName("collectionsRowSortBy")]
     public string? CollectionsRowSortBy { get; set; }
 
+    [JsonPropertyName("collectionsRowSortOrder")]
+    public string? CollectionsRowSortOrder { get; set; }
+
     [JsonPropertyName("genresRowSortBy")]
     public string? GenresRowSortBy { get; set; }
+
+    [JsonPropertyName("genresRowSortOrder")]
+    public string? GenresRowSortOrder { get; set; }
 
     [JsonPropertyName("genresRowItemFilter")]
     public string? GenresRowItemFilter { get; set; }
@@ -710,8 +719,14 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("playlistsRowSortBy")]
     public string? PlaylistsRowSortBy { get; set; }
 
+    [JsonPropertyName("playlistsRowSortOrder")]
+    public string? PlaylistsRowSortOrder { get; set; }
+
     [JsonPropertyName("audioRowsSortBy")]
     public string? AudioRowsSortBy { get; set; }
+
+    [JsonPropertyName("audioRowsSortOrder")]
+    public string? AudioRowsSortOrder { get; set; }
 
     [JsonPropertyName("epgMobileView")]
     public string? EpgMobileView { get; set; }
