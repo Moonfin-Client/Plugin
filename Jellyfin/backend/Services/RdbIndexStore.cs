@@ -41,6 +41,8 @@ internal sealed class RdbIndexStore
 
     internal Action? BuildIndexAboutToRunForTests { get; set; }
 
+    internal event Action<string>? IndexAvailable;
+
     internal RdbPlatformIndex? GetIndexOrStartBuild(string platform, PluginConfiguration config)
     {
         if (_indexes.TryGetValue(platform, out var existing))
@@ -101,6 +103,7 @@ internal sealed class RdbIndexStore
 
             _indexes[platform] = built;
             _parseRetryAfterUtc.TryRemove(platform, out _);
+            IndexAvailable?.Invoke(platform);
             return built;
         }
         finally
@@ -204,6 +207,7 @@ internal sealed class RdbIndexStore
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
                     File.Copy(source, localPath, overwrite: true);
+                    await GetIndexAsync(platform, config).ConfigureAwait(false);
                 }
 
                 _downloadRetryAfterUtc.TryRemove(platform, out _);
@@ -238,6 +242,7 @@ internal sealed class RdbIndexStore
             File.Move(temp, localPath, overwrite: true);
             _downloadRetryAfterUtc.TryRemove(platform, out _);
             _logger.LogInformation("Downloaded game metadata for {Platform} ({Bytes} bytes)", platform, data.Length);
+            await GetIndexAsync(platform, config).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

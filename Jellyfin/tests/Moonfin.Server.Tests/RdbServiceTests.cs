@@ -659,6 +659,41 @@ public class RdbServiceTests : IDisposable
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task LookupArtworkNameAsync_ColdFbneoIndexIsPendingAndDoesNotCacheAMiss()
+    {
+        // FBNeo thumbnail files use canonical display names, not driver shortnames. The first
+        // lookup begins downloading the missing index; it must remain retryable so a completed
+        // download can translate gauntlet2p.zip on the next attempt.
+        const string platform = "FBNeo - Arcade Games";
+        const string canonicalName = "Gauntlet (2 Players, rev 6)";
+        var bytes = new byte[] { 2, 3, 5, 7, 11, 13 };
+        var romPath = Path.Combine(_root, "gauntlet2p.zip");
+        Directory.CreateDirectory(_root);
+        File.WriteAllBytes(romPath, bytes);
+
+        var service = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration
+            {
+                GamesMetadataDbUrlBase = string.Empty,
+            },
+        };
+        var candidates = RdbService.GetCandidatePlatforms("arcade", coreWasDefaulted: false, fuzzyDirectoryCores: Array.Empty<string>());
+
+        var cold = await service.LookupArtworkNameAsync(candidates, romPath, "gauntlet2p");
+
+        Assert.True(cold.IsIndexPending);
+        Assert.Null(cold.Resolution);
+
+        WriteMinimalRdb(RdbPath(platform), new[] { (canonicalName, Crc32(bytes)) });
+        var warm = await service.LookupArtworkNameAsync(candidates, romPath, "gauntlet2p");
+
+        Assert.False(warm.IsIndexPending);
+        Assert.Equal(canonicalName, warm.Resolution?.Names[0]);
+        Assert.Equal(platform, warm.Resolution?.Platform);
+    }
+
     // ---- Multi-candidate artwork platform tests --------------------------------------------
     //
     // ResolveArtworkNameAsync tries an ordered list of platforms (from GetCandidatePlatforms), so

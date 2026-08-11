@@ -111,6 +111,45 @@ public class GameArtworkStoreTests : IDisposable
         Assert.Equal(1, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task Lookup_ColdFbneoIndexWithRawShortnameMissIsRetryable()
+    {
+        const string fbneoPlatform = "FBNeo - Arcade Games";
+        const string shortName = "gauntlet2p";
+        var romPath = Path.Combine(_root, shortName + ".zip");
+        Directory.CreateDirectory(_root);
+        File.WriteAllBytes(romPath, [2, 3, 5, 7]);
+
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ThumbUrl(fbneoPlatform, shortName), HttpStatusCode.NotFound, new ByteArrayContent([]));
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root)
+        {
+            // No local RDB: the resolver starts acquisition and reports IndexPending. The raw
+            // shortname really is absent upstream, but that cannot become a durable catalog miss.
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration
+            {
+                GamesMetadataDbUrlBase = string.Empty,
+            },
+        };
+        var store = new GameArtworkStore(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameArtworkStore>(),
+            rdb,
+            _root);
+
+        var result = await store.LookupThumbAsync(
+            core: "arcade",
+            coreWasDefaulted: false,
+            systemName: "Arcade",
+            romPath: romPath,
+            title: shortName,
+            kind: GameThumbService.ThumbKind.Boxart,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal(GameArtworkLookupOutcome.MetadataPending, result.Outcome);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
@@ -127,7 +166,7 @@ public class GameArtworkStoreTests : IDisposable
         File.WriteAllBytes(Path.Combine(_root, RomFileName), new byte[] { 9, 9, 9, 9 });
 
         // No ConfigOverrideForTests: ResolveArtworkNameAsync then returns null without touching
-        // disk or the network, leaving the ROM file name as the sole artwork candidate.
+        // disk or the network, leaving the ROM filename stem as the sole artwork candidate.
         var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root);
         return new GameArtworkStore(
             new FakeHttpClientFactory(handler),
@@ -156,8 +195,11 @@ public class GameArtworkStoreTests : IDisposable
     // Must match GameArtworkStore.BuildUrl's escaping and the Uri.ToString() normalization the
     // fake handler observes, or comparisons silently mismatch.
     private static string ThumbUrl(string thumbName)
+        => ThumbUrl(Platform, Path.GetFileNameWithoutExtension(thumbName));
+
+    private static string ThumbUrl(string platform, string thumbName)
     {
-        var raw = "https://thumbnails.libretro.com/" + Uri.EscapeDataString(Platform)
+        var raw = "https://thumbnails.libretro.com/" + Uri.EscapeDataString(platform)
             + "/Named_Boxarts/" + Uri.EscapeDataString(thumbName) + ".png";
         return new Uri(raw).ToString();
     }

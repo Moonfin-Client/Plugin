@@ -19,6 +19,24 @@ public class GameThumbService
     private readonly GameArtworkStore _artworkStore;
     private readonly DerivedThumbnailService _derivedThumbnailService;
 
+    internal event Action<string>? MetadataIndexAvailable
+    {
+        add
+        {
+            if (_artworkStore != null)
+            {
+                _artworkStore.MetadataIndexAvailable += value;
+            }
+        }
+        remove
+        {
+            if (_artworkStore != null)
+            {
+                _artworkStore.MetadataIndexAvailable -= value;
+            }
+        }
+    }
+
     public GameThumbService(
         IHttpClientFactory httpClientFactory,
         ILogger<GameThumbService> logger,
@@ -186,6 +204,8 @@ internal sealed record GameArtworkLookupResult(
 
     public static GameArtworkLookupResult TransientFailure(TimeSpan? retryDelay = null, bool timedOut = false) =>
         new(GameArtworkLookupOutcome.TransientFailure, RetryDelay: retryDelay, TimedOut: timedOut);
+
+    public static GameArtworkLookupResult MetadataPending() => new(GameArtworkLookupOutcome.MetadataPending);
 }
 
 /// <summary>Whether artwork was found, exhaustively confirmed absent, or requires a later retry.</summary>
@@ -194,6 +214,7 @@ internal enum GameArtworkLookupOutcome
     Found,
     Missing,
     TransientFailure,
+    MetadataPending,
 }
 
 /// <summary>

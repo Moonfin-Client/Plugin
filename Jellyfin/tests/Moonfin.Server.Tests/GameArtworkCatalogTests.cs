@@ -27,6 +27,35 @@ public sealed class GameArtworkCatalogTests : IDisposable
         Assert.Equal(ArtworkCatalogState.Pending, (await catalog.RequestRefreshAsync(Key("fingerprint-b"), "snes")).State);
     }
 
+    [Fact]
+    public async Task MetadataPending_UsesBoundedCadenceThenDefersUntilReopened()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var key = Key("metadata-pending");
+        var started = new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero);
+        var firstDelay = TimeSpan.FromMinutes(5);
+        var repeatDelay = TimeSpan.FromHours(3);
+        var window = TimeSpan.FromHours(24);
+
+        var first = await catalog.MarkMetadataPendingAsync(
+            key, "snes", "provider-v1", started, firstDelay, repeatDelay, window);
+        Assert.Equal(started + firstDelay, first);
+        Assert.Equal(ArtworkCatalogState.Retryable, (await catalog.GetAsync(key))?.State);
+
+        var secondAt = first!.Value;
+        var second = await catalog.MarkMetadataPendingAsync(
+            key, "snes", "provider-v1", secondAt, firstDelay, repeatDelay, window);
+        Assert.Equal(secondAt + repeatDelay, second);
+
+        var exhausted = await catalog.MarkMetadataPendingAsync(
+            key, "snes", "provider-v1", started + window, firstDelay, repeatDelay, window);
+        Assert.Null(exhausted);
+        Assert.Equal(ArtworkCatalogState.MetadataDeferred, (await catalog.GetAsync(key))?.State);
+        Assert.DoesNotContain(await catalog.GetStartupRecoveryWorkAsync(), item => item.Entry.Key == key);
+
+        Assert.Equal(ArtworkCatalogState.Pending, (await catalog.GetOrCreateAsync(key, "snes", "provider-v2")).State);
+    }
+
     [Theory]
     [InlineData("C:\\roms\\game.sfc")]
     [InlineData("../game.sfc")]

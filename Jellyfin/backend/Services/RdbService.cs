@@ -195,17 +195,39 @@ public class RdbService
         string? title,
         CancellationToken cancellationToken = default)
     {
+        var lookup = await LookupArtworkNameAsync(candidatePlatforms, romPath, title, cancellationToken)
+            .ConfigureAwait(false);
+        return lookup.Resolution;
+    }
+
+    internal event Action<string>? IndexAvailable
+    {
+        add => _indexStore.IndexAvailable += value;
+        remove => _indexStore.IndexAvailable -= value;
+    }
+
+    /// <summary>
+    /// Resolves canonical artwork names while preserving whether a required RDB index is still
+    /// loading. A missing index is not evidence that artwork is absent: callers may probe a raw
+    /// filename fallback, but must retry rather than persist a terminal miss if it also fails.
+    /// </summary>
+    internal async Task<ArtworkNameLookupResult> LookupArtworkNameAsync(
+        IReadOnlyList<string> candidatePlatforms,
+        string romPath,
+        string? title,
+        CancellationToken cancellationToken = default)
+    {
         try
         {
             var config = ConfigOverrideForTests ?? MoonfinPlugin.Instance?.Configuration;
             return config == null
-                ? null
-                : await ResolveArtworkNameCoreAsync(candidatePlatforms, romPath, title, config, cancellationToken).ConfigureAwait(false);
+                ? ArtworkNameLookupResult.NoMatch()
+                : await LookupArtworkNameCoreAsync(candidatePlatforms, romPath, title, config, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Resolving artwork name failed for {Path}", romPath);
-            return null;
+            return ArtworkNameLookupResult.NoMatch();
         }
     }
 
@@ -217,26 +239,40 @@ public class RdbService
         PluginConfiguration config,
         CancellationToken cancellationToken)
     {
+        var lookup = await LookupArtworkNameCoreAsync(candidatePlatforms, romPath, title, config, cancellationToken)
+            .ConfigureAwait(false);
+        return lookup.Resolution;
+    }
+
+    private async Task<ArtworkNameLookupResult> LookupArtworkNameCoreAsync(
+        IReadOnlyList<string> candidatePlatforms,
+        string romPath,
+        string? title,
+        PluginConfiguration config,
+        CancellationToken cancellationToken)
+    {
         if (candidatePlatforms.Count == 0 || !TryGetFileStamp(romPath, out var size, out var mtime))
         {
-            return null;
+            return ArtworkNameLookupResult.NoMatch();
         }
 
         if (_lookupCache.TryGetValue(romPath, out var cached) && cached.Matches(size, mtime))
         {
             return cached is ArtworkLookupCacheResult artwork
-                ? new ArtworkNameResolution(BuildNameList(artwork.Primary, artwork.Siblings), artwork.Platform)
-                : null;
+                ? ArtworkNameLookupResult.Resolved(new ArtworkNameResolution(BuildNameList(artwork.Primary, artwork.Siblings), artwork.Platform))
+                : ArtworkNameLookupResult.NoMatch();
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<uint>? crcCandidates = null;
+        var indexPending = false;
         for (var i = 0; i < candidatePlatforms.Count; i++)
         {
             var platform = candidatePlatforms[i];
             var index = await GetIndexAsync(platform, config).ConfigureAwait(false);
             if (index == null)
             {
+                indexPending = true;
                 continue;
             }
 
@@ -249,7 +285,8 @@ public class RdbService
                     var primary = matches[0];
                     var siblings = matches.Count > 1 ? matches.GetRange(1, matches.Count - 1) : null;
                     CacheLookup(romPath, new ArtworkLookupCacheResult(size, mtime, primary, platform, siblings));
-                    return new ArtworkNameResolution(BuildNameList(primary, siblings), platform);
+                    return ArtworkNameLookupResult.Resolved(
+                        new ArtworkNameResolution(BuildNameList(primary, siblings), platform));
                 }
             }
             else
@@ -259,13 +296,21 @@ public class RdbService
                 if (record != null)
                 {
                     CacheLookup(romPath, new ArtworkLookupCacheResult(size, mtime, record, platform, null));
-                    return new ArtworkNameResolution(BuildNameList(record, null), platform);
+                    return ArtworkNameLookupResult.Resolved(
+                        new ArtworkNameResolution(BuildNameList(record, null), platform));
                 }
             }
         }
 
+        // Do not cache this outcome: a download may complete between this call and the next one.
+        // Caching it would turn a cold RDB index into a process-lifetime false artwork miss.
+        if (indexPending)
+        {
+            return ArtworkNameLookupResult.IndexPending();
+        }
+
         CacheLookup(romPath, new DetailLookupCacheResult(size, mtime, null));
-        return null;
+        return ArtworkNameLookupResult.NoMatch();
     }
 
     private static bool TryGetFileStamp(string romPath, out long size, out long mtime)
@@ -367,3 +412,13 @@ public class RdbService
 
 /// <summary>The ordered artwork names and the libretro platform that matched the ROM.</summary>
 public sealed record ArtworkNameResolution(IReadOnlyList<string> Names, string Platform);
+
+/// <summary>Canonical-name lookup result, including the distinct cold-index state.</summary>
+internal sealed record ArtworkNameLookupResult(ArtworkNameResolution? Resolution, bool IsIndexPending)
+{
+    internal static ArtworkNameLookupResult Resolved(ArtworkNameResolution resolution) => new(resolution, false);
+
+    internal static ArtworkNameLookupResult NoMatch() => new(null, false);
+
+    internal static ArtworkNameLookupResult IndexPending() => new(null, true);
+}

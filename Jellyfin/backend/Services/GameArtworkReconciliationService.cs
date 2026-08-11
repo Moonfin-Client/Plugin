@@ -17,7 +17,8 @@ namespace Moonfin.Server.Services;
 /// </summary>
 public sealed class GameArtworkReconciliationService : IHostedService
 {
-    private const string ProviderVersion = "libretro-thumbnails-v1";
+    // v2 repairs false terminal misses recorded while a cold RDB index was still downloading.
+    private const string ProviderVersion = "libretro-thumbnails-v2";
     private static readonly GameThumbService.ThumbKind[] ArtworkKinds =
     [
         GameThumbService.ThumbKind.Boxart,
@@ -25,6 +26,9 @@ public sealed class GameArtworkReconciliationService : IHostedService
         GameThumbService.ThumbKind.Title,
     ];
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan MetadataFirstRetryDelay = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan MetadataRepeatRetryDelay = TimeSpan.FromHours(3);
+    private static readonly TimeSpan MetadataRetryWindow = TimeSpan.FromHours(24);
     private const int MaxQueuedRemoteWork = 20_000;
     private const int MaxQueuedThumbnailWork = 20_000;
     private readonly GamesService _games;
@@ -330,6 +334,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         // ItemAdded/ItemRemoved trigger; that is not implemented here.
         _remoteWorkers = Enumerable.Range(0, 2).Select(_ => Task.Run(() => RemoteWorkerAsync(token), token)).ToArray();
         _thumbnailWorker = Task.Run(() => ThumbnailWorkerAsync(token), token);
+        _thumbs.MetadataIndexAvailable += OnMetadataIndexAvailable;
         if (_taskManager != null)
         {
             _taskManager.TaskCompleted += OnTaskCompleted;
@@ -350,6 +355,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        _thumbs.MetadataIndexAvailable -= OnMetadataIndexAvailable;
         if (_taskManager != null)
         {
             _taskManager.TaskCompleted -= OnTaskCompleted;
@@ -407,14 +413,20 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
     }
 
-    private void QueueReconciliation(string reason)
+    private void OnMetadataIndexAvailable(string platform)
+    {
+        _logger.LogDebug("Metadata index for {Platform} is ready; reopening deferred artwork work", platform);
+        QueueReconciliation("metadata index ready", reopenMetadataDeferred: true);
+    }
+
+    private void QueueReconciliation(string reason, bool reopenMetadataDeferred = false)
     {
         var token = _stop?.Token ?? CancellationToken.None;
         _ = Task.Run(async () =>
         {
             try
             {
-                await ReconcileAsync(token).ConfigureAwait(false);
+                await ReconcileAsync(token, reopenMetadataDeferred).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -426,7 +438,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }, token);
     }
 
-    private async Task ReconcileAsync(CancellationToken cancellationToken)
+    private async Task ReconcileAsync(CancellationToken cancellationToken, bool reopenMetadataDeferred)
     {
         await _reconcileGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -514,7 +526,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                             var first = plan.TakeNext();
                             if (first != null)
                             {
-                                await QueueCandidateAsync(first, ArtworkLane.Preview, plan, cancellationToken).ConfigureAwait(false);
+                                await QueueCandidateAsync(first, ArtworkLane.Preview, plan, cancellationToken, reopenMetadataDeferred).ConfigureAwait(false);
                             }
                         }
                     }
@@ -522,7 +534,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                     {
                         foreach (var candidate in ordered)
                         {
-                            await QueueCandidateAsync(candidate, ArtworkLane.Bulk, null, cancellationToken).ConfigureAwait(false);
+                            await QueueCandidateAsync(candidate, ArtworkLane.Bulk, null, cancellationToken, reopenMetadataDeferred).ConfigureAwait(false);
                         }
                     }
                 }
@@ -536,7 +548,12 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
     }
 
-    private async Task QueueCandidateAsync(ArtworkCandidate candidate, ArtworkLane lane, PreviewPlan? preview, CancellationToken cancellationToken)
+    private async Task QueueCandidateAsync(
+        ArtworkCandidate candidate,
+        ArtworkLane lane,
+        PreviewPlan? preview,
+        CancellationToken cancellationToken,
+        bool reopenMetadataDeferred = false)
     {
         var entry = await _catalog.GetOrCreateAsync(
             candidate.Key,
@@ -555,6 +572,21 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 break;
             case ArtworkCatalogState.Missing:
                 await AdvancePreviewAsync(preview, candidate, false, cancellationToken).ConfigureAwait(false);
+                break;
+            case ArtworkCatalogState.MetadataDeferred:
+                if (reopenMetadataDeferred)
+                {
+                    await _catalog.ReopenMetadataDeferredAsync(
+                        candidate.Key,
+                        candidate.SystemId,
+                        candidate.GameId,
+                        cancellationToken).ConfigureAwait(false);
+                    QueueRemote(candidate, lane, preview, null);
+                }
+                else
+                {
+                    await AdvancePreviewAsync(preview, candidate, false, cancellationToken).ConfigureAwait(false);
+                }
                 break;
             default:
                 QueueRemote(candidate, lane, preview, entry.RetryAfterUtc);
@@ -616,6 +648,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 {
                     string? original = null;
                     GameArtworkLookupResult? transientFailure = null;
+                    GameArtworkLookupResult? metadataPending = null;
                     foreach (var core in work.Candidate.Source.Cores)
                     {
                         var lookup = await _thumbs.LookupThumbAsync(core, work.Candidate.Source.CoreWasDefaulted, work.Candidate.Source.SystemName, work.Candidate.Source.RomPath, work.Candidate.Source.Title, work.Candidate.Kind, cancellationToken).ConfigureAwait(false);
@@ -629,10 +662,21 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         {
                             transientFailure ??= lookup;
                         }
+                        else if (lookup.Outcome == GameArtworkLookupOutcome.MetadataPending)
+                        {
+                            metadataPending ??= lookup;
+                        }
                     }
 
                     if (original == null)
                     {
+                        if (metadataPending != null)
+                        {
+                            await DeferMetadataAsync(work, cancellationToken).ConfigureAwait(false);
+                            retryQueued = true;
+                            continue;
+                        }
+
                         if (transientFailure != null)
                         {
                             await RetryRemoteAsync(work, transientFailure.RetryDelay, cancellationToken).ConfigureAwait(false);
@@ -699,6 +743,36 @@ public sealed class GameArtworkReconciliationService : IHostedService
         await _catalog.MarkRetryableAsync(work.Candidate.Key, work.Candidate.SystemId, ArtworkCatalogWorkStage.AcquireOriginal, retryAfter, cancellationToken).ConfigureAwait(false);
         CompleteRemote(work);
         QueueRemote(work.Candidate, work.Lane, work.Preview, retryAfter);
+    }
+
+    private async Task DeferMetadataAsync(ArtworkWork work, CancellationToken cancellationToken)
+    {
+        var retryAfter = await _catalog.MarkMetadataPendingAsync(
+            work.Candidate.Key,
+            work.Candidate.SystemId,
+            ProviderVersion,
+            DateTimeOffset.UtcNow,
+            MetadataFirstRetryDelay,
+            MetadataRepeatRetryDelay,
+            MetadataRetryWindow,
+            cancellationToken).ConfigureAwait(false);
+        CompleteRemote(work);
+        if (retryAfter is { } scheduled)
+        {
+            _logger.LogDebug(
+                "Deferring artwork for {GameId} until {RetryAfterUtc} while its metadata index is pending",
+                work.Candidate.GameId,
+                scheduled);
+            QueueRemote(work.Candidate, work.Lane, work.Preview, scheduled);
+        }
+        else
+        {
+            _logger.LogDebug(
+                "Stopped automatic metadata retries for {GameId} after the {Hours}-hour retry window",
+                work.Candidate.GameId,
+                MetadataRetryWindow.TotalHours);
+            await AdvancePreviewAsync(work.Preview, work.Candidate, false, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task ThumbnailWorkerAsync(CancellationToken cancellationToken)

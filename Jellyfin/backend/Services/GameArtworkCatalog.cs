@@ -19,6 +19,7 @@ public enum ArtworkCatalogState
     ThumbnailReady,
     Missing,
     Retryable,
+    MetadataDeferred,
 }
 
 /// <summary>Which portion of an unfinished entry still needs background work.</summary>
@@ -130,6 +131,12 @@ public sealed record ArtworkCatalogEntry
 
     /// <summary>Provider/catalog revision that confirmed a definitive missing result.</summary>
     public string? MissingProviderVersion { get; init; }
+
+    /// <summary>When bounded metadata-index retries first began for this entry.</summary>
+    public DateTimeOffset? MetadataRetryStartedAtUtc { get; init; }
+
+    /// <summary>Provider revision that exhausted metadata-index retries for this entry.</summary>
+    public string? MetadataDeferredProviderVersion { get; init; }
 
     public DateTimeOffset UpdatedAtUtc { get; init; }
 }
@@ -263,7 +270,9 @@ public sealed class GameArtworkCatalog
                 changed = true;
             }
             else if (entry.State == ArtworkCatalogState.Missing &&
-                !string.Equals(entry.MissingProviderVersion, providerVersion, StringComparison.Ordinal))
+                !string.Equals(entry.MissingProviderVersion, providerVersion, StringComparison.Ordinal) ||
+                entry.State == ArtworkCatalogState.MetadataDeferred &&
+                !string.Equals(entry.MetadataDeferredProviderVersion, providerVersion, StringComparison.Ordinal))
             {
                 entry = NewPending(key, systemId, entry.Revision, gameId);
                 library.SetEntry(key.StorageKey, entry);
@@ -304,6 +313,8 @@ public sealed class GameArtworkCatalog
             ThumbnailPath = null,
             RetryAfterUtc = null,
             MissingProviderVersion = null,
+            MetadataRetryStartedAtUtc = null,
+            MetadataDeferredProviderVersion = null,
             Revision = entry.Revision + 1,
             UpdatedAtUtc = DateTimeOffset.UtcNow,
         }, cancellationToken);
@@ -320,6 +331,8 @@ public sealed class GameArtworkCatalog
             ThumbnailPath = RequirePath(thumbnailPath, nameof(thumbnailPath)),
             RetryAfterUtc = null,
             MissingProviderVersion = null,
+            MetadataRetryStartedAtUtc = null,
+            MetadataDeferredProviderVersion = null,
             Revision = entry.Revision + 1,
             UpdatedAtUtc = DateTimeOffset.UtcNow,
         }, cancellationToken);
@@ -343,6 +356,8 @@ public sealed class GameArtworkCatalog
             ThumbnailPath = null,
             RetryAfterUtc = null,
             MissingProviderVersion = providerVersion.Trim(),
+            MetadataRetryStartedAtUtc = null,
+            MetadataDeferredProviderVersion = null,
             Revision = entry.Revision + 1,
             UpdatedAtUtc = DateTimeOffset.UtcNow,
         }, cancellationToken);
@@ -371,8 +386,82 @@ public sealed class GameArtworkCatalog
                 ThumbnailPath = null,
                 RetryAfterUtc = retryAfterUtc,
                 MissingProviderVersion = null,
+                MetadataRetryStartedAtUtc = null,
+                MetadataDeferredProviderVersion = null,
                 UpdatedAtUtc = DateTimeOffset.UtcNow,
             }, cancellationToken);
+
+    /// <summary>
+    /// Schedules bounded metadata-index retries: once after five minutes, then every three hours
+    /// for at most one day. Exhaustion is deferred, not treated as an authoritative artwork miss.
+    /// </summary>
+    public async Task<DateTimeOffset?> MarkMetadataPendingAsync(
+        ArtworkCatalogKey key,
+        string systemId,
+        string providerVersion,
+        DateTimeOffset nowUtc,
+        TimeSpan firstDelay,
+        TimeSpan repeatDelay,
+        TimeSpan maximumDuration,
+        CancellationToken cancellationToken = default)
+    {
+        DateTimeOffset? retryAfter = null;
+        await UpdateEntryAsync(key, systemId, entry =>
+        {
+            var started = entry.MetadataRetryStartedAtUtc ?? nowUtc;
+            var deadline = started + maximumDuration;
+            if (nowUtc >= deadline)
+            {
+                return entry with
+                {
+                    State = ArtworkCatalogState.MetadataDeferred,
+                    OriginalPath = null,
+                    ThumbnailPath = null,
+                    RetryAfterUtc = null,
+                    MissingProviderVersion = null,
+                    MetadataRetryStartedAtUtc = started,
+                    MetadataDeferredProviderVersion = providerVersion.Trim(),
+                    UpdatedAtUtc = nowUtc,
+                };
+            }
+
+            retryAfter = nowUtc + (entry.MetadataRetryStartedAtUtc == null ? firstDelay : repeatDelay);
+            if (retryAfter > deadline)
+            {
+                retryAfter = deadline;
+            }
+
+            return entry with
+            {
+                State = ArtworkCatalogState.Retryable,
+                OriginalPath = null,
+                ThumbnailPath = null,
+                RetryAfterUtc = retryAfter,
+                MissingProviderVersion = null,
+                MetadataRetryStartedAtUtc = started,
+                MetadataDeferredProviderVersion = null,
+                UpdatedAtUtc = nowUtc,
+            };
+        }, cancellationToken).ConfigureAwait(false);
+        return retryAfter;
+    }
+
+    /// <summary>Reopens a bounded metadata defer after its platform index becomes available.</summary>
+    public Task<ArtworkCatalogEntry> ReopenMetadataDeferredAsync(
+        ArtworkCatalogKey key,
+        string systemId,
+        string? gameId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedSystemId = NormalizeSystemId(systemId);
+        return UpdateEntryAsync(
+            key,
+            normalizedSystemId,
+            entry => entry.State == ArtworkCatalogState.MetadataDeferred
+                ? NewPending(key, normalizedSystemId, entry.Revision, gameId ?? entry.GameId)
+                : entry,
+            cancellationToken);
+    }
 
     /// <summary>Explicit refresh deliberately reopens an entry, including a confirmed miss.</summary>
     public Task<ArtworkCatalogEntry> RequestRefreshAsync(

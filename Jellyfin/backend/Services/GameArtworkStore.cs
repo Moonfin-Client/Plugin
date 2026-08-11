@@ -37,6 +37,8 @@ internal sealed class GameArtworkStore
     private readonly ConcurrentDictionary<string, DateTime> _misses = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Lazy<Task<GameArtworkLookupResult>>> _inFlight = new(StringComparer.Ordinal);
 
+    internal event Action<string>? MetadataIndexAvailable;
+
     // maxArtworkBytes defaults to MaxArtworkBytes; the parameter exists so a focused test can drive
     // the cap with a few kilobytes instead of pushing a real 16 MB body through a fake handler
     // (mirroring ArcadeArchiveHasher.Read's maxEntryBytes and RdbReader.ReadAll's maxFileBytes seams).
@@ -50,6 +52,7 @@ internal sealed class GameArtworkStore
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _rdbService = rdbService;
+        _rdbService.IndexAvailable += platform => MetadataIndexAvailable?.Invoke(platform);
         _cacheDir = cacheDir;
         _maxArtworkBytes = maxArtworkBytes;
     }
@@ -113,12 +116,12 @@ internal sealed class GameArtworkStore
         var fuzzyDirectoryCores = GamesService.FuzzySuggestCores(systemName, MaxFuzzyDirectorySuggestions);
         var candidatePlatforms = RdbService.GetCandidatePlatforms(core, coreWasDefaulted, fuzzyDirectoryCores);
 
-        var romFileName = Path.GetFileName(romPath);
+        var romFileName = Path.GetFileNameWithoutExtension(romPath);
         var candidates = new List<(string Name, string Platform)>(3 + RdbService.MaxSiblingArtworkNamesPerRequest);
-        var resolved = await _rdbService
-            .ResolveArtworkNameAsync(candidatePlatforms, romPath, title, cancellationToken)
+        var nameLookup = await _rdbService
+            .LookupArtworkNameAsync(candidatePlatforms, romPath, title, cancellationToken)
             .ConfigureAwait(false);
-        if (resolved is { } match)
+        if (nameLookup.Resolution is { } match)
         {
             foreach (var candidateName in match.Names)
             {
@@ -177,9 +180,23 @@ internal sealed class GameArtworkStore
             }
         }
 
-        return sawTransientFailure
-            ? GameArtworkLookupResult.TransientFailure(retryDelay)
-            : GameArtworkLookupResult.Missing();
+        if (sawTransientFailure)
+        {
+            return GameArtworkLookupResult.TransientFailure(retryDelay);
+        }
+
+        // A raw filename 404 is not authoritative while the RDB that translates a shortname
+        // (for example FBNeo's gauntlet2p) into its canonical thumbnail name is still loading.
+        if (nameLookup.IsIndexPending)
+        {
+            _logger.LogDebug(
+                "Deferring {Kind} artwork for {RomPath}: metadata index is pending; scheduling metadata retry instead of recording Missing",
+                kind,
+                romPath);
+            return GameArtworkLookupResult.MetadataPending();
+        }
+
+        return GameArtworkLookupResult.Missing();
     }
 
     private async Task<GameArtworkLookupResult> GetThumbPathForNameAsync(
