@@ -3,6 +3,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     var PluginUniqueId = '9a1b2c3d-4e5f-6789-abcd-ef0123456789';
 
+    function esc(str) {
+        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     var RATING_SOURCES = [
         { id: 'tomatoes', label: 'Rotten Tomatoes' },
         { id: 'tomatoes_audience', label: 'RT Audience Score' },
@@ -160,6 +164,65 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         if (raw === '') return null;
         var parsed = parseInt(raw, 10);
         return isNaN(parsed) ? null : parsed;
+    }
+
+    function setNullableRangeInput(view, selectorId, value, unit) {
+        var select = view.querySelector(selectorId + '_Set');
+        var range = view.querySelector(selectorId);
+        var display = view.querySelector(selectorId + '_Val');
+        if (!range) return;
+
+        unit = unit || '';
+
+        if (value == null || value === '') {
+            if (select) select.value = 'unset';
+            range.disabled = true;
+            if (display) display.textContent = '--';
+        } else {
+            if (select) select.value = 'set';
+            range.disabled = false;
+            range.value = String(value);
+            if (display) display.textContent = String(value) + unit;
+        }
+    }
+
+    function getNullableRangeInput(view, selectorId) {
+        var select = view.querySelector(selectorId + '_Set');
+        var range = view.querySelector(selectorId);
+        if (!range) return null;
+        if (select && select.value === 'unset') return null;
+        if (range.disabled) return null;
+        var parsed = parseInt(range.value, 10);
+        return isNaN(parsed) ? null : parsed;
+    }
+
+    function bindNullableRangeInput(view, selectorId, unit) {
+        var select = view.querySelector(selectorId + '_Set');
+        var range = view.querySelector(selectorId);
+        var display = view.querySelector(selectorId + '_Val');
+        if (!range || !select) return;
+
+        unit = unit || '';
+
+        if (!select.dataset.rangeBound) {
+            select.dataset.rangeBound = 'true';
+            select.addEventListener('change', function() {
+                if (select.value === 'unset') {
+                    range.disabled = true;
+                    if (display) display.textContent = '--';
+                } else {
+                    range.disabled = false;
+                    if (display) display.textContent = range.value + unit;
+                }
+            });
+        }
+
+        if (!range.dataset.rangeBound) {
+            range.dataset.rangeBound = 'true';
+            range.addEventListener('input', function() {
+                if (display) display.textContent = range.value + unit;
+            });
+        }
     }
 
     // ── Tabbed navigation ───────────────────────────────────────────────────
@@ -494,6 +557,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
     }
 
+
+
     function loadAdminGenrePicker(view, selectedIds) {
         var picker = view.querySelector('#DefaultGenrePicker');
         if (!picker) return;
@@ -576,6 +641,246 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             if (cb && cb.checked) result.push(item.dataset.id);
         });
         return result.length > 0 ? result : null;
+    }
+
+    // ISO 639-2 codes, matching the table Core resolves track languages against.
+    // The audio and subtitle pickers share the list so the two stay in sync.
+    var LANGUAGE_OPTIONS = [
+        ['auto', 'Server Default'], ['eng', 'English'], ['spa', 'Spanish'],
+        ['fra', 'French'], ['deu', 'German'], ['ita', 'Italian'],
+        ['jpn', 'Japanese'], ['kor', 'Korean'], ['zho', 'Chinese'],
+        ['rus', 'Russian'], ['por', 'Portuguese'], ['ara', 'Arabic'],
+        ['hin', 'Hindi'], ['nld', 'Dutch'], ['pol', 'Polish'],
+        ['swe', 'Swedish'], ['nor', 'Norwegian'], ['dan', 'Danish'],
+        ['fin', 'Finnish'], ['tha', 'Thai'], ['tur', 'Turkish'],
+        ['heb', 'Hebrew'], ['ces', 'Czech'], ['ell', 'Greek'],
+        ['ron', 'Romanian'], ['hun', 'Hungarian'], ['ukr', 'Ukrainian'],
+        ['ind', 'Indonesian'], ['vie', 'Vietnamese']
+    ];
+
+    function fillLanguageSelect(view, selector) {
+        var select = view.querySelector(selector);
+        if (!select || select.dataset.filled) return;
+        select.dataset.filled = 'true';
+        var html = '<option value="">Not set (user decides)</option>';
+        for (var i = 0; i < LANGUAGE_OPTIONS.length; i++) {
+            var code = LANGUAGE_OPTIONS[i][0];
+            var label = LANGUAGE_OPTIONS[i][1];
+            html += '<option value="' + esc(code) + '">'
+                + esc(code === 'auto' ? label : label + ' (' + code + ')') + '</option>';
+        }
+        select.innerHTML = html;
+    }
+
+    // Same ids and declaration order as DetailButton in Core, so an untouched
+    // arrangement here matches what a fresh client shows.
+    var DETAIL_BUTTONS = [
+        { id: 'seerrRequest', label: 'Request' },
+        { id: 'seerrRequest4k', label: 'Request 4K' },
+        { id: 'shuffle', label: 'Shuffle' },
+        { id: 'restart', label: 'Restart', canHide: false },
+        { id: 'playOffline', label: 'Play Offline', canHide: false },
+        { id: 'audio', label: 'Audio' },
+        { id: 'subtitles', label: 'Subtitles' },
+        { id: 'version', label: 'Version' },
+        { id: 'cast', label: 'Cast' },
+        { id: 'trailer', label: 'Trailer' },
+        { id: 'watchWithGroup', label: 'Watch with group' },
+        { id: 'watched', label: 'Watched' },
+        { id: 'favorite', label: 'Favorite' },
+        { id: 'playlist', label: 'Playlist' },
+        { id: 'download', label: 'Download' },
+        { id: 'deleteFiles', label: 'Delete files' },
+        { id: 'goToSeries', label: 'Go to series' },
+        { id: 'seerrWatchlist', label: 'Watchlist' },
+        { id: 'seerrReportIssue', label: 'Report Issue' },
+        { id: 'seerrManage', label: 'Manage Requests' },
+        { id: 'admin', label: 'Admin' }
+    ];
+
+    function loadDetailButtonsPicker(view, order, hidden) {
+        var container = view.querySelector('#DefaultDetailButtonsList');
+        if (!container) return;
+        var hiddenSet = {};
+        if (hidden && Array.isArray(hidden)) {
+            hidden.forEach(function (id) { hiddenSet[id] = true; });
+        }
+
+        var ordered = [];
+        var addedSet = {};
+
+        function entryFor(btn) {
+            var hideable = btn.canHide !== false;
+            return {
+                id: btn.id,
+                label: btn.label,
+                hideable: hideable,
+                checked: hideable ? !hiddenSet[btn.id] : true
+            };
+        }
+
+        if (order && Array.isArray(order) && order.length > 0) {
+            order.forEach(function (id) {
+                var btn = DETAIL_BUTTONS.find(function (b) { return b.id === id; });
+                if (btn) {
+                    ordered.push(entryFor(btn));
+                    addedSet[btn.id] = true;
+                }
+            });
+        }
+
+        DETAIL_BUTTONS.forEach(function (btn) {
+            if (!addedSet[btn.id]) {
+                ordered.push(entryFor(btn));
+            }
+        });
+
+        container.innerHTML = '';
+        ordered.forEach(function (item) {
+            var row = document.createElement('div');
+            row.className = 'detailButtonItem';
+            row.dataset.id = item.id;
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;margin-bottom:2px;background:rgba(128,128,128,0.03);';
+            row.innerHTML =
+                (item.hideable
+                    ? '<input type="checkbox"' + (item.checked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;flex-shrink:0;">'
+                    : '<span title="Always shown" style="width:16px;height:16px;flex-shrink:0;text-align:center;color:rgba(128,128,128,0.35);">&#x2713;</span>') +
+                '<span style="flex:1;font-size:0.9em;color:rgba(128,128,128,0.9);">' + esc(item.label) + '</span>' +
+                '<button type="button" class="detailButtonMoveBtn" data-dir="up" style="background:none;border:1px solid rgba(128,128,128,0.2);border-radius:3px;color:rgba(128,128,128,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2191;</button>' +
+                '<button type="button" class="detailButtonMoveBtn" data-dir="down" style="background:none;border:1px solid rgba(128,128,128,0.2);border-radius:3px;color:rgba(128,128,128,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2193;</button>';
+            container.appendChild(row);
+        });
+
+        if (!container.dataset.hasListener) {
+            container.dataset.hasListener = 'true';
+            container.addEventListener('click', function (e) {
+                var btn = e.target.closest('.detailButtonMoveBtn');
+                if (!btn) return;
+                var row = btn.closest('.detailButtonItem');
+                if (!row) return;
+                if (btn.dataset.dir === 'up' && row.previousElementSibling) {
+                    container.insertBefore(row, row.previousElementSibling);
+                } else if (btn.dataset.dir === 'down' && row.nextElementSibling) {
+                    container.insertBefore(row.nextElementSibling, row);
+                }
+            });
+        }
+    }
+
+    function getDetailButtonsValue(view) {
+        var items = view.querySelectorAll('#DefaultDetailButtonsList .detailButtonItem');
+        var order = [];
+        var hidden = [];
+        items.forEach(function (item) {
+            var cb = item.querySelector('input[type=checkbox]');
+            var id = item.dataset.id;
+            order.push(id);
+            if (cb && !cb.checked) {
+                hidden.push(id);
+            }
+        });
+        return {
+            order: order.length > 0 ? order : null,
+            hidden: hidden.length > 0 ? hidden : null
+        };
+    }
+
+    var SEERR_DISCOVERY_ROWS = [
+        { id: 'recent_requests', label: 'Recent Requests' },
+        { id: 'watchlist', label: 'Your Watchlist' },
+        { id: 'recently_added', label: 'Recently Added' },
+        { id: 'trending', label: 'Trending' },
+        { id: 'popular_movies', label: 'Popular Movies' },
+        { id: 'movie_genres', label: 'Movie Genres' },
+        { id: 'upcoming_movies', label: 'Upcoming Movies' },
+        { id: 'studios', label: 'Studios' },
+        { id: 'popular_series', label: 'Popular Series' },
+        { id: 'series_genres', label: 'Series Genres' },
+        { id: 'upcoming_series', label: 'Upcoming Series' },
+        { id: 'networks', label: 'Networks' }
+    ];
+
+    function loadSeerrDiscoveryPicker(view, order, hidden) {
+        var container = view.querySelector('#DefaultSeerrDiscoveryList');
+        if (!container) return;
+        var hiddenSet = {};
+        if (hidden && Array.isArray(hidden)) {
+            hidden.forEach(function (id) { hiddenSet[id] = true; });
+        }
+
+        var ordered = [];
+        var addedSet = {};
+
+        if (order && Array.isArray(order) && order.length > 0) {
+            order.forEach(function (id) {
+                var row = SEERR_DISCOVERY_ROWS.find(function (r) { return r.id === id; });
+                if (row) {
+                    ordered.push({ id: row.id, label: row.label, checked: !hiddenSet[row.id] });
+                    addedSet[row.id] = true;
+                }
+            });
+        }
+
+        SEERR_DISCOVERY_ROWS.forEach(function (row) {
+            if (!addedSet[row.id]) {
+                ordered.push({ id: row.id, label: row.label, checked: !hiddenSet[row.id] });
+            }
+        });
+
+        container.innerHTML = '';
+        ordered.forEach(function (item) {
+            var row = document.createElement('div');
+            row.className = 'seerrDiscoveryItem';
+            row.dataset.id = item.id;
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;margin-bottom:2px;background:rgba(128,128,128,0.03);';
+            row.innerHTML =
+                '<input type="checkbox"' + (item.checked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;flex-shrink:0;">' +
+                '<span style="flex:1;font-size:0.9em;color:rgba(128,128,128,0.9);">' + esc(item.label) + '</span>' +
+                '<button type="button" class="seerrMoveBtn" data-dir="up" style="background:none;border:1px solid rgba(128,128,128,0.2);border-radius:3px;color:rgba(128,128,128,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2191;</button>' +
+                '<button type="button" class="seerrMoveBtn" data-dir="down" style="background:none;border:1px solid rgba(128,128,128,0.2);border-radius:3px;color:rgba(128,128,128,0.7);padding:1px 6px;cursor:pointer;font-size:0.85em;">&#x2193;</button>';
+            container.appendChild(row);
+        });
+
+        if (!container.dataset.hasListener) {
+            container.dataset.hasListener = 'true';
+            container.addEventListener('click', function (e) {
+                var btn = e.target.closest('.seerrMoveBtn');
+                if (!btn) return;
+                var row = btn.closest('.seerrDiscoveryItem');
+                if (!row) return;
+                if (btn.dataset.dir === 'up' && row.previousElementSibling) {
+                    container.insertBefore(row, row.previousElementSibling);
+                } else if (btn.dataset.dir === 'down' && row.nextElementSibling) {
+                    container.insertBefore(row.nextElementSibling, row);
+                }
+            });
+        }
+    }
+
+    // Clients carry Seerr rows as seerrRows.rowOrder, which lists the visible rows in
+    // order and treats every row it leaves out as switched off.
+    function getSeerrDiscoveryRowOrder(view) {
+        var items = view.querySelectorAll('#DefaultSeerrDiscoveryList .seerrDiscoveryItem');
+        var rowOrder = [];
+        items.forEach(function (item) {
+            var cb = item.querySelector('input[type=checkbox]');
+            if (!cb || cb.checked) {
+                rowOrder.push(item.dataset.id);
+            }
+        });
+        return rowOrder.length > 0 ? rowOrder : null;
+    }
+
+    // Turns a stored rowOrder back into the picker's order plus hidden pair.
+    function seerrRowsToPicker(seerrRows) {
+        var rowOrder = seerrRows && Array.isArray(seerrRows.rowOrder) ? seerrRows.rowOrder : null;
+        if (!rowOrder || rowOrder.length === 0) return { order: null, hidden: null };
+        var visible = {};
+        rowOrder.forEach(function (id) { visible[id] = true; });
+        var hidden = SEERR_DISCOVERY_ROWS
+            .filter(function (row) { return !visible[row.id]; })
+            .map(function (row) { return row.id; });
+        return { order: rowOrder, hidden: hidden.length > 0 ? hidden : null };
     }
 
     // ── Home layout builder ─────────────────────────────────────────────────
@@ -1417,57 +1722,115 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             initGameCores(view, view.__moonfinState);
 
             var defaults = camelKeysDeep(config.DefaultUserSettings) || {};
+            setSelectValue(view, '#DefaultInterfaceStyle', defaults.interfaceStyle, 'Configured style');
             setSelectValue(view, '#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
             setSelectValue(view, '#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
             setNullableBoolSelect(view, '#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
+            setNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
+            setSelectValue(view, '#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
+            setNullableBoolSelect(view, '#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
+            // One picker stands in for all three form factors.
+            loadDetailButtonsPicker(view,
+                defaults.detailButtonOrderTv || defaults.detailButtonOrderMobile || defaults.detailButtonOrderDesktop || null,
+                defaults.hiddenDetailButtonsTv || defaults.hiddenDetailButtonsMobile || defaults.hiddenDetailButtonsDesktop || null);
             setSelectValue(view, '#DefaultFocusColor', defaults.focusColor, 'Configured color');
+            setSelectValue(view, '#DefaultClockBehavior', defaults.clockBehavior, 'Configured clock');
+            setNullableBoolSelect(view, '#DefaultUse24HourClock', defaults.use24HourClock);
+            setSelectValue(view, '#DefaultDesktopUiScale', defaults.desktopUiScale, 'Configured scale');
+            setNullableBoolSelect(view, '#DefaultBackdropEnabled', defaults.backdropEnabled);
+            bindNullableRangeInput(view, '#DefaultBrowsingBlur');
+            setNullableRangeInput(view, '#DefaultBrowsingBlur', defaults.browsingBlur);
+            bindNullableRangeInput(view, '#DefaultDetailsScreenBlur');
+            setNullableRangeInput(view, '#DefaultDetailsScreenBlur', defaults.detailsScreenBlur);
+            setNullableBoolSelect(view, '#DefaultThemeMusicEnabled', defaults.themeMusicEnabled);
+            setNullableBoolSelect(view, '#DefaultThemeMusicOnHomeRows', defaults.themeMusicOnHomeRows);
+            setNullableBoolSelect(view, '#DefaultThemeMusicLoop', defaults.themeMusicLoop);
+            bindNullableRangeInput(view, '#DefaultThemeMusicVolume', '%');
+            setNullableRangeInput(view, '#DefaultThemeMusicVolume', defaults.themeMusicVolume, '%');
             setSelectValue(view, '#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
             setNullableBoolSelect(view, '#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
             setSelectValue(view, '#DefaultScreensaverMode', defaults.screensaverMode, 'Configured mode');
 
             setSelectValue(view, '#DefaultNavbarPosition', defaults.navbarPosition, 'Configured position');
             setSelectValue(view, '#DefaultNavbarColor', defaults.navbarColor, 'Configured color');
-            setNullableIntInput(view, '#DefaultNavbarOpacity', defaults.navbarOpacity);
+            bindNullableRangeInput(view, '#DefaultNavbarOpacity', '%');
+            setNullableRangeInput(view, '#DefaultNavbarOpacity', defaults.navbarOpacity, '%');
+            setNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded', defaults.navbarAlwaysExpanded);
+            setNullableBoolSelect(view, '#DefaultEnableFolderView', defaults.enableFolderView);
+            setNullableBoolSelect(view, '#DefaultShowSeerrButton', defaults.showSeerrButton);
 
             setSelectValue(view, '#DefaultMediaBarSourceType', defaults.mediaBarSourceType, 'Configured source');
+            loadAdminGenrePicker(view, defaults.mediaBarExcludedGenres || []);
             setSelectValue(view, '#DefaultMediaBarMode', defaults.mediaBarMode, 'Configured mode');
+            setSelectValue(view, '#DefaultMediaBarContentType', defaults.mediaBarContentType, 'Configured content type');
+            setSelectValue(view, '#DefaultMediaBarItemCount', defaults.mediaBarItemCount, 'Configured item count');
+            setNullableBoolSelect(view, '#DefaultMediaBarAutoAdvance', defaults.mediaBarAutoAdvance);
+            setSelectValue(view, '#DefaultMediaBarIntervalMs', defaults.mediaBarIntervalMs, 'Configured interval');
+            setNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
             setNullableBoolSelect(view, '#DefaultMediaBarTrailerAudio', defaults.mediaBarTrailerAudio);
+            setNullableBoolSelect(view, '#DefaultMediaBarTrailerCaptions', defaults.mediaBarTrailerCaptions);
+            setNullableBoolSelect(view, '#DefaultEpisodePreviewEnabled', defaults.episodePreviewEnabled);
+            setNullableBoolSelect(view, '#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
+            setSelectValue(view, '#DefaultSeasonalSurprise', defaults.seasonalSurprise, 'Configured surprise');
+
+            setSelectValue(view, '#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
+            setSelectValue(view, '#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
+            setSelectValue(view, '#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
+            setSelectValue(view, '#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
+
+            fillLanguageSelect(view, '#DefaultDefaultAudioLanguage');
+            fillLanguageSelect(view, '#DefaultDefaultSubtitleLanguage');
+            setSelectValue(view, '#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
+            setNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
+            setNullableBoolSelect(view, '#DefaultPreferAudioDescription', defaults.preferAudioDescription);
+
+            setSelectValue(view, '#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
+            setSelectValue(view, '#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
+            setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
+
+            setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+            setNullableBoolSelect(view, '#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
+            setSelectValue(view, '#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
+            setSelectValue(view, '#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
 
             setSelectValue(view, '#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
             setNullableBoolSelect(view, '#DefaultFullScreenRows', defaults.fullScreenRows);
-            setNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings', defaults.useDetailedSubHeadings);
-            setSelectValue(view, '#DefaultHomeImageTypeContinueWatching', defaults.homeImageTypeContinueWatching, 'Configured image type');
+            setNullableBoolSelect(view, '#DefaultHomeRowInfoOverlay', defaults.homeRowInfoOverlay);
+            bindNullableRangeInput(view, '#DefaultClassicHomeRowsPadding', 'px');
+            setNullableRangeInput(view, '#DefaultClassicHomeRowsPadding', defaults.classicHomeRowsPadding, 'px');
+            bindNullableRangeInput(view, '#DefaultModernHomeRowsPadding', 'px');
+            setNullableRangeInput(view, '#DefaultModernHomeRowsPadding', defaults.modernHomeRowsPadding, 'px');
             setSelectValue(view, '#DefaultPosterSize', defaults.posterSize, 'Configured size');
+            setSelectValue(view, '#DefaultHomeImageTypeContinueWatching', defaults.homeImageTypeContinueWatching, 'Configured image type');
             setNullableBoolSelect(view, '#DefaultDisplayFavoritesRows', defaults.displayFavoritesRows);
             setNullableBoolSelect(view, '#DefaultDisplayCollectionsRows', defaults.displayCollectionsRows);
             setNullableBoolSelect(view, '#DefaultDisplayGenresRows', defaults.displayGenresRows);
             setNullableBoolSelect(view, '#DefaultDisplayPlaylistsRows', defaults.displayPlaylistsRows);
             setNullableBoolSelect(view, '#DefaultDisplayAudioRows', defaults.displayAudioRows);
-            setSelectValue(view, '#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
-            setSelectValue(view, '#DefaultCollectionsRowSortBy', defaults.collectionsRowSortBy, 'Configured sort');
-            setSelectValue(view, '#DefaultGenresRowSortBy', defaults.genresRowSortBy, 'Configured sort');
-            setSelectValue(view, '#DefaultGenresRowItemFilter', defaults.genresRowItemFilter, 'Configured filter');
             setNullableBoolSelect(view, '#DefaultHomeImageUseSeriesImage', defaults.homeImageUseSeriesImage);
             loadHomeSectionsEditor(view, defaults.homeSections || null, defaults.homeRowOrder || null);
-            view.querySelector('#DefaultMergeContinueWatchingNextUp').checked = !!defaults.mergeContinueWatchingNextUp;
-            setNullableIntInput(view, '#DefaultNextUpMaxDays', defaults.nextUpMaxDays);
+            setNullableBoolSelect(view, '#DefaultMergeContinueWatchingNextUp', defaults.mergeContinueWatchingNextUp);
+            setSelectValue(view, '#DefaultNextUpMaxDays', defaults.nextUpMaxDays, 'Configured max days');
 
-            view.querySelector('#DefaultShowShuffleButton').checked = !!defaults.showShuffleButton;
-            view.querySelector('#DefaultShowGenresButton').checked = !!defaults.showGenresButton;
-            view.querySelector('#DefaultShowFavoritesButton').checked = !!defaults.showFavoritesButton;
-            view.querySelector('#DefaultShowCastButton').checked = !!defaults.showCastButton;
-            view.querySelector('#DefaultShowSyncPlayButton').checked = !!defaults.showSyncPlayButton;
-            view.querySelector('#DefaultShowLibrariesInToolbar').checked = !!defaults.showLibrariesInToolbar;
+            setNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
+            setNullableBoolSelect(view, '#DefaultMergeRecentRowsByType', defaults.mergeRecentRowsByType);
+            setNullableBoolSelect(view, '#DefaultGroupItemsIntoCollections', defaults.groupItemsIntoCollections);
+            setNullableBoolSelect(view, '#DefaultShowMediaDetailsOnLibraryPage', defaults.showMediaDetailsOnLibraryPage);
+            setNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings', defaults.useDetailedSubHeadings);
+            setNullableBoolSelect(view, '#DefaultHideBackdropsInLibraries', defaults.hideBackdropsInLibraries);
 
-            setNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
-            setNullableBoolSelect(view, '#DefaultEpisodePreviewEnabled', defaults.episodePreviewEnabled);
-            setNullableBoolSelect(view, '#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
+            setNullableBoolSelect(view, '#DefaultShowShuffleButton', defaults.showShuffleButton);
+            setNullableBoolSelect(view, '#DefaultShowGenresButton', defaults.showGenresButton);
+            setNullableBoolSelect(view, '#DefaultShowFavoritesButton', defaults.showFavoritesButton);
+            setNullableBoolSelect(view, '#DefaultShowLibrariesInToolbar', defaults.showLibrariesInToolbar);
 
             view.querySelector('#DefaultMdblistEnabled').checked = !!defaults.mdblistEnabled;
             view.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked = !!defaults.tmdbEpisodeRatingsEnabled;
             setNullableBoolSelect(view, '#DefaultMdblistShowRatingBadges', defaults.mdblistShowRatingBadges);
             loadRatingSourcesPicker(view, defaults.mdblistRatingSources || null);
             setNullableBoolSelect(view, '#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
+            var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
+            loadSeerrDiscoveryPicker(view, seerrPicker.order, seerrPicker.hidden);
 
             var sourceSelect = view.querySelector('#DefaultMediaBarSourceType');
             var collectionPickerSection = view.querySelector('#DefaultCollectionPickerSection');
@@ -1485,7 +1848,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 sourceSelect.addEventListener('change', togglePickerVisibility);
             }
             togglePickerVisibility();
-            loadAdminGenrePicker(view, defaults.mediaBarExcludedGenres || []);
 
             loading.hide();
         }).catch(reportConfigError);
@@ -1516,56 +1878,112 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 .map(function (cb) { return cb.getAttribute('data-id'); });
 
             var d = camelKeysDeep(config.DefaultUserSettings) || {};
+            d.interfaceStyle = view.querySelector('#DefaultInterfaceStyle').value || null;
             d.visualTheme = view.querySelector('#DefaultVisualTheme').value || null;
             d.detailScreenStyle = view.querySelector('#DefaultDetailScreenStyle').value || null;
             d.detailExpandedTabs = getNullableBoolSelect(view, '#DefaultDetailExpandedTabs');
+            d.detailShowTechnicalDetails = getNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails');
+            d.recommendationSystemSource = view.querySelector('#DefaultRecommendationSystemSource').value || null;
+            d.recommendationsApplyParentalRatingCap = getNullableBoolSelect(view, '#DefaultRecommendationsApplyParentalRatingCap');
+            var btnVal = getDetailButtonsValue(view);
+            // Clients read a different key per form factor, so one arrangement covers all three.
+            d.detailButtonOrderTv = btnVal.order;
+            d.detailButtonOrderMobile = btnVal.order;
+            d.detailButtonOrderDesktop = btnVal.order;
+            d.hiddenDetailButtonsTv = btnVal.hidden;
+            d.hiddenDetailButtonsMobile = btnVal.hidden;
+            d.hiddenDetailButtonsDesktop = btnVal.hidden;
             d.focusColor = view.querySelector('#DefaultFocusColor').value || null;
+            d.clockBehavior = view.querySelector('#DefaultClockBehavior').value || null;
+            d.use24HourClock = getNullableBoolSelect(view, '#DefaultUse24HourClock');
+            d.desktopUiScale = view.querySelector('#DefaultDesktopUiScale').value || null;
+            d.backdropEnabled = getNullableBoolSelect(view, '#DefaultBackdropEnabled');
+            d.browsingBlur = getNullableRangeInput(view, '#DefaultBrowsingBlur');
+            d.detailsScreenBlur = getNullableRangeInput(view, '#DefaultDetailsScreenBlur');
+            d.themeMusicEnabled = getNullableBoolSelect(view, '#DefaultThemeMusicEnabled');
+            d.themeMusicOnHomeRows = getNullableBoolSelect(view, '#DefaultThemeMusicOnHomeRows');
+            d.themeMusicLoop = getNullableBoolSelect(view, '#DefaultThemeMusicLoop');
+            d.themeMusicVolume = getNullableRangeInput(view, '#DefaultThemeMusicVolume');
             d.watchedIndicator = view.querySelector('#DefaultWatchedIndicator').value || null;
             d.cardFocusExpansion = getNullableBoolSelect(view, '#DefaultCardFocusExpansion');
             d.screensaverMode = view.querySelector('#DefaultScreensaverMode').value || null;
 
             d.navbarPosition = view.querySelector('#DefaultNavbarPosition').value || null;
             d.navbarColor = view.querySelector('#DefaultNavbarColor').value || null;
-            d.navbarOpacity = getNullableIntInput(view, '#DefaultNavbarOpacity');
+            d.navbarOpacity = getNullableRangeInput(view, '#DefaultNavbarOpacity');
+            d.navbarAlwaysExpanded = getNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded');
+            d.enableFolderView = getNullableBoolSelect(view, '#DefaultEnableFolderView');
+            d.showSeerrButton = getNullableBoolSelect(view, '#DefaultShowSeerrButton');
 
             d.mediaBarSourceType = view.querySelector('#DefaultMediaBarSourceType').value || null;
+            var genreIds = Array.prototype.slice.call(view.querySelectorAll('.adminGenreCb:checked')).map(function (cb) { return cb.dataset.id; });
+            d.mediaBarExcludedGenres = genreIds.length > 0 ? genreIds : null;
             d.mediaBarMode = view.querySelector('#DefaultMediaBarMode').value || null;
+            d.mediaBarContentType = view.querySelector('#DefaultMediaBarContentType').value || null;
+            d.mediaBarItemCount = getNullableIntInput(view, '#DefaultMediaBarItemCount');
+            d.mediaBarAutoAdvance = getNullableBoolSelect(view, '#DefaultMediaBarAutoAdvance');
+            d.mediaBarIntervalMs = getNullableIntInput(view, '#DefaultMediaBarIntervalMs');
+            d.mediaBarTrailerPreview = getNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview');
             d.mediaBarTrailerAudio = getNullableBoolSelect(view, '#DefaultMediaBarTrailerAudio');
+            d.mediaBarTrailerCaptions = getNullableBoolSelect(view, '#DefaultMediaBarTrailerCaptions');
+            d.episodePreviewEnabled = getNullableBoolSelect(view, '#DefaultEpisodePreviewEnabled');
+            d.previewAudioEnabled = getNullableBoolSelect(view, '#DefaultPreviewAudioEnabled');
+            d.seasonalSurprise = view.querySelector('#DefaultSeasonalSurprise').value || null;
+
+            // Clients store this one as text, unlike the millisecond fields below.
+            d.resumeSubtractDuration = view.querySelector('#DefaultResumeSubtractDuration').value || null;
+            d.unpauseRewindDuration = getNullableIntInput(view, '#DefaultUnpauseRewindDuration');
+            d.skipBackLength = getNullableIntInput(view, '#DefaultSkipBackLength');
+            d.skipForwardLength = getNullableIntInput(view, '#DefaultSkipForwardLength');
+
+            d.defaultAudioLanguage = view.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
+            d.preferDefaultAudioTrack = getNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack');
+            d.preferAudioDescription = getNullableBoolSelect(view, '#DefaultPreferAudioDescription');
+
+            d.subtitleMode = view.querySelector('#DefaultSubtitleMode').value || null;
+            d.defaultSubtitleLanguage = view.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
+            d.preferSdhSubtitles = getNullableBoolSelect(view, '#DefaultPreferSdhSubtitles');
+
+            d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
+            d.autoplayNextEpisode = getNullableBoolSelect(view, '#DefaultAutoplayNextEpisode');
+            d.nextUpTimeout = getNullableIntInput(view, '#DefaultNextUpTimeout');
+            d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;
 
             var collectionIds = Array.prototype.slice.call(view.querySelectorAll('.adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
             d.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
             var libraryIds = Array.prototype.slice.call(view.querySelectorAll('.adminLibraryCb:checked')).map(function (cb) { return cb.dataset.id; });
             d.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
-            var genreIds = Array.prototype.slice.call(view.querySelectorAll('.adminGenreCb:checked')).map(function (cb) { return cb.dataset.id; });
-            d.mediaBarExcludedGenres = genreIds.length > 0 ? genreIds : null;
 
             d.homeRowsStyle = view.querySelector('#DefaultHomeRowsStyle').value || null;
             d.fullScreenRows = getNullableBoolSelect(view, '#DefaultFullScreenRows');
-            d.useDetailedSubHeadings = getNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings');
-            d.homeImageTypeContinueWatching = view.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
+            d.homeRowInfoOverlay = getNullableBoolSelect(view, '#DefaultHomeRowInfoOverlay');
+            d.classicHomeRowsPadding = getNullableIntInput(view, '#DefaultClassicHomeRowsPadding');
+            d.modernHomeRowsPadding = getNullableIntInput(view, '#DefaultModernHomeRowsPadding');
             d.posterSize = view.querySelector('#DefaultPosterSize').value || null;
+            d.homeImageTypeContinueWatching = view.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
             d.displayFavoritesRows = getNullableBoolSelect(view, '#DefaultDisplayFavoritesRows');
             d.displayCollectionsRows = getNullableBoolSelect(view, '#DefaultDisplayCollectionsRows');
             d.displayGenresRows = getNullableBoolSelect(view, '#DefaultDisplayGenresRows');
             d.displayPlaylistsRows = getNullableBoolSelect(view, '#DefaultDisplayPlaylistsRows');
             d.displayAudioRows = getNullableBoolSelect(view, '#DefaultDisplayAudioRows');
-            d.favoritesRowSortBy = view.querySelector('#DefaultFavoritesRowSortBy').value || null;
-            d.collectionsRowSortBy = view.querySelector('#DefaultCollectionsRowSortBy').value || null;
-            d.genresRowSortBy = view.querySelector('#DefaultGenresRowSortBy').value || null;
-            d.genresRowItemFilter = view.querySelector('#DefaultGenresRowItemFilter').value || null;
             d.homeImageUseSeriesImage = getNullableBoolSelect(view, '#DefaultHomeImageUseSeriesImage');
             var homeSections = getHomeSectionsValue(view);
             d.homeSections = homeSections;
             d.homeRowOrder = getHomeRowOrderValue(view, homeSections);
-            d.mergeContinueWatchingNextUp = view.querySelector('#DefaultMergeContinueWatchingNextUp').checked;
+            d.mergeContinueWatchingNextUp = getNullableBoolSelect(view, '#DefaultMergeContinueWatchingNextUp');
             d.nextUpMaxDays = getNullableIntInput(view, '#DefaultNextUpMaxDays');
 
-            d.showShuffleButton = view.querySelector('#DefaultShowShuffleButton').checked;
-            d.showGenresButton = view.querySelector('#DefaultShowGenresButton').checked;
-            d.showFavoritesButton = view.querySelector('#DefaultShowFavoritesButton').checked;
-            d.showCastButton = view.querySelector('#DefaultShowCastButton').checked;
-            d.showSyncPlayButton = view.querySelector('#DefaultShowSyncPlayButton').checked;
-            d.showLibrariesInToolbar = view.querySelector('#DefaultShowLibrariesInToolbar').checked;
+            d.enableMultiServerLibraries = getNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries');
+            d.mergeRecentRowsByType = getNullableBoolSelect(view, '#DefaultMergeRecentRowsByType');
+            d.groupItemsIntoCollections = getNullableBoolSelect(view, '#DefaultGroupItemsIntoCollections');
+            d.showMediaDetailsOnLibraryPage = getNullableBoolSelect(view, '#DefaultShowMediaDetailsOnLibraryPage');
+            d.useDetailedSubHeadings = getNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings');
+            d.hideBackdropsInLibraries = getNullableBoolSelect(view, '#DefaultHideBackdropsInLibraries');
+
+            d.showShuffleButton = getNullableBoolSelect(view, '#DefaultShowShuffleButton');
+            d.showGenresButton = getNullableBoolSelect(view, '#DefaultShowGenresButton');
+            d.showFavoritesButton = getNullableBoolSelect(view, '#DefaultShowFavoritesButton');
+            d.showLibrariesInToolbar = getNullableBoolSelect(view, '#DefaultShowLibrariesInToolbar');
 
             d.mediaBarTrailerPreview = getNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview');
             d.episodePreviewEnabled = getNullableBoolSelect(view, '#DefaultEpisodePreviewEnabled');
@@ -1576,6 +1994,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.mdblistShowRatingBadges = getNullableBoolSelect(view, '#DefaultMdblistShowRatingBadges');
             d.mdblistRatingSources = getRatingSourcesValue(view);
             d.seerrBlockNsfw = getNullableBoolSelect(view, '#DefaultSeerrBlockNsfw');
+            // seerrRows carries more than the ordering, so merge rather than replace.
+            var seerrRows = Object.assign({}, d.seerrRows || {});
+            seerrRows.rowOrder = getSeerrDiscoveryRowOrder(view);
+            d.seerrRows = seerrRows;
 
             config.DefaultUserSettings = d;
 
@@ -1679,12 +2101,39 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
     }
 
+    function initializeDefaultsSubtabs(view) {
+        var subnav = view.querySelector('.defaultsSubnavBar');
+        if (!subnav || subnav.dataset.bound) return;
+        subnav.dataset.bound = 'true';
+
+        subnav.addEventListener('click', function (e) {
+            var btn = e.target.closest('.defaultsSubtabBtn');
+            if (!btn) return;
+            var subtab = btn.dataset.subtab;
+            if (!subtab) return;
+
+            var buttons = subnav.querySelectorAll('.defaultsSubtabBtn');
+            buttons.forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+
+            var panels = view.querySelectorAll('.defaultsSubtabPanel');
+            panels.forEach(function (p) {
+                if (p.dataset.subtab === subtab) {
+                    p.classList.add('active');
+                } else {
+                    p.classList.remove('active');
+                }
+            });
+        });
+    }
+
     function bindOnce(view) {
         if (view.__moonfinBound) return;
         view.__moonfinBound = true;
         view.__moonfinState = { timer: null };
 
         initializeAdminTabs(view);
+        initializeDefaultsSubtabs(view);
 
         var form = view.querySelector('#MoonfinConfigForm');
         if (form) {

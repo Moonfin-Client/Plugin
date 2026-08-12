@@ -90,6 +90,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("genresRowSortBy")] public string? GenresRowSortBy { get; set; }
         [JsonPropertyName("genresRowItemFilter")] public string? GenresRowItemFilter { get; set; }
         [JsonPropertyName("navbarAlwaysExpanded")] public bool? NavbarAlwaysExpanded { get; set; }
+        [JsonPropertyName("mediaBarTrailerCaptions")] public bool? MediaBarTrailerCaptions { get; set; }
         [JsonPropertyName("detailScreenStyle")] public string? DetailScreenStyle { get; set; }
         [JsonPropertyName("detailExpandedTabs")] public bool? DetailExpandedTabs { get; set; }
         [JsonPropertyName("themeMusicLoop")] public bool? ThemeMusicLoop { get; set; }

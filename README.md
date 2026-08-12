@@ -36,7 +36,7 @@ On **Jellyfin**, you can optionally add a one-click Moonfin button to the stock 
 - **Extra rating sources** through MDBList and TMDB, with the API keys kept on the server.
 - **Seerr integration** with a built-in proxy, single sign-on, and optional request and issue notifications.
 - **Push notifications** that reach Moonfin apps even when they're closed, covering Seerr activity, new media added to your library, and admin broadcasts, with support for a self-hosted relay or your own FCM service account. See [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications).
-- **Admin tools** for setting server-wide defaults, pushing them to existing users, and broadcasting messages to everyone at once.
+- **Admin tools** for setting server-wide defaults, including playback defaults for video, audio, subtitles, and automation, pushing them to existing users, and broadcasting messages to everyone at once.
 - **Custom themes** with a built-in editor, plus server-side upload and validation.
 - **Retro games** support for browsing and playing game libraries in the browser. See [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games).
 - **Custom rows** built from MDBList and IMDb lists, cached on the server.
@@ -92,6 +92,7 @@ Open your server dashboard, go to Plugins, and select **Moonbase** to configure 
 - Your Seerr URL and whether Seerr is enabled
 - Shared MDBList and TMDB API keys, so individual users don't need their own
 - Default user settings that new users inherit, with a button to push them to existing users
+- Playback defaults for autoplay, audio and subtitle language, subtitle mode, skip lengths, intro action, still watching behavior, and rewind durations
 - A broadcast message to announce something to everyone at once
 - Web startup options and custom theme uploads
 
