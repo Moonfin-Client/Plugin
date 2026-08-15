@@ -786,6 +786,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     var SEERR_DISCOVERY_ROWS = [
+        { id: 'shortcuts', label: 'Seerr Browse' },
         { id: 'recent_requests', label: 'Recent Requests' },
         { id: 'watchlist', label: 'Your Watchlist' },
         { id: 'recently_added', label: 'Recently Added' },
@@ -907,6 +908,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { type: 'favoritesongs', label: 'Favorite Songs' },
         { type: 'genres', label: 'Genres' },
         { type: 'playlists', label: 'Playlists' },
+        { type: 'seerr_shortcuts', label: 'Seerr Browse' },
         { type: 'seerr_recent_requests', label: 'Seerr Recent Requests' },
         { type: 'seerr_recently_added', label: 'Seerr Recently Added' },
         { type: 'seerr_popular_movies', label: 'Seerr Popular Movies' },
@@ -929,6 +931,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     ];
 
     var HOME_LAYOUT_SEERR_TYPES = {
+        seerr_shortcuts: true,
         seerr_recent_requests: true,
         seerr_recently_added: true,
         seerr_popular_movies: true,
