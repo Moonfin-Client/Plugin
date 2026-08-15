@@ -1135,6 +1135,16 @@
                                 </select>
                                 <div class="fieldDescription">Combines recently added media from different libraries of the same type into unified rows.</div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRecentlyReleasedSeriesType">Recently Released Series Sort By</label>
+                                <select id="DefaultRecentlyReleasedSeriesType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="series">Series</option>
+                                    <option value="season">Season</option>
+                                    <option value="episode">Episode</option>
+                                </select>
+                                <div class="fieldDescription">Sort Recently Released Series home rows by series, latest season, or latest episode air date.</div>
+                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Library View</h4>
                             <div class="inputContainer">
@@ -3682,6 +3692,7 @@
 
                     setNullableBoolSelect('#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
                     setNullableBoolSelect('#DefaultMergeRecentRowsByType', defaults.mergeRecentRowsByType);
+                    setSelectValue('#DefaultRecentlyReleasedSeriesType', defaults.recentlyReleasedSeriesType, 'Configured sort');
                     setNullableBoolSelect('#DefaultGroupItemsIntoCollections', defaults.groupItemsIntoCollections);
                     setNullableBoolSelect('#DefaultShowMediaDetailsOnLibraryPage', defaults.showMediaDetailsOnLibraryPage);
                     setNullableBoolSelect('#DefaultUseDetailedSubHeadings', defaults.useDetailedSubHeadings);
@@ -4087,6 +4098,7 @@
 
                         config.DefaultUserSettings.enableMultiServerLibraries = getNullableBoolSelect('#DefaultEnableMultiServerLibraries');
                         config.DefaultUserSettings.mergeRecentRowsByType = getNullableBoolSelect('#DefaultMergeRecentRowsByType');
+                        config.DefaultUserSettings.recentlyReleasedSeriesType = document.querySelector('#DefaultRecentlyReleasedSeriesType').value || null;
                         config.DefaultUserSettings.groupItemsIntoCollections = getNullableBoolSelect('#DefaultGroupItemsIntoCollections');
                         config.DefaultUserSettings.showMediaDetailsOnLibraryPage = getNullableBoolSelect('#DefaultShowMediaDetailsOnLibraryPage');
                         config.DefaultUserSettings.useDetailedSubHeadings = getNullableBoolSelect('#DefaultUseDetailedSubHeadings');
