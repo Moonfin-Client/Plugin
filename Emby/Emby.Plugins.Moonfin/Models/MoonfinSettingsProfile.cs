@@ -146,6 +146,13 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("subtitlesTextSize")] public double? SubtitlesTextSize { get; set; }
         [JsonPropertyName("subtitlesOffsetPosition")] public double? SubtitlesOffsetPosition { get; set; }
         [JsonPropertyName("subtitlesTextWeight")] public int? SubtitlesTextWeight { get; set; }
+        [JsonPropertyName("subtitlesHdrSeparate")] public bool? SubtitlesHdrSeparate { get; set; }
+        [JsonPropertyName("subtitlesHdrTextColor")] public string? SubtitlesHdrTextColor { get; set; }
+        [JsonPropertyName("subtitlesHdrTextStrokeColor")] public string? SubtitlesHdrTextStrokeColor { get; set; }
+        [JsonPropertyName("subtitlesHdrBackgroundColor")] public string? SubtitlesHdrBackgroundColor { get; set; }
+        [JsonPropertyName("subtitlesHdrTextSize")] public double? SubtitlesHdrTextSize { get; set; }
+        [JsonPropertyName("subtitlesHdrOffsetPosition")] public double? SubtitlesHdrOffsetPosition { get; set; }
+        [JsonPropertyName("subtitlesHdrTextWeight")] public int? SubtitlesHdrTextWeight { get; set; }
 
         // Audio track selection. Output and passthrough settings are deliberately absent,
         // they describe the hardware attached to one device rather than a user preference.
