@@ -1817,6 +1817,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             setNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
             setNullableBoolSelect(view, '#DefaultMergeRecentRowsByType', defaults.mergeRecentRowsByType);
+            setSelectValue(view, '#DefaultRecentlyReleasedSeriesType', defaults.recentlyReleasedSeriesType, 'Configured sort');
             setNullableBoolSelect(view, '#DefaultGroupItemsIntoCollections', defaults.groupItemsIntoCollections);
             setNullableBoolSelect(view, '#DefaultShowMediaDetailsOnLibraryPage', defaults.showMediaDetailsOnLibraryPage);
             setNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings', defaults.useDetailedSubHeadings);
@@ -1978,6 +1979,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             d.enableMultiServerLibraries = getNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries');
             d.mergeRecentRowsByType = getNullableBoolSelect(view, '#DefaultMergeRecentRowsByType');
+            d.recentlyReleasedSeriesType = view.querySelector('#DefaultRecentlyReleasedSeriesType').value || null;
             d.groupItemsIntoCollections = getNullableBoolSelect(view, '#DefaultGroupItemsIntoCollections');
             d.showMediaDetailsOnLibraryPage = getNullableBoolSelect(view, '#DefaultShowMediaDetailsOnLibraryPage');
             d.useDetailedSubHeadings = getNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings');
