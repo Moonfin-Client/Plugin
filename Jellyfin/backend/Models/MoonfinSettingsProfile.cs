@@ -820,6 +820,9 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("playlistsRowShowEpisodes")]
     public bool? PlaylistsRowShowEpisodes { get; set; }
+
+    [JsonPropertyName("recentlyReleasedSeriesType")]
+    public string? RecentlyReleasedSeriesType { get; set; }
 }
 
 
