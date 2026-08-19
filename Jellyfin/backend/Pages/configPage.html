@@ -3930,6 +3930,9 @@
                     }).then(function(info) {
                         var status = info && info.status ? info.status : 'Unknown';
                         var msg = 'Webhook provisioning status: ' + status + '.';
+                        if (info && info.message) {
+                            msg += ' ' + info.message;
+                        }
                         if (info && typeof info.currentTypes === 'number') {
                             msg += ' Current event types in Seerr: ' + info.currentTypes
                                 + ' (3918 = the four request events plus the four issue events).';

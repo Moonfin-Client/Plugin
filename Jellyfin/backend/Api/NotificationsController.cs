@@ -149,6 +149,7 @@ public class NotificationsController : ControllerBase
                 "ISSUE_CREATED", "ISSUE_COMMENT", "ISSUE_RESOLVED", "ISSUE_REOPENED"
             },
             status = _provisioning.LastStatus.ToString(),
+            message = _provisioning.LastMessage,
             likelyUnreachable = _provisioning.LastResolvedUrlLikelyUnreachable,
             currentTypes,
             expectedTypes = SeerrProvisioningService.TargetTypes

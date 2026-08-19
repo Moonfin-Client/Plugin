@@ -87,6 +87,13 @@ public class SeerrProvisioningService
     public ProvisioningStatus LastStatus { get; private set; } = ProvisioningStatus.NotAttempted;
 
     /// <summary>
+    /// What went wrong in the last attempt, in words. The status alone names a
+    /// condition without saying what to do about it, and an admin reading
+    /// NoAdminSession has nowhere to go from there.
+    /// </summary>
+    public string LastMessage { get; private set; } = string.Empty;
+
+    /// <summary>
     /// Runs provisioning if it hasn't been tried within the retry window. Fire-and-forget safe.
     /// </summary>
     public async Task<ProvisioningResult> EnsureWebhookAsync(CancellationToken cancellationToken)
@@ -95,7 +102,7 @@ public class SeerrProvisioningService
         var last = Interlocked.Read(ref _lastAttemptTicks);
         if (last != 0 && now - last < RetryWindow.Ticks)
         {
-            return new ProvisioningResult(LastStatus, "Skipped (tried recently).");
+            return new ProvisioningResult(LastStatus, LastMessage);
         }
 
         await _gate.WaitAsync(cancellationToken);
@@ -105,12 +112,13 @@ public class SeerrProvisioningService
             last = Interlocked.Read(ref _lastAttemptTicks);
             if (last != 0 && now - last < RetryWindow.Ticks)
             {
-                return new ProvisioningResult(LastStatus, "Skipped (tried recently).");
+                return new ProvisioningResult(LastStatus, LastMessage);
             }
 
             Interlocked.Exchange(ref _lastAttemptTicks, now);
             var result = await ProvisionAsync(cancellationToken);
             LastStatus = result.Status;
+            LastMessage = result.Message;
             return result;
         }
         finally
