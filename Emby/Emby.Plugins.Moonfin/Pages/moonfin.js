@@ -1950,19 +1950,19 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;
 
             if (view.querySelector('#DefaultCollectionPicker .adminCollectionCb')) {
-                var collectionIds = Array.prototype.slice.call(view.querySelectorAll('.adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
+                var collectionIds = Array.prototype.slice.call(view.querySelectorAll('#DefaultCollectionPicker .adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
                 d.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
             }
             if (view.querySelector('#DefaultLibraryPicker .adminLibraryCb')) {
-                var libraryIds = Array.prototype.slice.call(view.querySelectorAll('.adminLibraryCb:checked')).map(function (cb) { return cb.dataset.id; });
+                var libraryIds = Array.prototype.slice.call(view.querySelectorAll('#DefaultLibraryPicker .adminLibraryCb:checked')).map(function (cb) { return cb.dataset.id; });
                 d.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
             }
 
             d.homeRowsStyle = view.querySelector('#DefaultHomeRowsStyle').value || null;
             d.fullScreenRows = getNullableBoolSelect(view, '#DefaultFullScreenRows');
             d.homeRowInfoOverlay = getNullableBoolSelect(view, '#DefaultHomeRowInfoOverlay');
-            d.classicHomeRowsPadding = getNullableIntInput(view, '#DefaultClassicHomeRowsPadding');
-            d.modernHomeRowsPadding = getNullableIntInput(view, '#DefaultModernHomeRowsPadding');
+            d.classicHomeRowsPadding = getNullableRangeInput(view, '#DefaultClassicHomeRowsPadding');
+            d.modernHomeRowsPadding = getNullableRangeInput(view, '#DefaultModernHomeRowsPadding');
             d.posterSize = view.querySelector('#DefaultPosterSize').value || null;
             d.homeImageTypeContinueWatching = view.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
             d.displayFavoritesRows = getNullableBoolSelect(view, '#DefaultDisplayFavoritesRows');
