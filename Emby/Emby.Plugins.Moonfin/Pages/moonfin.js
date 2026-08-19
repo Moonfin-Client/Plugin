@@ -196,6 +196,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return isNaN(parsed) ? null : parsed;
     }
 
+    // The two blur settings are text on the profile, and a JSON number will not
+    // deserialize into a string property, so the whole save fails rather than
+    // that one value being dropped.
+    function getNullableRangeInputAsText(view, selectorId) {
+        var parsed = getNullableRangeInput(view, selectorId);
+        return parsed == null ? null : String(parsed);
+    }
+
     function bindNullableRangeInput(view, selectorId, unit) {
         var select = view.querySelector(selectorId + '_Set');
         var range = view.querySelector(selectorId);
@@ -786,6 +794,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     var SEERR_DISCOVERY_ROWS = [
+        { id: 'shortcuts', label: 'Seerr Browse' },
         { id: 'recent_requests', label: 'Recent Requests' },
         { id: 'watchlist', label: 'Your Watchlist' },
         { id: 'recently_added', label: 'Recently Added' },
@@ -907,6 +916,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { type: 'favoritesongs', label: 'Favorite Songs' },
         { type: 'genres', label: 'Genres' },
         { type: 'playlists', label: 'Playlists' },
+        { type: 'seerr_shortcuts', label: 'Seerr Browse' },
         { type: 'seerr_recent_requests', label: 'Seerr Recent Requests' },
         { type: 'seerr_recently_added', label: 'Seerr Recently Added' },
         { type: 'seerr_popular_movies', label: 'Seerr Popular Movies' },
@@ -929,6 +939,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     ];
 
     var HOME_LAYOUT_SEERR_TYPES = {
+        seerr_shortcuts: true,
         seerr_recent_requests: true,
         seerr_recently_added: true,
         seerr_popular_movies: true,
@@ -1898,8 +1909,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.use24HourClock = getNullableBoolSelect(view, '#DefaultUse24HourClock');
             d.desktopUiScale = view.querySelector('#DefaultDesktopUiScale').value || null;
             d.backdropEnabled = getNullableBoolSelect(view, '#DefaultBackdropEnabled');
-            d.browsingBlur = getNullableRangeInput(view, '#DefaultBrowsingBlur');
-            d.detailsScreenBlur = getNullableRangeInput(view, '#DefaultDetailsScreenBlur');
+            d.browsingBlur = getNullableRangeInputAsText(view, '#DefaultBrowsingBlur');
+            d.detailsScreenBlur = getNullableRangeInputAsText(view, '#DefaultDetailsScreenBlur');
             d.themeMusicEnabled = getNullableBoolSelect(view, '#DefaultThemeMusicEnabled');
             d.themeMusicOnHomeRows = getNullableBoolSelect(view, '#DefaultThemeMusicOnHomeRows');
             d.themeMusicLoop = getNullableBoolSelect(view, '#DefaultThemeMusicLoop');
@@ -1949,16 +1960,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.nextUpTimeout = getNullableIntInput(view, '#DefaultNextUpTimeout');
             d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;
 
-            var collectionIds = Array.prototype.slice.call(view.querySelectorAll('.adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
-            d.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
-            var libraryIds = Array.prototype.slice.call(view.querySelectorAll('.adminLibraryCb:checked')).map(function (cb) { return cb.dataset.id; });
-            d.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
+            if (view.querySelector('#DefaultCollectionPicker .adminCollectionCb')) {
+                var collectionIds = Array.prototype.slice.call(view.querySelectorAll('#DefaultCollectionPicker .adminCollectionCb:checked')).map(function (cb) { return cb.dataset.id; });
+                d.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
+            }
+            if (view.querySelector('#DefaultLibraryPicker .adminLibraryCb')) {
+                var libraryIds = Array.prototype.slice.call(view.querySelectorAll('#DefaultLibraryPicker .adminLibraryCb:checked')).map(function (cb) { return cb.dataset.id; });
+                d.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
+            }
 
             d.homeRowsStyle = view.querySelector('#DefaultHomeRowsStyle').value || null;
             d.fullScreenRows = getNullableBoolSelect(view, '#DefaultFullScreenRows');
             d.homeRowInfoOverlay = getNullableBoolSelect(view, '#DefaultHomeRowInfoOverlay');
-            d.classicHomeRowsPadding = getNullableIntInput(view, '#DefaultClassicHomeRowsPadding');
-            d.modernHomeRowsPadding = getNullableIntInput(view, '#DefaultModernHomeRowsPadding');
+            d.classicHomeRowsPadding = getNullableRangeInput(view, '#DefaultClassicHomeRowsPadding');
+            d.modernHomeRowsPadding = getNullableRangeInput(view, '#DefaultModernHomeRowsPadding');
             d.posterSize = view.querySelector('#DefaultPosterSize').value || null;
             d.homeImageTypeContinueWatching = view.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
             d.displayFavoritesRows = getNullableBoolSelect(view, '#DefaultDisplayFavoritesRows');

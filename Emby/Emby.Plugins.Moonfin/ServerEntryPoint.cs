@@ -15,15 +15,17 @@ namespace Emby.Plugins.Moonfin
         private readonly ILogManager _logManager;
         private readonly ILibraryManager _libraryManager;
         private readonly IUserManager _userManager;
+        private readonly IUserDataManager _userDataManager;
         private readonly ISessionManager _sessionManager;
         private readonly IServerApplicationHost _appHost;
         private Services.NewMediaNotifier? _newMediaNotifier;
 
-        public ServerEntryPoint(ILogManager logManager, ILibraryManager libraryManager, IUserManager userManager, ISessionManager sessionManager, IServerApplicationHost appHost)
+        public ServerEntryPoint(ILogManager logManager, ILibraryManager libraryManager, IUserManager userManager, IUserDataManager userDataManager, ISessionManager sessionManager, IServerApplicationHost appHost)
         {
             _logManager = logManager;
             _libraryManager = libraryManager;
             _userManager = userManager;
+            _userDataManager = userDataManager;
             _sessionManager = sessionManager;
             _appHost = appHost;
         }
@@ -35,6 +37,7 @@ namespace Emby.Plugins.Moonfin
 
             PluginServices.LibraryManager = _libraryManager;
             PluginServices.UserManager = _userManager;
+            PluginServices.UserDataManager = _userDataManager;
             PluginServices.SessionManager = _sessionManager;
 
             plugin.MigrateConfiguration();
@@ -95,6 +98,7 @@ namespace Emby.Plugins.Moonfin
     {
         public static ILibraryManager? LibraryManager { get; set; }
         public static IUserManager? UserManager { get; set; }
+        public static IUserDataManager? UserDataManager { get; set; }
         public static ISessionManager? SessionManager { get; set; }
     }
 }

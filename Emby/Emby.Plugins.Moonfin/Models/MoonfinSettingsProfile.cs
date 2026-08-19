@@ -120,6 +120,9 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaBarContentType")] public string? MediaBarContentType { get; set; }
 
         [JsonPropertyName("detailShowTechnicalDetails")] public bool? DetailShowTechnicalDetails { get; set; }
+        [JsonPropertyName("hideDetailsMediaDescription")] public bool? HideDetailsMediaDescription { get; set; }
+        [JsonPropertyName("detailUseSeriesThumbnails")] public bool? DetailUseSeriesThumbnails { get; set; }
+        [JsonPropertyName("hideHomeMediaDescription")] public bool? HideHomeMediaDescription { get; set; }
         [JsonPropertyName("recommendationSystemSource")] public string? RecommendationSystemSource { get; set; }
         [JsonPropertyName("recommendationsApplyParentalRatingCap")] public bool? RecommendationsApplyParentalRatingCap { get; set; }
 
@@ -149,6 +152,13 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("subtitlesTextSize")] public double? SubtitlesTextSize { get; set; }
         [JsonPropertyName("subtitlesOffsetPosition")] public double? SubtitlesOffsetPosition { get; set; }
         [JsonPropertyName("subtitlesTextWeight")] public int? SubtitlesTextWeight { get; set; }
+        [JsonPropertyName("subtitlesHdrSeparate")] public bool? SubtitlesHdrSeparate { get; set; }
+        [JsonPropertyName("subtitlesHdrTextColor")] public string? SubtitlesHdrTextColor { get; set; }
+        [JsonPropertyName("subtitlesHdrTextStrokeColor")] public string? SubtitlesHdrTextStrokeColor { get; set; }
+        [JsonPropertyName("subtitlesHdrBackgroundColor")] public string? SubtitlesHdrBackgroundColor { get; set; }
+        [JsonPropertyName("subtitlesHdrTextSize")] public double? SubtitlesHdrTextSize { get; set; }
+        [JsonPropertyName("subtitlesHdrOffsetPosition")] public double? SubtitlesHdrOffsetPosition { get; set; }
+        [JsonPropertyName("subtitlesHdrTextWeight")] public int? SubtitlesHdrTextWeight { get; set; }
 
         // Audio track selection. Output and passthrough settings are deliberately absent,
         // they describe the hardware attached to one device rather than a user preference.
@@ -259,6 +269,16 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("playlistsRowSortOrder")] public string? PlaylistsRowSortOrder { get; set; }
         [JsonPropertyName("audioRowsSortBy")] public string? AudioRowsSortBy { get; set; }
         [JsonPropertyName("audioRowsSortOrder")] public string? AudioRowsSortOrder { get; set; }
+        [JsonPropertyName("displayStudiosRows")] public bool? DisplayStudiosRows { get; set; }
+        [JsonPropertyName("studiosRowSortBy")] public string? StudiosRowSortBy { get; set; }
+        [JsonPropertyName("studiosRowSortOrder")] public string? StudiosRowSortOrder { get; set; }
+        [JsonPropertyName("studiosRowSelectedIds")] public string? StudiosRowSelectedIds { get; set; }
+        [JsonPropertyName("cinemaModeEpisodesEnabled")] public bool? CinemaModeEpisodesEnabled { get; set; }
+        [JsonPropertyName("playerSwipeGestures")] public bool? PlayerSwipeGestures { get; set; }
+        [JsonPropertyName("desktopScrollSensitivity")] public int? DesktopScrollSensitivity { get; set; }
+        [JsonPropertyName("mediaSegmentAutoHide")] public string? MediaSegmentAutoHide { get; set; }
+        [JsonPropertyName("mediaTypeBadgeBehavior")] public string? MediaTypeBadgeBehavior { get; set; }
+        [JsonPropertyName("personalRatingStyle")] public string? PersonalRatingStyle { get; set; }
         [JsonPropertyName("epgMobileView")] public string? EpgMobileView { get; set; }
         [JsonPropertyName("sinceYouWatched1Enabled")] public bool? SinceYouWatched1Enabled { get; set; }
         [JsonPropertyName("sinceYouWatched2Enabled")] public bool? SinceYouWatched2Enabled { get; set; }
