@@ -2145,6 +2145,14 @@
                 return Number.isNaN(parsed) ? null : parsed;
             }
 
+            // The two blur settings are text on the profile, and a JSON number
+            // will not deserialize into a string property, so the whole save
+            // fails rather than that one value being dropped.
+            function getNullableRangeInputAsText(selectorId) {
+                var parsed = getNullableRangeInput(selectorId);
+                return parsed == null ? null : String(parsed);
+            }
+
             function bindNullableRangeInput(selectorId, unit) {
                 var select = document.querySelector(selectorId + '_Set');
                 var range = document.querySelector(selectorId);
@@ -4000,11 +4008,12 @@
                         config.DefaultUserSettings.use24HourClock = getNullableBoolSelect('#DefaultUse24HourClock');
                         config.DefaultUserSettings.desktopUiScale = document.querySelector('#DefaultDesktopUiScale').value || null;
                         config.DefaultUserSettings.backdropEnabled = getNullableBoolSelect('#DefaultBackdropEnabled');
-                        config.DefaultUserSettings.browsingBlur = getNullableRangeInput('#DefaultBrowsingBlur');
-                        config.DefaultUserSettings.detailsScreenBlur = getNullableRangeInput('#DefaultDetailsScreenBlur');
+                        config.DefaultUserSettings.browsingBlur = getNullableRangeInputAsText('#DefaultBrowsingBlur');
+                        config.DefaultUserSettings.detailsScreenBlur = getNullableRangeInputAsText('#DefaultDetailsScreenBlur');
                         config.DefaultUserSettings.themeMusicEnabled = getNullableBoolSelect('#DefaultThemeMusicEnabled');
                         config.DefaultUserSettings.themeMusicOnHomeRows = getNullableBoolSelect('#DefaultThemeMusicOnHomeRows');
                         config.DefaultUserSettings.themeMusicLoop = getNullableBoolSelect('#DefaultThemeMusicLoop');
+                        config.DefaultUserSettings.themeMusicVolume = getNullableRangeInput('#DefaultThemeMusicVolume');
                         config.DefaultUserSettings.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
                         config.DefaultUserSettings.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
 

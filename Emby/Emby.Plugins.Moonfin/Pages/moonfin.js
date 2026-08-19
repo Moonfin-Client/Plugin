@@ -196,6 +196,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return isNaN(parsed) ? null : parsed;
     }
 
+    // The two blur settings are text on the profile, and a JSON number will not
+    // deserialize into a string property, so the whole save fails rather than
+    // that one value being dropped.
+    function getNullableRangeInputAsText(view, selectorId) {
+        var parsed = getNullableRangeInput(view, selectorId);
+        return parsed == null ? null : String(parsed);
+    }
+
     function bindNullableRangeInput(view, selectorId, unit) {
         var select = view.querySelector(selectorId + '_Set');
         var range = view.querySelector(selectorId);
@@ -1901,8 +1909,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.use24HourClock = getNullableBoolSelect(view, '#DefaultUse24HourClock');
             d.desktopUiScale = view.querySelector('#DefaultDesktopUiScale').value || null;
             d.backdropEnabled = getNullableBoolSelect(view, '#DefaultBackdropEnabled');
-            d.browsingBlur = getNullableRangeInput(view, '#DefaultBrowsingBlur');
-            d.detailsScreenBlur = getNullableRangeInput(view, '#DefaultDetailsScreenBlur');
+            d.browsingBlur = getNullableRangeInputAsText(view, '#DefaultBrowsingBlur');
+            d.detailsScreenBlur = getNullableRangeInputAsText(view, '#DefaultDetailsScreenBlur');
             d.themeMusicEnabled = getNullableBoolSelect(view, '#DefaultThemeMusicEnabled');
             d.themeMusicOnHomeRows = getNullableBoolSelect(view, '#DefaultThemeMusicOnHomeRows');
             d.themeMusicLoop = getNullableBoolSelect(view, '#DefaultThemeMusicLoop');
