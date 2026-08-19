@@ -743,6 +743,36 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("audioRowsSortBy")]
     public string? AudioRowsSortBy { get; set; }
 
+    [JsonPropertyName("displayStudiosRows")]
+    public bool? DisplayStudiosRows { get; set; }
+
+    [JsonPropertyName("studiosRowSortBy")]
+    public string? StudiosRowSortBy { get; set; }
+
+    [JsonPropertyName("studiosRowSortOrder")]
+    public string? StudiosRowSortOrder { get; set; }
+
+    [JsonPropertyName("studiosRowSelectedIds")]
+    public string? StudiosRowSelectedIds { get; set; }
+
+    [JsonPropertyName("cinemaModeEpisodesEnabled")]
+    public bool? CinemaModeEpisodesEnabled { get; set; }
+
+    [JsonPropertyName("playerSwipeGestures")]
+    public bool? PlayerSwipeGestures { get; set; }
+
+    [JsonPropertyName("desktopScrollSensitivity")]
+    public int? DesktopScrollSensitivity { get; set; }
+
+    [JsonPropertyName("mediaSegmentAutoHide")]
+    public string? MediaSegmentAutoHide { get; set; }
+
+    [JsonPropertyName("mediaTypeBadgeBehavior")]
+    public string? MediaTypeBadgeBehavior { get; set; }
+
+    [JsonPropertyName("personalRatingStyle")]
+    public string? PersonalRatingStyle { get; set; }
+
     [JsonPropertyName("epgMobileView")]
     public string? EpgMobileView { get; set; }
 
