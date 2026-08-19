@@ -117,6 +117,9 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaBarContentType")] public string? MediaBarContentType { get; set; }
 
         [JsonPropertyName("detailShowTechnicalDetails")] public bool? DetailShowTechnicalDetails { get; set; }
+        [JsonPropertyName("hideDetailsMediaDescription")] public bool? HideDetailsMediaDescription { get; set; }
+        [JsonPropertyName("detailUseSeriesThumbnails")] public bool? DetailUseSeriesThumbnails { get; set; }
+        [JsonPropertyName("hideHomeMediaDescription")] public bool? HideHomeMediaDescription { get; set; }
         [JsonPropertyName("recommendationSystemSource")] public string? RecommendationSystemSource { get; set; }
         [JsonPropertyName("recommendationsApplyParentalRatingCap")] public bool? RecommendationsApplyParentalRatingCap { get; set; }
 

@@ -4000,8 +4000,8 @@
                         config.DefaultUserSettings.use24HourClock = getNullableBoolSelect('#DefaultUse24HourClock');
                         config.DefaultUserSettings.desktopUiScale = document.querySelector('#DefaultDesktopUiScale').value || null;
                         config.DefaultUserSettings.backdropEnabled = getNullableBoolSelect('#DefaultBackdropEnabled');
-                        config.DefaultUserSettings.browsingBlur = getNullableIntInput('#DefaultBrowsingBlur');
-                        config.DefaultUserSettings.detailsScreenBlur = getNullableIntInput('#DefaultDetailsScreenBlur');
+                        config.DefaultUserSettings.browsingBlur = getNullableRangeInput('#DefaultBrowsingBlur');
+                        config.DefaultUserSettings.detailsScreenBlur = getNullableRangeInput('#DefaultDetailsScreenBlur');
                         config.DefaultUserSettings.themeMusicEnabled = getNullableBoolSelect('#DefaultThemeMusicEnabled');
                         config.DefaultUserSettings.themeMusicOnHomeRows = getNullableBoolSelect('#DefaultThemeMusicOnHomeRows');
                         config.DefaultUserSettings.themeMusicLoop = getNullableBoolSelect('#DefaultThemeMusicLoop');
@@ -4010,7 +4010,7 @@
 
                         config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
                         config.DefaultUserSettings.navbarColor = document.querySelector('#DefaultNavbarColor').value || null;
-                        config.DefaultUserSettings.navbarOpacity = getNullableIntInput('#DefaultNavbarOpacity');
+                        config.DefaultUserSettings.navbarOpacity = getNullableRangeInput('#DefaultNavbarOpacity');
                         config.DefaultUserSettings.navbarAlwaysExpanded = getNullableBoolSelect('#DefaultNavbarAlwaysExpanded');
                         config.DefaultUserSettings.enableFolderView = getNullableBoolSelect('#DefaultEnableFolderView');
                         config.DefaultUserSettings.showSeerrButton = getNullableBoolSelect('#DefaultShowSeerrButton');
@@ -4052,25 +4052,29 @@
                         config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
                         config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;
 
-                        var collectionCbs = document.querySelectorAll('.adminCollectionCb:checked');
-                        var collectionIds = [];
-                        for (var ci = 0; ci < collectionCbs.length; ci++) {
-                            collectionIds.push(collectionCbs[ci].dataset.id);
+                        if (document.querySelector('#DefaultCollectionPicker .adminCollectionCb') != null) {
+                            var collectionCbs = document.querySelectorAll('#DefaultCollectionPicker .adminCollectionCb:checked');
+                            var collectionIds = [];
+                            for (var ci = 0; ci < collectionCbs.length; ci++) {
+                                collectionIds.push(collectionCbs[ci].dataset.id);
+                            }
+                            config.DefaultUserSettings.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
                         }
-                        config.DefaultUserSettings.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
-                        var libraryCbs = document.querySelectorAll('.adminLibraryCb:checked');
-                        var libraryIds = [];
-                        for (var li = 0; li < libraryCbs.length; li++) {
-                            libraryIds.push(libraryCbs[li].dataset.id);
+                        if (document.querySelector('#DefaultLibraryPicker .adminLibraryCb') != null) {
+                            var libraryCbs = document.querySelectorAll('#DefaultLibraryPicker .adminLibraryCb:checked');
+                            var libraryIds = [];
+                            for (var li = 0; li < libraryCbs.length; li++) {
+                                libraryIds.push(libraryCbs[li].dataset.id);
+                            }
+                            config.DefaultUserSettings.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
                         }
-                        config.DefaultUserSettings.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
 
 
                         config.DefaultUserSettings.homeRowsStyle = document.querySelector('#DefaultHomeRowsStyle').value || null;
                         config.DefaultUserSettings.fullScreenRows = getNullableBoolSelect('#DefaultFullScreenRows');
                         config.DefaultUserSettings.homeRowInfoOverlay = getNullableBoolSelect('#DefaultHomeRowInfoOverlay');
-                        config.DefaultUserSettings.classicHomeRowsPadding = getNullableIntInput('#DefaultClassicHomeRowsPadding');
-                        config.DefaultUserSettings.modernHomeRowsPadding = getNullableIntInput('#DefaultModernHomeRowsPadding');
+                        config.DefaultUserSettings.classicHomeRowsPadding = getNullableRangeInput('#DefaultClassicHomeRowsPadding');
+                        config.DefaultUserSettings.modernHomeRowsPadding = getNullableRangeInput('#DefaultModernHomeRowsPadding');
                         config.DefaultUserSettings.posterSize = document.querySelector('#DefaultPosterSize').value || null;
                         config.DefaultUserSettings.homeImageTypeContinueWatching = document.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
                         config.DefaultUserSettings.displayFavoritesRows = getNullableBoolSelect('#DefaultDisplayFavoritesRows');
