@@ -310,6 +310,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("collectionsRowShowEpisodes")] public bool? CollectionsRowShowEpisodes { get; set; }
         [JsonPropertyName("mergeRecentRowsByType")] public bool? MergeRecentRowsByType { get; set; }
         [JsonPropertyName("playlistsRowShowEpisodes")] public bool? PlaylistsRowShowEpisodes { get; set; }
+        [JsonPropertyName("recentlyReleasedSeriesType")] public string? RecentlyReleasedSeriesType { get; set; }
     }
 
     /// <summary>
