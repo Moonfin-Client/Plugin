@@ -235,67 +235,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     // ── Tabbed navigation ───────────────────────────────────────────────────
 
-    function buildDefaultSettingsSubTabs(section) {
-        if (!section || section.dataset.subTabsInit === 'true') return;
-        var headings = Array.prototype.slice.call(section.querySelectorAll('h4'));
-        if (!headings.length) return;
-        section.dataset.subTabsInit = 'true';
-
-        var tabBar = document.createElement('div');
-        tabBar.className = 'moonfinSubTabs';
-        tabBar.setAttribute('role', 'tablist');
-
-        var entries = [];
-
-        function selectSubTab(active) {
-            entries.forEach(function (entry, i) {
-                var on = i === active;
-                entry.button.classList.toggle('is-active', on);
-                entry.button.setAttribute('aria-selected', on ? 'true' : 'false');
-                entry.panel.classList.toggle('is-active', on);
-            });
-        }
-
-        headings.forEach(function (heading, index) {
-            if (!heading || !heading.parentNode) return;
-
-            var title = (heading.textContent || '').trim();
-
-            var panel = document.createElement('div');
-            panel.className = 'moonfinSubPanel';
-            panel.setAttribute('role', 'tabpanel');
-            panel.setAttribute('data-subpanel', String(index));
-
-            var node = heading.nextSibling;
-            while (node && !(node.nodeType === 1 && node.tagName && node.tagName.toUpperCase() === 'H4')) {
-                var nextNode = node.nextSibling;
-                panel.appendChild(node);
-                node = nextNode;
-            }
-
-            heading.parentNode.insertBefore(panel, heading);
-            heading.remove();
-
-            var button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'moonfinSubTab';
-            button.setAttribute('role', 'tab');
-            button.setAttribute('data-subtab', String(index));
-            button.textContent = title;
-            button.addEventListener('click', function () {
-                selectSubTab(index);
-            });
-
-            tabBar.appendChild(button);
-            entries.push({ button: button, panel: panel });
-        });
-
-        if (entries.length) {
-            section.insertBefore(tabBar, entries[0].panel);
-            selectSubTab(0);
-        }
-    }
-
     function initializeAdminTabs(view) {
         if (!view || view.dataset.tabsInitialized === 'true') return;
         view.dataset.tabsInitialized = 'true';
@@ -423,14 +362,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 selectTab(item.getAttribute('data-tab'));
             });
         });
-
-        var defaultsPanel = view.querySelector('.moonfinTabPanel[data-tab="defaults"]');
-        if (defaultsPanel) {
-            var defaultsSection = defaultsPanel.querySelector('.verticalSection');
-            if (defaultsSection) {
-                buildDefaultSettingsSubTabs(defaultsSection);
-            }
-        }
 
         var saved = null;
         try { saved = window.localStorage.getItem('moonfinAdminActiveTab'); } catch (e) {}
