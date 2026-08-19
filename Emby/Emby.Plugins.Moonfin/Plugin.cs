@@ -91,7 +91,7 @@ namespace Emby.Plugins.Moonfin
             }
         }
 
-        public override string Name => "Moonfin";
+        public override string Name => "Moonbase";
 
         public override string Description => "Moonfin brings a modern TV-style UI to Emby. Features include: custom navbar, media bar with featured content, Seerr integration, and cross-device settings synchronization.";
 
