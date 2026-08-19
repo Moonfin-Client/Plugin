@@ -74,6 +74,8 @@ namespace Emby.Plugins.Moonfin.Services
             };
             request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             request.Headers.Accept.ParseAdd("application/json");
+            request.Headers.TryAddWithoutValidation("Origin", "https://www.imdb.com");
+            request.Headers.Referrer = new Uri("https://www.imdb.com/");
 
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
