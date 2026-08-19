@@ -45,8 +45,15 @@ public class UserBookmarksController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        var envelope = await _bookmarksService.GetUserBookmarksAsync(userId.Value);
-        return Ok(envelope);
+        try
+        {
+            return Ok(await _bookmarksService.GetUserBookmarksAsync(userId.Value));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading bookmarks for user {UserId}", userId);
+            return StatusCode(500, "Error reading bookmarks.");
+        }
     }
 
     /// <summary>
@@ -64,8 +71,15 @@ public class UserBookmarksController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        var data = await _bookmarksService.GetItemUserDataAsync(userId.Value, itemId);
-        return Ok(data);
+        try
+        {
+            return Ok(await _bookmarksService.GetItemUserDataAsync(userId.Value, itemId));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading bookmarks for user {UserId}, item {ItemId}", userId, itemId);
+            return StatusCode(500, "Error reading bookmarks.");
+        }
     }
 
     /// <summary>
@@ -85,8 +99,16 @@ public class UserBookmarksController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        await _bookmarksService.SaveItemBookmarksAsync(userId.Value, itemId, bookmarks ?? new List<BookmarkDto>());
-        return Ok(new { Success = true, ItemId = itemId });
+        try
+        {
+            await _bookmarksService.SaveItemBookmarksAsync(userId.Value, itemId, bookmarks ?? new List<BookmarkDto>());
+            return Ok(new { Success = true, ItemId = itemId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving bookmarks for user {UserId}, item {ItemId}", userId, itemId);
+            return StatusCode(500, "Error saving bookmarks.");
+        }
     }
 
     /// <summary>
@@ -106,7 +128,15 @@ public class UserBookmarksController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        await _bookmarksService.SaveItemNotesAsync(userId.Value, itemId, notes ?? new List<NoteDto>());
-        return Ok(new { Success = true, ItemId = itemId });
+        try
+        {
+            await _bookmarksService.SaveItemNotesAsync(userId.Value, itemId, notes ?? new List<NoteDto>());
+            return Ok(new { Success = true, ItemId = itemId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving notes for user {UserId}, item {ItemId}", userId, itemId);
+            return StatusCode(500, "Error saving notes.");
+        }
     }
 }
