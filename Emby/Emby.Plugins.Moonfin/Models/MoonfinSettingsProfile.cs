@@ -86,8 +86,11 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("displayPlaylistsRows")] public bool? DisplayPlaylistsRows { get; set; }
         [JsonPropertyName("displayAudioRows")] public bool? DisplayAudioRows { get; set; }
         [JsonPropertyName("favoritesRowSortBy")] public string? FavoritesRowSortBy { get; set; }
+        [JsonPropertyName("favoritesRowSortOrder")] public string? FavoritesRowSortOrder { get; set; }
         [JsonPropertyName("collectionsRowSortBy")] public string? CollectionsRowSortBy { get; set; }
+        [JsonPropertyName("collectionsRowSortOrder")] public string? CollectionsRowSortOrder { get; set; }
         [JsonPropertyName("genresRowSortBy")] public string? GenresRowSortBy { get; set; }
+        [JsonPropertyName("genresRowSortOrder")] public string? GenresRowSortOrder { get; set; }
         [JsonPropertyName("genresRowItemFilter")] public string? GenresRowItemFilter { get; set; }
         [JsonPropertyName("navbarAlwaysExpanded")] public bool? NavbarAlwaysExpanded { get; set; }
         [JsonPropertyName("mediaBarTrailerCaptions")] public bool? MediaBarTrailerCaptions { get; set; }
@@ -263,7 +266,9 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("showMediaDetailsOnLibraryPage")] public bool? ShowMediaDetailsOnLibraryPage { get; set; }
         [JsonPropertyName("hideBackdropsInLibraries")] public bool? HideBackdropsInLibraries { get; set; }
         [JsonPropertyName("playlistsRowSortBy")] public string? PlaylistsRowSortBy { get; set; }
+        [JsonPropertyName("playlistsRowSortOrder")] public string? PlaylistsRowSortOrder { get; set; }
         [JsonPropertyName("audioRowsSortBy")] public string? AudioRowsSortBy { get; set; }
+        [JsonPropertyName("audioRowsSortOrder")] public string? AudioRowsSortOrder { get; set; }
         [JsonPropertyName("displayStudiosRows")] public bool? DisplayStudiosRows { get; set; }
         [JsonPropertyName("studiosRowSortBy")] public string? StudiosRowSortBy { get; set; }
         [JsonPropertyName("studiosRowSortOrder")] public string? StudiosRowSortOrder { get; set; }
