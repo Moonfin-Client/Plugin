@@ -98,16 +98,16 @@ public class GameThumbServiceTests : IDisposable
     [Fact]
     public async Task GetThumbPathAsync_NoCandidateNameHasArt_ReturnsNullWithoutAnUnboundedRequestStorm()
     {
-        // When nothing has art anywhere, the request count must stay capped: after the primary
-        // and sibling 404, GetThumbPathAsync falls back to the raw filename and title candidates
-        // (both against the primary platform) and stops -- a fifth request would fail the test
-        // loudly via FakeHttpMessageHandler's unregistered-URL guard.
+        // When nothing has art anywhere the request count has to stay capped. After the primary
+        // and sibling 404s, GetThumbPathAsync falls back to the filename and title candidates
+        // against the primary platform and stops, and a fourth request would fail loudly
+        // through FakeHttpMessageHandler's unregistered-URL guard. The filename candidate drops
+        // its extension, so here it matches the title and the two collapse into one probe.
         WriteGreatGolfFixture();
         var handler = new FakeHttpMessageHandler();
         handler.SetResponse(ThumbUrl(JapanName), HttpStatusCode.NotFound, null);
         handler.SetResponse(ThumbUrl(WorldThumbFileName), HttpStatusCode.NotFound, null);
-        handler.SetResponse(ThumbUrl("Great Golf.sms"), HttpStatusCode.NotFound, null); // raw filename fallback
-        handler.SetResponse(ThumbUrl("Great Golf"), HttpStatusCode.NotFound, null); // title fallback
+        handler.SetResponse(ThumbUrl("Great Golf"), HttpStatusCode.NotFound, null);
 
         var (rdb, thumbs) = CreateServices(handler);
         var romPath = WriteRomFile();
@@ -130,7 +130,7 @@ public class GameThumbServiceTests : IDisposable
             title: "Great Golf",
             kind: GameThumbService.ThumbKind.Boxart);
         Assert.Null(path);
-        Assert.Equal(4, handler.RequestCount);
+        Assert.Equal(3, handler.RequestCount);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class GameThumbServiceTests : IDisposable
         WriteGreatGolfFixture();
         var handler = new FakeHttpMessageHandler();
         var retryAfter = TimeSpan.FromMinutes(2);
-        foreach (var name in new[] { JapanName, WorldThumbFileName, "Great Golf.sms", "Great Golf" })
+        foreach (var name in new[] { JapanName, WorldThumbFileName, "Great Golf" })
         {
             handler.SetResponse(ThumbUrl(name), HttpStatusCode.TooManyRequests, null, retryAfter);
         }
@@ -161,7 +161,7 @@ public class GameThumbServiceTests : IDisposable
         // The legacy request-path API retains its established null contract for this failure.
         Assert.Null(await thumbs.GetThumbPathAsync(
             "segaMS", false, "Sega Master System", romPath, "Great Golf", GameThumbService.ThumbKind.Boxart));
-        Assert.Equal(8, handler.RequestCount);
+        Assert.Equal(6, handler.RequestCount);
     }
 
     // ---- GetDerivedThumbAsync: encode budget and concurrency cap ------------------------------
