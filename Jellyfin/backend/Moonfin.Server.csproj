@@ -37,6 +37,7 @@
     <EmbeddedResource Include="Web/inject.html" LogicalName="Moonfin.Server.Web.inject.html" />
     <EmbeddedResource Include="Pages/configPage.html" LogicalName="Moonfin.Server.Pages.configPage.html" />
     <EmbeddedResource Include="EmulatorJS/player.html" LogicalName="Moonfin.Server.EmulatorJS.player.html" />
+    <EmbeddedResource Include="EmulatorJS/moonfin-bridge.js" LogicalName="Moonfin.Server.EmulatorJS.moonfin-bridge.js" />
     <EmbeddedResource Include="assets/*.png">
       <LogicalName>Moonfin.Server.assets.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
@@ -59,6 +60,7 @@
     <Error Condition="!Exists('Web/loader.js')" Text="Required embedded resource Web/loader.js was not found." />
     <Error Condition="!Exists('Web/inject.html')" Text="Required embedded resource Web/inject.html was not found." />
     <Error Condition="!Exists('EmulatorJS/player.html')" Text="Required embedded resource EmulatorJS/player.html was not found." />
+    <Error Condition="!Exists('EmulatorJS/moonfin-bridge.js')" Text="Required embedded resource EmulatorJS/moonfin-bridge.js was not found." />
   </Target>
 
 </Project>

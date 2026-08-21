@@ -1,7 +1,7 @@
-using System.Text;
 using System.Text.RegularExpressions;
-using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moonfin.Server.Models;
 using SharpCompress.Archives;
 
@@ -25,123 +25,41 @@ public class GamesService
     private readonly ILibraryManager _libraryManager;
     private readonly RdbService? _rdb;
     private readonly LaunchBoxService? _launchBox;
+    private readonly ArcadeCompatibilityService? _arcadeCompatibility;
+    private readonly ArcadeCoreOverrideService? _arcadeCoreOverrides;
+    private readonly GameBackendOverrideService? _gameBackendOverrides;
+    private readonly GamePathResolver _paths;
+    private readonly ILogger<GamesService> _logger;
+
+    private const string EmulatorJsBackend = "emulatorjs";
 
     private static readonly Regex AutoDetectLibraryName =
         new("game|rom|emulat", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // Recognized ROM file extensions -> EmulatorJS core (fallback when the system folder
-    // name is not recognized). Ambiguous extensions (.bin/.cue/.zip/.iso) are resolved by
-    // the system folder name instead and intentionally omitted here.
-    private static readonly IReadOnlyDictionary<string, string> ExtensionToCore =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            [".nes"] = "nes",
-            [".fds"] = "nes",
-            [".sfc"] = "snes",
-            [".smc"] = "snes",
-            [".gb"] = "gb",
-            [".gbc"] = "gb",
-            [".gba"] = "gba",
-            [".md"] = "segaMD",
-            [".gen"] = "segaMD",
-            [".smd"] = "segaMD",
-            [".sms"] = "segaMS",
-            [".gg"] = "segaGG",
-            [".sg"] = "segaMS",
-            [".n64"] = "n64",
-            [".z64"] = "n64",
-            [".v64"] = "n64",
-            [".nds"] = "nds",
-            [".vb"] = "vb",
-            [".a26"] = "atari2600",
-            [".a78"] = "atari7800",
-            [".lnx"] = "lynx",
-            [".ws"] = "ws",
-            [".wsc"] = "ws",
-            [".ngp"] = "ngp",
-            [".ngc"] = "ngp",
-            [".pce"] = "pce",
-            // Single-file disc images. Extension is ambiguous across disc systems (.pbp/.iso
-            // are used by both PSX and PSP), so the system folder name is the real resolver;
-            // these are only fallbacks. Multi-file .cue/.bin and multi-disc .m3u are not handled.
-            [".chd"] = "psx",
-            [".pbp"] = "psx",
-            [".cso"] = "psp",
-            [".iso"] = "psp",
-        };
-
-    // System folder name aliases -> EmulatorJS core (primary resolution; more reliable than
-    // extension for disc-based / ambiguous formats).
-    private static readonly IReadOnlyDictionary<string, string> SystemNameToCore =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["nes"] = "nes",
-            ["famicom"] = "nes",
-            ["snes"] = "snes",
-            ["superfamicom"] = "snes",
-            ["supernintendo"] = "snes",
-            ["gb"] = "gb",
-            ["gameboy"] = "gb",
-            ["gbc"] = "gb",
-            ["gameboycolor"] = "gb",
-            ["gba"] = "gba",
-            ["gameboyadvance"] = "gba",
-            ["genesis"] = "segaMD",
-            ["megadrive"] = "segaMD",
-            ["segagenesis"] = "segaMD",
-            ["mastersystem"] = "segaMS",
-            ["sms"] = "segaMS",
-            ["gamegear"] = "segaGG",
-            ["gg"] = "segaGG",
-            ["n64"] = "n64",
-            ["nintendo64"] = "n64",
-            ["nds"] = "nds",
-            ["nintendods"] = "nds",
-            ["virtualboy"] = "vb",
-            ["atari2600"] = "atari2600",
-            ["atari7800"] = "atari7800",
-            ["lynx"] = "lynx",
-            ["wonderswan"] = "ws",
-            ["neogeopocket"] = "ngp",
-            ["pcengine"] = "pce",
-            ["turbografx16"] = "pce",
-            ["psx"] = "psx",
-            ["ps1"] = "psx",
-            ["psone"] = "psx",
-            ["playstation"] = "psx",
-            ["psp"] = "psp",
-            ["playstationportable"] = "psp",
-            // PSX (pcsx_rearmed, single-threaded, BIOS from the system folder) and PSP (ppsspp,
-            // needs cross-origin isolation for threads, no BIOS) are supported via single-file
-            // disc images only. Saturn / Sega CD / 32X / Arcade / MAME remain omitted (heavier
-            // threaded cores, multi-file sets) rather than advertising unplayable systems.
-        };
-
-    private static readonly HashSet<string> BiosExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".bin", ".bios", ".rom", ".img", ".sys", ".bs" };
-
-    // Compressed single-ROM archives. The core is resolved from the system folder name, so these
-    // need no extension->core mapping; EmulatorJS decompresses them on the client. Multi-file sets
-    // (disc bin/cue) inside an archive are not supported.
-    private static readonly HashSet<string> ArchiveExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".zip", ".7z" };
-
-    // A file the scanner treats as a playable ROM: a known ROM extension or a supported archive.
-    private static bool IsRomFile(string path)
-    {
-        var ext = Path.GetExtension(path);
-        return ExtensionToCore.ContainsKey(ext) || ArchiveExtensions.Contains(ext);
-    }
-
     /// <summary>True when the path is a supported archive (.zip/.7z) rather than a raw ROM.</summary>
-    public static bool IsArchive(string path) => ArchiveExtensions.Contains(Path.GetExtension(path));
+    public static bool IsArchive(string path) => GameSystemCoreResolver.IsArchive(path);
+
+    private static bool IsRomFile(string path) => GameSystemCoreResolver.IsRomFile(path);
+
+    // Ceiling on a single extracted archive entry, mirroring GamesController's admin-only
+    // MaxDatUploadBytes: an explicit, documented limit rather than an unbounded MemoryStream.
+    // Unlike the DAT upload path, this endpoint is reachable by any authenticated non-admin user
+    // once per ROM request (GamesController.StreamExtractedRom), so a hostile or malformed archive
+    // entry that claims a huge size must not be allowed to force a huge in-memory allocation per
+    // request. The known cartridge formats this method ever serves top out well under this (N64
+    // carts are ~64 MB, the largest NDS carts are a few hundred MB); this is a generous ceiling for
+    // those real ROMs while still bounding worst-case memory use per request.
+    public const long MaxExtractedRomBytes = 512L * 1024 * 1024;
 
     /// <summary>
-    /// Extracts the playable ROM from a .zip/.7z into memory so every client receives raw ROM bytes
-    /// and never has to unpack the archive itself. The archive on disk is left untouched. Prefers the
-    /// entry with a recognized ROM extension, otherwise the largest file. Returns null when the
-    /// archive holds no usable ROM.
+    /// Extracts the playable ROM from a single-ROM .zip/.7z into memory. The archive on disk is left
+    /// untouched. MAME archives bypass this method and are streamed intact. Prefers an entry with a
+    /// recognized ROM extension, otherwise the largest file. Returns null when the archive holds no
+    /// usable ROM.
     /// </summary>
+    /// <exception cref="RomTooLargeException">
+    /// The chosen entry's reported (or actual decompressed) size exceeds <see cref="MaxExtractedRomBytes"/>.
+    /// </exception>
     public static byte[]? ExtractRomFromArchive(string archivePath)
     {
         // .zip goes through the built-in reader (always loadable, in the shared framework). .7z needs
@@ -181,9 +99,14 @@ public class GamesService
             return null;
         }
 
+        // The zip central directory's uncompressed-size field is attacker-controlled data (a
+        // crafted/corrupt archive can lie), so it is only a fast pre-check. CopyToLimited below
+        // enforces the real ceiling against actual decompressed bytes as they are copied.
+        CheckEntrySizeOrThrow(chosen.Length, MaxExtractedRomBytes);
+
         using var entryStream = chosen.Open();
         using var ms = new MemoryStream();
-        entryStream.CopyTo(ms);
+        CopyToLimited(entryStream, ms, MaxExtractedRomBytes);
         return ms.ToArray();
     }
 
@@ -205,7 +128,7 @@ public class GamesService
                 continue; // directory entry
             }
 
-            if (ExtensionToCore.ContainsKey(Path.GetExtension(entry.Name)))
+            if (GameSystemCoreResolver.IsKnownRomExtension(entry.Name))
             {
                 return entry;
             }
@@ -231,9 +154,13 @@ public class GamesService
             return null;
         }
 
+        // Same rationale as the zip path above: the header's Size is only a cheap pre-check, the
+        // actual copy below is what really enforces the ceiling.
+        CheckEntrySizeOrThrow(chosen.Size, MaxExtractedRomBytes);
+
         using var entryStream = chosen.OpenEntryStream();
         using var ms = new MemoryStream();
-        entryStream.CopyTo(ms);
+        CopyToLimited(entryStream, ms, MaxExtractedRomBytes);
         return ms.ToArray();
     }
 
@@ -253,7 +180,7 @@ public class GamesService
                 continue;
             }
 
-            if (ExtensionToCore.ContainsKey(Path.GetExtension(entry.Key ?? string.Empty)))
+            if (GameSystemCoreResolver.IsKnownRomExtension(entry.Key ?? string.Empty))
             {
                 return entry;
             }
@@ -267,14 +194,55 @@ public class GamesService
         return largest;
     }
 
+    // Shared pre-check for both archive formats' chosen entry, factored out (rather than an inline
+    // `if` at each call site) so a focused test can drive it with a small maxBytes without needing
+    // to construct a multi-hundred-megabyte fixture archive just to exercise this comparison.
+    private static void CheckEntrySizeOrThrow(long entrySize, long maxBytes)
+    {
+        if (entrySize > maxBytes)
+        {
+            throw new RomTooLargeException(entrySize, maxBytes);
+        }
+    }
+
+    // Copies at most maxBytes from source to destination, throwing RomTooLargeException the moment
+    // more data appears than the ceiling allows. This is the real enforcement point: it bounds
+    // memory even when an entry's advertised header size understates (or lies about) how much data
+    // actually decompresses, which a plain entry.Length/Size pre-check alone would not catch.
+    private static void CopyToLimited(Stream source, Stream destination, long maxBytes)
+    {
+        var buffer = new byte[81920];
+        long total = 0;
+        int read;
+        while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            total += read;
+            if (total > maxBytes)
+            {
+                throw new RomTooLargeException(total, maxBytes);
+            }
+
+            destination.Write(buffer, 0, read);
+        }
+    }
+
     public GamesService(
         ILibraryManager libraryManager,
         RdbService? rdb = null,
-        LaunchBoxService? launchBox = null)
+        LaunchBoxService? launchBox = null,
+        ArcadeCompatibilityService? arcadeCompatibility = null,
+        ArcadeCoreOverrideService? arcadeCoreOverrides = null,
+        GameBackendOverrideService? gameBackendOverrides = null,
+        ILogger<GamesService>? logger = null)
     {
         _libraryManager = libraryManager;
         _rdb = rdb;
         _launchBox = launchBox;
+        _arcadeCompatibility = arcadeCompatibility;
+        _arcadeCoreOverrides = arcadeCoreOverrides;
+        _gameBackendOverrides = gameBackendOverrides;
+        _paths = new GamePathResolver(GetGameLibraries);
+        _logger = logger ?? NullLogger<GamesService>.Instance;
     }
 
     /// <summary>Returns the libraries Moonbase treats as game (ROM) libraries.</summary>
@@ -434,7 +402,7 @@ public class GamesService
     }
 
     /// <summary>Lists the games inside a system folder (optionally a single system).</summary>
-    public IReadOnlyList<GameSummary> GetGames(string libraryId, string? systemId)
+    public virtual IReadOnlyList<GameSummary> GetGames(string libraryId, string? systemId)
     {
         var library = GetGameLibraries().FirstOrDefault(l =>
             SameId(l.Id, libraryId));
@@ -464,9 +432,12 @@ public class GamesService
                 var core = ResolveSystemCore(systemName, games);
                 foreach (var rom in games)
                 {
+                    // Compatibility resolution hashes every archive entry. Keep the browse
+                    // endpoint inexpensive: only resolve an arcade game's effective core when
+                    // its detail page is requested, where the user can also select an override.
                     result.Add(new GameSummary
                     {
-                        Id = EncodeToken(rom),
+                        Id = GamePathResolver.EncodeToken(rom),
                         Title = ResolveTitle(systemDir, rom),
                         System = systemName,
                         Core = core,
@@ -481,43 +452,119 @@ public class GamesService
             .ToList();
     }
 
-    /// <summary>Resolves the full detail for a single game by its opaque id token.</summary>
-    public GameDetail? GetGame(string libraryId, string gameId)
+    /// <summary>
+    /// The result of locating a game's ROM on disk and resolving its effective system/arcade
+    /// compatibility. Computed once by <see cref="ResolveGameAsync"/> and shared by
+    /// <see cref="GetGameAsync"/> and <see cref="SetCoreOverrideAsync"/> so a single detail
+    /// request or override write never hashes the same archive twice.
+    /// </summary>
+    private sealed record GameResolution(
+        GameLibrary Library,
+        string RomPath,
+        string? SystemDir,
+        string SystemName,
+        string SystemCore,
+        ArcadeCoreResolution? Arcade);
+
+    /// <summary>
+    /// Locates a game's ROM by its opaque token and resolves its system core and (for arcade
+    /// systems) arcade compatibility, exactly once. This is the expensive path (it may hash every
+    /// entry of a ZIP archive via <see cref="ResolveArcadeCompatibilityAsync"/>) shared by
+    /// <see cref="GetGameAsync"/> and <see cref="SetCoreOverrideAsync"/>. Returns null when the
+    /// library is unknown or the token does not resolve to a real file inside it.
+    /// <paramref name="cancellationToken"/> reaches all the way into the archive-hashing loop in
+    /// <see cref="ArcadeCompatibilityService.ResolveAsync"/>, so a cancelled request can abandon that
+    /// work instead of always hashing the whole archive to completion.
+    /// </summary>
+    private async Task<GameResolution?> ResolveGameAsync(
+        string libraryId,
+        string gameId,
+        CancellationToken cancellationToken = default)
     {
-        var library = GetGameLibraries().FirstOrDefault(l =>
-            SameId(l.Id, libraryId));
-        if (library == null)
+        var resolved = _paths.ResolveGameFile(libraryId, gameId);
+        if (resolved == null)
         {
             return null;
         }
 
-        var romPath = DecodeToken(gameId);
-        if (romPath == null || !IsWithinLibrary(library, romPath) || !File.Exists(romPath))
-        {
-            return null;
-        }
+        var systemCore = ResolveSystemCore(resolved.SystemName, new List<string> { resolved.RomPath });
+        var arcade = await ResolveArcadeCompatibilityAsync(resolved.RomPath, systemCore, cancellationToken).ConfigureAwait(false);
+        return new GameResolution(resolved.Library, resolved.RomPath, resolved.SystemDir, resolved.SystemName, systemCore, arcade);
+    }
 
-        var systemDir = FindSystemDir(library, romPath);
-        var systemName = systemDir == null ? string.Empty : Path.GetFileName(systemDir);
-        var core = ResolveSystemCore(systemName, new List<string> { romPath });
-        var bios = systemDir == null ? new List<GameBios>() : GetBiosFiles(systemDir);
-        var title = ResolveTitle(systemDir, romPath);
+    /// <summary>Resolves the full detail for a single game by its opaque id token.</summary>
+    public async Task<GameDetail?> GetGameAsync(
+        string libraryId,
+        string gameId,
+        Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        var resolution = await ResolveGameAsync(libraryId, gameId, cancellationToken).ConfigureAwait(false);
+        return resolution == null
+            ? null
+            : await BuildDetailAsync(gameId, resolution, userId, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Builds the <see cref="GameDetail"/> response from an already-resolved game plus the
+    /// current user's stored override (if any). Split out of <see cref="GetGameAsync"/> so
+    /// <see cref="SetCoreOverrideAsync"/> can build the same response after persisting a change
+    /// without re-resolving (and re-hashing) the game.
+    /// </summary>
+    private async Task<GameDetail> BuildDetailAsync(
+        string gameId,
+        GameResolution resolution,
+        Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        var arcade = resolution.Arcade;
+        var overrideCore = arcade != null && userId.HasValue && _arcadeCoreOverrides != null
+            ? await _arcadeCoreOverrides.GetAsync(userId.Value, arcade.ContentKey, cancellationToken).ConfigureAwait(false)
+            : null;
+        var backendOverride = userId.HasValue && _gameBackendOverrides != null
+            ? await _gameBackendOverrides.GetAsync(userId.Value, GetBackendPreferenceKey(resolution), cancellationToken).ConfigureAwait(false)
+            : null;
+        // Only values the current API understands are honored. A stale/corrupt preference
+        // falls back to normal native-selection rules rather than preventing launch.
+        if (!string.Equals(backendOverride, EmulatorJsBackend, StringComparison.Ordinal))
+        {
+            backendOverride = null;
+        }
+        // Preferences are validated against the current DAT result. An old override silently
+        // falls back to automatic selection if a ROM is replaced or pinned DATs change. A
+        // user may explicitly try FBNeo for a MAME-validated set, but it is never selected
+        // automatically because the DAT did not verify that compatibility.
+        if (arcade != null &&
+            !arcade.AvailableCores.Contains(overrideCore ?? string.Empty, StringComparer.Ordinal) &&
+            !IsExperimentalFbneoOverride(arcade, overrideCore))
+        {
+            overrideCore = null;
+        }
+        var core = overrideCore ?? arcade?.RecommendedCore ?? resolution.SystemCore;
+        var bios = resolution.SystemDir == null ? new List<GameBios>() : GetBiosFiles(resolution.SystemDir);
+        var title = ResolveTitle(resolution.SystemDir, resolution.RomPath);
 
         var detail = new GameDetail
         {
             Id = gameId,
             Title = title,
-            System = systemName,
+            System = resolution.SystemName,
             Core = core,
-            FileName = Path.GetFileName(romPath),
-            SizeBytes = SafeFileLength(romPath),
-            Bios = bios
+            FileName = Path.GetFileName(resolution.RomPath),
+            SizeBytes = SafeFileLength(resolution.RomPath),
+            Bios = bios,
+            RecommendedCore = arcade?.RecommendedCore,
+            AvailableCores = arcade?.AvailableCores.ToList(),
+            CoreCompatibilityReason = arcade?.Reason,
+            UserCoreOverride = overrideCore,
+            UserBackendOverride = backendOverride,
+            BackendOverrideSupported = _gameBackendOverrides != null
         };
 
         // LaunchBox is the primary source (overview + rich fields); the libretro .rdb fills any
         // gaps and supplies region, which LaunchBox does not carry.
         var lb = _launchBox?.TryLookup(core, title, detail.FileName);
-        var rdb = _rdb?.TryLookup(core, romPath, title);
+        var rdb = _rdb == null ? null : await _rdb.TryLookupAsync(core, resolution.RomPath, title, cancellationToken).ConfigureAwait(false);
 
         detail.Overview = lb?.Overview;
         detail.Genre = lb?.Genre ?? rdb?.Genre;
@@ -533,35 +580,132 @@ public class GamesService
     }
 
     /// <summary>
-    /// The core and ROM filename a game's art is keyed on. GetGame would answer this too, but it
-    /// also hashes the ROM for the metadata lookup, which is far too much work for an image
-    /// request that arrives once per poster on screen.
+    /// Stores or clears a per-user arcade core override. DAT-validated cores are accepted by
+    /// default; a user may explicitly try FBNeo for a MAME-validated archive at their own risk.
     /// </summary>
-    public (string Core, string FileName)? ResolveThumbSource(string libraryId, string gameId)
+    public async Task<GameDetail?> SetCoreOverrideAsync(
+        string libraryId,
+        string gameId,
+        Guid userId,
+        string? core,
+        CancellationToken cancellationToken)
     {
-        var library = GetGameLibraries().FirstOrDefault(l =>
-            SameId(l.Id, libraryId));
-        if (library == null)
+        if (_arcadeCompatibility == null || _arcadeCoreOverrides == null)
         {
             return null;
         }
 
-        var romPath = DecodeToken(gameId);
-        if (romPath == null || !IsWithinLibrary(library, romPath) || !File.Exists(romPath))
+        var resolution = await ResolveGameAsync(libraryId, gameId, cancellationToken).ConfigureAwait(false);
+        if (resolution == null || resolution.Arcade == null)
         {
             return null;
         }
 
-        var systemDir = FindSystemDir(library, romPath);
-        var systemName = systemDir == null ? string.Empty : Path.GetFileName(systemDir);
-        var core = ResolveSystemCore(systemName, new List<string> { romPath });
+        var arcade = resolution.Arcade;
+        if (!arcade.IsValidated ||
+            (!string.IsNullOrWhiteSpace(core) &&
+             !arcade.AvailableCores.Contains(core, StringComparer.Ordinal) &&
+             !IsExperimentalFbneoOverride(arcade, core)))
+        {
+            throw new ArgumentException("The requested core is not available for this arcade game.", nameof(core));
+        }
 
-        // Resolve the exact No-Intro name from Rdb if available so region codes and tags (like (USA)) are included in the art URL.
-        var title = ResolveTitle(systemDir, romPath);
-        var rdb = _rdb?.TryLookup(core, romPath, title);
-        var name = rdb?.Name ?? Path.GetFileNameWithoutExtension(romPath);
+        await _arcadeCoreOverrides.SetAsync(userId, arcade.ContentKey, core, cancellationToken).ConfigureAwait(false);
+        return await BuildDetailAsync(gameId, resolution, userId, cancellationToken).ConfigureAwait(false);
+    }
 
-        return (core, name);
+    /// <summary>
+    /// Stores or clears a per-user player-backend override. This works for every system because
+    /// it selects the client player, not a system-specific emulator core.
+    /// </summary>
+    public async Task<GameDetail?> SetBackendOverrideAsync(
+        string libraryId,
+        string gameId,
+        Guid userId,
+        string? backend,
+        CancellationToken cancellationToken)
+    {
+        if (_gameBackendOverrides == null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(backend) &&
+             !string.Equals(backend, EmulatorJsBackend, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("The requested game backend is not available.", nameof(backend));
+        }
+
+        var resolution = await ResolveGameAsync(libraryId, gameId, cancellationToken).ConfigureAwait(false);
+        if (resolution == null)
+        {
+            return null;
+        }
+
+        await _gameBackendOverrides.SetAsync(
+            userId,
+            GetBackendPreferenceKey(resolution),
+            string.IsNullOrWhiteSpace(backend) ? null : EmulatorJsBackend,
+            cancellationToken).ConfigureAwait(false);
+        return await BuildDetailAsync(gameId, resolution, userId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string GetBackendPreferenceKey(GameResolution resolution)
+    {
+        // Game tokens embed absolute paths and are regenerated on a rename. Keep the preference
+        // scoped to its library and relative ROM path instead.
+        var root = resolution.Library.Locations
+            .FirstOrDefault(location => GamePathResolver.IsWithinRoot(location, resolution.RomPath))
+            ?? resolution.Library.Locations.FirstOrDefault()
+            ?? string.Empty;
+        var relativePath = Path.GetRelativePath(root, resolution.RomPath).Replace('\\', '/');
+        return $"{resolution.Library.Id}:{relativePath}";
+    }
+
+    /// <summary>
+    /// The cores, display title, and full ROM path a game's art is keyed on. Deliberately skips
+    /// the full metadata resolution <see cref="GetGameAsync"/> does (which may hash an arcade ZIP)
+    /// since this fires once per poster, concurrently for every tile on screen, so it must stay
+    /// cheap like <see cref="GetGames"/>; arcade compatibility is read only from
+    /// <see cref="ArcadeCompatibilityService.TryGetCached"/>, never freshly hashed.
+    ///
+    /// Returns the full ROM path (not just filename) since <see cref="GameThumbService.GetThumbPathAsync"/>
+    /// needs it to CRC-hash the ROM for canonical-name resolution, required for every system, not
+    /// only arcade. Also returns the raw system folder name and whether the core was only a
+    /// defaulted guess (see <see cref="ResolveSystemCore(string, IReadOnlyList{string}, out bool)"/>),
+    /// both used to build the thumbnail path's multi-candidate platform list
+    /// (<see cref="RdbService.GetCandidatePlatforms"/>).
+    /// </summary>
+    public GameThumbSource? ResolveThumbSource(string libraryId, string gameId)
+    {
+        var resolved = _paths.ResolveGameFile(libraryId, gameId);
+        if (resolved == null)
+        {
+            return null;
+        }
+
+        var core = ResolveSystemCore(resolved.SystemName, new List<string> { resolved.RomPath }, out var coreWasDefaulted);
+        var arcade = TryGetCachedArcadeCompatibility(resolved.RomPath, core);
+        var cores = arcade is { IsValidated: true } && arcade.AvailableCores.Count > 0
+            ? arcade.AvailableCores
+            : [core];
+        // Artwork does not affect emulation compatibility. A clone may run only under one core
+        // while its shared cabinet/box art is catalogued under the other, so use both arcade
+        // thumbnail catalogs after the validated playback cores have been tried first.
+        if (string.Equals(core, ArcadeCompatibilityService.FbneoCore, StringComparison.Ordinal) ||
+            string.Equals(core, ArcadeCompatibilityService.MameCore, StringComparison.Ordinal))
+        {
+            cores = cores
+                .Concat([ArcadeCompatibilityService.FbneoCore, ArcadeCompatibilityService.MameCore])
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+        return new GameThumbSource(
+            cores,
+            ResolveTitle(resolved.SystemDir, resolved.RomPath),
+            resolved.RomPath,
+            resolved.SystemName,
+            coreWasDefaulted);
     }
 
     /// <summary>
@@ -570,26 +714,30 @@ public class GamesService
     /// </summary>
     public string? ResolveFilePath(string libraryId, string token, bool allowBios)
     {
-        var library = GetGameLibraries().FirstOrDefault(l =>
-            SameId(l.Id, libraryId));
-        if (library == null)
+        return _paths.ResolveFilePath(libraryId, token, allowBios);
+    }
+
+    /// <summary>
+    /// Returns true when an archive must be delivered intact instead of extracting a single ROM.
+    /// MAME ZIPs contain the complete multi-chip arcade set and the emulator identifies the set by
+    /// its archive filename.
+    /// </summary>
+    public bool ShouldPreserveArchive(string libraryId, string romPath)
+    {
+        if (!IsArchive(romPath))
         {
-            return null;
+            return false;
         }
 
-        var path = DecodeToken(token);
-        if (path == null || !IsWithinLibrary(library, path) || !File.Exists(path))
+        var resolved = _paths.ResolveAbsoluteGameFile(libraryId, romPath, requireExisting: false);
+        if (resolved == null)
         {
-            return null;
+            return false;
         }
 
-        var isRom = IsRomFile(path) || BiosExtensions.Contains(Path.GetExtension(path));
-        if (!isRom && !allowBios)
-        {
-            return null;
-        }
-
-        return path;
+        return ShouldPreserveArchiveForCore(
+            ResolveSystemCore(resolved.SystemName, new List<string> { romPath }),
+            romPath);
     }
 
     // -- internal helpers ---------------------------------------------------
@@ -597,11 +745,15 @@ public class GamesService
     private static List<string> GetGamesInSystem(string systemDir)
     {
         var roms = new List<string>();
+        var core = ResolveSystemCore(
+            Path.GetFileName(systemDir),
+            Array.Empty<string>());
 
         // One folder per game: pick the first recognized ROM inside each subfolder.
         foreach (var gameDir in SafeEnumerateDirectories(systemDir))
         {
-            var rom = SafeEnumerateFiles(gameDir).FirstOrDefault(IsRomFile);
+            var rom = SafeEnumerateFiles(gameDir)
+                .FirstOrDefault(path => IsPlayableFileForCore(core, path));
             if (rom != null)
             {
                 roms.Add(rom);
@@ -611,7 +763,7 @@ public class GamesService
         // Also accept loose ROMs sitting directly in the system folder.
         foreach (var file in SafeEnumerateFiles(systemDir))
         {
-            if (IsRomFile(file))
+            if (IsPlayableFileForCore(core, file))
             {
                 roms.Add(file);
             }
@@ -626,17 +778,16 @@ public class GamesService
         var bios = new List<GameBios>();
         foreach (var file in SafeEnumerateFiles(systemDir))
         {
-            var ext = Path.GetExtension(file);
             if (IsRomFile(file))
             {
                 continue;
             }
 
-            if (BiosExtensions.Contains(ext))
+            if (GameSystemCoreResolver.IsBiosFile(file))
             {
                 bios.Add(new GameBios
                 {
-                    Id = EncodeToken(file),
+                    Id = GamePathResolver.EncodeToken(file),
                     FileName = Path.GetFileName(file),
                     SizeBytes = SafeFileLength(file)
                 });
@@ -664,86 +815,104 @@ public class GamesService
             : Path.GetFileName(Path.GetDirectoryName(romPath)!);
     }
 
-    private static string ResolveSystemCore(string systemName, IReadOnlyList<string> games)
+    internal static string ResolveSystemCore(string systemName, IReadOnlyList<string> games) =>
+        GameSystemCoreResolver.ResolveSystemCore(systemName, games, out _);
+
+    /// <summary>
+    /// Resolves the EmulatorJS core for a system folder (exact alias, then fuzzy alias, then file
+    /// extension, then "nes" default), and reports whether the result is a genuine resolution or
+    /// just the safe fallback. Playback core selection stays strict/1:1 (a wrong core means
+    /// nothing plays) -- unlike artwork resolution, which tries several platforms since a wrong
+    /// guess there just costs an extra lookup. Do not collapse the two.
+    /// </summary>
+    /// <param name="systemName">The raw system folder name as it exists on disk.</param>
+    /// <param name="games">ROM paths inside the folder, used for the extension fallback.</param>
+    /// <param name="wasDefaulted">True when nothing recognized the folder and the returned core is
+    /// only the blind "nes" fallback. Artwork resolution uses this to avoid trusting a defaulted
+    /// core's platform the way it trusts a genuine resolution.</param>
+    internal static string ResolveSystemCore(string systemName, IReadOnlyList<string> games, out bool wasDefaulted)
+        => GameSystemCoreResolver.ResolveSystemCore(systemName, games, out wasDefaulted);
+
+    /// <summary>
+    /// Loosely suggests EmulatorJS cores for a system directory name, for artwork candidate
+    /// generation only (see RdbService.GetCandidatePlatforms), never playback core selection.
+    /// Unlike strict playback selection, returns multiple candidates (ties included)
+    /// ranked by closeness, since a wrong artwork guess only costs an extra lookup.
+    /// </summary>
+    /// <param name="systemName">The raw system folder name as it exists on disk.</param>
+    /// <param name="maxSuggestions">Upper bound on how many distinct cores to return.</param>
+    internal static IReadOnlyList<string> FuzzySuggestCores(string systemName, int maxSuggestions)
+        => GameSystemCoreResolver.FuzzySuggestCores(systemName, maxSuggestions);
+
+    // MAME and arcade (fbneo) cores both play the same kind of filename-sensitive, multi-chip
+    // ZIP set intact - only the EmulatorJS core they're handed to differs.
+    private static bool IsArcadeFamilyCore(string core) => GameSystemCoreResolver.IsArcadeFamilyCore(core);
+
+    private static bool IsExperimentalFbneoOverride(ArcadeCoreResolution arcade, string? core)
     {
-        var normalized = NormalizeSystemName(systemName);
-        if (SystemNameToCore.TryGetValue(normalized, out var core))
-        {
-            return core;
-        }
-
-        foreach (var rom in games)
-        {
-            if (ExtensionToCore.TryGetValue(Path.GetExtension(rom), out var byExt))
-            {
-                return byExt;
-            }
-        }
-
-        return "nes"; // safe default; client can still let the user override
+        return arcade.IsValidated &&
+               string.Equals(core, ArcadeCompatibilityService.FbneoCore, StringComparison.Ordinal);
     }
 
-    private static string NormalizeSystemName(string name)
+    private async Task<ArcadeCoreResolution?> ResolveArcadeCompatibilityAsync(
+        string romPath,
+        string systemCore,
+        CancellationToken cancellationToken = default)
     {
-        var sb = new StringBuilder(name.Length);
-        foreach (var c in name)
+        if (_arcadeCompatibility == null || !IsArcadeFamilyCore(systemCore) ||
+            !string.Equals(Path.GetExtension(romPath), ".zip", StringComparison.OrdinalIgnoreCase))
         {
-            if (char.IsLetterOrDigit(c))
-            {
-                sb.Append(char.ToLowerInvariant(c));
-            }
+            return null;
         }
 
-        return sb.ToString();
+        try
+        {
+            return await _arcadeCompatibility.ResolveAsync(romPath, systemCore, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancelled request must propagate as a cancellation, not get reinterpreted as a
+            // damaged archive by the catch-all below.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // This catch-all previously reinterpreted ANY exception - including a real bug like a
+            // NullReferenceException - as "damaged archive" with no trace left behind. Log before
+            // swallowing so a genuine defect is still visible, while keeping the legacy fallback
+            // behavior (a corrupt ZIP must not fail the whole library list).
+            _logger.LogWarning(
+                ex,
+                "Arcade compatibility resolution failed for {RomPath}; treating as a damaged archive and falling back to the system default core.",
+                romPath);
+            return new ArcadeCoreResolution(
+                systemCore,
+                [systemCore],
+                "Could not inspect this arcade archive; using the system default.",
+                GamePathResolver.EncodeToken(romPath),
+                false);
+        }
     }
 
-    private string? FindSystemDir(GameLibrary library, string romPath)
+    // Cache-only counterpart to ResolveArcadeCompatibility for the thumbnail path: same
+    // arcade-family/zip gating, but consults ArcadeCompatibilityService.TryGetCached instead of
+    // Resolve, so a cold cache never triggers an archive hash here.
+    private ArcadeCoreResolution? TryGetCachedArcadeCompatibility(string romPath, string systemCore)
     {
-        foreach (var root in library.Locations)
+        if (_arcadeCompatibility == null || !IsArcadeFamilyCore(systemCore) ||
+            !string.Equals(Path.GetExtension(romPath), ".zip", StringComparison.OrdinalIgnoreCase))
         {
-            var rootFull = Path.GetFullPath(root);
-            var current = Path.GetDirectoryName(Path.GetFullPath(romPath));
-            // Walk up until the parent is the library root: that node is the system folder.
-            while (!string.IsNullOrEmpty(current))
-            {
-                var parent = Path.GetDirectoryName(current);
-                if (parent != null && PathsEqual(parent, rootFull))
-                {
-                    return current;
-                }
-
-                if (PathsEqual(current, rootFull))
-                {
-                    break;
-                }
-
-                current = parent;
-            }
+            return null;
         }
 
-        return null;
+        return _arcadeCompatibility.TryGetCached(romPath, out var resolution) ? resolution : null;
     }
 
-    private static bool IsWithinLibrary(GameLibrary library, string path)
-    {
-        var full = Path.GetFullPath(path);
-        foreach (var root in library.Locations)
-        {
-            var rootFull = Path.GetFullPath(root);
-            var rootWithSep = rootFull.EndsWith(Path.DirectorySeparatorChar)
-                ? rootFull
-                : rootFull + Path.DirectorySeparatorChar;
-            var comparison = OperatingSystem.IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
-            if (full.StartsWith(rootWithSep, comparison) || PathsEqual(full, rootFull))
-            {
-                return true;
-            }
-        }
+    internal static bool ShouldPreserveArchiveForCore(string core, string romPath)
+        => GameSystemCoreResolver.ShouldPreserveArchiveForCore(core, romPath);
 
-        return false;
-    }
+    internal static bool IsPlayableFileForCore(string core, string romPath)
+        => GameSystemCoreResolver.IsPlayableFileForCore(core, romPath);
 
     /// <summary>
     /// Compares two library ids tolerant of GUID formatting. Jellyfin reports library ids in
@@ -765,17 +934,6 @@ public class GamesService
         }
 
         return string.Equals(x, y, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool PathsEqual(string a, string b)
-    {
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        return string.Equals(
-            Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar),
-            Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar),
-            comparison);
     }
 
     private static IEnumerable<string> SafeEnumerateDirectories(string path)
@@ -814,32 +972,34 @@ public class GamesService
         }
     }
 
-    private static string EncodeToken(string absolutePath)
-    {
-        var bytes = Encoding.UTF8.GetBytes(absolutePath);
-        return Convert.ToBase64String(bytes)
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
-    }
-
-    private static string? DecodeToken(string token)
-    {
-        try
-        {
-            var padded = token.Replace('-', '+').Replace('_', '/');
-            switch (padded.Length % 4)
-            {
-                case 2: padded += "=="; break;
-                case 3: padded += "="; break;
-            }
-
-            var bytes = Convert.FromBase64String(padded);
-            return Encoding.UTF8.GetString(bytes);
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
 }
+
+/// <summary>
+/// Thrown when a chosen archive entry (advertised or actual decompressed size) exceeds
+/// <see cref="GamesService.MaxExtractedRomBytes"/>. Kept as a distinct type (rather than a bare
+/// <see cref="IOException"/>) so <c>GamesController.StreamExtractedRom</c> can map it to a
+/// specific 413 response instead of the generic 404 it uses for other extraction failures.
+/// </summary>
+public sealed class RomTooLargeException : IOException
+{
+    public RomTooLargeException(long actualBytes, long maxBytes)
+        : base($"Archive entry is {actualBytes} bytes, exceeding the {maxBytes} byte limit for extracted ROMs.")
+    {
+        ActualBytes = actualBytes;
+        MaxBytes = maxBytes;
+    }
+
+    /// <summary>The entry's advertised or actually-copied size (in bytes) that triggered the limit.</summary>
+    public long ActualBytes { get; }
+
+    /// <summary>The configured ceiling (in bytes), i.e. <see cref="GamesService.MaxExtractedRomBytes"/>.</summary>
+    public long MaxBytes { get; }
+}
+
+/// <summary>Resolved, authorization-checked inputs for a game's thumbnail lookup.</summary>
+public sealed record GameThumbSource(
+    IReadOnlyList<string> Cores,
+    string Title,
+    string RomPath,
+    string SystemName,
+    bool CoreWasDefaulted);

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
@@ -44,6 +42,16 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override Guid Id => Guid.Parse("8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b");
 
     public new string DataFolderPath => Path.Combine(ApplicationPaths.PluginConfigurationsPath, "Moonfin");
+
+    /// <summary>
+    /// Resolves the plugin's data folder for callers that may run before the plugin instance
+    /// exists (e.g. a DI factory during host startup): falls back to the same
+    /// ApplicationData/Jellyfin/plugins/Moonfin path Jellyfin itself would use, mirroring
+    /// <see cref="DataFolderPath"/>.
+    /// </summary>
+    public static string ResolveDataFolderPath() =>
+        Instance?.DataFolderPath
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
 
     /// <inheritdoc />
     public override void UpdateConfiguration(BasePluginConfiguration configuration)

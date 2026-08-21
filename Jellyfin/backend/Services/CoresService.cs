@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Net.Http;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
@@ -12,10 +11,29 @@ namespace Moonfin.Server.Services;
 /// context cannot reliably resolve). The zip URL is the admin override <c>GamesCoreZipUrl</c>,
 /// or the <c>emulatorjs-data.zip</c> asset on the Moonbase plugin's latest GitHub release.
 /// The download runs in the background and is polled via <see cref="GetStatus"/>; the player
-/// switches from the CDN to these files automatically once <c>loader.js</c> exists.
+/// switches from the CDN to these files automatically once the common runtime files exist.
 /// </summary>
 public class CoresService
 {
+    /// <summary>
+    /// EmulatorJS release that <c>player.html</c>'s internals-reaching navigation adapter
+    /// (gamepad/controller-mapping code that pokes <c>emu.gamepad</c>, <c>emu.controls</c>,
+    /// <c>emu.controlPopup</c>, etc. -- see <c>moonfinAssertEmulatorContract</c> in
+    /// <c>player.html</c>) was last verified against.
+    ///
+    /// NEITHER of the two sources this service and <see cref="Moonfin.Server.Api.EmulatorController"/> can load
+    /// from is actually pinned today: the admin zip-URL override and the Moonbase GitHub
+    /// release asset are whatever an admin/maintainer last built, and the CDN fallback in
+    /// <c>EmulatorController.ResolveDataPath</c> tracks EmulatorJS's "stable" channel rather
+    /// than a fixed tag. This constant does not gate either path (yet); it exists purely as a
+    /// documented record of "what was last tested" -- update it (with a note of what was
+    /// re-verified) whenever someone deliberately re-tests player.html against a newer
+    /// EmulatorJS build, so a future silent drift has something concrete to diff against
+    /// instead of only the generic contract-violation report from
+    /// <c>moonfinAssertEmulatorContract</c>.
+    /// </summary>
+    internal const string ExpectedEmulatorJsVersion = "unknown"; // not yet pinned; see summary above
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CoresService> _logger;
 
@@ -144,9 +162,9 @@ public class CoresService
         try
         {
             var installed = ExtractDataFolder(tempZipPath, dataRoot);
-            if (installed == 0)
+            if (installed == 0 || !IsDataInstalled(dataRoot))
             {
-                Fail("The cores zip did not contain an EmulatorJS data folder (no loader.js).");
+                Fail("The cores zip did not contain a complete EmulatorJS data folder.");
                 return;
             }
 
@@ -264,6 +282,23 @@ public class CoresService
         return count;
     }
 
+    /// <summary>
+    /// Returns whether a data folder contains the common EmulatorJS runtime files needed
+    /// before any core can load. A lone loader.js is an incomplete installation and must
+    /// fall back to the CDN rather than returning a mixture of local 404s and cached files.
+    /// </summary>
+    public static bool IsDataInstalled(string? dataRoot)
+    {
+        if (string.IsNullOrWhiteSpace(dataRoot))
+        {
+            return false;
+        }
+
+        return File.Exists(Path.Combine(dataRoot, "loader.js")) &&
+               File.Exists(Path.Combine(dataRoot, "emulator.min.js")) &&
+               File.Exists(Path.Combine(dataRoot, "emulator.min.css"));
+    }
+
     private static bool LocalCoresInstalled()
     {
         var dataFolder = MoonfinPlugin.Instance?.DataFolderPath;
@@ -272,7 +307,7 @@ public class CoresService
             return false;
         }
 
-        return File.Exists(Path.Combine(dataFolder, "emulatorjs", "data", "loader.js"));
+        return IsDataInstalled(Path.Combine(dataFolder, "emulatorjs", "data"));
     }
 }
 
