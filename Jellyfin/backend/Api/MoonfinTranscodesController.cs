@@ -20,7 +20,7 @@ namespace Moonfin.Server.Api;
 /// </summary>
 [ApiController]
 [Route("Moonfin/Transcodes")]
-[Authorize(Policy = "RequiresElevation")]
+[Authorize]
 public sealed class MoonfinTranscodesController : ControllerBase
 {
     // The server keeps its active transcode list private, so it is read
@@ -45,6 +45,7 @@ public sealed class MoonfinTranscodesController : ControllerBase
     }
 
     [HttpGet("Active")]
+    [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<object>> GetActiveTranscodes([FromQuery] bool includePlayback = false)
     {
@@ -125,7 +126,65 @@ public sealed class MoonfinTranscodesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// The caller's own transcoded downloads, so a client can show progress and
+    /// an ETA for the job it started. Scoped by the device id on the token,
+    /// which is what the stream request carried, so no elevation is needed.
+    /// </summary>
+    [HttpGet("Mine")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<IEnumerable<object>> GetMyTranscodes()
+    {
+        var deviceId = this.GetDeviceIdFromClaims();
+        if (string.IsNullOrEmpty(deviceId))
+        {
+            return Ok(Array.Empty<object>());
+        }
+
+        try
+        {
+            var snapshot = SnapshotActiveJobs();
+            if (snapshot == null)
+            {
+                return StatusCode(500, "Could not read active transcode jobs on this server version.");
+            }
+
+            var result = snapshot
+                .Where(job => !job.HasExited && (job.CompletionPercentage ?? 0) < 100)
+                .Where(job => job.Type == TranscodingJobType.Progressive)
+                .Where(job => string.Equals(job.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
+                .Select(job =>
+                {
+                    DateTime? startTime = null;
+                    try
+                    {
+                        startTime = job.Process?.StartTime.ToUniversalTime();
+                    }
+                    catch
+                    {
+                    }
+
+                    return new
+                    {
+                        PlaySessionId = job.PlaySessionId,
+                        CompletionPercentage = job.CompletionPercentage,
+                        PositionTicks = job.TranscodingPositionTicks,
+                        RuntimeTicks = job.MediaSource?.RunTimeTicks,
+                        StartTime = startTime,
+                    };
+                });
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading own transcodes.");
+            return StatusCode(500, "Error reading own transcodes.");
+        }
+    }
+
     [HttpDelete("Active/{jobId}")]
+    [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> KillTranscodeJob(string jobId)
     {

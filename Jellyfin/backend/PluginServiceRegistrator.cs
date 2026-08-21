@@ -52,6 +52,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<RdbService>();
         serviceCollection.AddSingleton<GameThumbService>();
         serviceCollection.AddSingleton<LaunchBoxService>();
+        serviceCollection.AddSingleton<UserBookmarksService>();
         serviceCollection.AddHttpClient();
 
         // Auto-register file transformations on plugin load (no manual task needed)

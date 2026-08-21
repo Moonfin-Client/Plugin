@@ -30,6 +30,11 @@ jobs:
             const MIN_TITLE = 10;
 
             const CHECKS = {
+              template: {
+                name: 'Missing Template',
+                color: 'e99695',
+                description: 'Issue opened without one of the issue forms',
+              },
               title: {
                 name: 'Missing Title',
                 color: 'c5def5',
@@ -46,7 +51,7 @@ jobs:
             if (!issue || issue.pull_request) return;
             if (['OWNER', 'MEMBER', 'COLLABORATOR'].includes(issue.author_association)) return;
 
-            // The templates prefill "[Plugin] ", "[Settings] ", "[Feature] " and "[Vent] ",
+            // The templates prefill "[Plugin] ", "[Settings] ", "[Feature] ",
             // so split the leading tags off and judge the two halves apart.
             const title = issue.title || '';
             const prefix = (title.match(/^\s*(?:\[[^\]]*\]\s*)+/) || [''])[0];
@@ -57,7 +62,7 @@ jobs:
             // been created on this repo, so no issue has ever carried one.
             const needsImage = tagged('plugin') || tagged('settings');
 
-            const GENERIC = /^(bug|issue|issues|problem|problems|help|help me|crash|crashes|broken|error|errors|fix|please fix|question|feature|request|vent|title|test|n\/?a|none|plugin|moonbase|settings|jellyfin|emby|seerr|not working|doesn'?t work|does not work|no work)$/i;
+            const GENERIC = /^(bug|issue|issues|problem|problems|help|help me|crash|crashes|broken|error|errors|fix|please fix|question|feature|request|title|test|n\/?a|none|plugin|moonbase|settings|jellyfin|emby|seerr|not working|doesn'?t work|does not work|no work)$/i;
 
             const badTitle = rest.length < MIN_TITLE || GENERIC.test(rest);
 
@@ -66,7 +71,16 @@ jobs:
             // With nothing to ask for and no label left over from an earlier run, there's
             // no reason to spend an API call reading the comments.
             const leftover = Object.values(CHECKS).some(c => labels.includes(c.name));
-            if (!badTitle && !needsImage && !leftover) return;
+
+            // Every form renders one "### Question" heading per field, blank ones
+            // included, and the smallest still produces four. A body without them
+            // came in around the forms, which is also why it never picked up the
+            // labels the evidence checks read. Counting headings catches that even
+            // when the author typed a convincing tag into the title by hand.
+            const countFormHeadings = text => (text.match(/^### /gm) || []).length;
+            const mayNeedTemplate = countFormHeadings(issue.body || '') < 3;
+
+            if (!badTitle && !needsImage && !mayNeedTemplate && !leftover) return;
 
             // Read the body and every human comment, so evidence posted later still counts.
             const comments = await github.paginate(github.rest.issues.listComments, {
@@ -89,7 +103,12 @@ jobs:
               /https?:\/\/\S+\.(png|jpe?g|gif|webp|heic|bmp|mp4|mov|webm|m4v)(\?\S*)?/i,
             ].some(re => re.test(authored));
 
+            // Pasting the form's answers into a comment counts, which is what the
+            // ask invites, so this reads the same text the evidence checks do.
+            const needsTemplate = countFormHeadings(authored) < 3;
+
             const wanted = [];
+            if (needsTemplate) wanted.push('template');
             if (badTitle) wanted.push('title');
             if (needsImage && !hasImage) wanted.push('screenshot');
 
@@ -133,8 +152,20 @@ jobs:
               });
             }
 
-            // Ask once, not again on every edit.
-            if (comments.some(c => (c.body || '').includes(MARKER))) return;
+            const TEMPLATE_ASK = [
+              '### This issue skipped the issue form',
+              '',
+              'It was opened without one of the forms, so the fields that say which version, platform and setup this involves are all missing.',
+              '',
+              'The forms also decide how an issue gets labelled, and those labels are what tell this bot whether to ask you for a screenshot. Skipping the form means nobody was prompted for the one thing the report actually needs.',
+              '',
+              `Please open a fresh one from [New issue](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/new/choose) and pick the form that fits, then this can be closed as a duplicate. If you would rather not start over, paste the form's answers into a comment below and they will be picked up.`,
+              '',
+              '- **Bug: Server / Plugin** for the plugin or the server side, which needs a screenshot',
+              '- **Bug: Settings Sync** for settings not carrying between clients, which needs a screenshot',
+              '- **Feature request** for something new',
+            ].join('\n');
+
 
             const TITLE_ASK = [
               '### The title still looks like the template',
@@ -164,7 +195,23 @@ jobs:
               "It's also worth pasting anything the server logged. Open the **Logs** page in your Jellyfin or Emby dashboard and search for `Moonfin`, which is the name the plugin logs under.",
             ].join('\n');
 
-            const named = wanted.map(k => `**${CHECKS[k].name}**`);
+            const ASKS = {
+              template: TEMPLATE_ASK,
+              title: TITLE_ASK,
+              screenshot: SCREENSHOT_ASK,
+            };
+
+            // Each ask opens with its own heading, so a later run can see which ones
+            // already went out and raise only what is new. That way an issue labelled
+            // during triage still gets its evidence request, rather than the whole
+            // comment being skipped because the bot spoke once already.
+            const spoken = comments.filter(c => (c.body || '').includes(MARKER));
+            const pending = wanted.filter(
+              kind => !spoken.some(c => c.body.includes(ASKS[kind].split('\n')[0])),
+            );
+            if (!pending.length) return;
+
+            const named = pending.map(k => `**${CHECKS[k].name}**`);
             const listed = named.length === 1
               ? named[0]
               : `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`;
@@ -176,8 +223,7 @@ jobs:
               `Before anyone can pick this up it needs a little more from you, so it has been labelled ${listed}.`,
               '',
             ];
-            if (wanted.includes('title')) parts.push(TITLE_ASK, '');
-            if (wanted.includes('screenshot')) parts.push(SCREENSHOT_ASK, '');
+            for (const kind of pending) parts.push(ASKS[kind], '');
             parts.push('Each label comes off automatically once that piece is sorted.');
 
             await github.rest.issues.createComment({

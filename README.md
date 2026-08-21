@@ -50,9 +50,9 @@ On **Jellyfin**, you can optionally add a one-click Moonfin button to the stock 
 
 1. Jellyfin Dashboard, Administration, Plugins, Repositories
 2. Add a repository:
-   - **Name:** `Moonfin`
+   - **Name:** `Moonbase`
    - **URL:** `https://raw.githubusercontent.com/Moonfin-Client/Plugin/refs/heads/master/manifest.json`
-3. Go to Catalog, find **Moonfin**, and install it
+3. Go to Catalog, find **Moonbase**, and install it
 4. Restart Jellyfin
 
 **Manual install**

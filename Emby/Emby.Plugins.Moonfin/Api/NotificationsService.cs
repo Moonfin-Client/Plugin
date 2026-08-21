@@ -111,6 +111,7 @@ namespace Emby.Plugins.Moonfin.Api
             var provisioning = Plugin.Instance?.SeerrProvisioning;
             var status = provisioning?.LastStatus.ToString()
                 ?? ProvisioningStatus.NotAttempted.ToString();
+            var message = provisioning?.LastMessage ?? string.Empty;
 
             int? currentTypes = null;
             if (provisioning != null)
@@ -123,6 +124,7 @@ namespace Emby.Plugins.Moonfin.Api
                 header = WebhookSecretHeader,
                 types = "MEDIA_PENDING,MEDIA_APPROVED,MEDIA_AVAILABLE,MEDIA_DECLINED,ISSUE_CREATED,ISSUE_COMMENT,ISSUE_RESOLVED,ISSUE_REOPENED",
                 status,
+                message,
                 likelyUnreachable = provisioning?.LastResolvedUrlLikelyUnreachable ?? false,
                 currentTypes,
                 expectedTypes = SeerrProvisioningService.TargetTypes

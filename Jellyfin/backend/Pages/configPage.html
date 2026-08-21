@@ -1089,8 +1089,7 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultHomeImageTypeContinueWatching">Continue Watching Image Type</label>
                                 <select id="DefaultHomeImageTypeContinueWatching" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="Primary">Poster</option>
-                                    <option value="Backdrop">Backdrop</option>
+                                    <option value="Poster">Poster</option>
                                     <option value="Thumb">Thumbnail</option>
                                     <option value="Banner">Banner</option>
                                 </select>
@@ -1134,6 +1133,16 @@
                                     <option value="false">No</option>
                                 </select>
                                 <div class="fieldDescription">Combines recently added media from different libraries of the same type into unified rows.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRecentlyReleasedSeriesType">Recently Released Series Sort By</label>
+                                <select id="DefaultRecentlyReleasedSeriesType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="series">Series</option>
+                                    <option value="season">Season</option>
+                                    <option value="episode">Episode</option>
+                                </select>
+                                <div class="fieldDescription">Sort Recently Released Series home rows by series, latest season, or latest episode air date.</div>
                             </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Library View</h4>
@@ -1319,6 +1328,7 @@
                                     <option value="bookshelf">Bookshelf</option>
                                     <option value="gallery">Gallery</option>
                                     <option value="banner">Banner</option>
+                                    <option value="aya">Aya</option>
                                     <option value="off">Off</option>
                                 </select>
                             </div>
@@ -2145,6 +2155,14 @@
                 return Number.isNaN(parsed) ? null : parsed;
             }
 
+            // The two blur settings are text on the profile, and a JSON number
+            // will not deserialize into a string property, so the whole save
+            // fails rather than that one value being dropped.
+            function getNullableRangeInputAsText(selectorId) {
+                var parsed = getNullableRangeInput(selectorId);
+                return parsed == null ? null : String(parsed);
+            }
+
             function bindNullableRangeInput(selectorId, unit) {
                 var select = document.querySelector(selectorId + '_Set');
                 var range = document.querySelector(selectorId);
@@ -2216,6 +2234,7 @@
                 { type: 'sinceyouwatched4', label: "Since You Watched 4" },
                 { type: 'sinceyouwatched5', label: "Since You Watched 5" },
                 { type: 'rewatch', label: "Rewatch" },
+                { type: 'seerr_shortcuts', label: 'Seerr Browse' },
                 { type: 'seerr_recent_requests', label: 'Seerr Recent Requests' },
                 { type: 'seerr_recently_added', label: 'Seerr Recently Added' },
                 { type: 'seerr_popular_movies', label: 'Seerr Popular Movies' },
@@ -2481,6 +2500,7 @@
             }
 
             var SEERR_DISCOVERY_ROWS = [
+                { id: 'shortcuts', label: 'Seerr Browse' },
                 { id: 'recent_requests', label: 'Recent Requests' },
                 { id: 'watchlist', label: 'Your Watchlist' },
                 { id: 'recently_added', label: 'Recently Added' },
@@ -2588,6 +2608,7 @@
             ];
 
             var HOME_LAYOUT_SEERR_TYPES = {
+                seerr_shortcuts: true,
                 seerr_recent_requests: true,
                 seerr_recently_added: true,
                 seerr_popular_movies: true,
@@ -3679,6 +3700,7 @@
 
                     setNullableBoolSelect('#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
                     setNullableBoolSelect('#DefaultMergeRecentRowsByType', defaults.mergeRecentRowsByType);
+                    setSelectValue('#DefaultRecentlyReleasedSeriesType', defaults.recentlyReleasedSeriesType, 'Configured sort');
                     setNullableBoolSelect('#DefaultGroupItemsIntoCollections', defaults.groupItemsIntoCollections);
                     setNullableBoolSelect('#DefaultShowMediaDetailsOnLibraryPage', defaults.showMediaDetailsOnLibraryPage);
                     setNullableBoolSelect('#DefaultUseDetailedSubHeadings', defaults.useDetailedSubHeadings);
@@ -3909,6 +3931,9 @@
                     }).then(function(info) {
                         var status = info && info.status ? info.status : 'Unknown';
                         var msg = 'Webhook provisioning status: ' + status + '.';
+                        if (info && info.message) {
+                            msg += ' ' + info.message;
+                        }
                         if (info && typeof info.currentTypes === 'number') {
                             msg += ' Current event types in Seerr: ' + info.currentTypes
                                 + ' (3918 = the four request events plus the four issue events).';
@@ -3997,17 +4022,18 @@
                         config.DefaultUserSettings.use24HourClock = getNullableBoolSelect('#DefaultUse24HourClock');
                         config.DefaultUserSettings.desktopUiScale = document.querySelector('#DefaultDesktopUiScale').value || null;
                         config.DefaultUserSettings.backdropEnabled = getNullableBoolSelect('#DefaultBackdropEnabled');
-                        config.DefaultUserSettings.browsingBlur = getNullableIntInput('#DefaultBrowsingBlur');
-                        config.DefaultUserSettings.detailsScreenBlur = getNullableIntInput('#DefaultDetailsScreenBlur');
+                        config.DefaultUserSettings.browsingBlur = getNullableRangeInputAsText('#DefaultBrowsingBlur');
+                        config.DefaultUserSettings.detailsScreenBlur = getNullableRangeInputAsText('#DefaultDetailsScreenBlur');
                         config.DefaultUserSettings.themeMusicEnabled = getNullableBoolSelect('#DefaultThemeMusicEnabled');
                         config.DefaultUserSettings.themeMusicOnHomeRows = getNullableBoolSelect('#DefaultThemeMusicOnHomeRows');
                         config.DefaultUserSettings.themeMusicLoop = getNullableBoolSelect('#DefaultThemeMusicLoop');
+                        config.DefaultUserSettings.themeMusicVolume = getNullableRangeInput('#DefaultThemeMusicVolume');
                         config.DefaultUserSettings.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
                         config.DefaultUserSettings.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
 
                         config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
                         config.DefaultUserSettings.navbarColor = document.querySelector('#DefaultNavbarColor').value || null;
-                        config.DefaultUserSettings.navbarOpacity = getNullableIntInput('#DefaultNavbarOpacity');
+                        config.DefaultUserSettings.navbarOpacity = getNullableRangeInput('#DefaultNavbarOpacity');
                         config.DefaultUserSettings.navbarAlwaysExpanded = getNullableBoolSelect('#DefaultNavbarAlwaysExpanded');
                         config.DefaultUserSettings.enableFolderView = getNullableBoolSelect('#DefaultEnableFolderView');
                         config.DefaultUserSettings.showSeerrButton = getNullableBoolSelect('#DefaultShowSeerrButton');
@@ -4049,25 +4075,29 @@
                         config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
                         config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;
 
-                        var collectionCbs = document.querySelectorAll('.adminCollectionCb:checked');
-                        var collectionIds = [];
-                        for (var ci = 0; ci < collectionCbs.length; ci++) {
-                            collectionIds.push(collectionCbs[ci].dataset.id);
+                        if (document.querySelector('#DefaultCollectionPicker .adminCollectionCb') != null) {
+                            var collectionCbs = document.querySelectorAll('#DefaultCollectionPicker .adminCollectionCb:checked');
+                            var collectionIds = [];
+                            for (var ci = 0; ci < collectionCbs.length; ci++) {
+                                collectionIds.push(collectionCbs[ci].dataset.id);
+                            }
+                            config.DefaultUserSettings.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
                         }
-                        config.DefaultUserSettings.mediaBarCollectionIds = collectionIds.length > 0 ? collectionIds : null;
-                        var libraryCbs = document.querySelectorAll('.adminLibraryCb:checked');
-                        var libraryIds = [];
-                        for (var li = 0; li < libraryCbs.length; li++) {
-                            libraryIds.push(libraryCbs[li].dataset.id);
+                        if (document.querySelector('#DefaultLibraryPicker .adminLibraryCb') != null) {
+                            var libraryCbs = document.querySelectorAll('#DefaultLibraryPicker .adminLibraryCb:checked');
+                            var libraryIds = [];
+                            for (var li = 0; li < libraryCbs.length; li++) {
+                                libraryIds.push(libraryCbs[li].dataset.id);
+                            }
+                            config.DefaultUserSettings.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
                         }
-                        config.DefaultUserSettings.mediaBarLibraryIds = libraryIds.length > 0 ? libraryIds : null;
 
 
                         config.DefaultUserSettings.homeRowsStyle = document.querySelector('#DefaultHomeRowsStyle').value || null;
                         config.DefaultUserSettings.fullScreenRows = getNullableBoolSelect('#DefaultFullScreenRows');
                         config.DefaultUserSettings.homeRowInfoOverlay = getNullableBoolSelect('#DefaultHomeRowInfoOverlay');
-                        config.DefaultUserSettings.classicHomeRowsPadding = getNullableIntInput('#DefaultClassicHomeRowsPadding');
-                        config.DefaultUserSettings.modernHomeRowsPadding = getNullableIntInput('#DefaultModernHomeRowsPadding');
+                        config.DefaultUserSettings.classicHomeRowsPadding = getNullableRangeInput('#DefaultClassicHomeRowsPadding');
+                        config.DefaultUserSettings.modernHomeRowsPadding = getNullableRangeInput('#DefaultModernHomeRowsPadding');
                         config.DefaultUserSettings.posterSize = document.querySelector('#DefaultPosterSize').value || null;
                         config.DefaultUserSettings.homeImageTypeContinueWatching = document.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
                         config.DefaultUserSettings.displayFavoritesRows = getNullableBoolSelect('#DefaultDisplayFavoritesRows');
@@ -4084,6 +4114,7 @@
 
                         config.DefaultUserSettings.enableMultiServerLibraries = getNullableBoolSelect('#DefaultEnableMultiServerLibraries');
                         config.DefaultUserSettings.mergeRecentRowsByType = getNullableBoolSelect('#DefaultMergeRecentRowsByType');
+                        config.DefaultUserSettings.recentlyReleasedSeriesType = document.querySelector('#DefaultRecentlyReleasedSeriesType').value || null;
                         config.DefaultUserSettings.groupItemsIntoCollections = getNullableBoolSelect('#DefaultGroupItemsIntoCollections');
                         config.DefaultUserSettings.showMediaDetailsOnLibraryPage = getNullableBoolSelect('#DefaultShowMediaDetailsOnLibraryPage');
                         config.DefaultUserSettings.useDetailedSubHeadings = getNullableBoolSelect('#DefaultUseDetailedSubHeadings');

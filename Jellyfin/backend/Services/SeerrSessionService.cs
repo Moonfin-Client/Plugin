@@ -136,8 +136,8 @@ public class SeerrSessionService
     // check the Set-Cookie header first because CookieContainer.GetCookies can miss it for
     // IP-based hosts.
     //
-    // The name is not fixed. Standard Jellyseerr and Overseerr use "connect.sid", but a
-    // rebranded Seerr can rename it (SparkBox issues "sb.sid"). We take "connect.sid" when
+    // The name is not fixed. Stock Seerr uses "connect.sid", but a rebranded
+    // build can rename it (SparkBox issues "sb.sid"). We take "connect.sid" when
     // it is there, otherwise the cookie carrying an express-session signed value, which
     // identifies the session without special-casing any one name.
     private static (string? Name, string? Value) ReadSessionCookie(HttpResponseMessage response, CookieContainer jar, string seerrUrl)
@@ -1260,8 +1260,8 @@ public class SeerrSession
     public string SessionCookie { get; set; } = string.Empty;
 
     /// <summary>
-    /// Name of the session cookie Seerr issues. Standard Jellyseerr and Overseerr use
-    /// "connect.sid", but rebranded editions can rename it (SparkBox issues "sb.sid").
+    /// Name of the session cookie Seerr issues. Stock Seerr uses "connect.sid",
+    /// but rebranded editions can rename it (SparkBox issues "sb.sid").
     /// Defaults to "connect.sid" so existing stored sessions keep working.
     /// </summary>
     [JsonPropertyName("sessionCookieName")]

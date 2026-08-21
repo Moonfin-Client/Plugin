@@ -12,4 +12,10 @@ public static class ControllerExtensions
 
         return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
     }
+
+    public static string? GetDeviceIdFromClaims(this ControllerBase controller)
+    {
+        var deviceId = controller.User.FindFirst("Jellyfin-DeviceId")?.Value;
+        return string.IsNullOrEmpty(deviceId) ? null : deviceId;
+    }
 }
