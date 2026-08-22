@@ -858,7 +858,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { type: 'seerr_movie_genres', label: 'Seerr Movie Genres' },
         { type: 'seerr_studios', label: 'Seerr Studios' },
         { type: 'seerr_series_genres', label: 'Seerr Series Genres' },
-        { type: 'seerr_networks', label: 'Seerr Networks' }
+        { type: 'seerr_networks', label: 'Seerr Networks' },
+        { type: 'seerr_watchlist', label: 'Seerr Watchlist' }
     ];
 
     var HOME_LAYOUT_TABS = [
@@ -881,7 +882,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         seerr_movie_genres: true,
         seerr_studios: true,
         seerr_series_genres: true,
-        seerr_networks: true
+        seerr_networks: true,
+        seerr_watchlist: true
     };
 
     function isSeerrHomeSectionType(type) {
