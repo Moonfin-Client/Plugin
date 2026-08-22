@@ -47,6 +47,49 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GameLibraryFileChange_TriggersReconciliationForNewRoms()
+    {
+        var libraryRoot = Path.Combine(_root, "Games");
+        var systemRoot = Path.Combine(libraryRoot, "SNES");
+        Directory.CreateDirectory(systemRoot);
+        await File.WriteAllBytesAsync(Path.Combine(systemRoot, "First.sfc"), [1, 2, 3]);
+
+        var libraryId = Guid.NewGuid().ToString();
+        var libraryManager = new FakeLibraryManager(
+        [
+            new VirtualFolderInfo
+            {
+                Name = "Games",
+                ItemId = libraryId,
+                Locations = [libraryRoot],
+            },
+        ]);
+        var games = new GamesService(libraryManager);
+        var catalog = new GameArtworkCatalog(Path.Combine(_root, "catalog"));
+        var thumbs = (GameThumbService)RuntimeHelpers.GetUninitializedObject(typeof(GameThumbService));
+        var service = new GameArtworkReconciliationService(
+            games,
+            thumbs,
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitForDistinctGameCountAsync(catalog, libraryId, "snes", 1);
+
+            // Per-library scans bypass TaskCompleted, so the ROM-root watcher must find this file.
+            await File.WriteAllBytesAsync(Path.Combine(systemRoot, "Added.sfc"), [4, 5, 6]);
+            await WaitForDistinctGameCountAsync(catalog, libraryId, "snes", 2);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public void Scheduler_ForcesBulkAfterFourInteractiveSelections()
     {
         var scheduler = new ArtworkWorkScheduler();
@@ -249,7 +292,8 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
             thumbs,
             catalog,
             NullLogger<GameArtworkReconciliationService>.Instance,
-            taskManager);
+            taskManager,
+            watchLibraryFileSystem: false);
 
         await service.StartAsync(CancellationToken.None);
         try

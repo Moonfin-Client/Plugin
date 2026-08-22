@@ -130,8 +130,7 @@ internal sealed class GameArtworkStore
                     continue;
                 }
 
-                var name = LibretroThumbName(candidateName);
-                if (name.Length > 0)
+                foreach (var name in LibretroThumbNameVariants(candidateName))
                 {
                     candidates.Add((name, match.Platform));
                 }
@@ -447,6 +446,24 @@ internal sealed class GameArtworkStore
         }
 
         return new string(chars);
+    }
+
+    private static IEnumerable<string> LibretroThumbNameVariants(string name)
+    {
+        var sanitized = LibretroThumbName(name);
+        if (sanitized.Length == 0)
+        {
+            yield break;
+        }
+
+        yield return sanitized;
+
+        // Exact first; then one bounded compatibility spelling (for example Maze Craze's `~` vs `-`).
+        var alternateTitleSeparator = sanitized.Replace('~', '-');
+        if (!string.Equals(alternateTitleSeparator, sanitized, StringComparison.Ordinal))
+        {
+            yield return alternateTitleSeparator;
+        }
     }
 
     private static string CacheKey(string platform, GameThumbService.ThumbKind kind, string name)
