@@ -1756,9 +1756,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultDisplayAudioRows', defaults.displayAudioRows);
             setSelectValue(view, '#DefaultAudioRowsSortBy', defaults.audioRowsSortBy, 'Configured sort');
             setNullableBoolSelect(view, '#DefaultHomeImageUseSeriesImage', defaults.homeImageUseSeriesImage);
-            setNullableBoolSelect(view, '#DefaultDisplayRewatchRow' defaults.displayRewatchRow);
+            setNullableBoolSelect(view, '#DefaultDisplayRewatchRow', defaults.displayRewatchRow);
             setSelectValue(view, '#DefaultRewatchSortBy', defaults.rewatchSortBy, 'Configured sort');
-            setNullableBoolSelect(view, '#DefaultDisplaySinceYouWatchedRows', defaults.sinceYouWatchedRows);
+            setNullableBoolSelect(view, '#DefaultDisplaySinceYouWatchedRows', defaults.displaySinceYouWatchedRows);
             loadHomeSectionsEditor(view, defaults.homeSections || null, defaults.homeRowOrder || null);
             setNullableBoolSelect(view, '#DefaultMergeContinueWatchingNextUp', defaults.mergeContinueWatchingNextUp);
             setSelectValue(view, '#DefaultNextUpMaxDays', defaults.nextUpMaxDays, 'Configured max days');
