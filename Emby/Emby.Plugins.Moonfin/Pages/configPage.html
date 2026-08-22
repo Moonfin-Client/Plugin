@@ -1283,8 +1283,128 @@
                                     <div id="DefaultHomeAvailableRows" class="homeLayoutList"></div>
                                 </div>
                             </div>
+                            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Home Row Toggles/h4>
+                            <div class="fieldDescription" style="margin-bottom:0.75em;">Toggle the switches for these home row categories to make them available in the home sections page by default.</div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioRows">Audio Rows</label>
+                                <select id="DefaultDisplayAudioRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAudioRowsSortBy">Audio Rows Sorting</label>
+                                <select id="DefaultAudioRowsSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="name">Name</option>
+                                    <option value="dateAdded">Date Added</option>
+                                    <option value="premiereDate">Release Date</option>
+                                    <option value="runtime">Runtime</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayCollectionsRows">Collections Rows</label>
+                                <select id="DefaultDisplayCollectionsRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortBy">Collections Rows Sorting</label>
+                                <select id="DefaultCollectionsRowSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="name">Name</option>
+                                    <option value="dateAdded">Date Added</option>
+                                    <option value="premiereDate">Release Date</option>
+                                    <option value="runtime">Runtime</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayFavoritesRows">Favorites Rows</label>
+                                <select id="DefaultDisplayFavoritesRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortBy">Favorites Rows Sorting</label>
+                                <select id="DefaultFavoritesRowSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="name">Name</option>
+                                    <option value="dateAdded">Date Added</option>
+                                    <option value="premiereDate">Release Date</option>
+                                    <option value="runtime">Runtime</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayGenresRows">Genres Rows</label>
+                                <select id="DefaultDisplayGenresRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortBy">Genres Rows Sorting</label>
+                                <select id="DefaultGenresRowSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="name">Name</option>
+                                    <option value="dateAdded">Date Added</option>
+                                    <option value="premiereDate">Release Date</option>
+                                    <option value="runtime">Runtime</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayPlaylistsRows">Playlists Rows</label>
+                                <select id="DefaultDisplayPlaylistsRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowSortBy">Playlists Rows Sorting</label>
+                                <select id="DefaultPlaylistsRowSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="name">Name</option>
+                                    <option value="dateAdded">Date Added</option>
+                                    <option value="premiereDate">Release Date</option>
+                                    <option value="runtime">Runtime</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayRewatchRow">Rewatch Row</label>
+                                <select id="DefaultDisplayRewatchRow" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRewatchSortBy">Rewatch Row Sorting</label>
+                                <select id="DefaultRewatchSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="recentlyWatched">Recently Watched</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplaySinceYouWatchedRows">Since You Watched Rows</label>
+                                <select id="DefaultDisplaySinceYouWatchedRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
                         </div>
-
                         <!-- 6. Libraries -->
                         <div class="defaultsSubtabPanel" data-subtab="libraries">
                             <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">General</h4>
