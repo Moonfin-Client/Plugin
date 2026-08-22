@@ -858,7 +858,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { type: 'seerr_movie_genres', label: 'Seerr Movie Genres' },
         { type: 'seerr_studios', label: 'Seerr Studios' },
         { type: 'seerr_series_genres', label: 'Seerr Series Genres' },
-        { type: 'seerr_networks', label: 'Seerr Networks' }
+        { type: 'seerr_networks', label: 'Seerr Networks' },
+        { type: 'seerr_watchlist', label: 'Seerr Watchlist' }
     ];
 
     var HOME_LAYOUT_TABS = [
@@ -881,7 +882,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         seerr_movie_genres: true,
         seerr_studios: true,
         seerr_series_genres: true,
-        seerr_networks: true
+        seerr_networks: true,
+        seerr_watchlist: true
     };
 
     function isSeerrHomeSectionType(type) {
@@ -1744,12 +1746,21 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableRangeInput(view, '#DefaultModernHomeRowsPadding', defaults.modernHomeRowsPadding, 'px');
             setSelectValue(view, '#DefaultPosterSize', defaults.posterSize, 'Configured size');
             setSelectValue(view, '#DefaultHomeImageTypeContinueWatching', defaults.homeImageTypeContinueWatching, 'Configured image type');
+            setSelectValue(view, '#DefaultPosterSize', defaults.posterSize, 'Configured size');
             setNullableBoolSelect(view, '#DefaultDisplayFavoritesRows', defaults.displayFavoritesRows);
+            setSelectValue(view, '#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
             setNullableBoolSelect(view, '#DefaultDisplayCollectionsRows', defaults.displayCollectionsRows);
+            setSelectValue(view, '#DefaultCollectionsRowSortBy', defaults.collectionsRowSortBy, 'Configured sort');
             setNullableBoolSelect(view, '#DefaultDisplayGenresRows', defaults.displayGenresRows);
+            setSelectValue(view, '#DefaultGenresRowSortBy', defaults.genresRowSortBy, 'Configured sort');
             setNullableBoolSelect(view, '#DefaultDisplayPlaylistsRows', defaults.displayPlaylistsRows);
+            setSelectValue(view, '#DefaultPlaylistsRowSortBy', defaults.playlistsRowSortBy, 'Configured sort');
             setNullableBoolSelect(view, '#DefaultDisplayAudioRows', defaults.displayAudioRows);
+            setSelectValue(view, '#DefaultAudioRowsSortBy', defaults.audioRowsSortBy, 'Configured sort');
             setNullableBoolSelect(view, '#DefaultHomeImageUseSeriesImage', defaults.homeImageUseSeriesImage);
+            setNullableBoolSelect(view, '#DefaultDisplayRewatchRow', defaults.displayRewatchRow);
+            setSelectValue(view, '#DefaultRewatchSortBy', defaults.rewatchSortBy, 'Configured sort');
+            setNullableBoolSelect(view, '#DefaultDisplaySinceYouWatchedRows', defaults.displaySinceYouWatchedRows);
             loadHomeSectionsEditor(view, defaults.homeSections || null, defaults.homeRowOrder || null);
             setNullableBoolSelect(view, '#DefaultMergeContinueWatchingNextUp', defaults.mergeContinueWatchingNextUp);
             setSelectValue(view, '#DefaultNextUpMaxDays', defaults.nextUpMaxDays, 'Configured max days');
@@ -1909,10 +1920,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.posterSize = view.querySelector('#DefaultPosterSize').value || null;
             d.homeImageTypeContinueWatching = view.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
             d.displayFavoritesRows = getNullableBoolSelect(view, '#DefaultDisplayFavoritesRows');
+            d.favoritesRowSortBy = view.querySelector('#DefaultFavoritesRowSortBy').value || null;
             d.displayCollectionsRows = getNullableBoolSelect(view, '#DefaultDisplayCollectionsRows');
+            d.collectionsRowSortBy = view.querySelector('#DefaultCollectionsRowSortBy').value || null;
             d.displayGenresRows = getNullableBoolSelect(view, '#DefaultDisplayGenresRows');
+            d.genresRowSortBy = view.querySelector('#DefaultGenresRowSortBy').value || null;
             d.displayPlaylistsRows = getNullableBoolSelect(view, '#DefaultDisplayPlaylistsRows');
+            d.playlistsRowSortBy = view.querySelector('#DefaultPlaylistsRowSortBy').value || null;
             d.displayAudioRows = getNullableBoolSelect(view, '#DefaultDisplayAudioRows');
+            d.audioRowsSortBy = view.querySelector('#DefaultAudioRowsSortBy').value || null;
+            d.displayRewatchRow = getNullableBoolSelect(view, '#DefaultDisplayRewatchRow');
+            d.rewatchSortBy = view.querySelector('#DefaultRewatchSortBy').value || null;
+            d.displaySinceYouWatchedRows = getNullableBoolSelect(view, '#DefaultDisplaySinceYouWatchedRows');
             d.homeImageUseSeriesImage = getNullableBoolSelect(view, '#DefaultHomeImageUseSeriesImage');
             var homeSections = getHomeSectionsValue(view);
             d.homeSections = homeSections;
