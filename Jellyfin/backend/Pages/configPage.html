@@ -1112,7 +1112,7 @@
                                     <div id="DefaultHomeAvailableRows" class="homeLayoutList"></div>
                                 </div>
                             </div>
-                            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Home Row Toggles/h4>
+                            <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Home Row Toggles</h4>
                             <div class="fieldDescription" style="margin-bottom:0.75em;">Toggle the switches for these home row categories to make them available in the home sections page by default.</div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioRows">Audio Rows</label>
@@ -4244,6 +4244,16 @@
                         config.DefaultUserSettings.rewatchSortBy = document.querySelector('#DefaultRewatchSortBy').value || null;
                         config.DefaultUserSettings.displaySinceYouWatchedRows = getNullableBoolSelect('#DefaultDisplaySinceYouWatchedRows');
                         config.DefaultUserSettings.homeImageUseSeriesImage = getNullableBoolSelect('#DefaultHomeImageUseSeriesImage');
+                        // before saving home rows, make sure required toggles are active
+                        HOME_LAYOUT_STATE.sections.map(function(section) {
+                            if (section.pluginSource === 'collections') {
+                                config.DefaultUserSettings.displayCollectionsRows = true;
+                            } else if (section.pluginSource === 'playlists') {
+                                config.DefaultUserSettings.displayPlaylistsRows = true;
+                            } else if (section.pluginSource === 'genres') {
+                                config.DefaultUserSettings.displayGenresRows = true;
+                            }
+                        });
                         var homeSections = getHomeSectionsValue();
                         config.DefaultUserSettings.homeSections = homeSections;
                         config.DefaultUserSettings.homeRowOrder = getHomeRowOrderValue(homeSections);
