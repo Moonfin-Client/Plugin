@@ -2776,6 +2776,14 @@
                 return !!HOME_LAYOUT_EXTERNAL_LISTS[type];
             }
 
+            // A pushed genre, collection or playlist row renders for the user only
+            // when its category toggle is on, so saving a row switches its toggle on.
+            var HOME_LAYOUT_ROW_TOGGLES = {
+                collections: { setting: 'displayCollectionsRows', select: '#DefaultDisplayCollectionsRows' },
+                playlists: { setting: 'displayPlaylistsRows', select: '#DefaultDisplayPlaylistsRows' },
+                genres: { setting: 'displayGenresRows', select: '#DefaultDisplayGenresRows' }
+            };
+
             var HOME_LAYOUT_STATE = {
                 sections: [],
                 selectedIndex: null,
@@ -4244,15 +4252,13 @@
                         config.DefaultUserSettings.rewatchSortBy = document.querySelector('#DefaultRewatchSortBy').value || null;
                         config.DefaultUserSettings.displaySinceYouWatchedRows = getNullableBoolSelect('#DefaultDisplaySinceYouWatchedRows');
                         config.DefaultUserSettings.homeImageUseSeriesImage = getNullableBoolSelect('#DefaultHomeImageUseSeriesImage');
-                        // before saving home rows, make sure required toggles are active
-                        HOME_LAYOUT_STATE.sections.map(function(section) {
-                            if (section.pluginSource === 'collections') {
-                                config.DefaultUserSettings.displayCollectionsRows = true;
-                            } else if (section.pluginSource === 'playlists') {
-                                config.DefaultUserSettings.displayPlaylistsRows = true;
-                            } else if (section.pluginSource === 'genres') {
-                                config.DefaultUserSettings.displayGenresRows = true;
-                            }
+                        HOME_LAYOUT_STATE.sections.forEach(function(section) {
+                            var toggle = HOME_LAYOUT_ROW_TOGGLES[section.pluginSource];
+                            if (!toggle || config.DefaultUserSettings[toggle.setting] === true) return;
+                            config.DefaultUserSettings[toggle.setting] = true;
+                            // Keep the select in step, otherwise it goes on reading No
+                            // until the page is reloaded.
+                            setNullableBoolSelect(toggle.select, true);
                         });
                         var homeSections = getHomeSectionsValue();
                         config.DefaultUserSettings.homeSections = homeSections;
