@@ -2068,6 +2068,323 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
     }
 
+    var moonfinSeverityColors = {
+        info: '#52b54b',
+        warning: '#f0ad4e',
+        critical: '#d9534f'
+    };
+
+    var moonfinDeliveryLabels = {
+        inbox: 'Quiet',
+        toast: 'Corner popup',
+        popup: 'Opens the window'
+    };
+
+    function setMessageResult(view, text, color) {
+        var result = view.querySelector('#MessageSaveResult');
+        if (!result) return;
+
+        if (!text) {
+            result.style.display = 'none';
+            result.textContent = '';
+            return;
+        }
+
+        result.style.display = '';
+        result.style.color = color || '';
+        result.textContent = text;
+    }
+
+    // The date inputs work in the admin's own time zone, but the server stores UTC.
+    function messageDateToInput(utcValue) {
+        if (!utcValue) return '';
+
+        var date = new Date(utcValue);
+        if (isNaN(date.getTime())) return '';
+
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+            'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+    }
+
+    function messageDateFromInput(value) {
+        if (!value) return null;
+        var date = new Date(value);
+        return isNaN(date.getTime()) ? null : date.toISOString();
+    }
+
+    function formatMessageDate(utcValue) {
+        if (!utcValue) return '';
+        var date = new Date(utcValue);
+        return isNaN(date.getTime()) ? '' : date.toLocaleString();
+    }
+
+    function toggleMessageTargets(view) {
+        var audience = view.querySelector('#MessageAudience');
+        var row = view.querySelector('#MessageTargetsRow');
+        if (!audience || !row) return;
+        row.style.display = audience.value === 'users' ? '' : 'none';
+    }
+
+    function loadMessageTargetUsers(view) {
+        var select = view.querySelector('#MessageTargets');
+        if (!select || !ApiClient.getUsers) return Promise.resolve();
+
+        return ApiClient.getUsers().then(function (users) {
+            select.innerHTML = '';
+            (users || []).forEach(function (user) {
+                var option = document.createElement('option');
+                option.value = user.Id;
+                option.textContent = user.Name;
+                select.appendChild(option);
+            });
+        }).catch(function () {});
+    }
+
+    function resetMessageForm(view) {
+        view.__moonfinEditingMessageId = null;
+
+        view.querySelector('#MessageTitle').value = '';
+        view.querySelector('#MessageBody').value = '';
+        view.querySelector('#MessageSeverity').value = 'info';
+        view.querySelector('#MessageDelivery').value = 'inbox';
+        view.querySelector('#MessageAudience').value = 'all';
+        view.querySelector('#MessageStart').value = '';
+        view.querySelector('#MessageEnd').value = '';
+        view.querySelector('#MessageActionLabel').value = '';
+        view.querySelector('#MessageActionUrl').value = '';
+        view.querySelector('#MessagePinned').checked = false;
+
+        var targets = view.querySelector('#MessageTargets');
+        if (targets) {
+            Array.prototype.forEach.call(targets.options, function (option) { option.selected = false; });
+        }
+
+        var saveBtn = view.querySelector('#MessageSaveBtn');
+        if (saveBtn) saveBtn.querySelector('span').textContent = 'Save Message';
+
+        var resetBtn = view.querySelector('#MessageResetBtn');
+        if (resetBtn) resetBtn.style.display = 'none';
+
+        toggleMessageTargets(view);
+        setMessageResult(view, '', '');
+    }
+
+    function editMessage(view, item) {
+        view.__moonfinEditingMessageId = item.Id || item.id || null;
+
+        view.querySelector('#MessageTitle').value = item.Title || item.title || '';
+        view.querySelector('#MessageBody').value = item.Body || item.body || '';
+        view.querySelector('#MessageSeverity').value = item.Severity || item.severity || 'info';
+        view.querySelector('#MessageDelivery').value = item.Delivery || item.delivery || 'inbox';
+        view.querySelector('#MessageAudience').value = item.Audience || item.audience || 'all';
+        view.querySelector('#MessageStart').value = messageDateToInput(item.StartUtc || item.startUtc);
+        view.querySelector('#MessageEnd').value = messageDateToInput(item.EndUtc || item.endUtc);
+        view.querySelector('#MessageActionLabel').value = item.ActionLabel || item.actionLabel || '';
+        view.querySelector('#MessageActionUrl').value = item.ActionUrl || item.actionUrl || '';
+        view.querySelector('#MessagePinned').checked = !!(item.Pinned || item.pinned);
+
+        var selected = item.TargetUserIds || item.targetUserIds || [];
+        var targets = view.querySelector('#MessageTargets');
+        if (targets) {
+            Array.prototype.forEach.call(targets.options, function (option) {
+                option.selected = selected.some(function (id) {
+                    return String(id).toLowerCase() === String(option.value).toLowerCase();
+                });
+            });
+        }
+
+        var saveBtn = view.querySelector('#MessageSaveBtn');
+        if (saveBtn) saveBtn.querySelector('span').textContent = 'Update Message';
+
+        var resetBtn = view.querySelector('#MessageResetBtn');
+        if (resetBtn) resetBtn.style.display = '';
+
+        toggleMessageTargets(view);
+        setMessageResult(view, '', '');
+
+        var titleInput = view.querySelector('#MessageTitle');
+        if (titleInput) titleInput.focus();
+    }
+
+    function renderMessagesList(view, items) {
+        var container = view.querySelector('#MessagesList');
+        if (!container) return;
+
+        if (!items || items.length === 0) {
+            container.innerHTML = '<div style="padding:8px;opacity:0.6;font-size:0.9em;">No messages yet.</div>';
+            return;
+        }
+
+        var now = new Date();
+        var html = '';
+
+        items.forEach(function (item) {
+            var id = item.Id || item.id || '';
+            var title = item.Title || item.title || '';
+            var body = item.Body || item.body || '';
+            var severity = item.Severity || item.severity || 'info';
+            var delivery = item.Delivery || item.delivery || 'inbox';
+            var audience = item.Audience || item.audience || 'all';
+            var pinned = !!(item.Pinned || item.pinned);
+            var start = item.StartUtc || item.startUtc;
+            var end = item.EndUtc || item.endUtc;
+            var targets = item.TargetUserIds || item.targetUserIds || [];
+            var color = moonfinSeverityColors[severity] || moonfinSeverityColors.info;
+
+            var state = 'Showing now';
+            if (start && new Date(start) > now) {
+                state = 'Starts ' + formatMessageDate(start);
+            } else if (end && new Date(end) <= now) {
+                state = 'Expired';
+            } else if (end) {
+                state = 'Until ' + formatMessageDate(end);
+            }
+
+            var who = audience === 'admins'
+                ? 'Admins only'
+                : audience === 'users'
+                    ? targets.length + (targets.length === 1 ? ' user' : ' users')
+                    : 'Everyone';
+
+            html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px;border:1px solid rgba(128,128,128,0.3);border-left:3px solid ' + color + ';border-radius:4px;margin-bottom:6px;">' +
+                '<div style="flex:1;min-width:0;">' +
+                '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                '<strong style="font-size:0.95em;color:' + color + ';">' + esc(title || '(no title)') + '</strong>' +
+                (pinned ? '<span style="font-size:0.72em;opacity:0.7;border:1px solid rgba(128,128,128,0.4);border-radius:3px;padding:0 4px;">PINNED</span>' : '') +
+                '</div>' +
+                '<div style="font-size:0.82em;opacity:0.8;margin-top:4px;white-space:pre-wrap;">' + esc(body.length > 160 ? body.slice(0, 160) + '…' : body) + '</div>' +
+                '<div style="font-size:0.78em;opacity:0.6;margin-top:4px;">' +
+                esc(state) + ' • ' + esc(who) + ' • ' + esc(moonfinDeliveryLabels[delivery] || delivery) +
+                '</div>' +
+                '</div>' +
+                '<button type="button" class="moonfinMessageEditBtn" data-message-id="' + esc(id) + '" title="Edit message" style="background:none;border:1px solid rgba(128,128,128,0.5);border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">Edit</button>' +
+                '<button type="button" class="moonfinMessageDeleteBtn" data-message-id="' + esc(id) + '" title="Delete message" style="background:none;border:1px solid rgba(239,68,68,0.6);color:#ef4444;border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">&#x2715;</button>' +
+                '</div>';
+        });
+
+        container.innerHTML = html;
+    }
+
+    function loadMessagesList(view) {
+        var container = view.querySelector('#MessagesList');
+        if (!container) return;
+
+        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        container.innerHTML = '<div style="padding:8px;opacity:0.6;font-size:0.9em;">Loading messages...</div>';
+
+        fetch(serverUrl + '/Moonfin/Admin/Messages', { method: 'GET', headers: moonfinAuthHeaders() })
+            .then(parseJsonResponse)
+            .then(function (payload) {
+                var items = payload.items || payload.Items || [];
+                view.__moonfinMessagesCache = items;
+                renderMessagesList(view, items);
+            })
+            .catch(function (error) {
+                container.innerHTML = '<div style="padding:8px;color:#d9534f;font-size:0.9em;">' +
+                    esc((error && error.message) ? error.message : 'Failed to load messages.') + '</div>';
+            });
+    }
+
+    function saveMessage(view) {
+        var saveBtn = view.querySelector('#MessageSaveBtn');
+        var title = (view.querySelector('#MessageTitle').value || '').trim();
+        var body = (view.querySelector('#MessageBody').value || '').trim();
+
+        if (!title && !body) {
+            setMessageResult(view, 'Enter a title or a message.', '#d9534f');
+            return;
+        }
+
+        var audience = view.querySelector('#MessageAudience').value;
+        var targetSelect = view.querySelector('#MessageTargets');
+        var targetUserIds = [];
+        if (audience === 'users' && targetSelect) {
+            targetUserIds = Array.prototype.filter.call(targetSelect.options, function (option) {
+                return option.selected;
+            }).map(function (option) { return option.value; });
+
+            if (targetUserIds.length === 0) {
+                setMessageResult(view, 'Pick at least one user, or change who sees it.', '#d9534f');
+                return;
+            }
+        }
+
+        var payload = {
+            Id: view.__moonfinEditingMessageId || '',
+            Title: title,
+            Body: body,
+            Severity: view.querySelector('#MessageSeverity').value,
+            Delivery: view.querySelector('#MessageDelivery').value,
+            Audience: audience,
+            TargetUserIds: targetUserIds,
+            Pinned: view.querySelector('#MessagePinned').checked,
+            ActionLabel: (view.querySelector('#MessageActionLabel').value || '').trim(),
+            ActionUrl: (view.querySelector('#MessageActionUrl').value || '').trim(),
+            StartUtc: messageDateFromInput(view.querySelector('#MessageStart').value),
+            EndUtc: messageDateFromInput(view.querySelector('#MessageEnd').value)
+        };
+
+        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        var wasEditing = !!view.__moonfinEditingMessageId;
+
+        if (saveBtn) saveBtn.disabled = true;
+        setMessageResult(view, '', '');
+
+        fetch(serverUrl + '/Moonfin/Admin/Messages', {
+            method: 'POST',
+            headers: moonfinAuthHeaders(),
+            body: JSON.stringify(payload)
+        })
+            .then(parseJsonResponse)
+            .then(function (response) {
+                var saved = response.item || response.Item || {};
+                var warnings = [];
+
+                if (payload.ActionUrl && !(saved.ActionUrl || saved.actionUrl)) {
+                    warnings.push('the link was dropped, it must start with http:// or https://');
+                }
+                if (payload.EndUtc && !(saved.EndUtc || saved.endUtc)) {
+                    warnings.push('the end date was dropped, it was before the start date');
+                }
+
+                var message = wasEditing ? 'Message updated.' : 'Message saved.';
+                if (warnings.length) message += ' Note: ' + warnings.join(', ') + '.';
+
+                // resetMessageForm clears the result line, so set it afterwards.
+                resetMessageForm(view);
+                setMessageResult(view, message, warnings.length ? '#f0ad4e' : '#52b54b');
+                loadMessagesList(view);
+            })
+            .catch(function (error) {
+                setMessageResult(view, (error && error.message) ? error.message : 'Save failed.', '#d9534f');
+            })
+            .finally(function () {
+                if (saveBtn) saveBtn.disabled = false;
+            });
+    }
+
+    function deleteMessage(view, messageId) {
+        if (!messageId) return;
+        if (!window.confirm('Delete this message?')) return;
+
+        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+
+        fetch(serverUrl + '/Moonfin/Admin/Messages/' + encodeURIComponent(messageId), {
+            method: 'DELETE',
+            headers: moonfinAuthHeaders()
+        })
+            .then(parseJsonResponse)
+            .then(function () {
+                if (view.__moonfinEditingMessageId === messageId) resetMessageForm(view);
+                setMessageResult(view, 'Message deleted.', '#52b54b');
+                loadMessagesList(view);
+            })
+            .catch(function (error) {
+                setMessageResult(view, (error && error.message) ? error.message : 'Delete failed.', '#d9534f');
+            });
+    }
+
     function initializeDefaultsSubtabs(view) {
         var subnav = view.querySelector('.defaultsSubnavBar');
         if (!subnav || subnav.dataset.bound) return;
@@ -2144,6 +2461,36 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var broadcastBtn = view.querySelector('#BroadcastMessageBtn');
         if (broadcastBtn) broadcastBtn.addEventListener('click', function () { broadcast(view); });
 
+        var messageAudience = view.querySelector('#MessageAudience');
+        if (messageAudience) {
+            messageAudience.addEventListener('change', function () { toggleMessageTargets(view); });
+        }
+
+        var messageSaveBtn = view.querySelector('#MessageSaveBtn');
+        if (messageSaveBtn) messageSaveBtn.addEventListener('click', function () { saveMessage(view); });
+
+        var messageResetBtn = view.querySelector('#MessageResetBtn');
+        if (messageResetBtn) messageResetBtn.addEventListener('click', function () { resetMessageForm(view); });
+
+        var messagesListContainer = view.querySelector('#MessagesList');
+        if (messagesListContainer) {
+            messagesListContainer.addEventListener('click', function (event) {
+                var editButton = event.target.closest('.moonfinMessageEditBtn');
+                if (editButton) {
+                    var editId = editButton.getAttribute('data-message-id') || '';
+                    var cached = view.__moonfinMessagesCache || [];
+                    var found = cached.filter(function (item) {
+                        return (item.Id || item.id) === editId;
+                    })[0];
+                    if (found) editMessage(view, found);
+                    return;
+                }
+
+                var deleteButton = event.target.closest('.moonfinMessageDeleteBtn');
+                if (deleteButton) deleteMessage(view, deleteButton.getAttribute('data-message-id') || '');
+            });
+        }
+
         var mdblistTestBtn = view.querySelector('#MdblistTestKeyBtn');
         if (mdblistTestBtn) mdblistTestBtn.addEventListener('click', function () { testMdblistKey(view); });
 
@@ -2164,6 +2511,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         clearSelectedThemeFile(view);
         setThemeUploadResult(view, '', '');
         loadAdminThemesList(view);
+        // The user list must be there before the form can preselect targets on edit.
+        loadMessageTargetUsers(view).then(function () {
+            resetMessageForm(view);
+            loadMessagesList(view);
+        });
         loadConfig(view);
     };
 

@@ -567,6 +567,10 @@
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Themes</span><span class="moonfinNavSub">Upload &amp; catalog</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="messages">
+                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5S10.5 3.17 10.5 4v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Messages</span><span class="moonfinNavSub">News for your users</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="actions">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11v2h4v-2h-4zm-2 6.61c.96.71 2.21 1.65 3.2 2.39.4-.53.8-1.07 1.2-1.6-.99-.74-2.24-1.68-3.2-2.4-.4.54-.8 1.08-1.2 1.61zM20.4 5.6c-.4-.53-.8-1.07-1.2-1.6-.99.74-2.24 1.68-3.2 2.4.4.53.8 1.07 1.2 1.6.96-.72 2.21-1.65 3.2-2.4zM4 9c-1.1 0-2 .9-2 2v2c0 1.1.9 2 2 2h1v4h2v-4h1l5 3V6L8 9H4zm11.5 3c0-1.33-.58-2.53-1.5-3.35v6.69c.92-.81 1.5-2.01 1.5-3.34z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Actions</span><span class="moonfinNavSub">Apply Defaults &amp; Broadcast</span></span>
@@ -1868,6 +1872,117 @@
                     </div>
 
                     </section>
+                    <section class="moonfinTabPanel" data-tab="messages">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Messages</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            Write news, updates or warnings for your users. They read them from the messages
+                            button in the app menu. Messages are saved, so users still see them if the app was
+                            closed when you posted.
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageTitle">Title</label>
+                            <input type="text" id="MessageTitle" is="emby-input" maxlength="120" placeholder="Server maintenance on Saturday" />
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageBody">Message</label>
+                            <textarea id="MessageBody" is="emby-textarea" rows="4" maxlength="2000" placeholder="Plain text only. Links and formatting are not shown."></textarea>
+                        </div>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="MessageSeverity">Importance</label>
+                            <select is="emby-select" id="MessageSeverity">
+                                <option value="info">Info (green)</option>
+                                <option value="warning">Warning (yellow)</option>
+                                <option value="critical">Critical (red)</option>
+                            </select>
+                            <div class="fieldDescription">Sets the colour of the message and of the button in the app menu.</div>
+                        </div>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="MessageDelivery">How loud</label>
+                            <select is="emby-select" id="MessageDelivery">
+                                <option value="inbox">Quiet: only a dot on the button</option>
+                                <option value="toast">Small popup in the corner</option>
+                                <option value="popup">Open the message window once</option>
+                            </select>
+                            <div class="fieldDescription">
+                                The last two also send a phone notification to users who turned them on.
+                            </div>
+                        </div>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="MessageAudience">Who sees it</label>
+                            <select is="emby-select" id="MessageAudience">
+                                <option value="all">Everyone</option>
+                                <option value="users">Only the users I pick</option>
+                                <option value="admins">Only admins</option>
+                            </select>
+                        </div>
+
+                        <div class="selectContainer" id="MessageTargetsRow" style="display:none;">
+                            <label class="selectLabel" for="MessageTargets">Users</label>
+                            <select is="emby-select" id="MessageTargets" multiple size="6"></select>
+                            <div class="fieldDescription">Hold Ctrl or Cmd to pick more than one.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageStart">Show from (optional)</label>
+                            <input type="datetime-local" id="MessageStart" is="emby-input" />
+                            <div class="fieldDescription">Leave empty to show it right away.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageEnd">Hide after (optional)</label>
+                            <input type="datetime-local" id="MessageEnd" is="emby-input" />
+                            <div class="fieldDescription">
+                                Leave empty to keep it forever. Messages past this date are deleted on the next save.
+                            </div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageActionLabel">Button text (optional)</label>
+                            <input type="text" id="MessageActionLabel" is="emby-input" maxlength="40" placeholder="Read more" />
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageActionUrl">Button link (optional)</label>
+                            <input type="text" id="MessageActionUrl" is="emby-input" placeholder="https://example.com/news" />
+                            <div class="fieldDescription">
+                                Must start with http:// or https://. On TV the app shows it as a QR code.
+                                A link needs a button text, and a button text needs a link.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="MessagePinned" is="emby-checkbox" />
+                                <span>Keep this message at the top of the list</span>
+                            </label>
+                        </div>
+
+                        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6em; margin-top:0.8em;">
+                            <button is="emby-button" type="button" id="MessageSaveBtn" class="raised">
+                                <span>Save Message</span>
+                            </button>
+                            <button is="emby-button" type="button" id="MessageResetBtn" class="raised" style="display:none;">
+                                <span>Cancel Edit</span>
+                            </button>
+                        </div>
+                        <div id="MessageSaveResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Saved Messages</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            Up to 50 messages are kept. Past that, the oldest unpinned ones are dropped.
+                        </div>
+                        <div id="MessagesList" style="max-height:340px;overflow-y:auto;border:1px solid rgba(128,128,128,0.3);border-radius:4px;padding:6px;"></div>
+                    </div>
+
+                    </section>
                     <section class="moonfinTabPanel" data-tab="actions">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Push Defaults To Existing Users</h3>
@@ -1889,8 +2004,9 @@
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Broadcast Message</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            Send a live message to all currently connected Moonfin clients.
-                            This message is not saved and only appears for users with an active connection.
+                            Send a message to all connected Moonfin clients right now. It is also saved to
+                            the Messages tab, so users who were offline still see it later.
+                            For anything you want to write properly, use the Messages tab instead.
                         </div>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="BroadcastMessageText">Message</label>

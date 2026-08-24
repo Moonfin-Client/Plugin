@@ -23,6 +23,13 @@ namespace Emby.Plugins.Moonfin.Api
             catch { return null; }
         }
 
+        /// <summary>True when the caller is a server admin, the same check the "Admin" role uses.</summary>
+        public static bool IsCurrentUserAdmin(IRequest request, IAuthorizationContext authContext)
+        {
+            try { return GetCurrentUser(request, authContext)?.Policy?.IsAdministrator == true; }
+            catch { return false; }
+        }
+
         /// <summary>Returns all server user GUIDs, or null if the user manager is unavailable.</summary>
         public static IReadOnlyCollection<Guid>? GetAllServerUserIds()
         {
