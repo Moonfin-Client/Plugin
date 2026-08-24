@@ -209,15 +209,9 @@ public class ServerMessageTests
     }
 
     [Fact]
-    public void PruneMessages_DropsOldestFirstAndKeepsPinned()
+    public void PruneMessages_DropsTheOldestFirst()
     {
         var messages = new List<ServerMessage>();
-
-        var pinned = Message();
-        pinned.Id = "pinned";
-        pinned.Pinned = true;
-        pinned.CreatedUtc = Now.AddYears(-5);
-        messages.Add(pinned);
 
         for (var i = 0; i < ServerMessage.MaxStored + 5; i++)
         {
@@ -230,7 +224,8 @@ public class ServerMessageTests
         ServerMessage.Prune(messages);
 
         Assert.Equal(ServerMessage.MaxStored, messages.Count);
-        Assert.Contains(messages, m => m.Id == "pinned");
         Assert.DoesNotContain(messages, m => m.Id == "m0");
+        Assert.DoesNotContain(messages, m => m.Id == "m4");
+        Assert.Contains(messages, m => m.Id == "m5");
     }
 }

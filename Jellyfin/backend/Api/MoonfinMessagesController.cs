@@ -56,8 +56,6 @@ public class MoonfinMessagesController : ControllerBase
         var now = DateTime.UtcNow;
         var items = config.Messages
             .Where(m => m.IsVisibleTo(userId.Value, isAdmin, now))
-            .OrderByDescending(m => m.Pinned)
-            .ThenByDescending(m => m.CreatedUtc)
             .ToList();
 
         return Ok(new { items });
@@ -76,8 +74,6 @@ public class MoonfinMessagesController : ControllerBase
         return Ok(new
         {
             items = messages
-                .OrderByDescending(m => m.Pinned)
-                .ThenByDescending(m => m.CreatedUtc)
                 .ToList()
         });
     }
@@ -117,16 +113,18 @@ public class MoonfinMessagesController : ControllerBase
         {
             message.CreatedUtc = existing.CreatedUtc;
             message.CreatedByUserId = existing.CreatedByUserId;
-            messages.Remove(existing);
+            // Replaced in place, so editing a message does not move it in the list.
+            messages[messages.IndexOf(existing)] = message;
         }
         else
         {
             message.Id = Guid.NewGuid().ToString("N");
             message.CreatedUtc = DateTime.UtcNow;
             message.CreatedByUserId = this.GetUserIdFromClaims()?.ToString("N");
+            // Newest first by default. The admin can move it with the arrows.
+            messages.Insert(0, message);
         }
 
-        messages.Add(message);
         ServerMessage.Prune(messages);
         plugin.SaveConfiguration();
 
@@ -140,6 +138,52 @@ public class MoonfinMessagesController : ControllerBase
         }
 
         return Ok(new { success = true, item = message });
+    }
+
+    /// <summary>
+    /// Reorders the stored messages to match the IDs given. The app shows them in this
+    /// order, so this is what the up and down arrows in the config page drive.
+    /// </summary>
+    [HttpPost("Admin/Messages/Order")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public ActionResult ReorderMessages([FromBody] MoonfinMessageOrderRequest request)
+    {
+        var plugin = MoonfinPlugin.Instance;
+        if (plugin == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Plugin is not ready" });
+        }
+
+        var ids = request?.Ids;
+        if (ids == null || ids.Count == 0)
+        {
+            return BadRequest(new { error = "ids is required" });
+        }
+
+        var messages = plugin.Configuration.Messages;
+        var reordered = new List<ServerMessage>(messages.Count);
+
+        foreach (var id in ids)
+        {
+            var match = messages.FirstOrDefault(m =>
+                string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (match != null && !reordered.Contains(match))
+            {
+                reordered.Add(match);
+            }
+        }
+
+        // Anything the caller left out keeps its place at the end, so a stale list from
+        // the config page cannot delete messages.
+        reordered.AddRange(messages.Where(m => !reordered.Contains(m)));
+
+        plugin.Configuration.Messages = reordered;
+        plugin.SaveConfiguration();
+        _settingsService.BroadcastSystemEvent("messagesChanged");
+
+        return Ok(new { success = true });
     }
 
     /// <summary>
@@ -199,4 +243,13 @@ public class MoonfinMessagesController : ControllerBase
             _pushDelivery.QueueToUser(userId, title, body, route: "messages");
         }
     }
+}
+
+/// <summary>
+/// Body for the message reorder endpoint.
+/// </summary>
+public class MoonfinMessageOrderRequest
+{
+    /// <summary>Message IDs in the order they should be shown.</summary>
+    public List<string> Ids { get; set; } = new();
 }

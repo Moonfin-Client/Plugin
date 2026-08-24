@@ -395,11 +395,8 @@ public class ServerMessage
     public const string ColorBlue = "blue";
     public const string ColorWhite = "white";
 
-    /// <summary>Shows in the list only.</summary>
+    /// <summary>Only marks the menu button as unread.</summary>
     public const string DeliveryInbox = "inbox";
-
-    /// <summary>Shows a small toast when it arrives.</summary>
-    public const string DeliveryToast = "toast";
 
     /// <summary>Opens the message window once, until the user reads it.</summary>
     public const string DeliveryPopup = "popup";
@@ -413,7 +410,6 @@ public class ServerMessage
     public string Body { get; set; } = string.Empty;
     public string Color { get; set; } = ColorWhite;
     public string Delivery { get; set; } = DeliveryInbox;
-    public bool Pinned { get; set; }
     public string? ActionLabel { get; set; }
     public string? ActionUrl { get; set; }
 
@@ -478,12 +474,7 @@ public class ServerMessage
             _ => ColorWhite
         };
 
-        Delivery = Delivery switch
-        {
-            DeliveryToast => DeliveryToast,
-            DeliveryPopup => DeliveryPopup,
-            _ => DeliveryInbox
-        };
+        Delivery = Delivery == DeliveryPopup ? DeliveryPopup : DeliveryInbox;
 
         Audience = Audience switch
         {
@@ -561,8 +552,7 @@ public class ServerMessage
         }
 
         var extra = messages
-            .OrderBy(m => m.Pinned)
-            .ThenBy(m => m.CreatedUtc)
+            .OrderBy(m => m.CreatedUtc)
             .Take(messages.Count - MaxStored)
             .ToList();
 

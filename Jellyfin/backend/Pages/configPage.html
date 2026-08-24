@@ -1738,14 +1738,15 @@
                         </div>
 
                         <div class="selectContainer">
-                            <label class="selectLabel" for="MessageDelivery">How loud</label>
+                            <label class="selectLabel" for="MessageDelivery">How to show it</label>
                             <select is="emby-select" id="MessageDelivery">
-                                <option value="inbox">Quiet: only a dot on the button</option>
-                                <option value="toast">Small popup in the corner</option>
-                                <option value="popup">Open the message window once</option>
+                                <option value="inbox">Notify on the menu button</option>
+                                <option value="popup">Open the message in the app</option>
                             </select>
                             <div class="fieldDescription">
-                                The last two also send a phone notification to users who turned them on.
+                                Notify adds the message to the unread count on the menu button. Open shows it
+                                the next time the user opens the app, and also sends a phone notification to
+                                users who turned them on.
                             </div>
                         </div>
 
@@ -1792,12 +1793,6 @@
                             </div>
                         </div>
 
-                        <div class="checkboxContainer">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="MessagePinned" is="emby-checkbox" />
-                                <span>Keep this message at the top of the list</span>
-                            </label>
-                        </div>
 
                         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6em; margin-top:0.8em;">
                             <button is="emby-button" type="button" id="MessageSaveBtn" class="raised">
@@ -1813,7 +1808,7 @@
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Saved Messages</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            Up to 50 messages are kept. Past that, the oldest unpinned ones are dropped.
+                            Shown in this order in the app. Up to 50 are kept, then the oldest are dropped.
                         </div>
                         <div id="MessagesList" style="max-height:340px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;"></div>
                     </div>
@@ -3716,9 +3711,8 @@
             };
 
             var moonfinDeliveryLabels = {
-                inbox: 'Quiet',
-                toast: 'Corner popup',
-                popup: 'Opens the window'
+                inbox: 'Notify',
+                popup: 'Opens in app'
             };
 
             function setMessageResult(text, color) {
@@ -3811,7 +3805,6 @@
                 document.querySelector('#MessageEnd').value = '';
                 document.querySelector('#MessageActionLabel').value = '';
                 document.querySelector('#MessageActionUrl').value = '';
-                document.querySelector('#MessagePinned').checked = false;
 
                 var targets = document.querySelector('#MessageTargets');
                 if (targets) {
@@ -3846,7 +3839,6 @@
                 document.querySelector('#MessageEnd').value = messageDateToInput(item.endUtc || item.EndUtc);
                 document.querySelector('#MessageActionLabel').value = item.actionLabel || item.ActionLabel || '';
                 document.querySelector('#MessageActionUrl').value = item.actionUrl || item.ActionUrl || '';
-                document.querySelector('#MessagePinned').checked = !!(item.pinned || item.Pinned);
 
                 var selected = item.targetUserIds || item.TargetUserIds || [];
                 var targets = document.querySelector('#MessageTargets');
@@ -3891,14 +3883,13 @@
                 var now = new Date();
                 var html = '';
 
-                items.forEach(function(item) {
+                items.forEach(function(item, index) {
                     var id = item.id || item.Id || '';
                     var title = item.title || item.Title || '';
                     var body = item.body || item.Body || '';
                     var pick = item.color || item.Color || 'white';
                     var delivery = item.delivery || item.Delivery || 'inbox';
                     var audience = item.audience || item.Audience || 'all';
-                    var pinned = !!(item.pinned || item.Pinned);
                     var start = item.startUtc || item.StartUtc;
                     var end = item.endUtc || item.EndUtc;
                     var targets = item.targetUserIds || item.TargetUserIds || [];
@@ -3923,12 +3914,15 @@
                         + '<div style="flex:1;min-width:0;">'
                         + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
                         + '<strong style="font-size:0.95em;color:' + color + ';">' + esc(title || '(no title)') + '</strong>'
-                        + (pinned ? '<span style="font-size:0.72em;color:rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.2);border-radius:3px;padding:0 4px;">PINNED</span>' : '')
                         + '</div>'
                         + '<div style="font-size:0.82em;color:rgba(255,255,255,0.7);margin-top:4px;white-space:pre-wrap;">' + esc(body.length > 160 ? body.slice(0, 160) + '…' : body) + '</div>'
                         + '<div style="font-size:0.78em;color:rgba(255,255,255,0.52);margin-top:4px;">'
                         + esc(state) + ' • ' + esc(who) + ' • ' + esc(moonfinDeliveryLabels[delivery] || delivery)
                         + '</div>'
+                        + '</div>'
+                        + '<div style="display:flex;flex-direction:column;gap:2px;">'
+                        + '<button type="button" class="moonfinMessageUpBtn" data-message-id="' + esc(id) + '" title="Move up"' + (index === 0 ? ' disabled' : '') + ' style="background:none;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);border-radius:4px;padding:0 6px;cursor:pointer;line-height:1.3;">&#9650;</button>'
+                        + '<button type="button" class="moonfinMessageDownBtn" data-message-id="' + esc(id) + '" title="Move down"' + (index === items.length - 1 ? ' disabled' : '') + ' style="background:none;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);border-radius:4px;padding:0 6px;cursor:pointer;line-height:1.3;">&#9660;</button>'
                         + '</div>'
                         + '<button type="button" class="moonfinMessageEditBtn" data-message-id="' + esc(id) + '" title="Edit message" style="background:none;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">Edit</button>'
                         + '<button type="button" class="moonfinMessageDeleteBtn" data-message-id="' + esc(id) + '" title="Delete message" style="background:none;border:1px solid rgba(239,68,68,0.6);color:#ef4444;border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">&#x2715;</button>'
@@ -3960,6 +3954,43 @@
                     .catch(function(error) {
                         container.innerHTML = '<div style="padding:8px;color:#d9534f;font-size:0.9em;">'
                             + esc((error && error.message) ? error.message : 'Failed to load messages.') + '</div>';
+                    });
+            }
+
+            // Moves one message up or down and saves the whole order, so the app shows
+            // them in the same sequence as this list.
+            function moveMessage(messageId, delta) {
+                var items = (window.moonfinMessagesCache || []).slice();
+                var from = -1;
+                for (var i = 0; i < items.length; i++) {
+                    if ((items[i].id || items[i].Id) === messageId) { from = i; break; }
+                }
+
+                var to = from + delta;
+                if (from < 0 || to < 0 || to >= items.length) return;
+
+                var moved = items.splice(from, 1)[0];
+                items.splice(to, 0, moved);
+
+                // Redrawn straight away so the arrows feel instant, then saved.
+                window.moonfinMessagesCache = items;
+                renderMessagesList(items);
+
+                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                fetch(serverUrl + '/Moonfin/Admin/Messages/Order', {
+                    method: 'POST',
+                    headers: getMoonfinAuthHeaders(),
+                    body: JSON.stringify({
+                        ids: items.map(function (item) { return item.id || item.Id; })
+                    })
+                })
+                    .then(parseJsonResponse)
+                    .catch(function (error) {
+                        setMessageResult(
+                            (error && error.message) ? error.message : 'Could not save the new order.',
+                            '#d9534f'
+                        );
+                        loadMessagesList();
                     });
             }
 
@@ -3997,7 +4028,6 @@
                     delivery: document.querySelector('#MessageDelivery').value,
                     audience: audience,
                     targetUserIds: targetUserIds,
-                    pinned: document.querySelector('#MessagePinned').checked,
                     actionLabel: (document.querySelector('#MessageActionLabel').value || '').trim(),
                     actionUrl: (document.querySelector('#MessageActionUrl').value || '').trim(),
                     startUtc: messageDateFromInput(document.querySelector('#MessageStart').value),
@@ -4246,6 +4276,18 @@
                 if (messagesListContainer && !messagesListContainer.dataset.bound) {
                     messagesListContainer.dataset.bound = 'true';
                     messagesListContainer.addEventListener('click', function(event) {
+                        var upButton = event.target.closest('.moonfinMessageUpBtn');
+                        if (upButton) {
+                            moveMessage(upButton.getAttribute('data-message-id') || '', -1);
+                            return;
+                        }
+
+                        var downButton = event.target.closest('.moonfinMessageDownBtn');
+                        if (downButton) {
+                            moveMessage(downButton.getAttribute('data-message-id') || '', 1);
+                            return;
+                        }
+
                         var editButton = event.target.closest('.moonfinMessageEditBtn');
                         if (editButton) {
                             var editId = editButton.getAttribute('data-message-id') || '';
