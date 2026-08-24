@@ -76,15 +76,31 @@ public class ServerMessageTests
     public void Sanitize_FallsBackToDefaultsOnUnknownValues()
     {
         var message = Message();
-        message.Severity = "catastrophic";
+        message.Color = "chartreuse";
         message.Delivery = "carrier-pigeon";
         message.Audience = "nobody";
 
         message.Sanitize();
 
-        Assert.Equal(ServerMessage.SeverityInfo, message.Severity);
+        Assert.Equal(ServerMessage.ColorWhite, message.Color);
         Assert.Equal(ServerMessage.DeliveryInbox, message.Delivery);
         Assert.Equal(ServerMessage.AudienceAll, message.Audience);
+    }
+
+    [Theory]
+    [InlineData(ServerMessage.ColorGreen)]
+    [InlineData(ServerMessage.ColorRed)]
+    [InlineData(ServerMessage.ColorYellow)]
+    [InlineData(ServerMessage.ColorBlue)]
+    [InlineData(ServerMessage.ColorWhite)]
+    public void Sanitize_KeepsEveryColourTheAdminCanPick(string colour)
+    {
+        var message = Message();
+        message.Color = colour;
+
+        message.Sanitize();
+
+        Assert.Equal(colour, message.Color);
     }
 
     [Theory]

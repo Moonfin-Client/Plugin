@@ -389,9 +389,11 @@ public class ServerMessage
     /// <summary>Body length cap, so a huge paste cannot break the app layout.</summary>
     public const int MaxBodyLength = 2000;
 
-    public const string SeverityInfo = "info";
-    public const string SeverityWarning = "warning";
-    public const string SeverityCritical = "critical";
+    public const string ColorGreen = "green";
+    public const string ColorRed = "red";
+    public const string ColorYellow = "yellow";
+    public const string ColorBlue = "blue";
+    public const string ColorWhite = "white";
 
     /// <summary>Shows in the list only.</summary>
     public const string DeliveryInbox = "inbox";
@@ -409,7 +411,7 @@ public class ServerMessage
     public string Id { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
-    public string Severity { get; set; } = SeverityInfo;
+    public string Color { get; set; } = ColorWhite;
     public string Delivery { get; set; } = DeliveryInbox;
     public bool Pinned { get; set; }
     public string? ActionLabel { get; set; }
@@ -467,11 +469,13 @@ public class ServerMessage
             Body = Body.Substring(0, MaxBodyLength);
         }
 
-        Severity = Severity switch
+        Color = Color switch
         {
-            SeverityWarning => SeverityWarning,
-            SeverityCritical => SeverityCritical,
-            _ => SeverityInfo
+            ColorGreen => ColorGreen,
+            ColorRed => ColorRed,
+            ColorYellow => ColorYellow,
+            ColorBlue => ColorBlue,
+            _ => ColorWhite
         };
 
         Delivery = Delivery switch

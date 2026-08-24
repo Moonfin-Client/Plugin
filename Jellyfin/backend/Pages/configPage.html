@@ -1717,17 +1717,24 @@
 
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="MessageBody">Message</label>
-                            <textarea id="MessageBody" is="emby-textarea" rows="4" maxlength="2000" placeholder="Plain text only. Links and formatting are not shown."></textarea>
+                            <textarea id="MessageBody" is="emby-textarea" rows="12" maxlength="2000" style="width:100%;box-sizing:border-box;font-family:inherit;" placeholder="Write your message here."></textarea>
+                            <div class="fieldDescription">
+                                Formatting uses Markdown. Only CommonMark is supported:
+                                <a href="https://commonmark.org/help/" target="_blank">syntax reference</a>.
+                                Images are not shown, even though that page lists them.
+                            </div>
                         </div>
 
                         <div class="selectContainer">
-                            <label class="selectLabel" for="MessageSeverity">Importance</label>
-                            <select is="emby-select" id="MessageSeverity">
-                                <option value="info">Info (green)</option>
-                                <option value="warning">Warning (yellow)</option>
-                                <option value="critical">Critical (red)</option>
+                            <label class="selectLabel" for="MessageColor">Colour</label>
+                            <select is="emby-select" id="MessageColor">
+                                <option value="white">White</option>
+                                <option value="green">Green</option>
+                                <option value="blue">Blue</option>
+                                <option value="yellow">Yellow</option>
+                                <option value="red">Red</option>
                             </select>
-                            <div class="fieldDescription">Sets the colour of the message and of the button in the app menu.</div>
+                            <div class="fieldDescription">Colours the message in the app. The menu button stays neutral.</div>
                         </div>
 
                         <div class="selectContainer">
@@ -3700,10 +3707,12 @@
 
             var moonfinEditingMessageId = null;
 
-            var moonfinSeverityColors = {
-                info: '#52b54b',
-                warning: '#f0ad4e',
-                critical: '#d9534f'
+            var moonfinMessageColors = {
+                white: '#e8eaed',
+                green: '#4caf6d',
+                blue: '#4a9ee0',
+                yellow: '#e0b040',
+                red: '#e05260'
             };
 
             var moonfinDeliveryLabels = {
@@ -3795,7 +3804,7 @@
 
                 document.querySelector('#MessageTitle').value = '';
                 document.querySelector('#MessageBody').value = '';
-                document.querySelector('#MessageSeverity').value = 'info';
+                document.querySelector('#MessageColor').value = 'white';
                 document.querySelector('#MessageDelivery').value = 'inbox';
                 document.querySelector('#MessageAudience').value = 'all';
                 document.querySelector('#MessageStart').value = '';
@@ -3830,7 +3839,7 @@
 
                 document.querySelector('#MessageTitle').value = item.title || item.Title || '';
                 document.querySelector('#MessageBody').value = item.body || item.Body || '';
-                document.querySelector('#MessageSeverity').value = item.severity || item.Severity || 'info';
+                document.querySelector('#MessageColor').value = item.color || item.Color || 'white';
                 document.querySelector('#MessageDelivery').value = item.delivery || item.Delivery || 'inbox';
                 document.querySelector('#MessageAudience').value = item.audience || item.Audience || 'all';
                 document.querySelector('#MessageStart').value = messageDateToInput(item.startUtc || item.StartUtc);
@@ -3886,14 +3895,14 @@
                     var id = item.id || item.Id || '';
                     var title = item.title || item.Title || '';
                     var body = item.body || item.Body || '';
-                    var severity = item.severity || item.Severity || 'info';
+                    var pick = item.color || item.Color || 'white';
                     var delivery = item.delivery || item.Delivery || 'inbox';
                     var audience = item.audience || item.Audience || 'all';
                     var pinned = !!(item.pinned || item.Pinned);
                     var start = item.startUtc || item.StartUtc;
                     var end = item.endUtc || item.EndUtc;
                     var targets = item.targetUserIds || item.TargetUserIds || [];
-                    var color = moonfinSeverityColors[severity] || moonfinSeverityColors.info;
+                    var color = moonfinMessageColors[pick] || moonfinMessageColors.white;
 
                     var state = 'Showing now';
                     if (start && new Date(start) > now) {
@@ -3984,7 +3993,7 @@
                     id: moonfinEditingMessageId || '',
                     title: title,
                     body: body,
-                    severity: document.querySelector('#MessageSeverity').value,
+                    color: document.querySelector('#MessageColor').value,
                     delivery: document.querySelector('#MessageDelivery').value,
                     audience: audience,
                     targetUserIds: targetUserIds,
