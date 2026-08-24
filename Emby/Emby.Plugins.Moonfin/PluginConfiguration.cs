@@ -248,11 +248,8 @@ namespace Emby.Plugins.Moonfin
         public const string ColorBlue = "blue";
         public const string ColorWhite = "white";
 
-        /// <summary>Shows in the list only.</summary>
+        /// <summary>Only marks the menu button as unread.</summary>
         public const string DeliveryInbox = "inbox";
-
-        /// <summary>Shows a small toast when it arrives.</summary>
-        public const string DeliveryToast = "toast";
 
         /// <summary>Opens the message window once, until the user reads it.</summary>
         public const string DeliveryPopup = "popup";
@@ -266,7 +263,6 @@ namespace Emby.Plugins.Moonfin
         public string Body { get; set; } = string.Empty;
         public string Color { get; set; } = ColorWhite;
         public string Delivery { get; set; } = DeliveryInbox;
-        public bool Pinned { get; set; }
         public string? ActionLabel { get; set; }
         public string? ActionUrl { get; set; }
 
@@ -326,12 +322,7 @@ namespace Emby.Plugins.Moonfin
                 _ => ColorWhite
             };
 
-            Delivery = Delivery switch
-            {
-                DeliveryToast => DeliveryToast,
-                DeliveryPopup => DeliveryPopup,
-                _ => DeliveryInbox
-            };
+            Delivery = Delivery == DeliveryPopup ? DeliveryPopup : DeliveryInbox;
 
             Audience = Audience switch
             {
@@ -397,8 +388,7 @@ namespace Emby.Plugins.Moonfin
                 return;
 
             var extra = messages
-                .OrderBy(m => m.Pinned)
-                .ThenBy(m => m.CreatedUtc)
+                .OrderBy(m => m.CreatedUtc)
                 .Take(messages.Count - MaxStored)
                 .ToList();
 

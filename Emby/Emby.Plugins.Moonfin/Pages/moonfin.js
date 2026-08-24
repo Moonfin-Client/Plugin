@@ -2077,9 +2077,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     };
 
     var moonfinDeliveryLabels = {
-        inbox: 'Quiet',
-        toast: 'Corner popup',
-        popup: 'Opens the window'
+        inbox: 'Notify',
+        popup: 'Opens in app'
     };
 
     function setMessageResult(view, text, color) {
@@ -2155,7 +2154,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         view.querySelector('#MessageEnd').value = '';
         view.querySelector('#MessageActionLabel').value = '';
         view.querySelector('#MessageActionUrl').value = '';
-        view.querySelector('#MessagePinned').checked = false;
 
         var targets = view.querySelector('#MessageTargets');
         if (targets) {
@@ -2184,7 +2182,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         view.querySelector('#MessageEnd').value = messageDateToInput(item.EndUtc || item.endUtc);
         view.querySelector('#MessageActionLabel').value = item.ActionLabel || item.actionLabel || '';
         view.querySelector('#MessageActionUrl').value = item.ActionUrl || item.actionUrl || '';
-        view.querySelector('#MessagePinned').checked = !!(item.Pinned || item.pinned);
 
         var selected = item.TargetUserIds || item.targetUserIds || [];
         var targets = view.querySelector('#MessageTargets');
@@ -2221,14 +2218,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var now = new Date();
         var html = '';
 
-        items.forEach(function (item) {
+        items.forEach(function (item, index) {
             var id = item.Id || item.id || '';
             var title = item.Title || item.title || '';
             var body = item.Body || item.body || '';
             var pick = item.Color || item.color || 'white';
             var delivery = item.Delivery || item.delivery || 'inbox';
             var audience = item.Audience || item.audience || 'all';
-            var pinned = !!(item.Pinned || item.pinned);
             var start = item.StartUtc || item.startUtc;
             var end = item.EndUtc || item.endUtc;
             var targets = item.TargetUserIds || item.targetUserIds || [];
@@ -2253,12 +2249,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 '<div style="flex:1;min-width:0;">' +
                 '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
                 '<strong style="font-size:0.95em;color:' + color + ';">' + esc(title || '(no title)') + '</strong>' +
-                (pinned ? '<span style="font-size:0.72em;opacity:0.7;border:1px solid rgba(128,128,128,0.4);border-radius:3px;padding:0 4px;">PINNED</span>' : '') +
                 '</div>' +
                 '<div style="font-size:0.82em;opacity:0.8;margin-top:4px;white-space:pre-wrap;">' + esc(body.length > 160 ? body.slice(0, 160) + '…' : body) + '</div>' +
                 '<div style="font-size:0.78em;opacity:0.6;margin-top:4px;">' +
                 esc(state) + ' • ' + esc(who) + ' • ' + esc(moonfinDeliveryLabels[delivery] || delivery) +
                 '</div>' +
+                '</div>' +
+                '<div style="display:flex;flex-direction:column;gap:2px;">' +
+                '<button type="button" class="moonfinMessageUpBtn" data-message-id="' + esc(id) + '" title="Move up"' + (index === 0 ? ' disabled' : '') + ' style="background:none;border:1px solid rgba(128,128,128,0.5);border-radius:4px;padding:0 6px;cursor:pointer;line-height:1.3;">&#9650;</button>' +
+                '<button type="button" class="moonfinMessageDownBtn" data-message-id="' + esc(id) + '" title="Move down"' + (index === items.length - 1 ? ' disabled' : '') + ' style="background:none;border:1px solid rgba(128,128,128,0.5);border-radius:4px;padding:0 6px;cursor:pointer;line-height:1.3;">&#9660;</button>' +
                 '</div>' +
                 '<button type="button" class="moonfinMessageEditBtn" data-message-id="' + esc(id) + '" title="Edit message" style="background:none;border:1px solid rgba(128,128,128,0.5);border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">Edit</button>' +
                 '<button type="button" class="moonfinMessageDeleteBtn" data-message-id="' + esc(id) + '" title="Delete message" style="background:none;border:1px solid rgba(239,68,68,0.6);color:#ef4444;border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">&#x2715;</button>' +
@@ -2285,6 +2284,44 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             .catch(function (error) {
                 container.innerHTML = '<div style="padding:8px;color:#d9534f;font-size:0.9em;">' +
                     esc((error && error.message) ? error.message : 'Failed to load messages.') + '</div>';
+            });
+    }
+
+    // Moves one message up or down and saves the whole order, so the app shows
+    // them in the same sequence as this list.
+    function moveMessage(view, messageId, delta) {
+        var items = (view.__moonfinMessagesCache || []).slice();
+        var from = -1;
+        for (var i = 0; i < items.length; i++) {
+            if ((items[i].Id || items[i].id) === messageId) { from = i; break; }
+        }
+
+        var to = from + delta;
+        if (from < 0 || to < 0 || to >= items.length) return;
+
+        var moved = items.splice(from, 1)[0];
+        items.splice(to, 0, moved);
+
+        // Redrawn straight away so the arrows feel instant, then saved.
+        view.__moonfinMessagesCache = items;
+        renderMessagesList(view, items);
+
+        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        fetch(serverUrl + '/Moonfin/Admin/Messages/Order', {
+            method: 'POST',
+            headers: moonfinAuthHeaders(),
+            body: JSON.stringify({
+                Ids: items.map(function (item) { return item.Id || item.id; })
+            })
+        })
+            .then(parseJsonResponse)
+            .catch(function (error) {
+                setMessageResult(
+                    view,
+                    (error && error.message) ? error.message : 'Could not save the new order.',
+                    '#d9534f'
+                );
+                loadMessagesList(view);
             });
     }
 
@@ -2320,7 +2357,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             Delivery: view.querySelector('#MessageDelivery').value,
             Audience: audience,
             TargetUserIds: targetUserIds,
-            Pinned: view.querySelector('#MessagePinned').checked,
             ActionLabel: (view.querySelector('#MessageActionLabel').value || '').trim(),
             ActionUrl: (view.querySelector('#MessageActionUrl').value || '').trim(),
             StartUtc: messageDateFromInput(view.querySelector('#MessageStart').value),
@@ -2477,6 +2513,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var messagesListContainer = view.querySelector('#MessagesList');
         if (messagesListContainer) {
             messagesListContainer.addEventListener('click', function (event) {
+                var upButton = event.target.closest('.moonfinMessageUpBtn');
+                if (upButton) {
+                    moveMessage(view, upButton.getAttribute('data-message-id') || '', -1);
+                    return;
+                }
+
+                var downButton = event.target.closest('.moonfinMessageDownBtn');
+                if (downButton) {
+                    moveMessage(view, downButton.getAttribute('data-message-id') || '', 1);
+                    return;
+                }
+
                 var editButton = event.target.closest('.moonfinMessageEditBtn');
                 if (editButton) {
                     var editId = editButton.getAttribute('data-message-id') || '';

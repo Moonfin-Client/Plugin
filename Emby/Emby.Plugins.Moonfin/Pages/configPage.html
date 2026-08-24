@@ -1909,14 +1909,15 @@
                         </div>
 
                         <div class="selectContainer">
-                            <label class="selectLabel" for="MessageDelivery">How loud</label>
+                            <label class="selectLabel" for="MessageDelivery">How to show it</label>
                             <select is="emby-select" id="MessageDelivery">
-                                <option value="inbox">Quiet: only a dot on the button</option>
-                                <option value="toast">Small popup in the corner</option>
-                                <option value="popup">Open the message window once</option>
+                                <option value="inbox">Notify on the menu button</option>
+                                <option value="popup">Open the message in the app</option>
                             </select>
                             <div class="fieldDescription">
-                                The last two also send a phone notification to users who turned them on.
+                                Notify adds the message to the unread count on the menu button. Open shows it
+                                the next time the user opens the app, and also sends a phone notification to
+                                users who turned them on.
                             </div>
                         </div>
 
@@ -1963,12 +1964,6 @@
                             </div>
                         </div>
 
-                        <div class="checkboxContainer">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="MessagePinned" is="emby-checkbox" />
-                                <span>Keep this message at the top of the list</span>
-                            </label>
-                        </div>
 
                         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6em; margin-top:0.8em;">
                             <button is="emby-button" type="button" id="MessageSaveBtn" class="raised">
@@ -1984,7 +1979,7 @@
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Saved Messages</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            Up to 50 messages are kept. Past that, the oldest unpinned ones are dropped.
+                            Shown in this order in the app. Up to 50 are kept, then the oldest are dropped.
                         </div>
                         <div id="MessagesList" style="max-height:340px;overflow-y:auto;border:1px solid rgba(128,128,128,0.3);border-radius:4px;padding:6px;"></div>
                     </div>

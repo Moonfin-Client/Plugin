@@ -18,10 +18,26 @@ namespace Emby.Plugins.Moonfin.Api
         public System.IO.Stream RequestStream { get; set; } = null!;
     }
 
+    [Route("/Moonfin/Admin/Messages/Order", "POST")]
+    [Authenticated(Roles = "Admin")]
+    public class ReorderMessagesRequest : IReturn<object>, IRequiresRequestStream
+    {
+        public System.IO.Stream RequestStream { get; set; } = null!;
+    }
+
     [Route("/Moonfin/Admin/Messages/{MessageId}", "DELETE")]
     [Authenticated(Roles = "Admin")]
     public class DeleteMessageRequest : IReturn<object>
     {
         public string? MessageId { get; set; }
+    }
+}
+
+namespace Emby.Plugins.Moonfin.Api
+{
+    /// <summary>Body for the message reorder endpoint.</summary>
+    public class MessageOrderBody
+    {
+        public System.Collections.Generic.List<string>? Ids { get; set; }
     }
 }

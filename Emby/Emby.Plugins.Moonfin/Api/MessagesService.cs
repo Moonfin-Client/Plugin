@@ -39,8 +39,6 @@ namespace Emby.Plugins.Moonfin.Api
             var now = DateTime.UtcNow;
             var items = config.Messages
                 .Where(m => m.IsVisibleTo(userId.Value, isAdmin, now))
-                .OrderByDescending(m => m.Pinned)
-                .ThenByDescending(m => m.CreatedUtc)
                 .ToList();
 
             return Json(new { items });
@@ -53,8 +51,6 @@ namespace Emby.Plugins.Moonfin.Api
             return Json(new
             {
                 items = messages
-                    .OrderByDescending(m => m.Pinned)
-                    .ThenByDescending(m => m.CreatedUtc)
                     .ToList()
             });
         }
@@ -81,16 +77,18 @@ namespace Emby.Plugins.Moonfin.Api
             {
                 message.CreatedUtc = existing.CreatedUtc;
                 message.CreatedByUserId = existing.CreatedByUserId;
-                messages.Remove(existing);
+                // Replaced in place, so editing a message does not move it in the list.
+                messages[messages.IndexOf(existing)] = message;
             }
             else
             {
                 message.Id = Guid.NewGuid().ToString("N");
                 message.CreatedUtc = DateTime.UtcNow;
                 message.CreatedByUserId = AuthHelpers.GetCurrentUserId(Request, _authContext)?.ToString("N");
+                // Newest first by default. The admin can move it with the arrows.
+                messages.Insert(0, message);
             }
 
-            messages.Add(message);
             ServerMessage.Prune(messages);
             plugin.UpdateConfiguration(config);
 
@@ -102,6 +100,42 @@ namespace Emby.Plugins.Moonfin.Api
                 SendPush(message);
 
             return Json(new { success = true, item = message });
+        }
+
+        /// <summary>
+        /// Reorders the stored messages to match the IDs given. The app shows them in this
+        /// order, so this is what the up and down arrows in the config page drive.
+        /// </summary>
+        public async Task<object> Post(ReorderMessagesRequest request)
+        {
+            var plugin = Plugin.Instance;
+            var config = plugin?.Configuration;
+            if (plugin == null || config == null) return Json(503, new { error = "Plugin is not ready" });
+
+            var body = await MoonfinJson.ReadBodyAsync<MessageOrderBody>(request.RequestStream).ConfigureAwait(false);
+            var ids = body?.Ids;
+            if (ids == null || ids.Count == 0) return Json(400, new { error = "ids is required" });
+
+            var messages = config.Messages;
+            var reordered = new List<ServerMessage>(messages.Count);
+
+            foreach (var id in ids)
+            {
+                var match = messages.FirstOrDefault(m =>
+                    string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
+                if (match != null && !reordered.Contains(match))
+                    reordered.Add(match);
+            }
+
+            // Anything the caller left out keeps its place at the end, so a stale list from
+            // the config page cannot delete messages.
+            reordered.AddRange(messages.Where(m => !reordered.Contains(m)));
+
+            config.Messages = reordered;
+            plugin.UpdateConfiguration(config);
+            Plugin.Instance?.SettingsService?.BroadcastSystemEvent("messagesChanged");
+
+            return Json(new { success = true });
         }
 
         public object Delete(DeleteMessageRequest request)
