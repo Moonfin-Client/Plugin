@@ -35,6 +35,14 @@ public class StudioLogoFetchService
     }
 
     /// <summary>
+    /// TMDB numbers networks and production companies in separate spaces, so a
+    /// network id can equal an unrelated company id. The cache keys entries and
+    /// logo files by this id alone, so networks are stored negated to keep the
+    /// two from overwriting each other.
+    /// </summary>
+    public static int NetworkCacheId(int networkId) => -networkId;
+
+    /// <summary>
     /// Fetches the companies for a TMDB movie/tv item, downloads any logos, caches
     /// them, and returns the company list. Returns null when TMDB can't be reached.
     /// </summary>
@@ -56,7 +64,20 @@ public class StudioLogoFetchService
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var details = JsonSerializer.Deserialize<TmdbDetailsResponse>(json, JsonOptions);
-        var companies = details?.ProductionCompanies ?? new List<TmdbCompany>();
+        var companies = new List<TmdbCompany>();
+        if (details?.ProductionCompanies != null) companies.AddRange(details.ProductionCompanies);
+        if (details?.Networks != null)
+        {
+            foreach (var network in details.Networks)
+            {
+                companies.Add(new TmdbCompany
+                {
+                    Id = NetworkCacheId(network.Id),
+                    Name = network.Name,
+                    LogoPath = network.LogoPath
+                });
+            }
+        }
 
         var entries = new List<StudioCompanyEntry>();
         foreach (var company in companies)
@@ -149,6 +170,9 @@ public class StudioLogoFetchService
     {
         [JsonPropertyName("production_companies")]
         public List<TmdbCompany>? ProductionCompanies { get; set; }
+
+        [JsonPropertyName("networks")]
+        public List<TmdbCompany>? Networks { get; set; }
     }
 
     private class TmdbCompany

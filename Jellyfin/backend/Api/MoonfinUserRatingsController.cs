@@ -15,8 +15,8 @@ namespace Moonfin.Server.Api;
 /// <summary>
 /// Serves the calling user's personal ratings in one response, so clients can
 /// sort and filter a library by them. The server itself has no user rating
-/// sort, and its Likes and Dislikes item filters are defined against the
-/// rating threshold, which makes their union exactly the set of rated items.
+/// sort and no rated items filter, so the rated items are picked out of the
+/// library by the rating the user data carries.
 /// </summary>
 [ApiController]
 [Route("Moonfin/UserRatings")]
@@ -89,55 +89,51 @@ public sealed class MoonfinUserRatingsController : ControllerBase
             return Ok(new { Items = Array.Empty<object>() });
         }
 
-        var seen = new HashSet<Guid>();
         var items = new List<object>();
 
-        // Liked is rating at or above the threshold and disliked is below it,
-        // and a SQL comparison is never true for a null rating, so the two
-        // passes cover the rated items and nothing else.
-        foreach (var liked in new[] { true, false })
+        // The liked filter is the only user rating filter the server exposes,
+        // and what it means when asked for false differs between server
+        // versions, so a liked pass plus a not liked pass no longer covers the
+        // disliked items. Reading the library once and keeping what carries a
+        // rating asks the same question on every version, and the not liked
+        // pass was already returning most of the library anyway.
+        var query = new InternalItemsQuery
         {
-            var query = new InternalItemsQuery
-            {
-                Recursive = true,
-                IsLiked = liked
-            };
+            Recursive = true
+        };
 
-            if (!TryApplyQueryUser(query, queryUser))
+        if (!TryApplyQueryUser(query, queryUser))
+        {
+            return Ok(new { Items = Array.Empty<object>() });
+        }
+
+        // GetItemList changed its return type in Jellyfin 10.11, so a compiled
+        // call only binds on the version it was built against. GetItemsResult
+        // has the same signature everywhere and answers the same question.
+        foreach (var item in _libraryManager.GetItemsResult(query).Items)
+        {
+            UserItemData? userData;
+            try
             {
-                return Ok(new { Items = Array.Empty<object>() });
+                userData = _getUserData.Invoke(_userDataManager, [queryUser, item]) as UserItemData;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not read user data for {ItemId}", item.Id);
+                continue;
             }
 
-            foreach (var item in _libraryManager.GetItemList(query))
+            if (userData?.Rating == null)
             {
-                if (!seen.Add(item.Id))
-                {
-                    continue;
-                }
-
-                UserItemData? userData;
-                try
-                {
-                    userData = _getUserData.Invoke(_userDataManager, [queryUser, item]) as UserItemData;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not read user data for {ItemId}", item.Id);
-                    continue;
-                }
-
-                if (userData?.Rating == null)
-                {
-                    continue;
-                }
-
-                items.Add(new
-                {
-                    ItemId = item.Id.ToString("N"),
-                    Rating = userData.Rating,
-                    Likes = userData.Likes
-                });
+                continue;
             }
+
+            items.Add(new
+            {
+                ItemId = item.Id.ToString("N"),
+                Rating = userData.Rating,
+                Likes = userData.Likes
+            });
         }
 
         return Ok(new { Items = items });

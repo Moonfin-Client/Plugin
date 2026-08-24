@@ -52,7 +52,20 @@ namespace Emby.Plugins.Moonfin.Services
 
             var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             var details = JsonSerializer.Deserialize<TmdbDetailsResponse>(json, JsonOptions);
-            var companies = details?.ProductionCompanies ?? new List<TmdbCompany>();
+            var companies = new List<TmdbCompany>();
+            if (details?.ProductionCompanies != null) companies.AddRange(details.ProductionCompanies);
+            if (details?.Networks != null)
+            {
+                foreach (var network in details.Networks)
+                {
+                    companies.Add(new TmdbCompany
+                    {
+                        Id = NetworkCacheId(network.Id),
+                        Name = network.Name,
+                        LogoPath = network.LogoPath
+                    });
+                }
+            }
 
             var entries = new List<StudioCompanyEntry>();
             foreach (var company in companies)
@@ -112,11 +125,20 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
+        /// <summary>
+        /// TMDB numbers networks and production companies in separate spaces, so a
+        /// network id can equal an unrelated company id. The cache keys entries and
+        /// logo files by this id alone, so networks are stored negated to keep the
+        /// two from overwriting each other.
+        /// </summary>
+        public static int NetworkCacheId(int networkId) => -networkId;
+
         private static HttpClient CreateClient() => MoonfinHttp.CreateClient(TimeSpan.FromSeconds(20), "Moonfin/1.0");
 
         private class TmdbDetailsResponse
         {
             [JsonPropertyName("production_companies")] public List<TmdbCompany>? ProductionCompanies { get; set; }
+            [JsonPropertyName("networks")] public List<TmdbCompany>? Networks { get; set; }
         }
 
         private class TmdbCompany

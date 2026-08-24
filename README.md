@@ -38,9 +38,11 @@ On **Jellyfin**, you can optionally add a one-click Moonfin button to the stock 
 - **Push notifications** that reach Moonfin apps even when they're closed, covering Seerr activity, new media added to your library, and admin broadcasts, with support for a self-hosted relay or your own FCM service account. See [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications).
 - **Admin tools** for setting server-wide defaults, including playback defaults for video, audio, subtitles, and automation, pushing them to existing users, and broadcasting messages to everyone at once.
 - **Custom themes** with a built-in editor, plus server-side upload and validation.
-- **Retro games** support for browsing and playing game libraries in the browser. See [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games).
+- **Retro games** support for browsing and playing game libraries, with arcade ROMs matched offline against FBNeo and MAME data files you upload, server-side artwork with per-game overrides, and saves synced per user. See [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games).
 - **Custom rows** built from MDBList and IMDb lists, cached on the server.
-- **Active downloads dashboard** with live transcode metrics in the admin panel.
+- **Active downloads dashboard** with live transcode metrics in the admin panel, plus a per-client view so a transcoded download can show its own progress and ETA.
+- **Personal ratings served back to clients**, so a library can be sorted by your own rating and filtered by liked or disliked, which neither server can do on its own.
+- **Audiobook bookmarks and notes** stored on the server and synced between clients.
 
 ## Installation
 

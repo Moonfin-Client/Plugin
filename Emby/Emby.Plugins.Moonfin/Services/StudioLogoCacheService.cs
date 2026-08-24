@@ -97,7 +97,12 @@ namespace Emby.Plugins.Moonfin.Services
 
         public bool HasImage(int companyId) => File.Exists(GetImagePath(companyId));
 
-        public string GetImagePath(int companyId) => Path.Combine(_cacheDir, companyId + ".png");
+        /// <summary>Networks are cached under a negated id, written as n123.png so no
+        /// file name starts with a dash.</summary>
+        public static string ImageFileName(int companyId) =>
+            companyId < 0 ? "n" + (-companyId) + ".png" : companyId + ".png";
+
+        public string GetImagePath(int companyId) => Path.Combine(_cacheDir, ImageFileName(companyId));
 
         public string? GetLogoPath(int companyId)
         {
@@ -158,7 +163,13 @@ namespace Emby.Plugins.Moonfin.Services
                     try
                     {
                         using var stream = File.OpenRead(_indexFilePath);
-                        _index = JsonSerializer.Deserialize<StudioIndex>(stream, JsonOptions) ?? new StudioIndex();
+                        var loaded = JsonSerializer.Deserialize<StudioIndex>(stream, JsonOptions) ?? new StudioIndex();
+                        if (loaded.Version != StudioIndex.CurrentVersion)
+                        {
+                            _logger.Info("Studio logo index is version " + loaded.Version + ", rebuilding at version " + StudioIndex.CurrentVersion, 0);
+                            loaded = new StudioIndex();
+                        }
+                        _index = loaded;
                         _logger.Info("Studio logo index loaded (" + _index.Companies.Count + " companies, " + _index.Items.Count + " items)", 0);
                     }
                     catch (Exception ex)
@@ -190,6 +201,12 @@ namespace Emby.Plugins.Moonfin.Services
 
     internal class StudioIndex
     {
+        /// <summary>Bumped when cached entries need rebuilding rather than reusing.
+        /// Version 2 added TV networks, which entries written before it lack, and
+        /// gave networks their own negated ids.</summary>
+        public const int CurrentVersion = 2;
+
+        [JsonPropertyName("version")] public int Version { get; set; } = CurrentVersion;
         [JsonPropertyName("companies")] public Dictionary<string, StudioCompanyEntry> Companies { get; set; } = new Dictionary<string, StudioCompanyEntry>();
         [JsonPropertyName("items")] public Dictionary<string, StudioItemEntry> Items { get; set; } = new Dictionary<string, StudioItemEntry>();
     }
