@@ -83,6 +83,7 @@ public class MoonfinController : ControllerBase
                 : null,
             MdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey),
             TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
+            MessagesSupported = true,
             DefaultSettings = config?.DefaultUserSettings
         });
     }
@@ -506,13 +507,30 @@ public class MoonfinController : ControllerBase
 
         var deliveries = _settingsService.BroadcastMessage(message);
 
+        // Also save it, so users who were not connected still find it in the app. Older
+        // clients keep reading the "adminMessage" event above and ignore this.
+        var stored = new ServerMessage
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Body = message,
+            Severity = ServerMessage.SeverityInfo,
+            Delivery = ServerMessage.DeliveryPopup,
+            Audience = ServerMessage.AudienceAll,
+            CreatedUtc = DateTime.UtcNow,
+            CreatedByUserId = this.GetUserIdFromClaims()?.ToString("N")
+        };
+
+        config.Messages.Add(stored);
+        ServerMessage.Prune(config.Messages);
+        MoonfinPlugin.Instance?.SaveConfiguration();
+        _settingsService.BroadcastSystemEvent("messagesChanged");
+
         // SSE only reaches clients that are open right now, so push covers
-        // backgrounded and killed apps. The route is left blank because the
-        // client ignores blank routes and just opens the app on a tap.
+        // backgrounded and killed apps. The route opens the messages window on tap.
         var pushTargets = 0;
         foreach (var userId in _notificationStore.GetUsersWithDevices())
         {
-            _pushDelivery.QueueToUser(userId, "Message from your server", message, route: "");
+            _pushDelivery.QueueToUser(userId, "Message from your server", message, route: "messages");
             pushTargets++;
         }
 
@@ -1524,6 +1542,13 @@ public class MoonfinPingResponse
 
     [JsonPropertyName("tmdbAvailable")]
     public bool? TmdbAvailable { get; set; }
+
+    /// <summary>
+    /// True when this plugin has the admin messages endpoints. Older plugins leave it out, so
+    /// the app reads a missing value as false and hides the button.
+    /// </summary>
+    [JsonPropertyName("messagesSupported")]
+    public bool? MessagesSupported { get; set; }
 
     [JsonPropertyName("defaultSettings")]
     public MoonfinSettingsProfile? DefaultSettings { get; set; }
