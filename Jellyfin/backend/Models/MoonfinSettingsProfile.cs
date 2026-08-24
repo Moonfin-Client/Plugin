@@ -337,6 +337,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("detailShowTechnicalDetails")]
     public bool? DetailShowTechnicalDetails { get; set; }
 
+    [JsonPropertyName("detailTrailersExternal")]
+    public bool? DetailTrailersExternal { get; set; }
+
     [JsonPropertyName("hideDetailsMediaDescription")]
     public bool? HideDetailsMediaDescription { get; set; }
 
@@ -841,6 +844,9 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("showSeerrButton")]
     public bool? ShowSeerrButton { get; set; }
+
+    [JsonPropertyName("crashReportsEnabled")]
+    public bool? CrashReportsEnabled { get; set; }
 
     [JsonPropertyName("diagnosticLoggingEnabled")]
     public bool? DiagnosticLoggingEnabled { get; set; }

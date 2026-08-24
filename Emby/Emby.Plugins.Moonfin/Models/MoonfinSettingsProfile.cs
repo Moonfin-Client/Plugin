@@ -120,6 +120,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaBarContentType")] public string? MediaBarContentType { get; set; }
 
         [JsonPropertyName("detailShowTechnicalDetails")] public bool? DetailShowTechnicalDetails { get; set; }
+        [JsonPropertyName("detailTrailersExternal")] public bool? DetailTrailersExternal { get; set; }
         [JsonPropertyName("hideDetailsMediaDescription")] public bool? HideDetailsMediaDescription { get; set; }
         [JsonPropertyName("detailUseSeriesThumbnails")] public bool? DetailUseSeriesThumbnails { get; set; }
         [JsonPropertyName("hideHomeMediaDescription")] public bool? HideHomeMediaDescription { get; set; }
@@ -299,6 +300,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("use24HourClock")] public bool? Use24HourClock { get; set; }
         [JsonPropertyName("homeRowInfoOverlay")] public bool? HomeRowInfoOverlay { get; set; }
         [JsonPropertyName("showSeerrButton")] public bool? ShowSeerrButton { get; set; }
+        [JsonPropertyName("crashReportsEnabled")] public bool? CrashReportsEnabled { get; set; }
         [JsonPropertyName("diagnosticLoggingEnabled")] public bool? DiagnosticLoggingEnabled { get; set; }
         [JsonPropertyName("updateNotificationsEnabled")] public bool? UpdateNotificationsEnabled { get; set; }
         [JsonPropertyName("musicPlaybackTimeDisplay")] public string? MusicPlaybackTimeDisplay { get; set; }
