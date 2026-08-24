@@ -2068,10 +2068,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
     }
 
-    var moonfinSeverityColors = {
-        info: '#52b54b',
-        warning: '#f0ad4e',
-        critical: '#d9534f'
+    var moonfinMessageColors = {
+        white: '#e8eaed',
+        green: '#4caf6d',
+        blue: '#4a9ee0',
+        yellow: '#e0b040',
+        red: '#e05260'
     };
 
     var moonfinDeliveryLabels = {
@@ -2146,7 +2148,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         view.querySelector('#MessageTitle').value = '';
         view.querySelector('#MessageBody').value = '';
-        view.querySelector('#MessageSeverity').value = 'info';
+        view.querySelector('#MessageColor').value = 'white';
         view.querySelector('#MessageDelivery').value = 'inbox';
         view.querySelector('#MessageAudience').value = 'all';
         view.querySelector('#MessageStart').value = '';
@@ -2175,7 +2177,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         view.querySelector('#MessageTitle').value = item.Title || item.title || '';
         view.querySelector('#MessageBody').value = item.Body || item.body || '';
-        view.querySelector('#MessageSeverity').value = item.Severity || item.severity || 'info';
+        view.querySelector('#MessageColor').value = item.Color || item.color || 'white';
         view.querySelector('#MessageDelivery').value = item.Delivery || item.delivery || 'inbox';
         view.querySelector('#MessageAudience').value = item.Audience || item.audience || 'all';
         view.querySelector('#MessageStart').value = messageDateToInput(item.StartUtc || item.startUtc);
@@ -2223,14 +2225,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             var id = item.Id || item.id || '';
             var title = item.Title || item.title || '';
             var body = item.Body || item.body || '';
-            var severity = item.Severity || item.severity || 'info';
+            var pick = item.Color || item.color || 'white';
             var delivery = item.Delivery || item.delivery || 'inbox';
             var audience = item.Audience || item.audience || 'all';
             var pinned = !!(item.Pinned || item.pinned);
             var start = item.StartUtc || item.startUtc;
             var end = item.EndUtc || item.endUtc;
             var targets = item.TargetUserIds || item.targetUserIds || [];
-            var color = moonfinSeverityColors[severity] || moonfinSeverityColors.info;
+            var color = moonfinMessageColors[pick] || moonfinMessageColors.white;
 
             var state = 'Showing now';
             if (start && new Date(start) > now) {
@@ -2314,7 +2316,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             Id: view.__moonfinEditingMessageId || '',
             Title: title,
             Body: body,
-            Severity: view.querySelector('#MessageSeverity').value,
+            Color: view.querySelector('#MessageColor').value,
             Delivery: view.querySelector('#MessageDelivery').value,
             Audience: audience,
             TargetUserIds: targetUserIds,

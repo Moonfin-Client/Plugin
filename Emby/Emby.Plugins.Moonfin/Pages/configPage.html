@@ -1888,17 +1888,24 @@
 
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="MessageBody">Message</label>
-                            <textarea id="MessageBody" is="emby-textarea" rows="4" maxlength="2000" placeholder="Plain text only. Links and formatting are not shown."></textarea>
+                            <textarea id="MessageBody" is="emby-textarea" rows="12" maxlength="2000" style="width:100%;box-sizing:border-box;font-family:inherit;" placeholder="Write your message here."></textarea>
+                            <div class="fieldDescription">
+                                Formatting uses Markdown. Only CommonMark is supported:
+                                <a href="https://commonmark.org/help/" target="_blank">syntax reference</a>.
+                                Images are not shown, even though that page lists them.
+                            </div>
                         </div>
 
                         <div class="selectContainer">
-                            <label class="selectLabel" for="MessageSeverity">Importance</label>
-                            <select is="emby-select" id="MessageSeverity">
-                                <option value="info">Info (green)</option>
-                                <option value="warning">Warning (yellow)</option>
-                                <option value="critical">Critical (red)</option>
+                            <label class="selectLabel" for="MessageColor">Colour</label>
+                            <select is="emby-select" id="MessageColor">
+                                <option value="white">White</option>
+                                <option value="green">Green</option>
+                                <option value="blue">Blue</option>
+                                <option value="yellow">Yellow</option>
+                                <option value="red">Red</option>
                             </select>
-                            <div class="fieldDescription">Sets the colour of the message and of the button in the app menu.</div>
+                            <div class="fieldDescription">Colours the message in the app. The menu button stays neutral.</div>
                         </div>
 
                         <div class="selectContainer">

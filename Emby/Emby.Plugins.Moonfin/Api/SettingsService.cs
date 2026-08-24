@@ -353,7 +353,7 @@ namespace Emby.Plugins.Moonfin.Api
                 {
                     Id = Guid.NewGuid().ToString("N"),
                     Body = message,
-                    Severity = ServerMessage.SeverityInfo,
+                    Color = ServerMessage.ColorWhite,
                     Delivery = ServerMessage.DeliveryPopup,
                     Audience = ServerMessage.AudienceAll,
                     CreatedUtc = DateTime.UtcNow,
