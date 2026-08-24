@@ -56,7 +56,9 @@ public class StudioLogoFetchService
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var details = JsonSerializer.Deserialize<TmdbDetailsResponse>(json, JsonOptions);
-        var companies = details?.ProductionCompanies ?? new List<TmdbCompany>();
+        var companies = new List<TmdbCompany>();
+        if (details?.ProductionCompanies != null) companies.AddRange(details.ProductionCompanies);
+        if (details?.Networks != null) companies.AddRange(details.Networks);
 
         var entries = new List<StudioCompanyEntry>();
         foreach (var company in companies)
@@ -149,6 +151,9 @@ public class StudioLogoFetchService
     {
         [JsonPropertyName("production_companies")]
         public List<TmdbCompany>? ProductionCompanies { get; set; }
+
+        [JsonPropertyName("networks")]
+        public List<TmdbCompany>? Networks { get; set; }
     }
 
     private class TmdbCompany
