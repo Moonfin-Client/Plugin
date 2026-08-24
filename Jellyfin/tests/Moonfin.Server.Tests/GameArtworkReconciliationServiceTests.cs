@@ -89,6 +89,92 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         }
     }
 
+    // Watchers used to be built once, at StartAsync, from a snapshot of the configured libraries.
+    // Selecting a new game library on the configuration page therefore left its root unwatched and
+    // its ROMs uncataloged until a global scheduled scan or a server restart -- exactly what the
+    // per-library-scan support this class's watcher exists for is meant to avoid.
+    [Fact]
+    public async Task OnGameLibrariesChanged_WatchesAndScansANewlySelectedRootWithoutRestart()
+    {
+        var firstRoot = Path.Combine(_root, "Games");
+        Directory.CreateDirectory(Path.Combine(firstRoot, "SNES"));
+        await File.WriteAllBytesAsync(Path.Combine(firstRoot, "SNES", "First.sfc"), [1, 2, 3]);
+
+        var secondRoot = Path.Combine(_root, "MoreGames");
+        Directory.CreateDirectory(Path.Combine(secondRoot, "SNES"));
+        await File.WriteAllBytesAsync(Path.Combine(secondRoot, "SNES", "Second.sfc"), [4, 5, 6]);
+
+        var firstId = Guid.NewGuid().ToString();
+        var secondId = Guid.NewGuid().ToString();
+        var folders = new List<VirtualFolderInfo>
+        {
+            new() { Name = "Games", ItemId = firstId, Locations = [firstRoot] },
+        };
+        var service = CreateWatchingService(folders, out var catalog);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitForDistinctGameCountAsync(catalog, firstId, "snes", 1);
+            Assert.Equal([firstRoot], service.WatchedLibraryRootsForTests);
+
+            // The configuration page selects a second library. Its ROM is already on disk, so it
+            // raises no filesystem event: only the queued reconciliation can discover it.
+            folders.Add(new VirtualFolderInfo { Name = "MoreGames", ItemId = secondId, Locations = [secondRoot] });
+            service.OnGameLibrariesChanged();
+
+            await WaitForDistinctGameCountAsync(catalog, secondId, "snes", 1);
+            await WaitForWatchedRootsAsync(service, [firstRoot, secondRoot]);
+
+            // And the new root is genuinely watched from here on, not merely scanned once.
+            await File.WriteAllBytesAsync(Path.Combine(secondRoot, "SNES", "Third.sfc"), [7, 8, 9]);
+            await WaitForDistinctGameCountAsync(catalog, secondId, "snes", 2);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    // Deselecting a library must also drop its watcher. This asserts the watcher set directly
+    // rather than asserting that the removed root's ROMs stop being cataloged: reconciliation only
+    // ever scans currently-configured roots, so the catalog assertion passes even when a stale
+    // watcher is still running (it would just trigger pointless reconciliation passes forever).
+    [Fact]
+    public async Task OnGameLibrariesChanged_StopsWatchingADeselectedRoot()
+    {
+        var firstRoot = Path.Combine(_root, "Games");
+        Directory.CreateDirectory(Path.Combine(firstRoot, "SNES"));
+        await File.WriteAllBytesAsync(Path.Combine(firstRoot, "SNES", "First.sfc"), [1, 2, 3]);
+
+        var secondRoot = Path.Combine(_root, "MoreGames");
+        Directory.CreateDirectory(Path.Combine(secondRoot, "SNES"));
+        await File.WriteAllBytesAsync(Path.Combine(secondRoot, "SNES", "Second.sfc"), [4, 5, 6]);
+
+        var firstId = Guid.NewGuid().ToString();
+        var folders = new List<VirtualFolderInfo>
+        {
+            new() { Name = "Games", ItemId = firstId, Locations = [firstRoot] },
+            new() { Name = "MoreGames", ItemId = Guid.NewGuid().ToString(), Locations = [secondRoot] },
+        };
+        var service = CreateWatchingService(folders, out var catalog);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitForWatchedRootsAsync(service, [firstRoot, secondRoot]);
+
+            folders.RemoveAt(1);
+            service.OnGameLibrariesChanged();
+
+            await WaitForWatchedRootsAsync(service, [firstRoot]);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     [Fact]
     public void Scheduler_ForcesBulkAfterFourInteractiveSelections()
     {
@@ -445,5 +531,43 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         }
 
         Assert.Fail($"Timed out waiting for {key.StorageKey} to reach {state}");
+    }
+
+    // Real watchers (the production default), a real GamesService over a mutable folder list, and
+    // a stubbed GameThumbService: reconciliation's catalog bookkeeping runs, artwork downloads do
+    // not.
+    private GameArtworkReconciliationService CreateWatchingService(
+        List<VirtualFolderInfo> folders,
+        out GameArtworkCatalog catalog)
+    {
+        catalog = new GameArtworkCatalog(Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N")));
+        return new GameArtworkReconciliationService(
+            new GamesService(new FakeLibraryManager(folders)),
+            (GameThumbService)RuntimeHelpers.GetUninitializedObject(typeof(GameThumbService)),
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null);
+    }
+
+    private static async Task WaitForWatchedRootsAsync(
+        GameArtworkReconciliationService service,
+        IReadOnlyList<string> expected)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        IReadOnlyList<string> observed;
+        do
+        {
+            observed = service.WatchedLibraryRootsForTests;
+            if (observed.OrderBy(root => root, StringComparer.OrdinalIgnoreCase)
+                    .SequenceEqual(expected.OrderBy(root => root, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        Assert.Fail($"Timed out waiting for watched roots [{string.Join(", ", expected)}]; observed [{string.Join(", ", observed)}]");
     }
 }
