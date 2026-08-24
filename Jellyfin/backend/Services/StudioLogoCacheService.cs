@@ -90,7 +90,12 @@ public class StudioLogoCacheService
 
     public bool HasImage(int companyId) => File.Exists(GetImagePath(companyId));
 
-    public string GetImagePath(int companyId) => Path.Combine(_cacheDir, $"{companyId}.png");
+    /// <summary>Networks are cached under a negated id, written as n123.png so no
+    /// file name starts with a dash.</summary>
+    public static string ImageFileName(int companyId) =>
+        companyId < 0 ? $"n{-companyId}.png" : $"{companyId}.png";
+
+    public string GetImagePath(int companyId) => Path.Combine(_cacheDir, ImageFileName(companyId));
 
     /// <summary>The TMDB logo path recorded for a company, so a missing image file can be re-downloaded.</summary>
     public string? GetLogoPath(int companyId)
@@ -142,7 +147,13 @@ public class StudioLogoCacheService
                 try
                 {
                     using var stream = File.OpenRead(_indexFilePath);
-                    _index = JsonSerializer.Deserialize<StudioIndex>(stream, JsonOptions) ?? new StudioIndex();
+                    var loaded = JsonSerializer.Deserialize<StudioIndex>(stream, JsonOptions) ?? new StudioIndex();
+                    if (loaded.Version != StudioIndex.CurrentVersion)
+                    {
+                        _logger.LogInformation("Studio logo index is version {Found}, rebuilding at version {Current}", loaded.Version, StudioIndex.CurrentVersion);
+                        loaded = new StudioIndex();
+                    }
+                    _index = loaded;
                     _logger.LogInformation("Studio logo index loaded ({Companies} companies, {Items} items)", _index.Companies.Count, _index.Items.Count);
                 }
                 catch (Exception ex)
@@ -180,6 +191,14 @@ public class StudioCompanyInfo
 
 internal class StudioIndex
 {
+    /// <summary>Bumped when cached entries need rebuilding rather than reusing.
+    /// Version 2 added TV networks, which entries written before it lack, and
+    /// gave networks their own negated ids.</summary>
+    public const int CurrentVersion = 2;
+
+    [JsonPropertyName("version")]
+    public int Version { get; set; } = CurrentVersion;
+
     [JsonPropertyName("companies")]
     public Dictionary<string, StudioCompanyEntry> Companies { get; set; } = new();
 
