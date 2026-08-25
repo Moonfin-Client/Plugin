@@ -72,9 +72,9 @@ public class SeerrSessionService
 
         try
         {
-            // /api/v1/auth/me returns 401 but still runs the global csurf middleware,
-            // so it seeds both cookies without a redirect. A single probe avoids
-            // rotating the secret between requests.
+            // /api/v1/auth/me answers 403 to a caller it has no session for, but it still runs
+            // the global csurf middleware, so it seeds both cookies without a redirect. A single
+            // probe avoids rotating the secret between requests.
             using var response = await client.GetAsync(
                 baseUrl + "/api/v1/auth/me",
                 HttpCompletionOption.ResponseHeadersRead);
@@ -625,9 +625,12 @@ public class SeerrSessionService
     }
 
     /// <summary>
-    /// Gets the stored session for a user, optionally validating it.
+    /// Gets the stored session for a user, optionally re-checking it against Seerr. A session
+    /// Seerr confirmed within <paramref name="maxAge"/> skips the round trip, so a screen that
+    /// asks on every open does not call Seerr every time. A null maxAge always re-checks.
     /// </summary>
-    public async Task<SeerrSession?> GetSessionAsync(Guid userId, bool validate = false)
+    public async Task<SeerrSession?> GetSessionAsync(
+        Guid userId, bool validate = false, TimeSpan? maxAge = null)
     {
         var session = await LoadSessionAsync(userId);
         if (session == null || string.IsNullOrEmpty(session.SessionCookie))
@@ -639,12 +642,14 @@ public class SeerrSessionService
             return null;
         }
 
-        if (validate)
+        if (validate && IsOlderThan(session, maxAge))
         {
-            var isValid = await ValidateSessionAsync(session);
-            if (!isValid)
+            // Only a definite refusal signs anybody out. Seerr being unreachable is not the
+            // same as the user being signed out, so the session survives a restart or a blip
+            // behind the proxy.
+            if (await CheckSessionAsync(session) == SessionCheck.Dead)
             {
-                _logger.LogInformation("Seerr session expired for user {UserId}, removing", userId);
+                _logger.LogInformation("Seerr no longer knows the session for user {UserId}, removing", userId);
                 await ClearSessionAsync(userId);
                 return null;
             }
@@ -653,15 +658,43 @@ public class SeerrSessionService
         return session;
     }
 
+    private static bool IsOlderThan(SeerrSession session, TimeSpan? maxAge)
+    {
+        if (maxAge == null || session.LastValidated <= 0)
+        {
+            return true;
+        }
+
+        var age = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - session.LastValidated;
+        return age < 0 || age > maxAge.Value.TotalMilliseconds;
+    }
+
+    /// <summary>What asking Seerr about a stored session concluded.</summary>
+    public enum SessionCheck
+    {
+        /// <summary>Seerr answered as the signed-in user.</summary>
+        Valid,
+
+        /// <summary>Seerr answered and does not know this session. A reinstalled or
+        /// reconfigured Seerr, and an expired cookie, all land here.</summary>
+        Dead,
+
+        /// <summary>Nothing conclusive came back, so the session is left alone.</summary>
+        Unreachable
+    }
+
     /// <summary>
-    /// Validates a stored session by calling Seerr's /auth/me endpoint.
+    /// Asks Seerr whether it still knows a stored session, through /auth/me. Kept apart from
+    /// clearing the session because Seerr answers 403 both for a session it cannot attach a
+    /// user to and for a live session that lacks a permission, so a 403 has to be checked
+    /// here before it is read as a permission problem.
     /// </summary>
-    private async Task<bool> ValidateSessionAsync(SeerrSession session)
+    public async Task<SessionCheck> CheckSessionAsync(SeerrSession session)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
         var seerrUrl = config?.GetEffectiveSeerrUrl();
 
-        if (string.IsNullOrEmpty(seerrUrl)) return false;
+        if (string.IsNullOrEmpty(seerrUrl)) return SessionCheck.Unreachable;
 
         try
         {
@@ -681,28 +714,36 @@ public class SeerrSessionService
 
             if (response.IsSuccessStatusCode)
             {
-                // A proxy login page can return 200 HTML; that is not a valid session.
+                // A proxy login page can return 200 HTML, which is not Seerr answering.
                 var body = await response.Content.ReadAsByteArrayAsync();
                 if (LooksLikeHtml(response.Content.Headers.ContentType?.ToString(), body))
                 {
-                    _logger.LogWarning("Seerr validate returned HTML for user {UserId}; treating session as invalid", session.JellyfinUserId);
-                    return false;
+                    _logger.LogWarning(
+                        "Seerr session check returned HTML for user {UserId}, cannot confirm the session",
+                        session.JellyfinUserId);
+                    return SessionCheck.Unreachable;
                 }
 
                 await CheckForRotatedCookieAsync(session, response, cookieContainer, seerrUrl);
 
-                // Update last validated timestamp
                 session.LastValidated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 await SaveSessionAsync(session);
-                return true;
+                return SessionCheck.Valid;
             }
 
-            return false;
+            // /auth/me is happy with any signed-in user, so a refusal here is about the
+            // session itself rather than about permissions.
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                return SessionCheck.Dead;
+            }
+
+            return SessionCheck.Unreachable;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to validate Seerr session for user {UserId}", session.JellyfinUserId);
-            return false;
+            _logger.LogWarning(ex, "Failed to reach Seerr to check the session for user {UserId}", session.JellyfinUserId);
+            return SessionCheck.Unreachable;
         }
     }
 
@@ -841,21 +882,21 @@ public class SeerrSessionService
                 return upstreamFailure;
             }
 
-            // Seerr answers 401 for permission denials as well as for dead
-            // sessions, so the session has to be confirmed dead before it is
-            // cleared. Clearing on a denial logged the user out for pressing a
-            // button the server refused.
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            // Seerr answers 403 for permission denials and for sessions it no longer knows
+            // alike, so the session has to be confirmed dead before it is cleared. Clearing on
+            // a denial signed the user out for pressing a button the server refused, and passing
+            // a dead session's 403 through left the client sure it was still signed in.
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
-                if (await ValidateSessionAsync(session))
+                if (await CheckSessionAsync(session) != SessionCheck.Dead)
                 {
                     _logger.LogInformation(
-                        "Seerr refused {Path} for user {UserId} on a valid session",
+                        "Seerr refused {Path} for user {UserId} on a session it still knows",
                         path,
                         userId);
                     return new SeerrProxyResponse
                     {
-                        StatusCode = 401,
+                        StatusCode = (int)response.StatusCode,
                         Body = responseBody,
                         ContentType = responseContentType
                     };

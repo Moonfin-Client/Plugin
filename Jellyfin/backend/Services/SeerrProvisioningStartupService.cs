@@ -34,7 +34,17 @@ public class SeerrProvisioningStartupService : IHostedService
             {
                 await Task.Delay(TimeSpan.FromSeconds(20), token);
                 var result = await _provisioning.EnsureWebhookAsync(token);
-                _logger.LogDebug("Seerr webhook provisioning at startup: {Status} ({Message})",
+
+                // An outcome the admin has to act on is worth an ordinary log line, the
+                // routine ones stay at debug so a working setup keeps quiet.
+                var needsAttention = result.Status is ProvisioningStatus.AdminSessionExpired
+                    or ProvisioningStatus.NeedsPublicUrl
+                    or ProvisioningStatus.ForeignWebhookPresent
+                    or ProvisioningStatus.Failed;
+
+                _logger.Log(
+                    needsAttention ? LogLevel.Information : LogLevel.Debug,
+                    "Seerr webhook provisioning at startup: {Status}. {Message}",
                     result.Status, result.Message);
             }
             catch (OperationCanceledException)

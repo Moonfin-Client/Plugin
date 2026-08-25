@@ -22,6 +22,9 @@ public class SeerrProxyController : ControllerBase
     private const int AdminBit = 2;
     private const int OwnerSeerrUserId = 1;
 
+    // How long a status check trusts Seerr's last answer about a session before asking again.
+    private static readonly TimeSpan SessionFreshness = TimeSpan.FromMinutes(5);
+
     private readonly SeerrSessionService _sessionService;
     private readonly SeerrProvisioningService _provisioning;
 
@@ -202,7 +205,12 @@ public class SeerrProxyController : ControllerBase
             });
         }
 
-        var session = await _sessionService.GetSessionAsync(userId.Value, validate: false);
+        // Confirm the session against Seerr rather than trusting that a file exists. A
+        // reinstalled or reconfigured Seerr keeps none of its old sessions, and reporting
+        // authenticated on one of those left the client connected to a Seerr that refused
+        // every call, with no prompt to sign in again.
+        var session = await _sessionService.GetSessionAsync(
+            userId.Value, validate: true, maxAge: SessionFreshness);
 
         return Ok(new
         {

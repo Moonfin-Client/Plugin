@@ -184,8 +184,8 @@ public class SeerrProvisioningService
                 return new ProvisioningResult(ProvisioningStatus.NotConfigured, "Seerr is not enabled or configured.");
             }
 
-            var admin = _sessionService.EnumerateSessions().FirstOrDefault(IsAdmin);
-            if (admin == null)
+            var admins = _sessionService.EnumerateSessions().Where(IsAdmin).ToList();
+            if (admins.Count == 0)
             {
                 return new ProvisioningResult(ProvisioningStatus.NoAdminSession,
                     "No admin Seerr session available yet. Configure the webhook manually or sign in as a Seerr admin.");
@@ -206,14 +206,45 @@ public class SeerrProvisioningService
 
             var targetUrl = $"{baseUrl}{WebhookPath}?secret={Uri.EscapeDataString(secret)}";
 
-            // Fetch the current settings via the admin session.
-            var getResponse = await _sessionService.RequestWithSessionAsync(
-                admin, HttpMethod.Get, SettingsPath, cancellationToken: cancellationToken);
+            // Fetch the current settings through an admin session. Seerr answers 403 for a
+            // session it no longer knows exactly as it does for a real permission denial, so a
+            // refusal only counts as a permission problem once Seerr confirms the session is
+            // alive. Otherwise the next stored admin gets a turn.
+            SeerrSession? admin = null;
+            SeerrProxyResponse? getResponse = null;
+            var sawExpiredSession = false;
 
-            if (getResponse.StatusCode == 403)
+            foreach (var candidate in admins)
             {
-                return new ProvisioningResult(ProvisioningStatus.NoAdminSession,
-                    "Stored session lacks admin rights on Seerr.");
+                var response = await _sessionService.RequestWithSessionAsync(
+                    candidate, HttpMethod.Get, SettingsPath, cancellationToken: cancellationToken);
+
+                if (response.StatusCode == 403)
+                {
+                    if (await _sessionService.CheckSessionAsync(candidate) == SeerrSessionService.SessionCheck.Dead)
+                    {
+                        sawExpiredSession = true;
+                        continue;
+                    }
+
+                    return new ProvisioningResult(ProvisioningStatus.NoAdminSession,
+                        "Stored session lacks admin rights on Seerr.");
+                }
+
+                admin = candidate;
+                getResponse = response;
+                break;
+            }
+
+            if (admin == null || getResponse == null)
+            {
+                return sawExpiredSession
+                    ? new ProvisioningResult(ProvisioningStatus.AdminSessionExpired,
+                        "The stored Seerr admin session is no longer valid, which is what a reinstalled or " +
+                        "reconfigured Seerr leaves behind. Sign in to Seerr again from Moonfin and the webhook " +
+                        "registers itself.")
+                    : new ProvisioningResult(ProvisioningStatus.NoAdminSession,
+                        "No admin Seerr session available yet. Configure the webhook manually or sign in as a Seerr admin.");
             }
 
             if (getResponse.StatusCode is < 200 or >= 300 || getResponse.Body == null)
@@ -448,6 +479,7 @@ public enum ProvisioningStatus
     NotAttempted,
     NotConfigured,
     NoAdminSession,
+    AdminSessionExpired,
     NeedsPublicUrl,
     ForeignWebhookPresent,
     AlreadyProvisioned,

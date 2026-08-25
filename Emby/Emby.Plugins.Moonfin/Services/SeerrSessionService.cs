@@ -324,15 +324,22 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
-        public async Task<SeerrSession?> GetSessionAsync(Guid userId, bool validate = false)
+        /// <summary>
+        /// Gets the stored session for a user, optionally re-checking it against Seerr. A
+        /// session Seerr confirmed within <paramref name="maxAge"/> skips the round trip, and
+        /// a null maxAge always re-checks.
+        /// </summary>
+        public async Task<SeerrSession?> GetSessionAsync(Guid userId, bool validate = false, TimeSpan? maxAge = null)
         {
             var session = await LoadSessionAsync(userId).ConfigureAwait(false);
             if (session == null || string.IsNullOrEmpty(session.SessionCookie)) return null;
 
-            if (validate)
+            if (validate && IsOlderThan(session, maxAge))
             {
-                var isValid = await ValidateSessionAsync(session).ConfigureAwait(false);
-                if (!isValid)
+                // Only a definite refusal signs anybody out. Seerr being unreachable is not
+                // the same as the user being signed out, so the session survives a restart or
+                // a blip behind the proxy.
+                if (await CheckSessionAsync(session).ConfigureAwait(false) == SessionCheck.Dead)
                 {
                     await ClearSessionAsync(userId).ConfigureAwait(false);
                     return null;
@@ -341,10 +348,38 @@ namespace Emby.Plugins.Moonfin.Services
             return session;
         }
 
-        private async Task<bool> ValidateSessionAsync(SeerrSession session)
+        private static bool IsOlderThan(SeerrSession session, TimeSpan? maxAge)
+        {
+            if (maxAge == null || session.LastValidated <= 0) return true;
+
+            var age = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - session.LastValidated;
+            return age < 0 || age > maxAge.Value.TotalMilliseconds;
+        }
+
+        /// <summary>What asking Seerr about a stored session concluded.</summary>
+        public enum SessionCheck
+        {
+            /// <summary>Seerr answered as the signed-in user.</summary>
+            Valid,
+
+            /// <summary>Seerr answered and does not know this session. A reinstalled or
+            /// reconfigured Seerr, and an expired cookie, all land here.</summary>
+            Dead,
+
+            /// <summary>Nothing conclusive came back, so the session is left alone.</summary>
+            Unreachable
+        }
+
+        /// <summary>
+        /// Asks Seerr whether it still knows a stored session, through /auth/me. Kept apart
+        /// from clearing the session because Seerr answers 403 both for a session it cannot
+        /// attach a user to and for a live session that lacks a permission, so a 403 has to be
+        /// checked here before it is read as a permission problem.
+        /// </summary>
+        public async Task<SessionCheck> CheckSessionAsync(SeerrSession session)
         {
             var seerrUrl = Plugin.Instance?.Configuration?.GetEffectiveSeerrUrl();
-            if (string.IsNullOrEmpty(seerrUrl)) return false;
+            if (string.IsNullOrEmpty(seerrUrl)) return SessionCheck.Unreachable;
             try
             {
                 var cookieContainer = new CookieContainer();
@@ -354,25 +389,31 @@ namespace Emby.Plugins.Moonfin.Services
                 var response = await client.GetAsync($"{seerrUrl}/api/v1/auth/me").ConfigureAwait(false);
                 if (response.IsSuccessStatusCode)
                 {
-                    // A proxy login page can return 200 HTML. That is not a valid session.
+                    // A proxy login page can return 200 HTML, which is not Seerr answering.
                     var body = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                     if (LooksLikeHtml(response.Content.Headers.ContentType?.ToString(), body))
                     {
-                        _logger.Warn("Seerr validate returned HTML for user " + session.JellyfinUserId + "; treating session as invalid");
-                        return false;
+                        _logger.Warn("Seerr session check returned HTML for user " + session.JellyfinUserId + ", cannot confirm the session");
+                        return SessionCheck.Unreachable;
                     }
 
                     await CheckForRotatedCookieAsync(session, response, cookieContainer, seerrUrl).ConfigureAwait(false);
                     session.LastValidated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     await SaveSessionAsync(session).ConfigureAwait(false);
-                    return true;
+                    return SessionCheck.Valid;
                 }
-                return false;
+
+                // /auth/me is happy with any signed-in user, so a refusal here is about the
+                // session itself rather than about permissions.
+                if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
+                    return SessionCheck.Dead;
+
+                return SessionCheck.Unreachable;
             }
             catch (Exception ex)
             {
-                _logger.Warn("Failed to validate Seerr session for user " + session.JellyfinUserId + ": " + ex.Message);
-                return false;
+                _logger.Warn("Failed to reach Seerr to check the session for user " + session.JellyfinUserId + ": " + ex.Message);
+                return SessionCheck.Unreachable;
             }
         }
 
@@ -413,7 +454,7 @@ namespace Emby.Plugins.Moonfin.Services
             byte[]? body,
             string? contentType,
             bool sendOriginReferer,
-            Guid? evictUserIdOn401,
+            Guid? evictUserIdOnDeadSession,
             CancellationToken ct)
         {
             var cookieContainer = new CookieContainer();
@@ -461,25 +502,26 @@ namespace Emby.Plugins.Moonfin.Services
             if (upstreamFailure != null)
                 return upstreamFailure;
 
-            // Seerr answers 401 for permission denials as well as for dead
-            // sessions, so the session has to be confirmed dead before it is
-            // cleared. Clearing on a denial logged the user out for pressing a
-            // button the server refused.
-            if (evictUserIdOn401.HasValue &&
-                (response.StatusCode == HttpStatusCode.Unauthorized))
+            // Seerr answers 403 for permission denials and for sessions it no longer knows
+            // alike, so the session has to be confirmed dead before it is cleared. Clearing on
+            // a denial signed the user out for pressing a button the server refused, and passing
+            // a dead session's 403 through left the client sure it was still signed in.
+            if (evictUserIdOnDeadSession.HasValue &&
+                (response.StatusCode == HttpStatusCode.Unauthorized ||
+                 response.StatusCode == HttpStatusCode.Forbidden))
             {
-                if (await ValidateSessionAsync(session).ConfigureAwait(false))
+                if (await CheckSessionAsync(session).ConfigureAwait(false) != SessionCheck.Dead)
                 {
-                    _logger.Info("Seerr refused " + path + " for user " + evictUserIdOn401.Value + " on a valid session");
+                    _logger.Info("Seerr refused " + path + " for user " + evictUserIdOnDeadSession.Value + " on a session it still knows");
                     return new SeerrProxyResponse
                     {
-                        StatusCode = 401,
+                        StatusCode = (int)response.StatusCode,
                         Body = responseBody,
                         ContentType = responseContentType
                     };
                 }
 
-                await ClearSessionAsync(evictUserIdOn401.Value).ConfigureAwait(false);
+                await ClearSessionAsync(evictUserIdOnDeadSession.Value).ConfigureAwait(false);
                 return ErrorResponse(401, "Seerr session expired", "SESSION_EXPIRED");
             }
 
@@ -508,7 +550,7 @@ namespace Emby.Plugins.Moonfin.Services
             try
             {
                 return await SendProxyCoreAsync(seerrUrl, session, method, path, queryString, body, contentType,
-                    sendOriginReferer: false, evictUserIdOn401: userId, ct: default).ConfigureAwait(false);
+                    sendOriginReferer: false, evictUserIdOnDeadSession: userId, ct: default).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
@@ -693,7 +735,7 @@ namespace Emby.Plugins.Moonfin.Services
             try
             {
                 return await SendProxyCoreAsync(seerrUrl, session, method, path, queryString: null, body, contentType,
-                    sendOriginReferer: true, evictUserIdOn401: null, ct: cancellationToken).ConfigureAwait(false);
+                    sendOriginReferer: true, evictUserIdOnDeadSession: null, ct: cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

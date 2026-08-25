@@ -173,7 +173,20 @@ namespace Emby.Plugins.Moonfin
             {
                 try
                 {
-                    await provisioning.EnsureWebhookAsync(CancellationToken.None).ConfigureAwait(false);
+                    var result = await provisioning.EnsureWebhookAsync(CancellationToken.None).ConfigureAwait(false);
+
+                    // An outcome the admin has to act on is worth an ordinary log line, the
+                    // routine ones stay at debug so a working setup keeps quiet.
+                    var needsAttention = result.Status == ProvisioningStatus.AdminSessionExpired ||
+                        result.Status == ProvisioningStatus.NeedsPublicUrl ||
+                        result.Status == ProvisioningStatus.ForeignWebhookPresent ||
+                        result.Status == ProvisioningStatus.Failed;
+
+                    var message = "Moonfin webhook provisioning at startup: " + result.Status + ". " + result.Message;
+                    if (needsAttention)
+                        _logger.Info(message);
+                    else
+                        _logger.Debug(message);
                 }
                 catch (Exception ex)
                 {

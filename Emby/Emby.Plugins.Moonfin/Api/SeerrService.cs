@@ -13,6 +13,9 @@ namespace Emby.Plugins.Moonfin.Api
     {
         private readonly IAuthorizationContext _authContext;
 
+        // How long a status check trusts Seerr's last answer about a session before asking again.
+        private static readonly TimeSpan SessionFreshness = TimeSpan.FromMinutes(5);
+
         public IRequest Request { get; set; } = null!;
         public IHttpResultFactory ResultFactory { get; set; } = null!;
 
@@ -70,7 +73,12 @@ namespace Emby.Plugins.Moonfin.Api
             var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
             if (userId == null) return new { enabled = true, authenticated = false, url = config.SeerrUrl };
 
-            var sess = await Session.GetSessionAsync(userId.Value, validate: false).ConfigureAwait(false);
+            // Confirm the session against Seerr rather than trusting that a file exists. A
+            // reinstalled or reconfigured Seerr keeps none of its old sessions, and reporting
+            // authenticated on one of those left the client connected to a Seerr that refused
+            // every call, with no prompt to sign in again.
+            var sess = await Session.GetSessionAsync(
+                userId.Value, validate: true, maxAge: SessionFreshness).ConfigureAwait(false);
             return new
             {
                 enabled = true,
