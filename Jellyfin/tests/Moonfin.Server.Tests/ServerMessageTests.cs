@@ -159,6 +159,29 @@ public class ServerMessageTests
     }
 
     [Fact]
+    public void Sanitize_CutsTitleToTheCap()
+    {
+        var message = Message();
+        message.Title = new string('x', ServerMessage.MaxTitleLength + 50);
+
+        message.Sanitize();
+
+        Assert.Equal(ServerMessage.MaxTitleLength, message.Title.Length);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsTheEscapingInALink()
+    {
+        var message = Message();
+        message.ActionLabel = "Open";
+        message.ActionUrl = "https://example.com/a%20b?q=caf%C3%A9";
+
+        message.Sanitize();
+
+        Assert.Equal("https://example.com/a%20b?q=caf%C3%A9", message.ActionUrl);
+    }
+
+    [Fact]
     public void Sanitize_ClearsTargetsWhenAudienceIsNotUsers()
     {
         var message = Message();

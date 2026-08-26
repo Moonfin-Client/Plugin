@@ -242,6 +242,9 @@ namespace Emby.Plugins.Moonfin
         /// <summary>Body length cap, so a huge paste cannot break the app layout.</summary>
         public const int MaxBodyLength = 2000;
 
+        /// <summary>Title length cap, the same limit the config page puts on its field.</summary>
+        public const int MaxTitleLength = 120;
+
         public const string ColorGreen = "green";
         public const string ColorRed = "red";
         public const string ColorYellow = "yellow";
@@ -313,6 +316,9 @@ namespace Emby.Plugins.Moonfin
             if (Body.Length > MaxBodyLength)
                 Body = Body.Substring(0, MaxBodyLength);
 
+            if (Title.Length > MaxTitleLength)
+                Title = Title.Substring(0, MaxTitleLength);
+
             Color = Color switch
             {
                 ColorGreen => ColorGreen,
@@ -372,7 +378,8 @@ namespace Emby.Plugins.Moonfin
                 (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                 return null;
 
-            return uri.ToString();
+            // AbsoluteUri keeps the escaping the admin typed, where ToString would decode it.
+            return uri.AbsoluteUri;
         }
 
         /// <summary>
