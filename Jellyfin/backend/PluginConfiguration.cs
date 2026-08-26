@@ -205,6 +205,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public List<UploadedThemeEntry> UploadedThemes { get; set; } = new();
 
+    /// <summary>
+    /// Admin messages shown to users in the app. They are only a few KB of text, so they live
+    /// in the config instead of the data folder.
+    /// </summary>
+    public List<ServerMessage> Messages { get; set; } = new();
+
     // ---------------------------------------------------------------------
     // Retro games (EmulatorJS) configuration
     // ---------------------------------------------------------------------
@@ -370,4 +376,198 @@ public class UploadedThemeEntry
     public DateTimeOffset UploadedAtUtc { get; set; }
     public string? UploadedByUserId { get; set; }
     public string ChecksumSha256 { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// One message the admin wrote for users to read in the app.
+/// </summary>
+public class ServerMessage
+{
+    /// <summary>Highest number of messages kept. Older ones are dropped on save.</summary>
+    public const int MaxStored = 50;
+
+    /// <summary>Body length cap, so a huge paste cannot break the app layout.</summary>
+    public const int MaxBodyLength = 2000;
+
+    /// <summary>Title length cap, the same limit the config page puts on its field.</summary>
+    public const int MaxTitleLength = 120;
+
+    public const string ColorGreen = "green";
+    public const string ColorRed = "red";
+    public const string ColorYellow = "yellow";
+    public const string ColorBlue = "blue";
+    public const string ColorWhite = "white";
+
+    /// <summary>Only marks the menu button as unread.</summary>
+    public const string DeliveryInbox = "inbox";
+
+    /// <summary>Opens the message window once, until the user reads it.</summary>
+    public const string DeliveryPopup = "popup";
+
+    public const string AudienceAll = "all";
+    public const string AudienceUsers = "users";
+    public const string AudienceAdmins = "admins";
+
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public string Color { get; set; } = ColorWhite;
+    public string Delivery { get; set; } = DeliveryInbox;
+    public string? ActionLabel { get; set; }
+    public string? ActionUrl { get; set; }
+
+    /// <summary>When the message starts showing. Null means right away.</summary>
+    public DateTime? StartUtc { get; set; }
+
+    /// <summary>When the message stops showing. Null means never.</summary>
+    public DateTime? EndUtc { get; set; }
+
+    public string Audience { get; set; } = AudienceAll;
+
+    /// <summary>User IDs to show this to. Only used when <see cref="Audience"/> is "users".</summary>
+    public List<string> TargetUserIds { get; set; } = new();
+
+    public DateTime CreatedUtc { get; set; }
+    public string? CreatedByUserId { get; set; }
+
+    /// <summary>
+    /// True when this message should show right now, for this user.
+    /// </summary>
+    public bool IsVisibleTo(Guid userId, bool isAdmin, DateTime nowUtc)
+    {
+        if (StartUtc.HasValue && nowUtc < StartUtc.Value)
+        {
+            return false;
+        }
+
+        if (EndUtc.HasValue && nowUtc >= EndUtc.Value)
+        {
+            return false;
+        }
+
+        return Audience switch
+        {
+            AudienceAdmins => isAdmin,
+            AudienceUsers => TargetUserIds.Any(id =>
+                Guid.TryParse(id, out var target) && target == userId),
+            _ => true
+        };
+    }
+
+    /// <summary>
+    /// Cleans admin input before it is saved. Bad values fall back to the default instead of
+    /// being rejected, except the action URL which is dropped when it is not http or https.
+    /// </summary>
+    public void Sanitize()
+    {
+        Title = (Title ?? string.Empty).Trim();
+        Body = (Body ?? string.Empty).Trim();
+
+        if (Body.Length > MaxBodyLength)
+        {
+            Body = Body.Substring(0, MaxBodyLength);
+        }
+
+        if (Title.Length > MaxTitleLength)
+        {
+            Title = Title.Substring(0, MaxTitleLength);
+        }
+
+        Color = Color switch
+        {
+            ColorGreen => ColorGreen,
+            ColorRed => ColorRed,
+            ColorYellow => ColorYellow,
+            ColorBlue => ColorBlue,
+            _ => ColorWhite
+        };
+
+        Delivery = Delivery == DeliveryPopup ? DeliveryPopup : DeliveryInbox;
+
+        Audience = Audience switch
+        {
+            AudienceUsers => AudienceUsers,
+            AudienceAdmins => AudienceAdmins,
+            _ => AudienceAll
+        };
+
+        if (Audience != AudienceUsers)
+        {
+            TargetUserIds = new List<string>();
+        }
+        else
+        {
+            TargetUserIds = TargetUserIds
+                .Where(id => Guid.TryParse(id, out _))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        ActionLabel = string.IsNullOrWhiteSpace(ActionLabel) ? null : ActionLabel.Trim();
+        ActionUrl = SanitizeActionUrl(ActionUrl);
+
+        // A link with no label is useless to the user, and a label with no link does nothing.
+        if (ActionUrl == null)
+        {
+            ActionLabel = null;
+        }
+        else if (ActionLabel == null)
+        {
+            ActionUrl = null;
+        }
+
+        // An end date before the start date would hide the message forever.
+        if (StartUtc.HasValue && EndUtc.HasValue && EndUtc.Value <= StartUtc.Value)
+        {
+            EndUtc = null;
+        }
+    }
+
+    /// <summary>
+    /// Keeps only real http and https links. Anything else is dropped, since this URL gets
+    /// opened on the user's device.
+    /// </summary>
+    private static string? SanitizeActionUrl(string? rawUrl)
+    {
+        if (string.IsNullOrWhiteSpace(rawUrl))
+        {
+            return null;
+        }
+
+        var value = rawUrl.Trim().Trim('"', '\'').Trim();
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return null;
+        }
+
+        // AbsoluteUri keeps the escaping the admin typed, where ToString would decode it.
+        return uri.AbsoluteUri;
+    }
+
+    /// <summary>
+    /// Drops expired messages, then the oldest ones if the list is still too long. Keeps the
+    /// config file from growing forever without needing a scheduled task.
+    /// </summary>
+    public static void Prune(List<ServerMessage> messages)
+    {
+        var now = DateTime.UtcNow;
+        messages.RemoveAll(m => m.EndUtc.HasValue && m.EndUtc.Value < now);
+
+        if (messages.Count <= MaxStored)
+        {
+            return;
+        }
+
+        var extra = messages
+            .OrderBy(m => m.CreatedUtc)
+            .Take(messages.Count - MaxStored)
+            .ToList();
+
+        foreach (var message in extra)
+        {
+            messages.Remove(message);
+        }
+    }
 }

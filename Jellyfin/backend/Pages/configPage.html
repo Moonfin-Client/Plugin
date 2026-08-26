@@ -374,6 +374,10 @@
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">palette</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Themes</span><span class="moonfinNavSub">Upload &amp; catalog</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="messages">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">notifications</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Messages</span><span class="moonfinNavSub">News for your users</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="actions">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">campaign</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Actions</span><span class="moonfinNavSub">Apply Defaults &amp; Broadcast</span></span>
@@ -1011,6 +1015,14 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultShowSeerrButton">Show Seerr Button</label>
                                 <select id="DefaultShowSeerrButton" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowServerMessagesButton">Show Messages Button</label>
+                                <select id="DefaultShowServerMessagesButton" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
@@ -1697,6 +1709,119 @@
                     </div>
 
                     </section>
+                    <section class="moonfinTabPanel" data-tab="messages">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Messages</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            Write news, updates or warnings for your users. They read them from the messages
+                            button in the app menu. Messages are saved, so users still see them if the app was
+                            closed when you posted.
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageTitle">Title</label>
+                            <input type="text" id="MessageTitle" is="emby-input" maxlength="120" placeholder="Server maintenance on Saturday" />
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageBody" style="display:block;">Message</label>
+                            <textarea id="MessageBody" is="emby-textarea" rows="12" maxlength="2000" style="width:100%;box-sizing:border-box;font-family:inherit;" placeholder="Write your message here."></textarea>
+                            <div class="fieldDescription">
+                                Formatting uses Markdown. Only CommonMark is supported:
+                                <a href="https://commonmark.org/help/" target="_blank">syntax reference</a>.
+                                Images are not shown, even though that page lists them.
+                            </div>
+                        </div>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="MessageColor">Colour</label>
+                            <select is="emby-select" id="MessageColor">
+                                <option value="white">White</option>
+                                <option value="green">Green</option>
+                                <option value="blue">Blue</option>
+                                <option value="yellow">Yellow</option>
+                                <option value="red">Red</option>
+                            </select>
+                            <div class="fieldDescription">Colours the message in the app. The menu button stays neutral.</div>
+                        </div>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="MessageDelivery">How to show it</label>
+                            <select is="emby-select" id="MessageDelivery">
+                                <option value="inbox">Notify on the menu button</option>
+                                <option value="popup">Open the message in the app</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Notify adds the message to the unread count on the menu button. Open makes the
+                                message window come up on its own, once. Open also sends a phone notification, if
+                                this server has push set up.
+                            </div>
+                        </div>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="MessageAudience">Who sees it</label>
+                            <select is="emby-select" id="MessageAudience">
+                                <option value="all">Everyone</option>
+                                <option value="users">Only the users I pick</option>
+                                <option value="admins">Only admins</option>
+                            </select>
+                        </div>
+
+                        <div class="selectContainer" id="MessageTargetsRow" style="display:none;">
+                            <label class="selectLabel" for="MessageTargets">Users</label>
+                            <select is="emby-select" id="MessageTargets" multiple size="6"></select>
+                            <div class="fieldDescription">Hold Ctrl or Cmd to pick more than one.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageStart">Show from (optional)</label>
+                            <input type="datetime-local" id="MessageStart" is="emby-input" />
+                            <div class="fieldDescription">Leave empty to show it right away.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageEnd">Hide after (optional)</label>
+                            <input type="datetime-local" id="MessageEnd" is="emby-input" />
+                            <div class="fieldDescription">
+                                Leave empty to keep it forever. Messages past this date are deleted on the next save.
+                            </div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageActionLabel">Button text (optional)</label>
+                            <input type="text" id="MessageActionLabel" is="emby-input" maxlength="40" placeholder="Read more" />
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MessageActionUrl">Button link (optional)</label>
+                            <input type="text" id="MessageActionUrl" is="emby-input" placeholder="https://example.com/news" />
+                            <div class="fieldDescription">
+                                Must start with http:// or https://. On TV the app shows it as a QR code.
+                                A link needs a button text, and a button text needs a link.
+                            </div>
+                        </div>
+
+
+                        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6em; margin-top:0.8em;">
+                            <button is="emby-button" type="button" id="MessageSaveBtn" class="raised">
+                                <span>Save Message</span>
+                            </button>
+                            <button is="emby-button" type="button" id="MessageResetBtn" class="raised" style="display:none;">
+                                <span>Cancel Edit</span>
+                            </button>
+                        </div>
+                        <div id="MessageSaveResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Saved Messages</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            Shown in this order in the app. Up to 50 are kept, then the oldest are dropped.
+                        </div>
+                        <div id="MessagesList" style="max-height:340px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;"></div>
+                    </div>
+
+                    </section>
                     <section class="moonfinTabPanel" data-tab="actions">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Apply Defaults To Users</h3>
@@ -1744,8 +1869,9 @@
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Broadcast Message</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            Send a live message to all currently connected Moonfin clients.
-                            This message is not saved and only appears for users with an active connection.
+                            Send a message to all connected Moonfin clients right now. It is also saved to
+                            the Messages tab, so users who were offline still see it later.
+                            For anything you want to write properly, use the Messages tab instead.
                         </div>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="BroadcastMessageText">Message</label>
@@ -3582,6 +3708,411 @@
                     });
             }
 
+            var moonfinEditingMessageId = null;
+
+            var moonfinMessageColors = {
+                white: '#e8eaed',
+                green: '#4caf6d',
+                blue: '#4a9ee0',
+                yellow: '#e0b040',
+                red: '#e05260'
+            };
+
+            var moonfinDeliveryLabels = {
+                inbox: 'Notify',
+                popup: 'Opens in app'
+            };
+
+            function setMessageResult(text, color) {
+                var result = document.querySelector('#MessageSaveResult');
+                if (!result) {
+                    return;
+                }
+
+                if (!text) {
+                    result.style.display = 'none';
+                    result.textContent = '';
+                    return;
+                }
+
+                result.style.display = '';
+                result.style.color = color || 'rgba(255,255,255,0.75)';
+                result.textContent = text;
+            }
+
+            // The date inputs work in the admin's own time zone, but the server stores UTC.
+            function messageDateToInput(utcValue) {
+                if (!utcValue) {
+                    return '';
+                }
+
+                var date = new Date(utcValue);
+                if (isNaN(date.getTime())) {
+                    return '';
+                }
+
+                var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+                return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+                    + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+            }
+
+            function messageDateFromInput(value) {
+                if (!value) {
+                    return null;
+                }
+
+                var date = new Date(value);
+                return isNaN(date.getTime()) ? null : date.toISOString();
+            }
+
+            function formatMessageDate(utcValue) {
+                if (!utcValue) {
+                    return '';
+                }
+
+                var date = new Date(utcValue);
+                return isNaN(date.getTime()) ? '' : date.toLocaleString();
+            }
+
+            function toggleMessageTargets() {
+                var audience = document.querySelector('#MessageAudience');
+                var row = document.querySelector('#MessageTargetsRow');
+                if (!audience || !row) {
+                    return;
+                }
+
+                row.style.display = audience.value === 'users' ? '' : 'none';
+            }
+
+            function loadMessageTargetUsers() {
+                var select = document.querySelector('#MessageTargets');
+                if (!select || !ApiClient.getUsers) {
+                    return Promise.resolve();
+                }
+
+                return ApiClient.getUsers().then(function(users) {
+                    select.innerHTML = '';
+                    (users || []).forEach(function(user) {
+                        var option = document.createElement('option');
+                        option.value = user.Id;
+                        option.textContent = user.Name;
+                        select.appendChild(option);
+                    });
+                });
+            }
+
+            function resetMessageForm() {
+                moonfinEditingMessageId = null;
+
+                document.querySelector('#MessageTitle').value = '';
+                document.querySelector('#MessageBody').value = '';
+                document.querySelector('#MessageColor').value = 'white';
+                document.querySelector('#MessageDelivery').value = 'inbox';
+                document.querySelector('#MessageAudience').value = 'all';
+                document.querySelector('#MessageStart').value = '';
+                document.querySelector('#MessageEnd').value = '';
+                document.querySelector('#MessageActionLabel').value = '';
+                document.querySelector('#MessageActionUrl').value = '';
+
+                var targets = document.querySelector('#MessageTargets');
+                if (targets) {
+                    Array.prototype.forEach.call(targets.options, function(option) {
+                        option.selected = false;
+                    });
+                }
+
+                var saveBtn = document.querySelector('#MessageSaveBtn');
+                if (saveBtn) {
+                    saveBtn.querySelector('span').textContent = 'Save Message';
+                }
+
+                var resetBtn = document.querySelector('#MessageResetBtn');
+                if (resetBtn) {
+                    resetBtn.style.display = 'none';
+                }
+
+                toggleMessageTargets();
+                setMessageResult('', '');
+            }
+
+            function editMessage(item) {
+                moonfinEditingMessageId = item.id || item.Id || null;
+
+                document.querySelector('#MessageTitle').value = item.title || item.Title || '';
+                document.querySelector('#MessageBody').value = item.body || item.Body || '';
+                document.querySelector('#MessageColor').value = item.color || item.Color || 'white';
+                document.querySelector('#MessageDelivery').value = item.delivery || item.Delivery || 'inbox';
+                document.querySelector('#MessageAudience').value = item.audience || item.Audience || 'all';
+                document.querySelector('#MessageStart').value = messageDateToInput(item.startUtc || item.StartUtc);
+                document.querySelector('#MessageEnd').value = messageDateToInput(item.endUtc || item.EndUtc);
+                document.querySelector('#MessageActionLabel').value = item.actionLabel || item.ActionLabel || '';
+                document.querySelector('#MessageActionUrl').value = item.actionUrl || item.ActionUrl || '';
+
+                var selected = item.targetUserIds || item.TargetUserIds || [];
+                var targets = document.querySelector('#MessageTargets');
+                if (targets) {
+                    Array.prototype.forEach.call(targets.options, function(option) {
+                        option.selected = selected.some(function(id) {
+                            return String(id).toLowerCase() === String(option.value).toLowerCase();
+                        });
+                    });
+                }
+
+                var saveBtn = document.querySelector('#MessageSaveBtn');
+                if (saveBtn) {
+                    saveBtn.querySelector('span').textContent = 'Update Message';
+                }
+
+                var resetBtn = document.querySelector('#MessageResetBtn');
+                if (resetBtn) {
+                    resetBtn.style.display = '';
+                }
+
+                toggleMessageTargets();
+                setMessageResult('', '');
+
+                var titleInput = document.querySelector('#MessageTitle');
+                if (titleInput) {
+                    titleInput.focus();
+                }
+            }
+
+            function renderMessagesList(items) {
+                var container = document.querySelector('#MessagesList');
+                if (!container) {
+                    return;
+                }
+
+                if (!items || items.length === 0) {
+                    container.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.55);font-size:0.9em;">No messages yet.</div>';
+                    return;
+                }
+
+                var now = new Date();
+                var html = '';
+
+                items.forEach(function(item, index) {
+                    var id = item.id || item.Id || '';
+                    var title = item.title || item.Title || '';
+                    var body = item.body || item.Body || '';
+                    var pick = item.color || item.Color || 'white';
+                    var delivery = item.delivery || item.Delivery || 'inbox';
+                    var audience = item.audience || item.Audience || 'all';
+                    var start = item.startUtc || item.StartUtc;
+                    var end = item.endUtc || item.EndUtc;
+                    var targets = item.targetUserIds || item.TargetUserIds || [];
+                    var color = moonfinMessageColors[pick] || moonfinMessageColors.white;
+
+                    var state = 'Showing now';
+                    if (start && new Date(start) > now) {
+                        state = 'Starts ' + formatMessageDate(start);
+                    } else if (end && new Date(end) <= now) {
+                        state = 'Expired';
+                    } else if (end) {
+                        state = 'Until ' + formatMessageDate(end);
+                    }
+
+                    var who = audience === 'admins'
+                        ? 'Admins only'
+                        : audience === 'users'
+                            ? targets.length + (targets.length === 1 ? ' user' : ' users')
+                            : 'Everyone';
+
+                    html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px;border:1px solid rgba(255,255,255,0.08);border-left:3px solid ' + color + ';border-radius:4px;margin-bottom:6px;background:rgba(255,255,255,0.02);">'
+                        + '<div style="flex:1;min-width:0;">'
+                        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+                        + '<strong style="font-size:0.95em;color:' + color + ';">' + esc(title || '(no title)') + '</strong>'
+                        + '</div>'
+                        + '<div style="font-size:0.82em;color:rgba(255,255,255,0.7);margin-top:4px;white-space:pre-wrap;">' + esc(body.length > 160 ? body.slice(0, 160) + '…' : body) + '</div>'
+                        + '<div style="font-size:0.78em;color:rgba(255,255,255,0.52);margin-top:4px;">'
+                        + esc(state) + ' • ' + esc(who) + ' • ' + esc(moonfinDeliveryLabels[delivery] || delivery)
+                        + '</div>'
+                        + '</div>'
+                        + '<div style="display:flex;flex-direction:column;gap:2px;">'
+                        + '<button type="button" class="moonfinMessageUpBtn" data-message-id="' + esc(id) + '" title="Move up"' + (index === 0 ? ' disabled' : '') + ' style="background:none;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);border-radius:4px;padding:0 6px;cursor:pointer;line-height:1.3;">&#9650;</button>'
+                        + '<button type="button" class="moonfinMessageDownBtn" data-message-id="' + esc(id) + '" title="Move down"' + (index === items.length - 1 ? ' disabled' : '') + ' style="background:none;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);border-radius:4px;padding:0 6px;cursor:pointer;line-height:1.3;">&#9660;</button>'
+                        + '</div>'
+                        + '<button type="button" class="moonfinMessageEditBtn" data-message-id="' + esc(id) + '" title="Edit message" style="background:none;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">Edit</button>'
+                        + '<button type="button" class="moonfinMessageDeleteBtn" data-message-id="' + esc(id) + '" title="Delete message" style="background:none;border:1px solid rgba(239,68,68,0.6);color:#ef4444;border-radius:4px;padding:2px 8px;cursor:pointer;line-height:1.1;">&#x2715;</button>'
+                        + '</div>';
+                });
+
+                container.innerHTML = html;
+            }
+
+            function loadMessagesList() {
+                var container = document.querySelector('#MessagesList');
+                if (!container) {
+                    return;
+                }
+
+                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                container.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.55);font-size:0.9em;">Loading messages...</div>';
+
+                fetch(serverUrl + '/Moonfin/Admin/Messages', {
+                    method: 'GET',
+                    headers: getMoonfinAuthHeaders()
+                })
+                    .then(parseJsonResponse)
+                    .then(function(payload) {
+                        var items = payload.items || payload.Items || [];
+                        window.moonfinMessagesCache = items;
+                        renderMessagesList(items);
+                    })
+                    .catch(function(error) {
+                        container.innerHTML = '<div style="padding:8px;color:#d9534f;font-size:0.9em;">'
+                            + esc((error && error.message) ? error.message : 'Failed to load messages.') + '</div>';
+                    });
+            }
+
+            // Moves one message up or down and saves the whole order, so the app shows
+            // them in the same sequence as this list.
+            function moveMessage(messageId, delta) {
+                var items = (window.moonfinMessagesCache || []).slice();
+                var from = -1;
+                for (var i = 0; i < items.length; i++) {
+                    if ((items[i].id || items[i].Id) === messageId) { from = i; break; }
+                }
+
+                var to = from + delta;
+                if (from < 0 || to < 0 || to >= items.length) return;
+
+                var moved = items.splice(from, 1)[0];
+                items.splice(to, 0, moved);
+
+                // Redrawn straight away so the arrows feel instant, then saved.
+                window.moonfinMessagesCache = items;
+                renderMessagesList(items);
+
+                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                fetch(serverUrl + '/Moonfin/Admin/Messages/Order', {
+                    method: 'POST',
+                    headers: getMoonfinAuthHeaders(),
+                    body: JSON.stringify({
+                        ids: items.map(function (item) { return item.id || item.Id; })
+                    })
+                })
+                    .then(parseJsonResponse)
+                    .catch(function (error) {
+                        setMessageResult(
+                            (error && error.message) ? error.message : 'Could not save the new order.',
+                            '#d9534f'
+                        );
+                        loadMessagesList();
+                    });
+            }
+
+            function saveMessage() {
+                var saveBtn = document.querySelector('#MessageSaveBtn');
+                var title = (document.querySelector('#MessageTitle').value || '').trim();
+                var body = (document.querySelector('#MessageBody').value || '').trim();
+
+                if (!title && !body) {
+                    setMessageResult('Enter a title or a message.', '#d9534f');
+                    return;
+                }
+
+                var audience = document.querySelector('#MessageAudience').value;
+                var targetSelect = document.querySelector('#MessageTargets');
+                var targetUserIds = [];
+                if (audience === 'users' && targetSelect) {
+                    targetUserIds = Array.prototype.filter.call(targetSelect.options, function(option) {
+                        return option.selected;
+                    }).map(function(option) {
+                        return option.value;
+                    });
+
+                    if (targetUserIds.length === 0) {
+                        setMessageResult('Pick at least one user, or change who sees it.', '#d9534f');
+                        return;
+                    }
+                }
+
+                var payload = {
+                    id: moonfinEditingMessageId || '',
+                    title: title,
+                    body: body,
+                    color: document.querySelector('#MessageColor').value,
+                    delivery: document.querySelector('#MessageDelivery').value,
+                    audience: audience,
+                    targetUserIds: targetUserIds,
+                    actionLabel: (document.querySelector('#MessageActionLabel').value || '').trim(),
+                    actionUrl: (document.querySelector('#MessageActionUrl').value || '').trim(),
+                    startUtc: messageDateFromInput(document.querySelector('#MessageStart').value),
+                    endUtc: messageDateFromInput(document.querySelector('#MessageEnd').value)
+                };
+
+                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                var wasEditing = !!moonfinEditingMessageId;
+
+                saveBtn.disabled = true;
+                setMessageResult('', '');
+                Dashboard.showLoadingMsg();
+
+                fetch(serverUrl + '/Moonfin/Admin/Messages', {
+                    method: 'POST',
+                    headers: getMoonfinAuthHeaders(),
+                    body: JSON.stringify(payload)
+                })
+                    .then(parseJsonResponse)
+                    .then(function(response) {
+                        var saved = response.item || response.Item || {};
+                        var warnings = [];
+
+                        if (payload.actionUrl && !(saved.actionUrl || saved.ActionUrl)) {
+                            warnings.push('the link was dropped, it must start with http:// or https://');
+                        }
+                        if (payload.endUtc && !(saved.endUtc || saved.EndUtc)) {
+                            warnings.push('the end date was dropped, it was before the start date');
+                        }
+
+                        var message = wasEditing ? 'Message updated.' : 'Message saved.';
+                        if (warnings.length) {
+                            message += ' Note: ' + warnings.join(', ') + '.';
+                        }
+
+                        // resetMessageForm clears the result line, so set it afterwards.
+                        resetMessageForm();
+                        setMessageResult(message, warnings.length ? '#f0ad4e' : '#52b54b');
+                        loadMessagesList();
+                    })
+                    .catch(function(error) {
+                        setMessageResult((error && error.message) ? error.message : 'Save failed.', '#d9534f');
+                    })
+                    .finally(function() {
+                        saveBtn.disabled = false;
+                        Dashboard.hideLoadingMsg();
+                    });
+            }
+
+            function deleteMessage(messageId) {
+                if (!messageId) {
+                    return;
+                }
+
+                if (!window.confirm('Delete this message?')) {
+                    return;
+                }
+
+                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+
+                fetch(serverUrl + '/Moonfin/Admin/Messages/' + encodeURIComponent(messageId), {
+                    method: 'DELETE',
+                    headers: getMoonfinAuthHeaders()
+                })
+                    .then(parseJsonResponse)
+                    .then(function() {
+                        if (moonfinEditingMessageId === messageId) {
+                            resetMessageForm();
+                        }
+                        setMessageResult('Message deleted.', '#52b54b');
+                        loadMessagesList();
+                    })
+                    .catch(function(error) {
+                        setMessageResult((error && error.message) ? error.message : 'Delete failed.', '#d9534f');
+                    });
+            }
+
             function ensureMoonfinAdminRuntimeStyles() {
                 var source = document.getElementById('MoonfinAdminRuntimeStyleSource');
                 if (!source || !source.textContent) {
@@ -3731,6 +4262,66 @@
                 setThemeUploadResult('', '');
                 loadAdminThemesList();
 
+                var messageAudience = document.querySelector('#MessageAudience');
+                if (messageAudience && !messageAudience.dataset.bound) {
+                    messageAudience.dataset.bound = 'true';
+                    messageAudience.addEventListener('change', toggleMessageTargets);
+                }
+
+                var messageSaveBtn = document.querySelector('#MessageSaveBtn');
+                if (messageSaveBtn && !messageSaveBtn.dataset.bound) {
+                    messageSaveBtn.dataset.bound = 'true';
+                    messageSaveBtn.addEventListener('click', saveMessage);
+                }
+
+                var messageResetBtn = document.querySelector('#MessageResetBtn');
+                if (messageResetBtn && !messageResetBtn.dataset.bound) {
+                    messageResetBtn.dataset.bound = 'true';
+                    messageResetBtn.addEventListener('click', resetMessageForm);
+                }
+
+                var messagesListContainer = document.querySelector('#MessagesList');
+                if (messagesListContainer && !messagesListContainer.dataset.bound) {
+                    messagesListContainer.dataset.bound = 'true';
+                    messagesListContainer.addEventListener('click', function(event) {
+                        var upButton = event.target.closest('.moonfinMessageUpBtn');
+                        if (upButton) {
+                            moveMessage(upButton.getAttribute('data-message-id') || '', -1);
+                            return;
+                        }
+
+                        var downButton = event.target.closest('.moonfinMessageDownBtn');
+                        if (downButton) {
+                            moveMessage(downButton.getAttribute('data-message-id') || '', 1);
+                            return;
+                        }
+
+                        var editButton = event.target.closest('.moonfinMessageEditBtn');
+                        if (editButton) {
+                            var editId = editButton.getAttribute('data-message-id') || '';
+                            var cached = window.moonfinMessagesCache || [];
+                            var found = cached.filter(function(item) {
+                                return (item.id || item.Id) === editId;
+                            })[0];
+                            if (found) {
+                                editMessage(found);
+                            }
+                            return;
+                        }
+
+                        var deleteButton = event.target.closest('.moonfinMessageDeleteBtn');
+                        if (deleteButton) {
+                            deleteMessage(deleteButton.getAttribute('data-message-id') || '');
+                        }
+                    });
+                }
+
+                // The user list must be there before the form can preselect targets on edit.
+                loadMessageTargetUsers().then(function() {
+                    resetMessageForm();
+                    loadMessagesList();
+                });
+
                 Dashboard.showLoadingMsg();
                 ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
                     document.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
@@ -3794,6 +4385,7 @@
                     setNullableBoolSelect('#DefaultNavbarAlwaysExpanded', defaults.navbarAlwaysExpanded);
                     setNullableBoolSelect('#DefaultEnableFolderView', defaults.enableFolderView);
                     setNullableBoolSelect('#DefaultShowSeerrButton', defaults.showSeerrButton);
+                    setNullableBoolSelect('#DefaultShowServerMessagesButton', defaults.showServerMessagesButton);
 
                     setSelectValue('#DefaultMediaBarSourceType', defaults.mediaBarSourceType, 'Configured source');
                     loadAdminGenrePicker(defaults.mediaBarExcludedGenres || []);
@@ -4175,6 +4767,7 @@
                         config.DefaultUserSettings.navbarAlwaysExpanded = getNullableBoolSelect('#DefaultNavbarAlwaysExpanded');
                         config.DefaultUserSettings.enableFolderView = getNullableBoolSelect('#DefaultEnableFolderView');
                         config.DefaultUserSettings.showSeerrButton = getNullableBoolSelect('#DefaultShowSeerrButton');
+                        config.DefaultUserSettings.showServerMessagesButton = getNullableBoolSelect('#DefaultShowServerMessagesButton');
 
                         config.DefaultUserSettings.mediaBarSourceType = document.querySelector('#DefaultMediaBarSourceType').value || null;
                         var genreIds = [];

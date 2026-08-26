@@ -300,6 +300,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("use24HourClock")] public bool? Use24HourClock { get; set; }
         [JsonPropertyName("homeRowInfoOverlay")] public bool? HomeRowInfoOverlay { get; set; }
         [JsonPropertyName("showSeerrButton")] public bool? ShowSeerrButton { get; set; }
+        [JsonPropertyName("showServerMessagesButton")] public bool? ShowServerMessagesButton { get; set; }
         [JsonPropertyName("crashReportsEnabled")] public bool? CrashReportsEnabled { get; set; }
         [JsonPropertyName("diagnosticLoggingEnabled")] public bool? DiagnosticLoggingEnabled { get; set; }
         [JsonPropertyName("updateNotificationsEnabled")] public bool? UpdateNotificationsEnabled { get; set; }

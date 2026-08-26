@@ -81,6 +81,9 @@ namespace Emby.Plugins.Moonfin.Api
                 jellyseerrUrl = seerrUrl,
                 mdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey),
                 tmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
+                // Older plugins leave this out, which the app reads as false and hides the
+                // messages button.
+                messagesSupported = true,
                 defaultSettings = config?.DefaultUserSettings
             });
         }
@@ -341,9 +344,29 @@ namespace Emby.Plugins.Moonfin.Api
 
             var deliveries = Settings.BroadcastMessage(message);
 
+            // Also save it, so users who were not connected still find it in the app. Older
+            // clients keep reading the "adminMessage" event above and ignore this.
+            var config = Plugin.Instance?.Configuration;
+            if (Plugin.Instance != null && config != null)
+            {
+                config.Messages.Add(new ServerMessage
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Body = message,
+                    Color = ServerMessage.ColorWhite,
+                    Delivery = ServerMessage.DeliveryPopup,
+                    Audience = ServerMessage.AudienceAll,
+                    CreatedUtc = DateTime.UtcNow,
+                    CreatedByUserId = AuthHelpers.GetCurrentUserId(Request, _authContext)?.ToString("N")
+                });
+                ServerMessage.Prune(config.Messages);
+                Plugin.Instance.UpdateConfiguration(config);
+                Settings.BroadcastSystemEvent("messagesChanged");
+            }
+
             // The websocket only reaches clients that are open right now, so push
-            // covers backgrounded and killed apps. The route is left blank because
-            // the client ignores blank routes and just opens the app on a tap.
+            // covers backgrounded and killed apps. The route opens the messages window
+            // on tap.
             var pushTargets = 0;
             var store = Plugin.Instance?.NotificationStore;
             var pushDelivery = Plugin.Instance?.PushDelivery;
@@ -351,7 +374,7 @@ namespace Emby.Plugins.Moonfin.Api
             {
                 foreach (var userId in store.GetUsersWithDevices())
                 {
-                    pushDelivery.QueueToUser(userId, "Message from your server", message, route: "");
+                    pushDelivery.QueueToUser(userId, "Message from your server", message, route: "messages");
                     pushTargets++;
                 }
             }
