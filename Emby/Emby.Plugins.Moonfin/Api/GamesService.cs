@@ -148,7 +148,7 @@ namespace Emby.Plugins.Moonfin.Api
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return NotFound();
 
             var length = !allowBios && GamesScanner.IsArchive(path)
-                ? GamesScanner.GetExtractedRomLength(path)
+                ? GamesScanner.GetExtractedRomInfo(path)?.Length
                 : new FileInfo(path).Length;
             if (length == null) return NotFound();
 

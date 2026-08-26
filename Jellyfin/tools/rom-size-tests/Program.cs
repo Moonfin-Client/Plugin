@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using Moonfin.Server.Services;
 
-// Checks the archived-ROM size path. A HEAD reports GetExtractedRomLength while the GET sends
+// Checks the archived-ROM size path. A HEAD reports GetExtractedRomInfo while the GET sends
 // ExtractRomFromArchive, and a client compares the two to decide whether its cached copy is
 // still good, so they have to agree exactly. Assert-style, non-zero exit means failure.
 //
@@ -45,7 +45,7 @@ string WriteZip(string name, params (string Entry, int Bytes)[] entries)
 void CheckAgrees(string path, string name)
 {
     var extracted = GamesService.ExtractRomFromArchive(path);
-    var reported = GamesService.GetExtractedRomLength(path);
+    var reported = GamesService.GetExtractedRomInfo(path)?.Length;
     Check(extracted != null, $"{name}: extracts");
     Check(reported == extracted?.Length, $"{name}: reported {reported} vs extracted {extracted?.Length}");
 }
@@ -64,7 +64,7 @@ CheckAgrees(
 // A file that only looks like an archive reports no size rather than throwing.
 var broken = Path.Combine(work.FullName, "broken.zip");
 File.WriteAllText(broken, "not really a zip");
-Check(GamesService.GetExtractedRomLength(broken) == null, "unreadable archive reports null");
+Check(GamesService.GetExtractedRomInfo(broken) == null, "unreadable archive reports null");
 
 work.Delete(recursive: true);
 

@@ -106,23 +106,30 @@ namespace Emby.Plugins.Moonfin.Api
         }
 
         /// <summary>
-        /// The size the extracted ROM will have, read from the archive index rather than by
-        /// unpacking it, so answering a HEAD costs nothing. Null when the archive holds no usable
-        /// ROM or can't be read.
+        /// The name and size the extracted ROM will be served with, read from the archive index
+        /// rather than by unpacking it, so answering a HEAD costs nothing. Null when the archive
+        /// holds no usable ROM or can't be read.
         /// </summary>
-        public static long? GetExtractedRomLength(string archivePath)
+        public static ExtractedRomInfo? GetExtractedRomInfo(string archivePath)
         {
             try
             {
                 if (".7z".Equals(Path.GetExtension(archivePath), StringComparison.OrdinalIgnoreCase))
                 {
                     using var archive = ArchiveFactory.Open(archivePath);
-                    return PickRom(archive.Entries, e => e.IsDirectory, e => e.Key ?? string.Empty, e => e.Size)?.Size;
+                    var entry = PickRom(archive.Entries, e => e.IsDirectory, e => e.Key ?? string.Empty, e => e.Size);
+                    if (entry == null) return null;
+
+                    // An entry key carries its path inside the archive, and only the last segment
+                    // names the file. Backslashes turn up in archives written on Windows.
+                    var name = Path.GetFileName((entry.Key ?? string.Empty).Replace('\\', '/'));
+                    return string.IsNullOrEmpty(name) ? null : new ExtractedRomInfo(name, entry.Size);
                 }
 
                 using var fs = File.OpenRead(archivePath);
                 using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
-                return PickRom(zip.Entries, e => string.IsNullOrEmpty(e.Name), e => e.Name, e => e.Length)?.Length;
+                var zipEntry = PickRom(zip.Entries, e => string.IsNullOrEmpty(e.Name), e => e.Name, e => e.Length);
+                return zipEntry == null ? null : new ExtractedRomInfo(zipEntry.Name, zipEntry.Length);
             }
             catch
             {
@@ -352,20 +359,37 @@ namespace Emby.Plugins.Moonfin.Api
             var bios = systemDir == null ? new List<GameBios>() : GetBiosFiles(systemDir);
             var title = TitleFor(systemDir, romPath);
 
+            var archiveName = Path.GetFileName(romPath);
+
+            // The ROM endpoint unpacks an archive and sends the raw ROM, so the detail has to
+            // name what the client will actually receive. Naming the archive left a client saving
+            // plain ROM bytes under a .zip name and then failing to unpack them.
+            var servedName = archiveName;
+            var servedSize = SafeFileLength(romPath);
+            if (IsArchive(romPath))
+            {
+                var extracted = GetExtractedRomInfo(romPath);
+                if (extracted != null)
+                {
+                    servedName = extracted.Value.Name;
+                    servedSize = extracted.Value.Length;
+                }
+            }
+
             var detail = new GameDetail
             {
                 Id = gameId,
                 Title = title,
                 System = systemName,
                 Core = core,
-                FileName = Path.GetFileName(romPath),
-                SizeBytes = SafeFileLength(romPath),
+                FileName = servedName,
+                SizeBytes = servedSize,
                 Bios = bios
             };
 
             // LaunchBox is the primary source (overview + rich fields). The libretro .rdb fills
             // any gaps and supplies region, which LaunchBox does not carry.
-            var lb = GameLaunchBoxHelper.TryLookup(core, title, detail.FileName);
+            var lb = GameLaunchBoxHelper.TryLookup(core, title, archiveName);
             var rdb = GameMetadataHelper.TryLookup(core, romPath, title);
 
             detail.Overview = lb?.Overview;
@@ -565,5 +589,22 @@ namespace Emby.Plugins.Moonfin.Api
             }
             catch { return null; }
         }
+    }
+
+    /// <summary>
+    /// The ROM entry a client is served out of an archive. The name is a bare file name, with no
+    /// path from inside the archive.
+    /// </summary>
+    public readonly struct ExtractedRomInfo
+    {
+        public ExtractedRomInfo(string name, long length)
+        {
+            Name = name;
+            Length = length;
+        }
+
+        public string Name { get; }
+
+        public long Length { get; }
     }
 }

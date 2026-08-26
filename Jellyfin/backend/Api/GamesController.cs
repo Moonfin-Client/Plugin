@@ -906,7 +906,7 @@ public class GamesController : ControllerBase
     // match what StreamExtractedRom sends, since that is what the client compares against.
     private IActionResult ExtractedRomSize(string path)
     {
-        var length = GamesService.GetExtractedRomLength(path);
+        var length = GamesService.GetExtractedRomInfo(path)?.Length;
         if (length == null)
         {
             return NotFound();

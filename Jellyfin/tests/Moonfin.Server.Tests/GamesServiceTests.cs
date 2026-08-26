@@ -253,6 +253,46 @@ public class GamesServiceTests : IDisposable
         }
     }
 
+    // The ROM endpoint serves the unpacked entry rather than the archive, and the game detail
+    // reports its name and size so the client knows what it is receiving. Naming the archive
+    // instead left clients saving raw ROM bytes under a .zip name and failing to unpack them.
+    [Fact]
+    public void GetExtractedRomInfo_NamesTheEntryThatWillBeServed()
+    {
+        var archivePath = ZipFixtures.WriteZip(
+            Path.GetTempPath(),
+            $"{Guid.NewGuid():N}.zip",
+            ("readme.txt", [9, 9]),
+            ("Super Game (Europe).sfc", [1, 2, 3, 4]));
+        try
+        {
+            var info = GamesService.GetExtractedRomInfo(archivePath);
+
+            Assert.NotNull(info);
+            Assert.Equal("Super Game (Europe).sfc", info.Value.Name);
+            Assert.Equal(GamesService.ExtractRomFromArchive(archivePath)!.Length, info.Value.Length);
+        }
+        finally
+        {
+            File.Delete(archivePath);
+        }
+    }
+
+    [Fact]
+    public void GetExtractedRomInfo_ReturnsNullForAnUnreadableArchive()
+    {
+        var archivePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.zip");
+        File.WriteAllBytes(archivePath, [0, 1, 2, 3]);
+        try
+        {
+            Assert.Null(GamesService.GetExtractedRomInfo(archivePath));
+        }
+        finally
+        {
+            File.Delete(archivePath);
+        }
+    }
+
     // Regression test for the unbounded-extraction bug: ExtractRomFromArchive used to CopyTo an
     // in-memory MemoryStream with no ceiling, so any authenticated non-admin user's ROM request
     // (GamesController.StreamExtractedRom) could force an arbitrarily large allocation per

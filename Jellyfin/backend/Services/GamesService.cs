@@ -71,17 +71,17 @@ public class GamesService
     }
 
     /// <summary>
-    /// The size the extracted ROM will have, read from the archive index rather than by
-    /// unpacking it, so answering a HEAD costs nothing. Returns null when the archive holds no
-    /// usable ROM or can't be read.
+    /// The name and size the extracted ROM will be served with, read from the archive index
+    /// rather than by unpacking it, so answering a HEAD costs nothing. Returns null when the
+    /// archive holds no usable ROM or can't be read.
     /// </summary>
-    public static long? GetExtractedRomLength(string archivePath)
+    public static ExtractedRomInfo? GetExtractedRomInfo(string archivePath)
     {
         try
         {
             return ".7z".Equals(Path.GetExtension(archivePath), StringComparison.OrdinalIgnoreCase)
-                ? SharpCompressRomLength(archivePath)
-                : ZipRomLength(archivePath);
+                ? SharpCompressRomInfo(archivePath)
+                : ZipRomInfo(archivePath);
         }
         catch
         {
@@ -110,10 +110,11 @@ public class GamesService
         return ms.ToArray();
     }
 
-    private static long? ZipRomLength(string archivePath)
+    private static ExtractedRomInfo? ZipRomInfo(string archivePath)
     {
         using var zip = System.IO.Compression.ZipFile.OpenRead(archivePath);
-        return ChooseZipEntry(zip)?.Length;
+        var entry = ChooseZipEntry(zip);
+        return entry == null ? null : new ExtractedRomInfo(entry.Name, entry.Length);
     }
 
     // The entry a client is served: the first with a known ROM extension, else the largest file.
@@ -164,10 +165,19 @@ public class GamesService
         return ms.ToArray();
     }
 
-    private static long? SharpCompressRomLength(string archivePath)
+    private static ExtractedRomInfo? SharpCompressRomInfo(string archivePath)
     {
         using var archive = ArchiveFactory.Open(archivePath);
-        return ChooseArchiveEntry(archive)?.Size;
+        var entry = ChooseArchiveEntry(archive);
+        if (entry == null)
+        {
+            return null;
+        }
+
+        // An entry key carries its path inside the archive, and only the last segment names
+        // the file. Backslashes turn up in archives written on Windows.
+        var name = Path.GetFileName((entry.Key ?? string.Empty).Replace('\\', '/'));
+        return string.IsNullOrEmpty(name) ? null : new ExtractedRomInfo(name, entry.Size);
     }
 
     private static IArchiveEntry? ChooseArchiveEntry(IArchive archive)
@@ -544,14 +554,34 @@ public class GamesService
         var bios = resolution.SystemDir == null ? new List<GameBios>() : GetBiosFiles(resolution.SystemDir);
         var title = ResolveTitle(resolution.SystemDir, resolution.RomPath);
 
+        var archiveName = Path.GetFileName(resolution.RomPath);
+
+        // The ROM endpoint unpacks a single-ROM archive and sends the raw ROM, so the detail has
+        // to name what the client will actually receive. Naming the archive left a client saving
+        // plain ROM bytes under a .zip name and then failing to unpack them. Arcade sets are
+        // streamed intact and keep the archive's name, and the system core decides that because
+        // the endpoint resolves it the same way.
+        var servedName = archiveName;
+        var servedSize = SafeFileLength(resolution.RomPath);
+        if (IsArchive(resolution.RomPath) &&
+            !ShouldPreserveArchiveForCore(resolution.SystemCore, resolution.RomPath))
+        {
+            var extracted = GetExtractedRomInfo(resolution.RomPath);
+            if (extracted != null)
+            {
+                servedName = extracted.Value.Name;
+                servedSize = extracted.Value.Length;
+            }
+        }
+
         var detail = new GameDetail
         {
             Id = gameId,
             Title = title,
             System = resolution.SystemName,
             Core = core,
-            FileName = Path.GetFileName(resolution.RomPath),
-            SizeBytes = SafeFileLength(resolution.RomPath),
+            FileName = servedName,
+            SizeBytes = servedSize,
             Bios = bios,
             RecommendedCore = arcade?.RecommendedCore,
             AvailableCores = arcade?.AvailableCores.ToList(),
@@ -563,7 +593,7 @@ public class GamesService
 
         // LaunchBox is the primary source (overview + rich fields); the libretro .rdb fills any
         // gaps and supplies region, which LaunchBox does not carry.
-        var lb = _launchBox?.TryLookup(core, title, detail.FileName);
+        var lb = _launchBox?.TryLookup(core, title, archiveName);
         var rdb = _rdb == null ? null : await _rdb.TryLookupAsync(core, resolution.RomPath, title, cancellationToken).ConfigureAwait(false);
 
         detail.Overview = lb?.Overview;
@@ -973,6 +1003,12 @@ public class GamesService
     }
 
 }
+
+/// <summary>
+/// The ROM entry a client is served out of an archive. The name is a bare file name, with no
+/// path from inside the archive.
+/// </summary>
+public readonly record struct ExtractedRomInfo(string Name, long Length);
 
 /// <summary>
 /// Thrown when a chosen archive entry (advertised or actual decompressed size) exceeds
