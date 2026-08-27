@@ -994,9 +994,25 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverMode">Screensaver Mode (TV clients only)</label>
                                 <select id="DefaultScreensaverMode" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="off">Off</option>
                                     <option value="logo">Logo</option>
                                     <option value="library">Library</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultConfirmExit">Confirm Exit (TV clients only)</label>
+                                <select id="DefaultConfirmExit" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Ask before the back button leaves the app.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultUpdateNotificationsEnabled">Update Notifications</label>
+                                <select id="DefaultUpdateNotificationsEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                         </div>
@@ -1059,6 +1075,57 @@
                                 </select>
                                 <div class="fieldDescription">Filter recommendations to not exceed the current item's age rating.</div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPersonalRatingStyle">Personal Rating Style</label>
+                                <select id="DefaultPersonalRatingStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="thumbs">Thumbs</option>
+                                    <option value="stars">Stars</option>
+                                    <option value="numeric">Numeric</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescription">Hide Description</label>
+                                <select id="DefaultHideDetailsMediaDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDetailTrailersExternal">Open Trailers Externally</label>
+                                <select id="DefaultDetailTrailersExternal" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Play trailers in the system browser or YouTube app instead of inside Moonfin.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDetailUseSeriesThumbnails">Use Series Thumbnails for Episodes</label>
+                                <select id="DefaultDetailUseSeriesThumbnails" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPersonPageGroupItems">Group Person Page by Type</label>
+                                <select id="DefaultPersonPageGroupItems" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPersonPageSortOption">Person Page Sort</label>
+                                <select id="DefaultPersonPageSortOption" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="alphabetical">Alphabetical</option>
+                                    <option value="releaseDateDesc">Newest First</option>
+                                    <option value="releaseDateAsc">Oldest First</option>
+                                </select>
+                            </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Action Buttons</h4>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Default Action Buttons &amp; Order</label>
@@ -1083,7 +1150,6 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultNavbarColor">Navbar Color</label>
                                 <select id="DefaultNavbarColor" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="white">White</option>
                                     <option value="black">Black</option>
                                     <option value="gray">Gray</option>
                                     <option value="darkBlue">Dark Blue</option>
@@ -1119,6 +1185,15 @@
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShuffleContentType">Shuffle Content</label>
+                                <select id="DefaultShuffleContentType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Movies and Shows</option>
+                                    <option value="movies">Movies</option>
+                                    <option value="shows">Shows</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1277,6 +1352,41 @@
                                     <option value="Banner">Banner</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHomeRowsImageTypeOverride">Override Row Image Type</label>
+                                <select id="DefaultHomeRowsImageTypeOverride" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Use one image type for every home row instead of each row choosing its own.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHomeRowsImageType">Row Image Type</label>
+                                <select id="DefaultHomeRowsImageType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="poster">Poster</option>
+                                    <option value="thumb">Thumbnail</option>
+                                    <option value="banner">Banner</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaTypeBadgeBehavior">Media Type Badges</label>
+                                <select id="DefaultMediaTypeBadgeBehavior" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="always">Always</option>
+                                    <option value="mixedRowsOnly">Mixed Rows Only</option>
+                                    <option value="never">Never</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideHomeMediaDescription">Hide Descriptions on Home</label>
+                                <select id="DefaultHideHomeMediaDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
                         </div>
 
                         <!-- 5. Home Sections -->
@@ -1317,6 +1427,14 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAudioRowsSortOrder">Audio Rows Sort Direction</label>
+                                <select id="DefaultAudioRowsSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayCollectionsRows">Collections Rows</label>
                                 <select id="DefaultDisplayCollectionsRows" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -1326,13 +1444,22 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortBy">Collections Rows Sorting</label>
-                                <select id="DefaultCollectionsRowSortBy" is="emby-select">
+                                <select id="DefaultCollectionsRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortOrder">Collections Rows Sort Direction</label>
+                                <select id="DefaultCollectionsRowSortOrder" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="name">Name</option>
-                                    <option value="dateAdded">Date Added</option>
-                                    <option value="premiereDate">Release Date</option>
-                                    <option value="runtime">Runtime</option>
-                                    <option value="random">Random</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowShowEpisodes">Collections Rows Show Episodes</label>
+                                <select id="DefaultCollectionsRowShowEpisodes" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1345,13 +1472,14 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortBy">Favorites Rows Sorting</label>
-                                <select id="DefaultFavoritesRowSortBy" is="emby-select">
+                                <select id="DefaultFavoritesRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortOrder">Favorites Rows Sort Direction</label>
+                                <select id="DefaultFavoritesRowSortOrder" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="name">Name</option>
-                                    <option value="dateAdded">Date Added</option>
-                                    <option value="premiereDate">Release Date</option>
-                                    <option value="runtime">Runtime</option>
-                                    <option value="random">Random</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1364,13 +1492,23 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortBy">Genres Rows Sorting</label>
-                                <select id="DefaultGenresRowSortBy" is="emby-select">
+                                <select id="DefaultGenresRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortOrder">Genres Rows Sort Direction</label>
+                                <select id="DefaultGenresRowSortOrder" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="name">Name</option>
-                                    <option value="dateAdded">Date Added</option>
-                                    <option value="premiereDate">Release Date</option>
-                                    <option value="runtime">Runtime</option>
-                                    <option value="random">Random</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowItemFilter">Genres Rows Content</label>
+                                <select id="DefaultGenresRowItemFilter" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Movies and Series</option>
+                                    <option value="movies">Movies</option>
+                                    <option value="series">Series</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1383,13 +1521,42 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowSortBy">Playlists Rows Sorting</label>
-                                <select id="DefaultPlaylistsRowSortBy" is="emby-select">
+                                <select id="DefaultPlaylistsRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowSortOrder">Playlists Rows Sort Direction</label>
+                                <select id="DefaultPlaylistsRowSortOrder" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="name">Name</option>
-                                    <option value="dateAdded">Date Added</option>
-                                    <option value="premiereDate">Release Date</option>
-                                    <option value="runtime">Runtime</option>
-                                    <option value="random">Random</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowShowEpisodes">Playlists Rows Show Episodes</label>
+                                <select id="DefaultPlaylistsRowShowEpisodes" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayStudiosRows">Studios Rows</label>
+                                <select id="DefaultDisplayStudiosRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStudiosRowSortBy">Studios Rows Sorting</label>
+                                <select id="DefaultStudiosRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStudiosRowSortOrder">Studios Rows Sort Direction</label>
+                                <select id="DefaultStudiosRowSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1409,8 +1576,106 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRewatchIncludeMovies">Rewatch Row Includes Movies</label>
+                                <select id="DefaultRewatchIncludeMovies" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRewatchIncludeShows">Rewatch Row Includes Shows</label>
+                                <select id="DefaultRewatchIncludeShows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRewatchIncludeCollections">Rewatch Row Includes Collections</label>
+                                <select id="DefaultRewatchIncludeCollections" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDisplaySinceYouWatchedRows">Since You Watched Rows</label>
                                 <select id="DefaultDisplaySinceYouWatchedRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatchedSource">Since You Watched Source</label>
+                                <select id="DefaultSinceYouWatchedSource" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="local">Local</option>
+                                    <option value="online">Online</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatchedSourceType">Since You Watched Content</label>
+                                <select id="DefaultSinceYouWatchedSourceType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Movies and Shows</option>
+                                    <option value="movies">Movies</option>
+                                    <option value="shows">Shows</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatchedSourceItem">Since You Watched Based On</label>
+                                <select id="DefaultSinceYouWatchedSourceItem" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="recentlyWatched">Recently Watched</option>
+                                    <option value="favorites">Favorites</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatchedIncludeWatched">Since You Watched Includes Watched Items</label>
+                                <select id="DefaultSinceYouWatchedIncludeWatched" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched1Enabled">Since You Watched Row 1</label>
+                                <select id="DefaultSinceYouWatched1Enabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched2Enabled">Since You Watched Row 2</label>
+                                <select id="DefaultSinceYouWatched2Enabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched3Enabled">Since You Watched Row 3</label>
+                                <select id="DefaultSinceYouWatched3Enabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched4Enabled">Since You Watched Row 4</label>
+                                <select id="DefaultSinceYouWatched4Enabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched5Enabled">Since You Watched Row 5</label>
+                                <select id="DefaultSinceYouWatched5Enabled" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
@@ -1479,6 +1744,127 @@
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLibraryPosterSize">Library Card Size</label>
+                                <select id="DefaultLibraryPosterSize" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="small">Small</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="large">Large</option>
+                                    <option value="extraLarge">Extra Large</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistPosterSize">Playlist Card Size</label>
+                                <select id="DefaultPlaylistPosterSize" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="small">Small</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="large">Large</option>
+                                    <option value="extraLarge">Extra Large</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesViewStyle">Favorites View</label>
+                                <select id="DefaultFavoritesViewStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="home">Home Rows</option>
+                                    <option value="library">Library Grid</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAllGenresImageType">Genres Page Image Type</label>
+                                <select id="DefaultAllGenresImageType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="poster">Poster</option>
+                                    <option value="thumb">Thumbnail</option>
+                                    <option value="banner">Banner</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Music Library</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioLatest">Latest Row</label>
+                                <select id="DefaultDisplayAudioLatest" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioLastPlayed">Recently Played Row</label>
+                                <select id="DefaultDisplayAudioLastPlayed" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioFavorites">Favorites Row</label>
+                                <select id="DefaultDisplayAudioFavorites" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioPlaylists">Playlists Row</label>
+                                <select id="DefaultDisplayAudioPlaylists" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioAlbumArtists">Album Artists Row</label>
+                                <select id="DefaultDisplayAudioAlbumArtists" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioArtists">Artists Row</label>
+                                <select id="DefaultDisplayAudioArtists" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioAlbums">Albums Row</label>
+                                <select id="DefaultDisplayAudioAlbums" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAudioSortOption">Music Sorting</label>
+                                <select id="DefaultAudioSortOption" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="name">Name</option>
+                                    <option value="release_year">Release Year</option>
+                                    <option value="date_added">Date Added</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Live TV</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLiveTvChannelSortBy">Channel Sorting</label>
+                                <select id="DefaultLiveTvChannelSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="number">Channel Number</option>
+                                    <option value="name">Name</option>
+                                    <option value="favoritesFirst">Favorites First</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultEpgMobileView">Guide View (mobile)</label>
+                                <select id="DefaultEpgMobileView" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="list">List</option>
+                                    <option value="grid">Grid</option>
                                 </select>
                             </div>
                         </div>
@@ -1617,6 +2003,70 @@
                                     <option value="veryLong">After 8 episodes</option>
                                 </select>
                             </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Media Segments</h4>
+                            <div class="fieldDescription" style="margin-bottom:0.75em;">What a client does when playback reaches a segment. Needs a plugin that provides segments, such as Intro Skipper. A type left unset does nothing.</div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionIntro">Intro</label>
+                                <select id="DefaultSegmentActionIntro" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionRecap">Recap</label>
+                                <select id="DefaultSegmentActionRecap" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionPreview">Preview</label>
+                                <select id="DefaultSegmentActionPreview" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionCommercial">Commercial</label>
+                                <select id="DefaultSegmentActionCommercial" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionOutro">Outro</label>
+                                <select id="DefaultSegmentActionOutro" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaSegmentCountdown">Skip Button Countdown</label>
+                                <select id="DefaultMediaSegmentCountdown" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="progressBar">Progress bar</option>
+                                    <option value="timer">Timer</option>
+                                    <option value="both">Both</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaSegmentAutoHide">Hide Skip Button After</label>
+                                <select id="DefaultMediaSegmentAutoHide" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="s5">5 seconds</option>
+                                    <option value="s10">10 seconds</option>
+                                    <option value="off">Never</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultReplaceSkipOutroWithNextUp">Replace Skip Outro with Next Up</label>
+                                <select id="DefaultReplaceSkipOutroWithNextUp" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Only applies when the outro asks before skipping and Next Up is on.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeEpisodesEnabled">Cinema Mode for Episodes</label>
+                                <select id="DefaultCinemaModeEpisodesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Player Buttons</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Default Player Buttons &amp; Order</label>
+                                <div class="fieldDescription">Check which buttons to show around the player controls and use the arrows to set their order. Play, pause and seek are always shown.</div>
+                                <div id="DefaultOsdButtonsList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                            </div>
                         </div>
 
                         <!-- 8. Extras -->
@@ -1680,6 +2130,37 @@
                                     <option value="10000">10 Seconds</option>
                                     <option value="15000">15 Seconds</option>
                                     <option value="30000">30 Seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarOpacity">Media Bar Overlay Opacity</label>
+                                <div style="display:flex; align-items:center; gap: 12px; margin-top: 6px; max-width: 440px;">
+                                    <select id="DefaultMediaBarOpacity_Set" is="emby-select" style="width: auto; min-width: 195px;">
+                                        <option value="unset">Not set (user decides)</option>
+                                        <option value="set">Set default:</option>
+                                    </select>
+                                    <input type="range" id="DefaultMediaBarOpacity" min="0" max="100" step="5" value="100" disabled style="flex: 1; accent-color: #00a4dc;" />
+                                    <span id="DefaultMediaBarOpacity_Val" style="font-weight: 600; min-width: 40px; color: #00a4dc; text-align: right; font-size: 0.95em;">--</span>
+                                </div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarOverlayColor">Media Bar Overlay Color</label>
+                                <select id="DefaultMediaBarOverlayColor" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="black">Black</option>
+                                    <option value="gray">Gray</option>
+                                    <option value="darkBlue">Dark Blue</option>
+                                    <option value="purple">Purple</option>
+                                    <option value="teal">Teal</option>
+                                    <option value="navy">Navy</option>
+                                    <option value="charcoal">Charcoal</option>
+                                    <option value="brown">Brown</option>
+                                    <option value="darkRed">Dark Red</option>
+                                    <option value="darkGreen">Dark Green</option>
+                                    <option value="slate">Slate</option>
+                                    <option value="indigo">Indigo</option>
+                                    <option value="moonfinCyan">Moonfin Cyan</option>
+                                    <option value="neonPulseMagenta">Neon Pulse Magenta</option>
                                 </select>
                             </div>
                             <div id="DefaultCollectionPickerSection" style="display:none;">
@@ -1833,6 +2314,160 @@
                                 <div class="fieldDescription">Check which ratings to display and drag or use the arrows to set their order.</div>
                                 <div id="DefaultMdblistRatingSourcesList" style="max-height:220px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;margin-top:6px;"></div>
                             </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Discovery Rows</h4>
+                            <div class="fieldDescription" style="margin-bottom:0.75em;">Chart rows the home sections page can offer. IMDb rows need IMDb Charts enabled above, TMDB rows need a TMDB API key.</div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbTop250MoviesEnabled">IMDb Top 250 Movies</label>
+                                <select id="DefaultImdbTop250MoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbTop250TvShowsEnabled">IMDb Top 250 TV Shows</label>
+                                <select id="DefaultImdbTop250TvShowsEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbMostPopularMoviesEnabled">IMDb Most Popular Movies</label>
+                                <select id="DefaultImdbMostPopularMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbMostPopularTvShowsEnabled">IMDb Most Popular TV Shows</label>
+                                <select id="DefaultImdbMostPopularTvShowsEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbTopEnglishMoviesEnabled">IMDb Top English Movies</label>
+                                <select id="DefaultImdbTopEnglishMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbLowestRatedMoviesEnabled">IMDb Lowest Rated Movies</label>
+                                <select id="DefaultImdbLowestRatedMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingAllWeeklyEnabled">TMDB Trending This Week</label>
+                                <select id="DefaultTmdbTrendingAllWeeklyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingMovieDailyEnabled">TMDB Trending Movies Today</label>
+                                <select id="DefaultTmdbTrendingMovieDailyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingMovieWeeklyEnabled">TMDB Trending Movies This Week</label>
+                                <select id="DefaultTmdbTrendingMovieWeeklyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingTvDailyEnabled">TMDB Trending TV Today</label>
+                                <select id="DefaultTmdbTrendingTvDailyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingTvWeeklyEnabled">TMDB Trending TV This Week</label>
+                                <select id="DefaultTmdbTrendingTvWeeklyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbPopularMoviesEnabled">TMDB Popular Movies</label>
+                                <select id="DefaultTmdbPopularMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbPopularTvEnabled">TMDB Popular TV</label>
+                                <select id="DefaultTmdbPopularTvEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTopRatedMoviesEnabled">TMDB Top Rated Movies</label>
+                                <select id="DefaultTmdbTopRatedMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTopRatedTvEnabled">TMDB Top Rated TV</label>
+                                <select id="DefaultTmdbTopRatedTvEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbNowPlayingMoviesEnabled">TMDB Now Playing Movies</label>
+                                <select id="DefaultTmdbNowPlayingMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbUpcomingMoviesEnabled">TMDB Upcoming Movies</label>
+                                <select id="DefaultTmdbUpcomingMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbAiringTodayTvEnabled">TMDB Airing Today</label>
+                                <select id="DefaultTmdbAiringTodayTvEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbOnTheAirTvEnabled">TMDB On The Air</label>
+                                <select id="DefaultTmdbOnTheAirTvEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Seerr</h4>
                             <div class="inputContainer">
@@ -1847,6 +2482,79 @@
                                 <label class="inputLabel inputLabelUnfocused">Seerr Discovery Rows &amp; Order</label>
                                 <div class="fieldDescription">Enable rows to see on Seerr mainpage and use the arrows to set their order.</div>
                                 <div id="DefaultSeerrDiscoveryList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Calendar</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultEnableRadarrCalendar">Radarr Calendar</label>
+                                <select id="DefaultEnableRadarrCalendar" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultEnableSonarrCalendar">Sonarr Calendar</label>
+                                <select id="DefaultEnableSonarrCalendar" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMergeRadarrSonarrCalendars">Merge Radarr and Sonarr Calendars</label>
+                                <select id="DefaultMergeRadarrSonarrCalendars" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarShowCinema">Radarr: Show Cinema Releases</label>
+                                <select id="DefaultRadarrCalendarShowCinema" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarShowDigital">Radarr: Show Digital Releases</label>
+                                <select id="DefaultRadarrCalendarShowDigital" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarShowPhysical">Radarr: Show Physical Releases</label>
+                                <select id="DefaultRadarrCalendarShowPhysical" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarShowDate">Radarr: Show Release Date</label>
+                                <select id="DefaultRadarrCalendarShowDate" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarShowDate">Sonarr: Show Air Date</label>
+                                <select id="DefaultSonarrCalendarShowDate" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarShowEpisodeInfo">Sonarr: Show Episode Info</label>
+                                <select id="DefaultSonarrCalendarShowEpisodeInfo" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
                             </div>
                         </div>
                     </div>

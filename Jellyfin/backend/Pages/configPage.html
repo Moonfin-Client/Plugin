@@ -845,9 +845,25 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverMode">Screensaver Mode (TV clients only)</label>
                                 <select id="DefaultScreensaverMode" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="off">Off</option>
                                     <option value="logo">Logo</option>
                                     <option value="library">Library</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultConfirmExit">Confirm Exit (TV clients only)</label>
+                                <select id="DefaultConfirmExit" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Ask before the back button leaves the app.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultUpdateNotificationsEnabled">Update Notifications</label>
+                                <select id="DefaultUpdateNotificationsEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                         </div>
@@ -910,6 +926,57 @@
                                 </select>
                                 <div class="fieldDescription">Filter recommendations to not exceed the current item's age rating.</div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPersonalRatingStyle">Personal Rating Style</label>
+                                <select id="DefaultPersonalRatingStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="thumbs">Thumbs</option>
+                                    <option value="stars">Stars</option>
+                                    <option value="numeric">Numeric</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescription">Hide Description</label>
+                                <select id="DefaultHideDetailsMediaDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDetailTrailersExternal">Open Trailers Externally</label>
+                                <select id="DefaultDetailTrailersExternal" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Play trailers in the system browser or YouTube app instead of inside Moonfin.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDetailUseSeriesThumbnails">Use Series Thumbnails for Episodes</label>
+                                <select id="DefaultDetailUseSeriesThumbnails" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPersonPageGroupItems">Group Person Page by Type</label>
+                                <select id="DefaultPersonPageGroupItems" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPersonPageSortOption">Person Page Sort</label>
+                                <select id="DefaultPersonPageSortOption" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="alphabetical">Alphabetical</option>
+                                    <option value="releaseDateDesc">Newest First</option>
+                                    <option value="releaseDateAsc">Oldest First</option>
+                                </select>
+                            </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Action Buttons</h4>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Default Action Buttons &amp; Order</label>
@@ -934,7 +1001,6 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultNavbarColor">Navbar Color</label>
                                 <select id="DefaultNavbarColor" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="white">White</option>
                                     <option value="black">Black</option>
                                     <option value="gray">Gray</option>
                                     <option value="darkBlue">Dark Blue</option>
@@ -973,6 +1039,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShuffleContentType">Shuffle Content</label>
+                                <select id="DefaultShuffleContentType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Movies and Shows</option>
+                                    <option value="movies">Movies</option>
+                                    <option value="shows">Shows</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultShowGenresButton">Show Genres Button</label>
                                 <select id="DefaultShowGenresButton" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -983,6 +1058,14 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultShowFavoritesButton">Show Favorites Button</label>
                                 <select id="DefaultShowFavoritesButton" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowSyncPlayButton">Show SyncPlay Button</label>
+                                <select id="DefaultShowSyncPlayButton" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
@@ -1088,6 +1171,28 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultClassicHomeRowsPadding">Home Row Padding (Classic)</label>
+                                <div style="display:flex; align-items:center; gap: 12px; margin-top: 6px; max-width: 440px;">
+                                    <select id="DefaultClassicHomeRowsPadding_Set" is="emby-select" style="width: auto; min-width: 195px;">
+                                        <option value="unset">Not set (user decides)</option>
+                                        <option value="set">Set default:</option>
+                                    </select>
+                                    <input type="range" id="DefaultClassicHomeRowsPadding" min="10" max="130" step="5" value="10" disabled style="flex: 1; accent-color: #00a4dc;" />
+                                    <span id="DefaultClassicHomeRowsPadding_Val" style="font-weight: 600; min-width: 32px; color: #00a4dc; text-align: right; font-size: 0.95em;">--</span>
+                                </div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultModernHomeRowsPadding">Home Row Padding (Modern)</label>
+                                <div style="display:flex; align-items:center; gap: 12px; margin-top: 6px; max-width: 440px;">
+                                    <select id="DefaultModernHomeRowsPadding_Set" is="emby-select" style="width: auto; min-width: 195px;">
+                                        <option value="unset">Not set (user decides)</option>
+                                        <option value="set">Set default:</option>
+                                    </select>
+                                    <input type="range" id="DefaultModernHomeRowsPadding" min="360" max="560" step="10" value="360" disabled style="flex: 1; accent-color: #00a4dc;" />
+                                    <span id="DefaultModernHomeRowsPadding_Val" style="font-weight: 600; min-width: 32px; color: #00a4dc; text-align: right; font-size: 0.95em;">--</span>
+                                </div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPosterSize">Home Row Card Display Size</label>
                                 <select id="DefaultPosterSize" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -1104,6 +1209,41 @@
                                     <option value="Poster">Poster</option>
                                     <option value="Thumb">Thumbnail</option>
                                     <option value="Banner">Banner</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHomeRowsImageTypeOverride">Override Row Image Type</label>
+                                <select id="DefaultHomeRowsImageTypeOverride" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Use one image type for every home row instead of each row choosing its own.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHomeRowsImageType">Row Image Type</label>
+                                <select id="DefaultHomeRowsImageType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="poster">Poster</option>
+                                    <option value="thumb">Thumbnail</option>
+                                    <option value="banner">Banner</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaTypeBadgeBehavior">Media Type Badges</label>
+                                <select id="DefaultMediaTypeBadgeBehavior" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="always">Always</option>
+                                    <option value="mixedRowsOnly">Mixed Rows Only</option>
+                                    <option value="never">Never</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideHomeMediaDescription">Hide Descriptions on Home</label>
+                                <select id="DefaultHideHomeMediaDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                         </div>
@@ -1146,6 +1286,14 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAudioRowsSortOrder">Audio Rows Sort Direction</label>
+                                <select id="DefaultAudioRowsSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayCollectionsRows">Collections Rows</label>
                                 <select id="DefaultDisplayCollectionsRows" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -1155,13 +1303,22 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortBy">Collections Rows Sorting</label>
-                                <select id="DefaultCollectionsRowSortBy" is="emby-select">
+                                <select id="DefaultCollectionsRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortOrder">Collections Rows Sort Direction</label>
+                                <select id="DefaultCollectionsRowSortOrder" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="name">Name</option>
-                                    <option value="dateAdded">Date Added</option>
-                                    <option value="premiereDate">Release Date</option>
-                                    <option value="runtime">Runtime</option>
-                                    <option value="random">Random</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowShowEpisodes">Collections Rows Show Episodes</label>
+                                <select id="DefaultCollectionsRowShowEpisodes" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1174,13 +1331,14 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortBy">Favorites Rows Sorting</label>
-                                <select id="DefaultFavoritesRowSortBy" is="emby-select">
+                                <select id="DefaultFavoritesRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortOrder">Favorites Rows Sort Direction</label>
+                                <select id="DefaultFavoritesRowSortOrder" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="name">Name</option>
-                                    <option value="dateAdded">Date Added</option>
-                                    <option value="premiereDate">Release Date</option>
-                                    <option value="runtime">Runtime</option>
-                                    <option value="random">Random</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1193,13 +1351,23 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortBy">Genres Rows Sorting</label>
-                                <select id="DefaultGenresRowSortBy" is="emby-select">
+                                <select id="DefaultGenresRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortOrder">Genres Rows Sort Direction</label>
+                                <select id="DefaultGenresRowSortOrder" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="name">Name</option>
-                                    <option value="dateAdded">Date Added</option>
-                                    <option value="premiereDate">Release Date</option>
-                                    <option value="runtime">Runtime</option>
-                                    <option value="random">Random</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowItemFilter">Genres Rows Content</label>
+                                <select id="DefaultGenresRowItemFilter" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Movies and Series</option>
+                                    <option value="movies">Movies</option>
+                                    <option value="series">Series</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1212,13 +1380,42 @@
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowSortBy">Playlists Rows Sorting</label>
-                                <select id="DefaultPlaylistsRowSortBy" is="emby-select">
+                                <select id="DefaultPlaylistsRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowSortOrder">Playlists Rows Sort Direction</label>
+                                <select id="DefaultPlaylistsRowSortOrder" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="name">Name</option>
-                                    <option value="dateAdded">Date Added</option>
-                                    <option value="premiereDate">Release Date</option>
-                                    <option value="runtime">Runtime</option>
-                                    <option value="random">Random</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowShowEpisodes">Playlists Rows Show Episodes</label>
+                                <select id="DefaultPlaylistsRowShowEpisodes" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayStudiosRows">Studios Rows</label>
+                                <select id="DefaultDisplayStudiosRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStudiosRowSortBy">Studios Rows Sorting</label>
+                                <select id="DefaultStudiosRowSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStudiosRowSortOrder">Studios Rows Sort Direction</label>
+                                <select id="DefaultStudiosRowSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1238,8 +1435,106 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRewatchIncludeMovies">Rewatch Row Includes Movies</label>
+                                <select id="DefaultRewatchIncludeMovies" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRewatchIncludeShows">Rewatch Row Includes Shows</label>
+                                <select id="DefaultRewatchIncludeShows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRewatchIncludeCollections">Rewatch Row Includes Collections</label>
+                                <select id="DefaultRewatchIncludeCollections" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDisplaySinceYouWatchedRows">Since You Watched Rows</label>
                                 <select id="DefaultDisplaySinceYouWatchedRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatchedSource">Since You Watched Source</label>
+                                <select id="DefaultSinceYouWatchedSource" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="local">Local</option>
+                                    <option value="online">Online</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatchedSourceType">Since You Watched Content</label>
+                                <select id="DefaultSinceYouWatchedSourceType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Movies and Shows</option>
+                                    <option value="movies">Movies</option>
+                                    <option value="shows">Shows</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatchedSourceItem">Since You Watched Based On</label>
+                                <select id="DefaultSinceYouWatchedSourceItem" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="recentlyWatched">Recently Watched</option>
+                                    <option value="favorites">Favorites</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatchedIncludeWatched">Since You Watched Includes Watched Items</label>
+                                <select id="DefaultSinceYouWatchedIncludeWatched" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched1Enabled">Since You Watched Row 1</label>
+                                <select id="DefaultSinceYouWatched1Enabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched2Enabled">Since You Watched Row 2</label>
+                                <select id="DefaultSinceYouWatched2Enabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched3Enabled">Since You Watched Row 3</label>
+                                <select id="DefaultSinceYouWatched3Enabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched4Enabled">Since You Watched Row 4</label>
+                                <select id="DefaultSinceYouWatched4Enabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSinceYouWatched5Enabled">Since You Watched Row 5</label>
+                                <select id="DefaultSinceYouWatched5Enabled" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
@@ -1308,6 +1603,127 @@
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLibraryPosterSize">Library Card Size</label>
+                                <select id="DefaultLibraryPosterSize" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="small">Small</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="large">Large</option>
+                                    <option value="extraLarge">Extra Large</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistPosterSize">Playlist Card Size</label>
+                                <select id="DefaultPlaylistPosterSize" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="small">Small</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="large">Large</option>
+                                    <option value="extraLarge">Extra Large</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesViewStyle">Favorites View</label>
+                                <select id="DefaultFavoritesViewStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="home">Home Rows</option>
+                                    <option value="library">Library Grid</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAllGenresImageType">Genres Page Image Type</label>
+                                <select id="DefaultAllGenresImageType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="poster">Poster</option>
+                                    <option value="thumb">Thumbnail</option>
+                                    <option value="banner">Banner</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Music Library</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioLatest">Latest Row</label>
+                                <select id="DefaultDisplayAudioLatest" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioLastPlayed">Recently Played Row</label>
+                                <select id="DefaultDisplayAudioLastPlayed" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioFavorites">Favorites Row</label>
+                                <select id="DefaultDisplayAudioFavorites" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioPlaylists">Playlists Row</label>
+                                <select id="DefaultDisplayAudioPlaylists" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioAlbumArtists">Album Artists Row</label>
+                                <select id="DefaultDisplayAudioAlbumArtists" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioArtists">Artists Row</label>
+                                <select id="DefaultDisplayAudioArtists" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayAudioAlbums">Albums Row</label>
+                                <select id="DefaultDisplayAudioAlbums" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAudioSortOption">Music Sorting</label>
+                                <select id="DefaultAudioSortOption" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="name">Name</option>
+                                    <option value="release_year">Release Year</option>
+                                    <option value="date_added">Date Added</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Live TV</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLiveTvChannelSortBy">Channel Sorting</label>
+                                <select id="DefaultLiveTvChannelSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="number">Channel Number</option>
+                                    <option value="name">Name</option>
+                                    <option value="favoritesFirst">Favorites First</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultEpgMobileView">Guide View (mobile)</label>
+                                <select id="DefaultEpgMobileView" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="list">List</option>
+                                    <option value="grid">Grid</option>
                                 </select>
                             </div>
                         </div>
@@ -1446,6 +1862,70 @@
                                     <option value="veryLong">After 8 episodes</option>
                                 </select>
                             </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Media Segments</h4>
+                            <div class="fieldDescription" style="margin-bottom:0.75em;">What a client does when playback reaches a segment. Needs a plugin that provides segments, such as Intro Skipper. A type left unset does nothing.</div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionIntro">Intro</label>
+                                <select id="DefaultSegmentActionIntro" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionRecap">Recap</label>
+                                <select id="DefaultSegmentActionRecap" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionPreview">Preview</label>
+                                <select id="DefaultSegmentActionPreview" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionCommercial">Commercial</label>
+                                <select id="DefaultSegmentActionCommercial" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSegmentActionOutro">Outro</label>
+                                <select id="DefaultSegmentActionOutro" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaSegmentCountdown">Skip Button Countdown</label>
+                                <select id="DefaultMediaSegmentCountdown" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="progressBar">Progress bar</option>
+                                    <option value="timer">Timer</option>
+                                    <option value="both">Both</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaSegmentAutoHide">Hide Skip Button After</label>
+                                <select id="DefaultMediaSegmentAutoHide" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="s5">5 seconds</option>
+                                    <option value="s10">10 seconds</option>
+                                    <option value="off">Never</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultReplaceSkipOutroWithNextUp">Replace Skip Outro with Next Up</label>
+                                <select id="DefaultReplaceSkipOutroWithNextUp" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Only applies when the outro asks before skipping and Next Up is on.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeEpisodesEnabled">Cinema Mode for Episodes</label>
+                                <select id="DefaultCinemaModeEpisodesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Player Buttons</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Default Player Buttons &amp; Order</label>
+                                <div class="fieldDescription">Check which buttons to show around the player controls and use the arrows to set their order. Play, pause and seek are always shown.</div>
+                                <div id="DefaultOsdButtonsList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                            </div>
                         </div>
 
                         <!-- 8. Extras -->
@@ -1509,6 +1989,37 @@
                                     <option value="10000">10 Seconds</option>
                                     <option value="15000">15 Seconds</option>
                                     <option value="30000">30 Seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarOpacity">Media Bar Overlay Opacity</label>
+                                <div style="display:flex; align-items:center; gap: 12px; margin-top: 6px; max-width: 440px;">
+                                    <select id="DefaultMediaBarOpacity_Set" is="emby-select" style="width: auto; min-width: 195px;">
+                                        <option value="unset">Not set (user decides)</option>
+                                        <option value="set">Set default:</option>
+                                    </select>
+                                    <input type="range" id="DefaultMediaBarOpacity" min="0" max="100" step="5" value="100" disabled style="flex: 1; accent-color: #00a4dc;" />
+                                    <span id="DefaultMediaBarOpacity_Val" style="font-weight: 600; min-width: 40px; color: #00a4dc; text-align: right; font-size: 0.95em;">--</span>
+                                </div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarOverlayColor">Media Bar Overlay Color</label>
+                                <select id="DefaultMediaBarOverlayColor" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="black">Black</option>
+                                    <option value="gray">Gray</option>
+                                    <option value="darkBlue">Dark Blue</option>
+                                    <option value="purple">Purple</option>
+                                    <option value="teal">Teal</option>
+                                    <option value="navy">Navy</option>
+                                    <option value="charcoal">Charcoal</option>
+                                    <option value="brown">Brown</option>
+                                    <option value="darkRed">Dark Red</option>
+                                    <option value="darkGreen">Dark Green</option>
+                                    <option value="slate">Slate</option>
+                                    <option value="indigo">Indigo</option>
+                                    <option value="moonfinCyan">Moonfin Cyan</option>
+                                    <option value="neonPulseMagenta">Neon Pulse Magenta</option>
                                 </select>
                             </div>
                             <div id="DefaultCollectionPickerSection" style="display:none;">
@@ -1662,6 +2173,160 @@
                                 <div class="fieldDescription">Check which ratings to display and drag or use the arrows to set their order.</div>
                                 <div id="DefaultMdblistRatingSourcesList" style="max-height:220px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;margin-top:6px;"></div>
                             </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Discovery Rows</h4>
+                            <div class="fieldDescription" style="margin-bottom:0.75em;">Chart rows the home sections page can offer. IMDb rows need IMDb Charts enabled above, TMDB rows need a TMDB API key.</div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbTop250MoviesEnabled">IMDb Top 250 Movies</label>
+                                <select id="DefaultImdbTop250MoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbTop250TvShowsEnabled">IMDb Top 250 TV Shows</label>
+                                <select id="DefaultImdbTop250TvShowsEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbMostPopularMoviesEnabled">IMDb Most Popular Movies</label>
+                                <select id="DefaultImdbMostPopularMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbMostPopularTvShowsEnabled">IMDb Most Popular TV Shows</label>
+                                <select id="DefaultImdbMostPopularTvShowsEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbTopEnglishMoviesEnabled">IMDb Top English Movies</label>
+                                <select id="DefaultImdbTopEnglishMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbLowestRatedMoviesEnabled">IMDb Lowest Rated Movies</label>
+                                <select id="DefaultImdbLowestRatedMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingAllWeeklyEnabled">TMDB Trending This Week</label>
+                                <select id="DefaultTmdbTrendingAllWeeklyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingMovieDailyEnabled">TMDB Trending Movies Today</label>
+                                <select id="DefaultTmdbTrendingMovieDailyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingMovieWeeklyEnabled">TMDB Trending Movies This Week</label>
+                                <select id="DefaultTmdbTrendingMovieWeeklyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingTvDailyEnabled">TMDB Trending TV Today</label>
+                                <select id="DefaultTmdbTrendingTvDailyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTrendingTvWeeklyEnabled">TMDB Trending TV This Week</label>
+                                <select id="DefaultTmdbTrendingTvWeeklyEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbPopularMoviesEnabled">TMDB Popular Movies</label>
+                                <select id="DefaultTmdbPopularMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbPopularTvEnabled">TMDB Popular TV</label>
+                                <select id="DefaultTmdbPopularTvEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTopRatedMoviesEnabled">TMDB Top Rated Movies</label>
+                                <select id="DefaultTmdbTopRatedMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbTopRatedTvEnabled">TMDB Top Rated TV</label>
+                                <select id="DefaultTmdbTopRatedTvEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbNowPlayingMoviesEnabled">TMDB Now Playing Movies</label>
+                                <select id="DefaultTmdbNowPlayingMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbUpcomingMoviesEnabled">TMDB Upcoming Movies</label>
+                                <select id="DefaultTmdbUpcomingMoviesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbAiringTodayTvEnabled">TMDB Airing Today</label>
+                                <select id="DefaultTmdbAiringTodayTvEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbOnTheAirTvEnabled">TMDB On The Air</label>
+                                <select id="DefaultTmdbOnTheAirTvEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Seerr</h4>
                             <div class="inputContainer">
@@ -1676,6 +2341,79 @@
                                 <label class="inputLabel inputLabelUnfocused">Seerr Discovery Rows &amp; Order</label>
                                 <div class="fieldDescription">Enable rows to see on Seerr mainpage and use the arrows to set their order.</div>
                                 <div id="DefaultSeerrDiscoveryList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Calendar</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultEnableRadarrCalendar">Radarr Calendar</label>
+                                <select id="DefaultEnableRadarrCalendar" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultEnableSonarrCalendar">Sonarr Calendar</label>
+                                <select id="DefaultEnableSonarrCalendar" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMergeRadarrSonarrCalendars">Merge Radarr and Sonarr Calendars</label>
+                                <select id="DefaultMergeRadarrSonarrCalendars" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarShowCinema">Radarr: Show Cinema Releases</label>
+                                <select id="DefaultRadarrCalendarShowCinema" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarShowDigital">Radarr: Show Digital Releases</label>
+                                <select id="DefaultRadarrCalendarShowDigital" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarShowPhysical">Radarr: Show Physical Releases</label>
+                                <select id="DefaultRadarrCalendarShowPhysical" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarShowDate">Radarr: Show Release Date</label>
+                                <select id="DefaultRadarrCalendarShowDate" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarShowDate">Sonarr: Show Air Date</label>
+                                <select id="DefaultSonarrCalendarShowDate" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarShowEpisodeInfo">Sonarr: Show Episode Info</label>
+                                <select id="DefaultSonarrCalendarShowEpisodeInfo" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -2659,8 +3397,26 @@
                 { id: 'admin', label: 'Admin' }
             ];
 
-            function loadDetailButtonsPicker(order, hidden) {
-                var container = document.querySelector('#DefaultDetailButtonsList');
+            var OSD_BUTTONS = [
+                { id: 'syncPlay', label: 'SyncPlay' },
+                { id: 'favorite', label: 'Favorite' },
+                { id: 'speed', label: 'Playback Speed' },
+                { id: 'chapters', label: 'Chapters' },
+                { id: 'subtitles', label: 'Subtitles' },
+                { id: 'audio', label: 'Audio' },
+                { id: 'castAndCrew', label: 'Cast & Crew' },
+                { id: 'cast', label: 'Cast' },
+                { id: 'volume', label: 'Volume' },
+                { id: 'quality', label: 'Quality' },
+                { id: 'zoom', label: 'Zoom' },
+                { id: 'orientation', label: 'Orientation' },
+                { id: 'info', label: 'Info' },
+                { id: 'fullscreen', label: 'Fullscreen' },
+                { id: 'floatOnTop', label: 'Float on Top' }
+            ];
+
+            function loadButtonPicker(selector, buttons, order, hidden) {
+                var container = document.querySelector(selector);
                 if (!container) return;
                 var hiddenSet = {};
                 if (hidden && Array.isArray(hidden)) {
@@ -2682,7 +3438,7 @@
 
                 if (order && Array.isArray(order) && order.length > 0) {
                     order.forEach(function(id) {
-                        var btn = DETAIL_BUTTONS.find(function(b) { return b.id === id; });
+                        var btn = buttons.find(function(b) { return b.id === id; });
                         if (btn) {
                             ordered.push(entryFor(btn));
                             addedSet[btn.id] = true;
@@ -2690,7 +3446,7 @@
                     });
                 }
 
-                DETAIL_BUTTONS.forEach(function(btn) {
+                buttons.forEach(function(btn) {
                     if (!addedSet[btn.id]) {
                         ordered.push(entryFor(btn));
                     }
@@ -2728,8 +3484,8 @@
                 }
             }
 
-            function getDetailButtonsValue() {
-                var items = document.querySelectorAll('#DefaultDetailButtonsList .detailButtonItem');
+            function getButtonPickerValue(selector) {
+                var items = document.querySelectorAll(selector + ' .detailButtonItem');
                 var order = [];
                 var hidden = [];
                 items.forEach(function(item) {
@@ -2744,6 +3500,90 @@
                     order: order.length > 0 ? order : null,
                     hidden: hidden.length > 0 ? hidden : null
                 };
+            }
+
+
+            // Same order and wording as LibrarySortBy in Core. The two flagged
+            // sorts run through their own endpoint, so only the rows that read
+            // that endpoint offer them.
+            var LIBRARY_SORT_OPTIONS = [
+                ['playlistOrder', 'Playlist Order', true],
+                ['name', 'Name'],
+                ['dateAdded', 'Date Added'],
+                ['dateEpisodeAdded', 'Date Episode Added'],
+                ['premiereDate', 'Release Date'],
+                ['rating', 'Rating'],
+                ['runtime', 'Runtime'],
+                ['random', 'Random'],
+                ['criticRating', 'Critic Rating'],
+                ['communityRating', 'Community Rating'],
+                ['myRating', 'My Rating', true],
+                ['datePlayed', 'Last Played'],
+                ['playCount', 'Play Count'],
+                ['albumArtist', 'Album Artist'],
+                ['album', 'Album'],
+                ['artist', 'Artist'],
+                ['trackNumber', 'Number'],
+                ['genre', 'Genre'],
+                ['foldersFirst', 'Folders First']
+            ];
+
+            function fillSortSelect(selector, includeDedicated) {
+                var select = document.querySelector(selector);
+                if (!select || select.dataset.filled) return;
+                select.dataset.filled = 'true';
+                var html = '<option value="">Not set (user decides)</option>';
+                LIBRARY_SORT_OPTIONS.forEach(function(option) {
+                    if (option[2] && !includeDedicated) return;
+                    html += '<option value="' + esc(option[0]) + '">' + esc(option[1]) + '</option>';
+                });
+                select.innerHTML = html;
+            }
+
+            var SEGMENT_ACTIONS = [
+                ['doNothing', 'Do nothing'],
+                ['skip', 'Skip automatically'],
+                ['askToSkip', 'Ask before skipping']
+            ];
+
+            var SEGMENT_TYPES = ['intro', 'recap', 'preview', 'commercial', 'outro'];
+
+            function segmentActionSelector(type) {
+                return '#DefaultSegmentAction' + type.charAt(0).toUpperCase() + type.slice(1);
+            }
+
+            function loadSegmentActions(raw) {
+                var stored = {};
+                String(raw || '').split(',').forEach(function(part) {
+                    var pair = part.split(':');
+                    if (pair.length !== 2) return;
+                    var name = pair[0].trim().toLowerCase();
+                    if (name) stored[name] = pair[1].trim();
+                });
+                SEGMENT_TYPES.forEach(function(type) {
+                    var el = document.querySelector(segmentActionSelector(type));
+                    if (!el) return;
+                    if (!el.dataset.filled) {
+                        el.dataset.filled = 'true';
+                        var html = '<option value="">Not set (user decides)</option>';
+                        SEGMENT_ACTIONS.forEach(function(action) {
+                            html += '<option value="' + esc(action[0]) + '">' + esc(action[1]) + '</option>';
+                        });
+                        el.innerHTML = html;
+                    }
+                    el.value = stored[type] || '';
+                });
+            }
+
+            // Written in the order the clients write it, so a value that came
+            // from a client and goes back untouched is unchanged.
+            function getSegmentActionsValue() {
+                var parts = [];
+                SEGMENT_TYPES.forEach(function(type) {
+                    var el = document.querySelector(segmentActionSelector(type));
+                    if (el && el.value) parts.push(type + ':' + el.value);
+                });
+                return parts.length > 0 ? parts.join(',') : null;
             }
 
             var SEERR_DISCOVERY_ROWS = [
@@ -4358,7 +5198,7 @@
                     setSelectValue('#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
                     setNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
                     // One picker stands in for all three form factors.
-                    loadDetailButtonsPicker(
+                    loadButtonPicker('#DefaultDetailButtonsList', DETAIL_BUTTONS,
                         defaults.detailButtonOrderTv || defaults.detailButtonOrderMobile || defaults.detailButtonOrderDesktop || null,
                         defaults.hiddenDetailButtonsTv || defaults.hiddenDetailButtonsMobile || defaults.hiddenDetailButtonsDesktop || null);
                     setSelectValue('#DefaultFocusColor', defaults.focusColor, 'Configured color');
@@ -4377,6 +5217,7 @@
                     setNullableRangeInput('#DefaultThemeMusicVolume', defaults.themeMusicVolume, '%');
                     setSelectValue('#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
                     setNullableBoolSelect('#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
+                    setSelectValue('#DefaultScreensaverMode', defaults.screensaverMode, 'Configured mode');
 
                     setSelectValue('#DefaultNavbarPosition', defaults.navbarPosition, 'Configured position');
                     setSelectValue('#DefaultNavbarColor', defaults.navbarColor, 'Configured color');
@@ -4411,12 +5252,16 @@
                     setSelectValue('#DefaultHomeImageTypeContinueWatching', defaults.homeImageTypeContinueWatching, 'Configured image type');
                     setSelectValue('#DefaultPosterSize', defaults.posterSize, 'Configured size');
                     setNullableBoolSelect('#DefaultDisplayFavoritesRows', defaults.displayFavoritesRows);
+                    fillSortSelect('#DefaultFavoritesRowSortBy', false);
                     setSelectValue('#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
                     setNullableBoolSelect('#DefaultDisplayCollectionsRows', defaults.displayCollectionsRows);
+                    fillSortSelect('#DefaultCollectionsRowSortBy', true);
                     setSelectValue('#DefaultCollectionsRowSortBy', defaults.collectionsRowSortBy, 'Configured sort');
                     setNullableBoolSelect('#DefaultDisplayGenresRows', defaults.displayGenresRows);
+                    fillSortSelect('#DefaultGenresRowSortBy', false);
                     setSelectValue('#DefaultGenresRowSortBy', defaults.genresRowSortBy, 'Configured sort');
                     setNullableBoolSelect('#DefaultDisplayPlaylistsRows', defaults.displayPlaylistsRows);
+                    fillSortSelect('#DefaultPlaylistsRowSortBy', true);
                     setSelectValue('#DefaultPlaylistsRowSortBy', defaults.playlistsRowSortBy, 'Configured sort');
                     setNullableBoolSelect('#DefaultDisplayAudioRows', defaults.displayAudioRows);
                     setSelectValue('#DefaultAudioRowsSortBy', defaults.audioRowsSortBy, 'Configured sort');
@@ -4439,12 +5284,8 @@
                     setNullableBoolSelect('#DefaultShowShuffleButton', defaults.showShuffleButton);
                     setNullableBoolSelect('#DefaultShowGenresButton', defaults.showGenresButton);
                     setNullableBoolSelect('#DefaultShowFavoritesButton', defaults.showFavoritesButton);
-                    setCheckbox('#DefaultShowSyncPlayButton', defaults.showSyncPlayButton);
+                    setNullableBoolSelect('#DefaultShowSyncPlayButton', defaults.showSyncPlayButton);
                     setNullableBoolSelect('#DefaultShowLibrariesInToolbar', defaults.showLibrariesInToolbar);
-
-                    setNullableBoolSelect('#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
-                    setNullableBoolSelect('#DefaultEpisodePreviewEnabled', defaults.episodePreviewEnabled);
-                    setNullableBoolSelect('#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
 
                     setSelectValue('#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
                     setSelectValue('#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
@@ -4465,6 +5306,11 @@
                     setNullableBoolSelect('#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
                     setSelectValue('#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
                     setSelectValue('#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
+                    loadSegmentActions(defaults.mediaSegmentActions);
+                    setSelectValue('#DefaultMediaSegmentCountdown', defaults.mediaSegmentCountdown, 'Configured countdown');
+                    setSelectValue('#DefaultMediaSegmentAutoHide', defaults.mediaSegmentAutoHide, 'Configured timeout');
+                    setNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp', defaults.replaceSkipOutroWithNextUp);
+                    setNullableBoolSelect('#DefaultCinemaModeEpisodesEnabled', defaults.cinemaModeEpisodesEnabled);
 
                     setCheckbox('#DefaultMdblistEnabled', defaults.mdblistEnabled);
                     setCheckbox('#DefaultTmdbEpisodeRatingsEnabled', defaults.tmdbEpisodeRatingsEnabled);
@@ -4474,6 +5320,92 @@
                     setNullableBoolSelect('#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
                     var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
                     loadSeerrDiscoveryPicker(seerrPicker.order, seerrPicker.hidden);
+
+                    setNullableBoolSelect('#DefaultConfirmExit', defaults.confirmExit);
+                    setNullableBoolSelect('#DefaultUpdateNotificationsEnabled', defaults.updateNotificationsEnabled);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescription', defaults.hideDetailsMediaDescription);
+                    setNullableBoolSelect('#DefaultDetailTrailersExternal', defaults.detailTrailersExternal);
+                    setNullableBoolSelect('#DefaultDetailUseSeriesThumbnails', defaults.detailUseSeriesThumbnails);
+                    setNullableBoolSelect('#DefaultPersonPageGroupItems', defaults.personPageGroupItems);
+                    setNullableBoolSelect('#DefaultHomeRowsImageTypeOverride', defaults.homeRowsImageTypeOverride);
+                    setNullableBoolSelect('#DefaultHideHomeMediaDescription', defaults.hideHomeMediaDescription);
+                    setNullableBoolSelect('#DefaultCollectionsRowShowEpisodes', defaults.collectionsRowShowEpisodes);
+                    setNullableBoolSelect('#DefaultPlaylistsRowShowEpisodes', defaults.playlistsRowShowEpisodes);
+                    setNullableBoolSelect('#DefaultDisplayStudiosRows', defaults.displayStudiosRows);
+                    setNullableBoolSelect('#DefaultRewatchIncludeMovies', defaults.rewatchIncludeMovies);
+                    setNullableBoolSelect('#DefaultRewatchIncludeShows', defaults.rewatchIncludeShows);
+                    setNullableBoolSelect('#DefaultRewatchIncludeCollections', defaults.rewatchIncludeCollections);
+                    setNullableBoolSelect('#DefaultSinceYouWatchedIncludeWatched', defaults.sinceYouWatchedIncludeWatched);
+                    setNullableBoolSelect('#DefaultSinceYouWatched1Enabled', defaults.sinceYouWatched1Enabled);
+                    setNullableBoolSelect('#DefaultSinceYouWatched2Enabled', defaults.sinceYouWatched2Enabled);
+                    setNullableBoolSelect('#DefaultSinceYouWatched3Enabled', defaults.sinceYouWatched3Enabled);
+                    setNullableBoolSelect('#DefaultSinceYouWatched4Enabled', defaults.sinceYouWatched4Enabled);
+                    setNullableBoolSelect('#DefaultSinceYouWatched5Enabled', defaults.sinceYouWatched5Enabled);
+                    setNullableBoolSelect('#DefaultDisplayAudioLatest', defaults.displayAudioLatest);
+                    setNullableBoolSelect('#DefaultDisplayAudioLastPlayed', defaults.displayAudioLastPlayed);
+                    setNullableBoolSelect('#DefaultDisplayAudioFavorites', defaults.displayAudioFavorites);
+                    setNullableBoolSelect('#DefaultDisplayAudioPlaylists', defaults.displayAudioPlaylists);
+                    setNullableBoolSelect('#DefaultDisplayAudioAlbumArtists', defaults.displayAudioAlbumArtists);
+                    setNullableBoolSelect('#DefaultDisplayAudioArtists', defaults.displayAudioArtists);
+                    setNullableBoolSelect('#DefaultDisplayAudioAlbums', defaults.displayAudioAlbums);
+                    setNullableBoolSelect('#DefaultImdbTop250MoviesEnabled', defaults.imdbTop250MoviesEnabled);
+                    setNullableBoolSelect('#DefaultImdbTop250TvShowsEnabled', defaults.imdbTop250TvShowsEnabled);
+                    setNullableBoolSelect('#DefaultImdbMostPopularMoviesEnabled', defaults.imdbMostPopularMoviesEnabled);
+                    setNullableBoolSelect('#DefaultImdbMostPopularTvShowsEnabled', defaults.imdbMostPopularTvShowsEnabled);
+                    setNullableBoolSelect('#DefaultImdbTopEnglishMoviesEnabled', defaults.imdbTopEnglishMoviesEnabled);
+                    setNullableBoolSelect('#DefaultImdbLowestRatedMoviesEnabled', defaults.imdbLowestRatedMoviesEnabled);
+                    setNullableBoolSelect('#DefaultTmdbTrendingAllWeeklyEnabled', defaults.tmdbTrendingAllWeeklyEnabled);
+                    setNullableBoolSelect('#DefaultTmdbTrendingMovieDailyEnabled', defaults.tmdbTrendingMovieDailyEnabled);
+                    setNullableBoolSelect('#DefaultTmdbTrendingMovieWeeklyEnabled', defaults.tmdbTrendingMovieWeeklyEnabled);
+                    setNullableBoolSelect('#DefaultTmdbTrendingTvDailyEnabled', defaults.tmdbTrendingTvDailyEnabled);
+                    setNullableBoolSelect('#DefaultTmdbTrendingTvWeeklyEnabled', defaults.tmdbTrendingTvWeeklyEnabled);
+                    setNullableBoolSelect('#DefaultTmdbPopularMoviesEnabled', defaults.tmdbPopularMoviesEnabled);
+                    setNullableBoolSelect('#DefaultTmdbPopularTvEnabled', defaults.tmdbPopularTvEnabled);
+                    setNullableBoolSelect('#DefaultTmdbTopRatedMoviesEnabled', defaults.tmdbTopRatedMoviesEnabled);
+                    setNullableBoolSelect('#DefaultTmdbTopRatedTvEnabled', defaults.tmdbTopRatedTvEnabled);
+                    setNullableBoolSelect('#DefaultTmdbNowPlayingMoviesEnabled', defaults.tmdbNowPlayingMoviesEnabled);
+                    setNullableBoolSelect('#DefaultTmdbUpcomingMoviesEnabled', defaults.tmdbUpcomingMoviesEnabled);
+                    setNullableBoolSelect('#DefaultTmdbAiringTodayTvEnabled', defaults.tmdbAiringTodayTvEnabled);
+                    setNullableBoolSelect('#DefaultTmdbOnTheAirTvEnabled', defaults.tmdbOnTheAirTvEnabled);
+                    setNullableBoolSelect('#DefaultEnableRadarrCalendar', defaults.enableRadarrCalendar);
+                    setNullableBoolSelect('#DefaultEnableSonarrCalendar', defaults.enableSonarrCalendar);
+                    setNullableBoolSelect('#DefaultMergeRadarrSonarrCalendars', defaults.mergeRadarrSonarrCalendars);
+                    setNullableBoolSelect('#DefaultRadarrCalendarShowCinema', defaults.radarrCalendarShowCinema);
+                    setNullableBoolSelect('#DefaultRadarrCalendarShowDigital', defaults.radarrCalendarShowDigital);
+                    setNullableBoolSelect('#DefaultRadarrCalendarShowPhysical', defaults.radarrCalendarShowPhysical);
+                    setNullableBoolSelect('#DefaultRadarrCalendarShowDate', defaults.radarrCalendarShowDate);
+                    setNullableBoolSelect('#DefaultSonarrCalendarShowDate', defaults.sonarrCalendarShowDate);
+                    setNullableBoolSelect('#DefaultSonarrCalendarShowEpisodeInfo', defaults.sonarrCalendarShowEpisodeInfo);
+                    setSelectValue('#DefaultPersonalRatingStyle', defaults.personalRatingStyle, 'Configured style');
+                    setSelectValue('#DefaultPersonPageSortOption', defaults.personPageSortOption, 'Configured sort');
+                    setSelectValue('#DefaultShuffleContentType', defaults.shuffleContentType, 'Configured content');
+                    setSelectValue('#DefaultHomeRowsImageType', defaults.homeRowsImageType, 'Configured image type');
+                    setSelectValue('#DefaultMediaTypeBadgeBehavior', defaults.mediaTypeBadgeBehavior, 'Configured behavior');
+                    setSelectValue('#DefaultAudioRowsSortOrder', defaults.audioRowsSortOrder, 'Configured direction');
+                    setSelectValue('#DefaultCollectionsRowSortOrder', defaults.collectionsRowSortOrder, 'Configured direction');
+                    setSelectValue('#DefaultFavoritesRowSortOrder', defaults.favoritesRowSortOrder, 'Configured direction');
+                    setSelectValue('#DefaultGenresRowSortOrder', defaults.genresRowSortOrder, 'Configured direction');
+                    setSelectValue('#DefaultGenresRowItemFilter', defaults.genresRowItemFilter, 'Configured content');
+                    setSelectValue('#DefaultPlaylistsRowSortOrder', defaults.playlistsRowSortOrder, 'Configured direction');
+                    fillSortSelect('#DefaultStudiosRowSortBy', false);
+                    setSelectValue('#DefaultStudiosRowSortBy', defaults.studiosRowSortBy, 'Configured sort');
+                    setSelectValue('#DefaultStudiosRowSortOrder', defaults.studiosRowSortOrder, 'Configured direction');
+                    setSelectValue('#DefaultSinceYouWatchedSource', defaults.sinceYouWatchedSource, 'Configured source');
+                    setSelectValue('#DefaultSinceYouWatchedSourceType', defaults.sinceYouWatchedSourceType, 'Configured content');
+                    setSelectValue('#DefaultSinceYouWatchedSourceItem', defaults.sinceYouWatchedSourceItem, 'Configured source');
+                    setSelectValue('#DefaultLibraryPosterSize', defaults.libraryPosterSize, 'Configured size');
+                    setSelectValue('#DefaultPlaylistPosterSize', defaults.playlistPosterSize, 'Configured size');
+                    setSelectValue('#DefaultFavoritesViewStyle', defaults.favoritesViewStyle, 'Configured view');
+                    setSelectValue('#DefaultAllGenresImageType', defaults.allGenresImageType, 'Configured image type');
+                    setSelectValue('#DefaultAudioSortOption', defaults.audioSortOption, 'Configured sort');
+                    setSelectValue('#DefaultLiveTvChannelSortBy', defaults.liveTvChannelSortBy, 'Configured sort');
+                    setSelectValue('#DefaultEpgMobileView', defaults.epgMobileView, 'Configured view');
+                    setSelectValue('#DefaultMediaBarOverlayColor', defaults.mediaBarOverlayColor, 'Configured color');
+                    bindNullableRangeInput('#DefaultMediaBarOpacity', '%');
+                    setNullableRangeInput('#DefaultMediaBarOpacity', defaults.mediaBarOpacity, '%');
+                    loadButtonPicker('#DefaultOsdButtonsList', OSD_BUTTONS,
+                        defaults.osdButtonOrderTv || defaults.osdButtonOrderMobile || defaults.osdButtonOrderDesktop || null,
+                        defaults.hiddenOsdButtonsTv || defaults.hiddenOsdButtonsMobile || defaults.hiddenOsdButtonsDesktop || null);
 
                     var sourceSelect = document.querySelector('#DefaultMediaBarSourceType');
                     var collectionPickerSection = document.querySelector('#DefaultCollectionPickerSection');
@@ -4740,7 +5672,7 @@
                         config.DefaultUserSettings.recommendationSystemSource = document.querySelector('#DefaultRecommendationSystemSource').value || null;
                         config.DefaultUserSettings.recommendationsApplyParentalRatingCap = getNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap');
                         // Clients read a different key per form factor, so one arrangement covers all three.
-                        var btnVal = getDetailButtonsValue();
+                        var btnVal = getButtonPickerValue('#DefaultDetailButtonsList');
                         config.DefaultUserSettings.detailButtonOrderTv = btnVal.order;
                         config.DefaultUserSettings.detailButtonOrderMobile = btnVal.order;
                         config.DefaultUserSettings.detailButtonOrderDesktop = btnVal.order;
@@ -4760,6 +5692,7 @@
                         config.DefaultUserSettings.themeMusicVolume = getNullableRangeInput('#DefaultThemeMusicVolume');
                         config.DefaultUserSettings.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
                         config.DefaultUserSettings.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
+                        config.DefaultUserSettings.screensaverMode = document.querySelector('#DefaultScreensaverMode').value || null;
 
                         config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
                         config.DefaultUserSettings.navbarColor = document.querySelector('#DefaultNavbarColor').value || null;
@@ -4780,6 +5713,7 @@
                         config.DefaultUserSettings.mediaBarContentType = document.querySelector('#DefaultMediaBarContentType').value || null;
                         config.DefaultUserSettings.mediaBarItemCount = getNullableIntInput('#DefaultMediaBarItemCount');
                         config.DefaultUserSettings.mediaBarAutoAdvance = getNullableBoolSelect('#DefaultMediaBarAutoAdvance');
+                        config.DefaultUserSettings.mediaBarIntervalMs = getNullableIntInput('#DefaultMediaBarIntervalMs');
                         config.DefaultUserSettings.mediaBarTrailerPreview = getNullableBoolSelect('#DefaultMediaBarTrailerPreview');
                         config.DefaultUserSettings.mediaBarTrailerAudio = getNullableBoolSelect('#DefaultMediaBarTrailerAudio');
                         config.DefaultUserSettings.mediaBarTrailerCaptions = getNullableBoolSelect('#DefaultMediaBarTrailerCaptions');
@@ -4805,6 +5739,11 @@
                         config.DefaultUserSettings.autoplayNextEpisode = getNullableBoolSelect('#DefaultAutoplayNextEpisode');
                         config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
                         config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;
+                        config.DefaultUserSettings.mediaSegmentActions = getSegmentActionsValue();
+                        config.DefaultUserSettings.mediaSegmentCountdown = document.querySelector('#DefaultMediaSegmentCountdown').value || null;
+                        config.DefaultUserSettings.mediaSegmentAutoHide = document.querySelector('#DefaultMediaSegmentAutoHide').value || null;
+                        config.DefaultUserSettings.replaceSkipOutroWithNextUp = getNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp');
+                        config.DefaultUserSettings.cinemaModeEpisodesEnabled = getNullableBoolSelect('#DefaultCinemaModeEpisodesEnabled');
 
                         if (document.querySelector('#DefaultCollectionPicker .adminCollectionCb') != null) {
                             var collectionCbs = document.querySelectorAll('#DefaultCollectionPicker .adminCollectionCb:checked');
@@ -4870,12 +5809,8 @@
                         config.DefaultUserSettings.showShuffleButton = getNullableBoolSelect('#DefaultShowShuffleButton');
                         config.DefaultUserSettings.showGenresButton = getNullableBoolSelect('#DefaultShowGenresButton');
                         config.DefaultUserSettings.showFavoritesButton = getNullableBoolSelect('#DefaultShowFavoritesButton');
-                        config.DefaultUserSettings.showSyncPlayButton = getCheckbox('#DefaultShowSyncPlayButton');
+                        config.DefaultUserSettings.showSyncPlayButton = getNullableBoolSelect('#DefaultShowSyncPlayButton');
                         config.DefaultUserSettings.showLibrariesInToolbar = getNullableBoolSelect('#DefaultShowLibrariesInToolbar');
-
-                        config.DefaultUserSettings.mediaBarTrailerPreview = getNullableBoolSelect('#DefaultMediaBarTrailerPreview');
-                        config.DefaultUserSettings.episodePreviewEnabled = getNullableBoolSelect('#DefaultEpisodePreviewEnabled');
-                        config.DefaultUserSettings.previewAudioEnabled = getNullableBoolSelect('#DefaultPreviewAudioEnabled');
                         config.DefaultUserSettings.mdblistEnabled = getCheckbox('#DefaultMdblistEnabled');
                         config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = getCheckbox('#DefaultTmdbEpisodeRatingsEnabled');
                         config.DefaultUserSettings.mdblistShowRatingBadges = getNullableBoolSelect('#DefaultMdblistShowRatingBadges');
@@ -4886,6 +5821,94 @@
                         var seerrRows = Object.assign({}, config.DefaultUserSettings.seerrRows || {});
                         seerrRows.rowOrder = getSeerrDiscoveryRowOrder();
                         config.DefaultUserSettings.seerrRows = seerrRows;
+
+                        config.DefaultUserSettings.confirmExit = getNullableBoolSelect('#DefaultConfirmExit');
+                        config.DefaultUserSettings.updateNotificationsEnabled = getNullableBoolSelect('#DefaultUpdateNotificationsEnabled');
+                        config.DefaultUserSettings.hideDetailsMediaDescription = getNullableBoolSelect('#DefaultHideDetailsMediaDescription');
+                        config.DefaultUserSettings.detailTrailersExternal = getNullableBoolSelect('#DefaultDetailTrailersExternal');
+                        config.DefaultUserSettings.detailUseSeriesThumbnails = getNullableBoolSelect('#DefaultDetailUseSeriesThumbnails');
+                        config.DefaultUserSettings.personPageGroupItems = getNullableBoolSelect('#DefaultPersonPageGroupItems');
+                        config.DefaultUserSettings.homeRowsImageTypeOverride = getNullableBoolSelect('#DefaultHomeRowsImageTypeOverride');
+                        config.DefaultUserSettings.hideHomeMediaDescription = getNullableBoolSelect('#DefaultHideHomeMediaDescription');
+                        config.DefaultUserSettings.collectionsRowShowEpisodes = getNullableBoolSelect('#DefaultCollectionsRowShowEpisodes');
+                        config.DefaultUserSettings.playlistsRowShowEpisodes = getNullableBoolSelect('#DefaultPlaylistsRowShowEpisodes');
+                        config.DefaultUserSettings.displayStudiosRows = getNullableBoolSelect('#DefaultDisplayStudiosRows');
+                        config.DefaultUserSettings.rewatchIncludeMovies = getNullableBoolSelect('#DefaultRewatchIncludeMovies');
+                        config.DefaultUserSettings.rewatchIncludeShows = getNullableBoolSelect('#DefaultRewatchIncludeShows');
+                        config.DefaultUserSettings.rewatchIncludeCollections = getNullableBoolSelect('#DefaultRewatchIncludeCollections');
+                        config.DefaultUserSettings.sinceYouWatchedIncludeWatched = getNullableBoolSelect('#DefaultSinceYouWatchedIncludeWatched');
+                        config.DefaultUserSettings.sinceYouWatched1Enabled = getNullableBoolSelect('#DefaultSinceYouWatched1Enabled');
+                        config.DefaultUserSettings.sinceYouWatched2Enabled = getNullableBoolSelect('#DefaultSinceYouWatched2Enabled');
+                        config.DefaultUserSettings.sinceYouWatched3Enabled = getNullableBoolSelect('#DefaultSinceYouWatched3Enabled');
+                        config.DefaultUserSettings.sinceYouWatched4Enabled = getNullableBoolSelect('#DefaultSinceYouWatched4Enabled');
+                        config.DefaultUserSettings.sinceYouWatched5Enabled = getNullableBoolSelect('#DefaultSinceYouWatched5Enabled');
+                        config.DefaultUserSettings.displayAudioLatest = getNullableBoolSelect('#DefaultDisplayAudioLatest');
+                        config.DefaultUserSettings.displayAudioLastPlayed = getNullableBoolSelect('#DefaultDisplayAudioLastPlayed');
+                        config.DefaultUserSettings.displayAudioFavorites = getNullableBoolSelect('#DefaultDisplayAudioFavorites');
+                        config.DefaultUserSettings.displayAudioPlaylists = getNullableBoolSelect('#DefaultDisplayAudioPlaylists');
+                        config.DefaultUserSettings.displayAudioAlbumArtists = getNullableBoolSelect('#DefaultDisplayAudioAlbumArtists');
+                        config.DefaultUserSettings.displayAudioArtists = getNullableBoolSelect('#DefaultDisplayAudioArtists');
+                        config.DefaultUserSettings.displayAudioAlbums = getNullableBoolSelect('#DefaultDisplayAudioAlbums');
+                        config.DefaultUserSettings.imdbTop250MoviesEnabled = getNullableBoolSelect('#DefaultImdbTop250MoviesEnabled');
+                        config.DefaultUserSettings.imdbTop250TvShowsEnabled = getNullableBoolSelect('#DefaultImdbTop250TvShowsEnabled');
+                        config.DefaultUserSettings.imdbMostPopularMoviesEnabled = getNullableBoolSelect('#DefaultImdbMostPopularMoviesEnabled');
+                        config.DefaultUserSettings.imdbMostPopularTvShowsEnabled = getNullableBoolSelect('#DefaultImdbMostPopularTvShowsEnabled');
+                        config.DefaultUserSettings.imdbTopEnglishMoviesEnabled = getNullableBoolSelect('#DefaultImdbTopEnglishMoviesEnabled');
+                        config.DefaultUserSettings.imdbLowestRatedMoviesEnabled = getNullableBoolSelect('#DefaultImdbLowestRatedMoviesEnabled');
+                        config.DefaultUserSettings.tmdbTrendingAllWeeklyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingAllWeeklyEnabled');
+                        config.DefaultUserSettings.tmdbTrendingMovieDailyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingMovieDailyEnabled');
+                        config.DefaultUserSettings.tmdbTrendingMovieWeeklyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingMovieWeeklyEnabled');
+                        config.DefaultUserSettings.tmdbTrendingTvDailyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingTvDailyEnabled');
+                        config.DefaultUserSettings.tmdbTrendingTvWeeklyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingTvWeeklyEnabled');
+                        config.DefaultUserSettings.tmdbPopularMoviesEnabled = getNullableBoolSelect('#DefaultTmdbPopularMoviesEnabled');
+                        config.DefaultUserSettings.tmdbPopularTvEnabled = getNullableBoolSelect('#DefaultTmdbPopularTvEnabled');
+                        config.DefaultUserSettings.tmdbTopRatedMoviesEnabled = getNullableBoolSelect('#DefaultTmdbTopRatedMoviesEnabled');
+                        config.DefaultUserSettings.tmdbTopRatedTvEnabled = getNullableBoolSelect('#DefaultTmdbTopRatedTvEnabled');
+                        config.DefaultUserSettings.tmdbNowPlayingMoviesEnabled = getNullableBoolSelect('#DefaultTmdbNowPlayingMoviesEnabled');
+                        config.DefaultUserSettings.tmdbUpcomingMoviesEnabled = getNullableBoolSelect('#DefaultTmdbUpcomingMoviesEnabled');
+                        config.DefaultUserSettings.tmdbAiringTodayTvEnabled = getNullableBoolSelect('#DefaultTmdbAiringTodayTvEnabled');
+                        config.DefaultUserSettings.tmdbOnTheAirTvEnabled = getNullableBoolSelect('#DefaultTmdbOnTheAirTvEnabled');
+                        config.DefaultUserSettings.enableRadarrCalendar = getNullableBoolSelect('#DefaultEnableRadarrCalendar');
+                        config.DefaultUserSettings.enableSonarrCalendar = getNullableBoolSelect('#DefaultEnableSonarrCalendar');
+                        config.DefaultUserSettings.mergeRadarrSonarrCalendars = getNullableBoolSelect('#DefaultMergeRadarrSonarrCalendars');
+                        config.DefaultUserSettings.radarrCalendarShowCinema = getNullableBoolSelect('#DefaultRadarrCalendarShowCinema');
+                        config.DefaultUserSettings.radarrCalendarShowDigital = getNullableBoolSelect('#DefaultRadarrCalendarShowDigital');
+                        config.DefaultUserSettings.radarrCalendarShowPhysical = getNullableBoolSelect('#DefaultRadarrCalendarShowPhysical');
+                        config.DefaultUserSettings.radarrCalendarShowDate = getNullableBoolSelect('#DefaultRadarrCalendarShowDate');
+                        config.DefaultUserSettings.sonarrCalendarShowDate = getNullableBoolSelect('#DefaultSonarrCalendarShowDate');
+                        config.DefaultUserSettings.sonarrCalendarShowEpisodeInfo = getNullableBoolSelect('#DefaultSonarrCalendarShowEpisodeInfo');
+                        config.DefaultUserSettings.personalRatingStyle = document.querySelector('#DefaultPersonalRatingStyle').value || null;
+                        config.DefaultUserSettings.personPageSortOption = document.querySelector('#DefaultPersonPageSortOption').value || null;
+                        config.DefaultUserSettings.shuffleContentType = document.querySelector('#DefaultShuffleContentType').value || null;
+                        config.DefaultUserSettings.homeRowsImageType = document.querySelector('#DefaultHomeRowsImageType').value || null;
+                        config.DefaultUserSettings.mediaTypeBadgeBehavior = document.querySelector('#DefaultMediaTypeBadgeBehavior').value || null;
+                        config.DefaultUserSettings.audioRowsSortOrder = document.querySelector('#DefaultAudioRowsSortOrder').value || null;
+                        config.DefaultUserSettings.collectionsRowSortOrder = document.querySelector('#DefaultCollectionsRowSortOrder').value || null;
+                        config.DefaultUserSettings.favoritesRowSortOrder = document.querySelector('#DefaultFavoritesRowSortOrder').value || null;
+                        config.DefaultUserSettings.genresRowSortOrder = document.querySelector('#DefaultGenresRowSortOrder').value || null;
+                        config.DefaultUserSettings.genresRowItemFilter = document.querySelector('#DefaultGenresRowItemFilter').value || null;
+                        config.DefaultUserSettings.playlistsRowSortOrder = document.querySelector('#DefaultPlaylistsRowSortOrder').value || null;
+                        config.DefaultUserSettings.studiosRowSortBy = document.querySelector('#DefaultStudiosRowSortBy').value || null;
+                        config.DefaultUserSettings.studiosRowSortOrder = document.querySelector('#DefaultStudiosRowSortOrder').value || null;
+                        config.DefaultUserSettings.sinceYouWatchedSource = document.querySelector('#DefaultSinceYouWatchedSource').value || null;
+                        config.DefaultUserSettings.sinceYouWatchedSourceType = document.querySelector('#DefaultSinceYouWatchedSourceType').value || null;
+                        config.DefaultUserSettings.sinceYouWatchedSourceItem = document.querySelector('#DefaultSinceYouWatchedSourceItem').value || null;
+                        config.DefaultUserSettings.libraryPosterSize = document.querySelector('#DefaultLibraryPosterSize').value || null;
+                        config.DefaultUserSettings.playlistPosterSize = document.querySelector('#DefaultPlaylistPosterSize').value || null;
+                        config.DefaultUserSettings.favoritesViewStyle = document.querySelector('#DefaultFavoritesViewStyle').value || null;
+                        config.DefaultUserSettings.allGenresImageType = document.querySelector('#DefaultAllGenresImageType').value || null;
+                        config.DefaultUserSettings.audioSortOption = document.querySelector('#DefaultAudioSortOption').value || null;
+                        config.DefaultUserSettings.liveTvChannelSortBy = document.querySelector('#DefaultLiveTvChannelSortBy').value || null;
+                        config.DefaultUserSettings.epgMobileView = document.querySelector('#DefaultEpgMobileView').value || null;
+                        config.DefaultUserSettings.mediaBarOverlayColor = document.querySelector('#DefaultMediaBarOverlayColor').value || null;
+                        config.DefaultUserSettings.mediaBarOpacity = getNullableRangeInput('#DefaultMediaBarOpacity');
+                        var osdVal = getButtonPickerValue('#DefaultOsdButtonsList');
+                        config.DefaultUserSettings.osdButtonOrderTv = osdVal.order;
+                        config.DefaultUserSettings.osdButtonOrderMobile = osdVal.order;
+                        config.DefaultUserSettings.osdButtonOrderDesktop = osdVal.order;
+                        config.DefaultUserSettings.hiddenOsdButtonsTv = osdVal.hidden;
+                        config.DefaultUserSettings.hiddenOsdButtonsMobile = osdVal.hidden;
+                        config.DefaultUserSettings.hiddenOsdButtonsDesktop = osdVal.hidden;
 
                         return ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
