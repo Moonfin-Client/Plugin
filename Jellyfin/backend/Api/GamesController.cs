@@ -166,7 +166,7 @@ public class GamesController : ControllerBase
         SystemPreviews = true,
     });
 
-    /// <summary>Returns the locally cataloged state for one system without scheduling provider work.</summary>
+    /// <summary>Returns one system's locally cataloged artwork state without scheduling provider work.</summary>
     [HttpGet("{libraryId}/ArtworkManifest")]
     [Authorize]
     [Produces(MediaTypeNames.Application.Json)]
@@ -293,7 +293,7 @@ public class GamesController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Serves exactly one authenticated, versioned, local artwork artifact.</summary>
+    /// <summary>Serves one revisioned local artwork artifact without changing catalog or queue state.</summary>
     [HttpGet("{libraryId}/Artwork/{gameId}/{role}/{revision}")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -306,6 +306,11 @@ public class GamesController : ControllerBase
         CancellationToken cancellationToken)
     {
         if (!GamesEnabled())
+        {
+            return ArtworkNotFound(confirmedMissing: false);
+        }
+
+        if (!IsArtworkRole(role))
         {
             return ArtworkNotFound(confirmedMissing: false);
         }

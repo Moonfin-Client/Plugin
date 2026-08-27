@@ -57,6 +57,7 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override void UpdateConfiguration(BasePluginConfiguration configuration)
     {
         var previousUrl = Configuration.PublicServerUrl;
+        var previousGameLibraryIds = Configuration.GameLibraryIds?.ToList() ?? new List<string>();
         base.UpdateConfiguration(configuration);
 
         // Re-provision the Seerr webhook when the public URL changes, so the new URL is
@@ -69,6 +70,27 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
             if (provisioning != null)
             {
                 _ = provisioning.EnsureWebhookAsync(default);
+            }
+        }
+
+        // Re-watch and re-scan the ROM roots when the selected game libraries change, so a newly
+        // picked library's games acquire artwork without waiting for a scheduled scan or a restart.
+        // GameArtworkReconciliationService is registered as a concrete singleton and reused as the
+        // hosted service (see PluginServiceRegistrator), so this resolves the running instance.
+        var newGameLibraryIds = Configuration.GameLibraryIds ?? new List<string>();
+        if (!previousGameLibraryIds.OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+                .SequenceEqual(newGameLibraryIds.OrderBy(id => id, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                ServiceProvider?.GetService<GameArtworkReconciliationService>()?.OnGameLibrariesChanged();
+            }
+            catch (Exception)
+            {
+                // Saving the configuration must succeed even if reconciliation cannot be signalled;
+                // the next scheduled scan or restart still picks the change up. There is no logger
+                // on the plugin instance, and the signal itself only sets a semaphore, so there is
+                // nothing here worth taking the config-save request path down for.
             }
         }
     }

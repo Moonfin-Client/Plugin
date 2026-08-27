@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using System.Net.Http;
 using Microsoft.Extensions.Logging;
 using Moonfin.Server.Services;
@@ -150,6 +151,54 @@ public class GameArtworkStoreTests : IDisposable
         Assert.Equal(1, handler.RequestCount);
     }
 
+    // ---- Candidate budget: the fallbacks must survive a maximum-sized RDB match ---------------
+    //
+    // MatchWithSiblings returns the primary plus up to MaxSiblingArtworkNamesPerRequest siblings,
+    // so a densely-catalogued title contributes 7 asserted names -- and with the 2 fallbacks that
+    // is exactly the 9-probe budget. This guards that equality: lowering the budget, or adding a
+    // candidate pass in front of the fallbacks (a `~` -> `-` spelling guess was tried and removed),
+    // starves the fallbacks and records a terminal Missing for artwork that exists.
+    [Fact]
+    public async Task Lookup_MaximumSiblingSet_StillProbesTheFilenameAndTitleFallbacks()
+    {
+        // The ROM is identified by CRC, so neither its file name nor its title collides with any
+        // RDB name: 7 asserted names + 2 distinct fallbacks is the full 9-candidate worst case.
+        var romBytes = new byte[] { 4, 8, 15, 16, 23, 42 };
+        var records = new List<(string Name, uint Crc)> { ("Maze Craze (USA)", Crc32(romBytes)) };
+        var siblingRegions = new[] { "USA, Europe", "Europe", "Japan", "World", "Brazil", "Korea", "Proto", "Taiwan", "France", "Germany" };
+        for (var i = 0; i < siblingRegions.Length; i++)
+        {
+            records.Add(($"Maze Craze ~ A Game of Cops n Robbers ({siblingRegions[i]})", (uint)(0x22222222u + i)));
+        }
+
+        var handler = new FakeHttpMessageHandler();
+
+        // Every asserted name and the filename fallback 404. The handler throws on any unregistered
+        // URL, so a candidate pass inserted ahead of the fallbacks fails loudly here.
+        foreach (var (name, _) in records)
+        {
+            handler.SetResponse(ThumbUrl(Platform, name), HttpStatusCode.NotFound, new ByteArrayContent([]));
+        }
+
+        handler.SetResponse(ThumbUrl(Platform, "Unmatched Dump 01"), HttpStatusCode.NotFound, new ByteArrayContent([]));
+        handler.SetResponse(ThumbUrl(Platform, "Unmatched Dump Title"), HttpStatusCode.OK, new ByteArrayContent(new byte[64]));
+
+        var store = CreateRdbBackedStore(handler, records, romFileName: "Unmatched Dump 01.sms", romBytes: romBytes);
+
+        var result = await store.LookupThumbAsync(
+            core: "segaMS",
+            coreWasDefaulted: false,
+            systemName: "Sega Master System",
+            romPath: Path.Combine(_root, "Unmatched Dump 01.sms"),
+            title: "Unmatched Dump Title",
+            kind: GameThumbService.ThumbKind.Boxart,
+            cancellationToken: CancellationToken.None);
+
+        // The title fallback is the 9th and last candidate: it must still be probed.
+        Assert.Equal(9, handler.RequestCount);
+        Assert.Equal(GameArtworkLookupOutcome.Found, result.Outcome);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
@@ -282,6 +331,8 @@ public class GameArtworkStoreTests : IDisposable
 
         public int RequestCount => Volatile.Read(ref _requestCount);
 
+        public List<string> Requested { get; } = new();
+
         public void SetResponse(string url, HttpStatusCode status, HttpContent content) =>
             _responses[url] = (status, content);
 
@@ -289,6 +340,10 @@ public class GameArtworkStoreTests : IDisposable
         {
             var url = request.RequestUri!.ToString();
             Interlocked.Increment(ref _requestCount);
+            lock (Requested)
+            {
+                Requested.Add(url);
+            }
 
             if (!_responses.TryGetValue(url, out var response))
             {
@@ -299,4 +354,92 @@ public class GameArtworkStoreTests : IDisposable
         }
     }
 
+
+    // Builds a store over a real, locally-present .rdb so the full RDB name-resolution path runs
+    // (MatchWithSiblings included) rather than the short-circuit the other tests here rely on.
+    // GamesMetadataDbUrlBase is empty: the file is already on disk, so nothing downloads.
+    private GameArtworkStore CreateRdbBackedStore(
+        FakeHttpMessageHandler handler,
+        IReadOnlyList<(string Name, uint Crc)> records,
+        string romFileName,
+        byte[]? romBytes = null)
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllBytes(Path.Combine(_root, romFileName), romBytes ?? [9, 9, 9, 9]);
+        WriteMinimalRdb(Path.Combine(_root, "gamemeta", Platform + ".rdb"), records);
+
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration
+            {
+                GamesMetadataDbUrlBase = string.Empty,
+            },
+        };
+
+        return new GameArtworkStore(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameArtworkStore>(),
+            rdb,
+            _root);
+    }
+
+    // Minimal libretro .rdb writer: 8-byte magic, 8-byte metadata offset, then one MessagePack
+    // fixmap per game with "name" and "crc". Mirrors RdbServiceTests' fixture writer.
+    private static void WriteMinimalRdb(string path, IReadOnlyList<(string Name, uint Crc)> games)
+    {
+        using var ms = new MemoryStream();
+        ms.Write("RARCHDB"u8.ToArray());
+        ms.WriteByte(0); // trailing NUL of the 8-byte magic
+        ms.Write(new byte[8]);
+
+        foreach (var (name, crc) in games)
+        {
+            ms.WriteByte(0x82); // fixmap, 2 entries
+            WriteMsgPackString(ms, "name");
+            WriteMsgPackString(ms, name);
+            WriteMsgPackString(ms, "crc");
+            ms.WriteByte(0xc4); // bin8
+            ms.WriteByte(4);
+            var crcBytes = new byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(crcBytes, crc);
+            ms.Write(crcBytes);
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, ms.ToArray());
+    }
+
+    private static void WriteMsgPackString(MemoryStream ms, string s)
+    {
+        var bytes = Encoding.UTF8.GetBytes(s);
+        if (bytes.Length <= 31)
+        {
+            ms.WriteByte((byte)(0xa0 | bytes.Length));
+        }
+        else
+        {
+            ms.WriteByte(0xd9);
+            ms.WriteByte((byte)bytes.Length);
+        }
+
+        ms.Write(bytes);
+    }
+
+    // CRC32 (IEEE 802.3 / zlib polynomial, init and final XOR 0xFFFFFFFF) -- the same value
+    // RdbMatcher.ComputeCrcCandidates derives from the ROM, so a fixture record carrying it is
+    // matched by content rather than by name.
+    private static uint Crc32(byte[] data)
+    {
+        var crc = 0xFFFFFFFFu;
+        foreach (var b in data)
+        {
+            crc ^= b;
+            for (var i = 0; i < 8; i++)
+            {
+                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+            }
+        }
+
+        return crc ^ 0xFFFFFFFFu;
+    }
 }

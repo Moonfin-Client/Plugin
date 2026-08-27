@@ -15,15 +15,25 @@ namespace Moonfin.Server.Tests;
 internal sealed class FakeLibraryManager : ILibraryManager
 {
     private readonly List<VirtualFolderInfo> _folders;
+    private readonly Action? _beforeGetVirtualFolders;
 
-    public FakeLibraryManager(List<VirtualFolderInfo> folders)
+    public FakeLibraryManager(List<VirtualFolderInfo> folders, Action? beforeGetVirtualFolders = null)
     {
         _folders = folders;
+        _beforeGetVirtualFolders = beforeGetVirtualFolders;
     }
 
-    List<VirtualFolderInfo> ILibraryManager.GetVirtualFolders() => _folders;
+    List<VirtualFolderInfo> ILibraryManager.GetVirtualFolders()
+    {
+        _beforeGetVirtualFolders?.Invoke();
+        return _folders;
+    }
 
-    List<VirtualFolderInfo> ILibraryManager.GetVirtualFolders(bool includeRefreshState) => _folders;
+    List<VirtualFolderInfo> ILibraryManager.GetVirtualFolders(bool includeRefreshState)
+    {
+        _beforeGetVirtualFolders?.Invoke();
+        return _folders;
+    }
 
     event System.EventHandler<MediaBrowser.Controller.Library.ItemChangeEventArgs>? ILibraryManager.ItemAdded
     {

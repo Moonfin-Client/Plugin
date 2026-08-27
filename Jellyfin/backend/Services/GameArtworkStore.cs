@@ -12,6 +12,13 @@ internal sealed class GameArtworkStore
 {
     private const int MaxMissEntries = 6096;
     private const int MaxFuzzyDirectorySuggestions = 3;
+    // Nine probes: exactly enough that every name the RDB asserts, plus both fallbacks, is always
+    // reachable. MatchWithSiblings returns the primary plus up to MaxSiblingArtworkNamesPerRequest
+    // siblings (see RdbMatcher: `results.Count < 1 + maxSiblings`), so the worst case is
+    // 7 asserted names + 2 fallbacks = 9: the budget and the candidate list meet exactly, and
+    // nothing is ever truncated. Anything added to GetThumbPathCoreAsync's candidate list needs a
+    // matching rise here, or it silently starves the fallbacks and turns artwork that does exist
+    // into a terminal Missing.
     private const int MaxTotalProbesPerRequest = RdbService.MaxSiblingArtworkNamesPerRequest + 3;
     private static readonly TimeSpan MissTtl = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(6);
@@ -117,19 +124,28 @@ internal sealed class GameArtworkStore
         var candidatePlatforms = RdbService.GetCandidatePlatforms(core, coreWasDefaulted, fuzzyDirectoryCores);
 
         var romFileName = Path.GetFileNameWithoutExtension(romPath);
-        var candidates = new List<(string Name, string Platform)>(3 + RdbService.MaxSiblingArtworkNamesPerRequest);
+
+        // Every RDB name (primary + siblings), plus the filename and title fallbacks.
+        var candidates = new List<(string Name, string Platform)>(RdbService.MaxSiblingArtworkNamesPerRequest + 1 + 2);
         var nameLookup = await _rdbService
             .LookupArtworkNameAsync(candidatePlatforms, romPath, title, cancellationToken)
             .ConfigureAwait(false);
+
+        // Order matters here: the probe budget is spent walking this list in order, so anything
+        // appended past the budget is never probed at all. Names the RDB asserts come first, then
+        // the filename and title fallbacks -- and the budget is sized so that all of them fit.
+        //
+        // Do NOT reintroduce speculative spellings; a `~` -> `-` separator swap was tried here and
+        // removed. Measured against the live libretro inventory cross-referenced with the .rdb, on
+        // both Atari 2600 (32 RDB names carry `~`) and NES, the number of names reachable ONLY via
+        // the swapped spelling was zero: every one that has artwork has it at its exact spelling.
+        // Such a pass cannot add a hit, but it does consume probes -- and interleaving each guess
+        // behind its own name is what pushed the fallbacks past the end of the budget and recorded
+        // terminal Missing for games whose artwork sat under the plain filename.
         if (nameLookup.Resolution is { } match)
         {
             foreach (var candidateName in match.Names)
             {
-                if (string.IsNullOrWhiteSpace(candidateName))
-                {
-                    continue;
-                }
-
                 var name = LibretroThumbName(candidateName);
                 if (name.Length > 0)
                 {

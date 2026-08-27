@@ -10,15 +10,16 @@ namespace Moonfin.Server.Services;
 
 /// <summary>
 /// Owns all non-request-path retro artwork work. Jellyfin does not index raw ROM files as media
-/// items consistently, so reconciliation is triggered by plugin startup (once) and by every
-/// completion of Jellyfin's built-in "RefreshLibrary" scheduled task (<see cref="ITaskManager.TaskCompleted"/>),
-/// which picks up filesystem-only ROM changes whenever a library scan runs. See the comment in
-/// <see cref="StartAsync"/> for why this subscription is safe and what it deliberately does not do.
+/// items consistently, so reconciliation is triggered by plugin startup, completion of Jellyfin's
+/// built-in "RefreshLibrary" scheduled task (<see cref="ITaskManager.TaskCompleted"/>), and file
+/// system events from configured ROM roots. See <see cref="StartAsync"/> for the trigger details.
 /// </summary>
 public sealed class GameArtworkReconciliationService : IHostedService
 {
-    // v2 repairs false terminal misses recorded while a cold RDB index was still downloading.
-    private const string ProviderVersion = "libretro-thumbnails-v2";
+    private static readonly TimeSpan LibraryFileSystemQuietPeriod = TimeSpan.FromSeconds(5);
+
+    // v3 repairs false terminal misses caused by RDB and thumbnail alternate-title separators.
+    private const string ProviderVersion = "libretro-thumbnails-v3";
     private static readonly GameThumbService.ThumbKind[] ArtworkKinds =
     [
         GameThumbService.ThumbKind.Boxart,
@@ -36,6 +37,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private readonly GameArtworkCatalog _catalog;
     private readonly ILogger<GameArtworkReconciliationService> _logger;
     private readonly ITaskManager? _taskManager;
+    private readonly bool _watchLibraryFileSystem;
     private readonly ArtworkWorkScheduler _remote = new();
     private readonly ConcurrentQueue<ArtworkWork> _thumbnail = new();
     private readonly SemaphoreSlim _thumbnailAvailable = new(0);
@@ -43,11 +45,17 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private readonly Dictionary<string, QueuedRemoteWork> _queued = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _thumbnailQueued = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, PreviewPlan> _previewPlans = new(StringComparer.Ordinal);
-    private readonly SemaphoreSlim _reconcileGate = new(1, 1);
+    private readonly SemaphoreSlim _reconciliationAvailable = new(0, 1);
     private CancellationTokenSource? _stop;
     private Task[] _remoteWorkers = Array.Empty<Task>();
     private Task? _thumbnailWorker;
+    private Task? _reconciliationWorker;
+    private readonly Dictionary<string, FileSystemWatcher> _libraryWatchers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _libraryWatcherLock = new();
+    private readonly object _libraryWatcherDebounceLock = new();
+    private Timer? _libraryWatcherDebounce;
     private bool _startupRecoveryDone;
+    private int _reopenMetadataDeferred;
 
     /// <param name="games">Resolves game libraries/systems/games from the filesystem.</param>
     /// <param name="thumbs">Looks up and derives artwork thumbnails.</param>
@@ -65,12 +73,24 @@ public sealed class GameArtworkReconciliationService : IHostedService
         GameArtworkCatalog catalog,
         ILogger<GameArtworkReconciliationService> logger,
         ITaskManager? taskManager = null)
+        : this(games, thumbs, catalog, logger, taskManager, watchLibraryFileSystem: true)
+    {
+    }
+
+    internal GameArtworkReconciliationService(
+        GamesService games,
+        GameThumbService thumbs,
+        GameArtworkCatalog catalog,
+        ILogger<GameArtworkReconciliationService> logger,
+        ITaskManager? taskManager,
+        bool watchLibraryFileSystem)
     {
         _games = games;
         _thumbs = thumbs;
         _catalog = catalog;
         _logger = logger;
         _taskManager = taskManager;
+        _watchLibraryFileSystem = watchLibraryFileSystem;
     }
 
     /// <summary>
@@ -328,12 +348,10 @@ public sealed class GameArtworkReconciliationService : IHostedService
         // ITaskManager.TaskCompleted (see OnTaskCompleted): that is a plain event handler `+=` on a
         // DI singleton, not a library-manager mutation, so it carries none of the AddParts risk.
         //
-        // Known gap: the web UI's per-library "Scan library files" action calls
-        // POST /Items/{id}/Refresh, which does not run through the scheduled-task system and so does
-        // not raise TaskCompleted. Closing that gap would need a separate, debounced
-        // ItemAdded/ItemRemoved trigger; that is not implemented here.
+        // Per-library scans bypass TaskCompleted; ROM-root watchers cover their raw-file changes.
         _remoteWorkers = Enumerable.Range(0, 2).Select(_ => Task.Run(() => RemoteWorkerAsync(token), token)).ToArray();
         _thumbnailWorker = Task.Run(() => ThumbnailWorkerAsync(token), token);
+        _reconciliationWorker = Task.Run(() => ReconciliationWorkerAsync(token), token);
         _thumbs.MetadataIndexAvailable += OnMetadataIndexAvailable;
         if (_taskManager != null)
         {
@@ -341,12 +359,9 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
         else
         {
-            // Only unit tests construct this service without a task manager. If it ever happens in
-            // production the plugin still works, but artwork stops tracking the library after the
-            // startup pass -- a silent, gradual staleness that is very hard to diagnose from the
-            // symptoms, so say so loudly here.
+            // File-system events still cover ROM changes, but scheduled refreshes will not.
             _logger.LogWarning(
-                "No task manager was supplied to game artwork reconciliation; it will run once at startup and will not react to library scans");
+                "No task manager was supplied to game artwork reconciliation; scheduled library refreshes will not signal artwork reconciliation");
         }
 
         QueueReconciliation("plugin startup");
@@ -367,9 +382,12 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
 
         _stop.Cancel();
+        CancelLibraryWatcherDebounce();
+        StopLibraryWatchers();
         _remote.Available.Release(_remoteWorkers.Length);
         _thumbnailAvailable.Release();
-        var workers = _remoteWorkers.Concat(new[] { _thumbnailWorker }.OfType<Task>());
+        TrySignalReconciliation();
+        var workers = _remoteWorkers.Concat(new[] { _thumbnailWorker, _reconciliationWorker }.OfType<Task>());
         try
         {
             await Task.WhenAll(workers).WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -421,28 +439,219 @@ public sealed class GameArtworkReconciliationService : IHostedService
 
     private void QueueReconciliation(string reason, bool reopenMetadataDeferred = false)
     {
-        var token = _stop?.Token ?? CancellationToken.None;
-        _ = Task.Run(async () =>
+        if (_stop is not { IsCancellationRequested: false })
+        {
+            return;
+        }
+
+        if (reopenMetadataDeferred)
+        {
+            Interlocked.Exchange(ref _reopenMetadataDeferred, 1);
+        }
+
+        _logger.LogDebug("Queueing game artwork reconciliation after {Reason}", reason);
+        TrySignalReconciliation();
+    }
+
+    /// <summary>
+    /// Brings the watcher set in line with the currently configured game-library roots. Diff-based
+    /// and idempotent, so calling it on every reconciliation pass costs one directory enumeration
+    /// when nothing has changed. Beyond tracking configuration-page edits, that recurring call is
+    /// what recovers a root that could not be watched earlier: a NAS share that was offline at
+    /// startup, a library location changed outside Moonfin's own configuration page, or a watcher
+    /// whose construction threw.
+    /// </summary>
+    private void SyncLibraryWatchers()
+    {
+        if (!_watchLibraryFileSystem || _stop is not { IsCancellationRequested: false })
+        {
+            return;
+        }
+
+        HashSet<string> desired;
+        try
+        {
+            desired = _games.GetGameLibraries()
+                .SelectMany(library => library.Locations)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            // Resolving libraries goes through Jellyfin's library manager; a failure here must not
+            // take down reconciliation or a configuration save. Keep the existing watcher set.
+            _logger.LogWarning(ex, "Resolving game library roots for artwork watching failed");
+            return;
+        }
+
+        lock (_libraryWatcherLock)
+        {
+            // Root resolution above can block in Jellyfin's library manager. StopAsync may cancel
+            // the service and dispose every watcher while that work is in progress.
+            if (_stop is not { IsCancellationRequested: false })
+            {
+                return;
+            }
+
+            foreach (var root in _libraryWatchers.Keys.Where(root => !desired.Contains(root)).ToList())
+            {
+                _libraryWatchers[root].Dispose();
+                _libraryWatchers.Remove(root);
+                _logger.LogDebug("Stopped watching game library root {Root}", root);
+            }
+
+            foreach (var root in desired)
+            {
+                if (_libraryWatchers.ContainsKey(root))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var watcher = new FileSystemWatcher(root)
+                    {
+                        IncludeSubdirectories = true,
+                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
+                        EnableRaisingEvents = true,
+                    };
+                    watcher.Created += OnLibraryFileSystemChanged;
+                    watcher.Changed += OnLibraryFileSystemChanged;
+                    watcher.Deleted += OnLibraryFileSystemChanged;
+                    watcher.Renamed += OnLibraryFileSystemChanged;
+                    watcher.Error += OnLibraryWatcherError;
+                    _libraryWatchers.Add(root, watcher);
+                    _logger.LogDebug("Watching game library root {Root} for artwork reconciliation", root);
+                }
+                catch (Exception ex)
+                {
+                    // A root that is missing or unreachable right now is retried by the next sync,
+                    // so this stays a warning rather than a failure.
+                    _logger.LogWarning(ex, "Watching game library root {Root} for artwork reconciliation failed", root);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called when the configured game libraries change (see MoonfinPlugin.UpdateConfiguration).
+    /// Queueing reconciliation is the load-bearing half: ROMs already sitting under a newly
+    /// selected root raise no filesystem events, so without this they would wait for a scheduled
+    /// scan or a restart. The reconciliation pass itself re-syncs the watcher set.
+    /// </summary>
+    public void OnGameLibrariesChanged() => QueueReconciliation("game library configuration changed");
+
+    /// <summary>Returns the roots currently being watched. Test seam.</summary>
+    internal IReadOnlyList<string> WatchedLibraryRootsForTests
+    {
+        get
+        {
+            lock (_libraryWatcherLock)
+            {
+                return _libraryWatchers.Keys.ToList();
+            }
+        }
+    }
+
+    private void StopLibraryWatchers()
+    {
+        lock (_libraryWatcherLock)
+        {
+            foreach (var watcher in _libraryWatchers.Values)
+            {
+                watcher.Dispose();
+            }
+
+            _libraryWatchers.Clear();
+        }
+    }
+
+    private void OnLibraryFileSystemChanged(object sender, FileSystemEventArgs e) =>
+        DebounceLibraryFileSystemReconciliation();
+
+    /// <summary>
+    /// Restarts the quiet period. One timer is reused for the life of the service and only its due
+    /// time is pushed back, so copying in a romset costs one allocation rather than one per file.
+    /// </summary>
+    private void DebounceLibraryFileSystemReconciliation()
+    {
+        if (_stop is not { IsCancellationRequested: false })
+        {
+            return;
+        }
+
+        lock (_libraryWatcherDebounceLock)
+        {
+            // Checked inside the lock as well: StopAsync disposes the timer under it, and watcher
+            // events keep arriving on their own threads while that happens.
+            if (_stop is not { IsCancellationRequested: false })
+            {
+                return;
+            }
+
+            _libraryWatcherDebounce ??= new Timer(
+                _ => QueueReconciliation("game-library filesystem change"),
+                null,
+                Timeout.InfiniteTimeSpan,
+                Timeout.InfiniteTimeSpan);
+            _libraryWatcherDebounce.Change(LibraryFileSystemQuietPeriod, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void CancelLibraryWatcherDebounce()
+    {
+        lock (_libraryWatcherDebounceLock)
+        {
+            _libraryWatcherDebounce?.Dispose();
+            _libraryWatcherDebounce = null;
+        }
+    }
+
+    private void OnLibraryWatcherError(object sender, ErrorEventArgs e)
+    {
+        _logger.LogWarning(e.GetException(), "Game-library watcher overflowed; reconciling artwork catalog");
+        QueueReconciliation("game-library watcher error");
+    }
+
+    private void TrySignalReconciliation()
+    {
+        try
+        {
+            _reconciliationAvailable.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // A reconciliation pass is pending or in progress; one follow-up pass captures all
+            // intervening file-system events without queueing duplicate full-library scans.
+        }
+    }
+
+    private async Task ReconciliationWorkerAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                await ReconcileAsync(token, reopenMetadataDeferred).ConfigureAwait(false);
+                await _reconciliationAvailable.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+                // Before scanning, not after: a root added since the last pass must be watched and
+                // scanned in the same pass, or its ROMs wait for the pass after next.
+                SyncLibraryWatchers();
+                var reopenMetadataDeferred = Interlocked.Exchange(ref _reopenMetadataDeferred, 0) != 0;
+                await ReconcileAsync(cancellationToken, reopenMetadataDeferred).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                break;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Game artwork reconciliation triggered by {Reason} failed", reason);
+                _logger.LogWarning(ex, "Game artwork reconciliation failed");
             }
-        }, token);
+        }
     }
 
     private async Task ReconcileAsync(CancellationToken cancellationToken, bool reopenMetadataDeferred)
     {
-        await _reconcileGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
             // GetStartupRecoveryWorkAsync re-reads and re-parses the entire catalog (25-35 MB at
             // 20k ROMs), so it only makes sense to pay for once, on the first (startup) pass. Later
             // passes -- now triggered by RefreshLibrary completions instead of a timer -- rely on
@@ -541,11 +750,6 @@ public sealed class GameArtworkReconciliationService : IHostedService
             }
 
             await EnqueueRecoveryAsync(recovery, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _reconcileGate.Release();
-        }
     }
 
     private async Task QueueCandidateAsync(
