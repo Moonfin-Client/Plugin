@@ -53,7 +53,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private readonly Dictionary<string, FileSystemWatcher> _libraryWatchers = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _libraryWatcherLock = new();
     private readonly object _libraryWatcherDebounceLock = new();
-    private CancellationTokenSource? _libraryWatcherDebounce;
+    private Timer? _libraryWatcherDebounce;
     private bool _startupRecoveryDone;
     private int _reopenMetadataDeferred;
 
@@ -364,7 +364,6 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 "No task manager was supplied to game artwork reconciliation; scheduled library refreshes will not signal artwork reconciliation");
         }
 
-        SyncLibraryWatchers();
         QueueReconciliation("plugin startup");
         return Task.CompletedTask;
     }
@@ -569,81 +568,41 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private void OnLibraryFileSystemChanged(object sender, FileSystemEventArgs e) =>
         DebounceLibraryFileSystemReconciliation();
 
+    /// <summary>
+    /// Restarts the quiet period. One timer is reused for the life of the service and only its due
+    /// time is pushed back, so copying in a romset costs one allocation rather than one per file.
+    /// </summary>
     private void DebounceLibraryFileSystemReconciliation()
     {
-        if (_stop is not { IsCancellationRequested: false } stop)
+        if (_stop is not { IsCancellationRequested: false })
         {
             return;
         }
 
-        var debounce = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
-        CancellationTokenSource? superseded;
         lock (_libraryWatcherDebounceLock)
         {
-            superseded = _libraryWatcherDebounce;
-            _libraryWatcherDebounce = debounce;
-        }
-
-        TryCancelDebounce(superseded);
-
-        _ = QueueLibraryFileSystemReconciliationAfterQuietPeriodAsync(debounce);
-    }
-
-    private async Task QueueLibraryFileSystemReconciliationAfterQuietPeriodAsync(CancellationTokenSource debounce)
-    {
-        try
-        {
-            await Task.Delay(LibraryFileSystemQuietPeriod, debounce.Token).ConfigureAwait(false);
-
-            lock (_libraryWatcherDebounceLock)
+            // Checked inside the lock as well: StopAsync disposes the timer under it, and watcher
+            // events keep arriving on their own threads while that happens.
+            if (_stop is not { IsCancellationRequested: false })
             {
-                if (!ReferenceEquals(_libraryWatcherDebounce, debounce))
-                {
-                    return;
-                }
-
-                _libraryWatcherDebounce = null;
+                return;
             }
 
-            QueueReconciliation("game-library filesystem change");
-        }
-        catch (OperationCanceledException) when (debounce.IsCancellationRequested)
-        {
-            // A later event reset the quiet period, or the service is stopping.
-        }
-        finally
-        {
-            debounce.Dispose();
+            _libraryWatcherDebounce ??= new Timer(
+                _ => QueueReconciliation("game-library filesystem change"),
+                null,
+                Timeout.InfiniteTimeSpan,
+                Timeout.InfiniteTimeSpan);
+            _libraryWatcherDebounce.Change(LibraryFileSystemQuietPeriod, Timeout.InfiniteTimeSpan);
         }
     }
 
     private void CancelLibraryWatcherDebounce()
     {
-        CancellationTokenSource? debounce;
         lock (_libraryWatcherDebounceLock)
         {
-            debounce = _libraryWatcherDebounce;
+            _libraryWatcherDebounce?.Dispose();
             _libraryWatcherDebounce = null;
-        }
-
-        TryCancelDebounce(debounce);
-    }
-
-    /// <summary>
-    /// Cancels a debounce timer that may already have disposed itself. The pending timer's own
-    /// task owns the lifetime of its <see cref="CancellationTokenSource"/> and disposes it as it
-    /// unwinds, and that source is linked to <c>_stop</c> -- so <see cref="StopAsync"/> cancelling
-    /// <c>_stop</c> is itself what starts the disposal this call can race. Losing that race is
-    /// benign (the timer is already gone), but it must not throw out of shutdown.
-    /// </summary>
-    private static void TryCancelDebounce(CancellationTokenSource? debounce)
-    {
-        try
-        {
-            debounce?.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
         }
     }
 

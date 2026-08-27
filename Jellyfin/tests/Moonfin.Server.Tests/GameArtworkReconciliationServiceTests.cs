@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Jellyfin.Data.Events;
 using MediaBrowser.Model.Entities;
@@ -240,6 +241,40 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
                 await stopTask;
             }
         }
+    }
+
+    [Fact]
+    public void WatcherEventAfterTheStopSourceIsDisposedDoesNotThrow()
+    {
+        // A watcher callback reads the stop source, then can be descheduled for the whole of
+        // StopAsync and resume once that source has been disposed. Callbacks run on their own
+        // threads, so anything thrown there is unhandled and ends the process. The window is too
+        // narrow to hit by racing threads, so this drives the same field state directly.
+        var libraryManager = new FakeLibraryManager(new List<VirtualFolderInfo>());
+        var service = new GameArtworkReconciliationService(
+            new GamesService(libraryManager),
+            (GameThumbService)RuntimeHelpers.GetUninitializedObject(typeof(GameThumbService)),
+            new GameArtworkCatalog(Path.Combine(_root, "catalog-disposed-stop")),
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null);
+
+        var stopField = typeof(GameArtworkReconciliationService)
+            .GetField("_stop", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var disposed = new CancellationTokenSource();
+        disposed.Dispose();
+        stopField.SetValue(service, disposed);
+
+        var debounce = typeof(GameArtworkReconciliationService)
+            .GetMethod("DebounceLibraryFileSystemReconciliation", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var fault = Record.Exception(() => debounce.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: null,
+            culture: null));
+
+        Assert.Null(fault);
     }
 
     [Fact]
