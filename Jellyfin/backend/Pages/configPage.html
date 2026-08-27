@@ -1146,6 +1146,14 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultAudioRowsSortOrder">Audio Rows Sort Order</label>
+                                <select id="DefaultAudioRowsSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayCollectionsRows">Collections Rows</label>
                                 <select id="DefaultDisplayCollectionsRows" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -1157,11 +1165,33 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortBy">Collections Rows Sorting</label>
                                 <select id="DefaultCollectionsRowSortBy" is="emby-select">
                                     <option value="">Not set (user decides)</option>
+                                    <option value="playlistOrder">Playlist Order</option>
                                     <option value="name">Name</option>
                                     <option value="dateAdded">Date Added</option>
+                                    <option value="dateEpisodeAdded">Date Episode Added</option>
                                     <option value="premiereDate">Release Date</option>
+                                    <option value="rating">Rating</option>
                                     <option value="runtime">Runtime</option>
                                     <option value="random">Random</option>
+                                    <option value="criticRating">Critic Rating</option>
+                                    <option value="communityRating">Community Rating</option>
+                                    <option value="myRating">My Rating</option>
+                                    <option value="datePlayed">Last Played</option>
+                                    <option value="playCount">Play Count</option>
+                                    <option value="albumArtist">Album Artist</option>
+                                    <option value="album">Album</option>
+                                    <option value="artist">Artist</option>
+                                    <option value="trackNumber">Number</option>
+                                    <option value="genre">Genre</option>
+                                    <option value="foldersFirst">Folders First</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCollectionsRowSortOrder">Collections Rows Sort Order</label>
+                                <select id="DefaultCollectionsRowSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1176,11 +1206,33 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortBy">Favorites Rows Sorting</label>
                                 <select id="DefaultFavoritesRowSortBy" is="emby-select">
                                     <option value="">Not set (user decides)</option>
+                                    <option value="playlistOrder">Playlist Order</option>
                                     <option value="name">Name</option>
                                     <option value="dateAdded">Date Added</option>
+                                    <option value="dateEpisodeAdded">Date Episode Added</option>
                                     <option value="premiereDate">Release Date</option>
+                                    <option value="rating">Rating</option>
                                     <option value="runtime">Runtime</option>
                                     <option value="random">Random</option>
+                                    <option value="criticRating">Critic Rating</option>
+                                    <option value="communityRating">Community Rating</option>
+                                    <option value="myRating">My Rating</option>
+                                    <option value="datePlayed">Last Played</option>
+                                    <option value="playCount">Play Count</option>
+                                    <option value="albumArtist">Album Artist</option>
+                                    <option value="album">Album</option>
+                                    <option value="artist">Artist</option>
+                                    <option value="trackNumber">Number</option>
+                                    <option value="genre">Genre</option>
+                                    <option value="foldersFirst">Folders First</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultFavoritesRowSortOrder">Favorites Rows Sort Order</label>
+                                <select id="DefaultFavoritesRowSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1195,11 +1247,33 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortBy">Genres Rows Sorting</label>
                                 <select id="DefaultGenresRowSortBy" is="emby-select">
                                     <option value="">Not set (user decides)</option>
+                                    <option value="playlistOrder">Playlist Order</option>
                                     <option value="name">Name</option>
                                     <option value="dateAdded">Date Added</option>
+                                    <option value="dateEpisodeAdded">Date Episode Added</option>
                                     <option value="premiereDate">Release Date</option>
+                                    <option value="rating">Rating</option>
                                     <option value="runtime">Runtime</option>
                                     <option value="random">Random</option>
+                                    <option value="criticRating">Critic Rating</option>
+                                    <option value="communityRating">Community Rating</option>
+                                    <option value="myRating">My Rating</option>
+                                    <option value="datePlayed">Last Played</option>
+                                    <option value="playCount">Play Count</option>
+                                    <option value="albumArtist">Album Artist</option>
+                                    <option value="album">Album</option>
+                                    <option value="artist">Artist</option>
+                                    <option value="trackNumber">Number</option>
+                                    <option value="genre">Genre</option>
+                                    <option value="foldersFirst">Folders First</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultGenresRowSortOrder">Genres Rows Sort Order</label>
+                                <select id="DefaultGenresRowSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1214,11 +1288,33 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowSortBy">Playlists Rows Sorting</label>
                                 <select id="DefaultPlaylistsRowSortBy" is="emby-select">
                                     <option value="">Not set (user decides)</option>
+                                    <option value="playlistOrder">Playlist Order</option>
                                     <option value="name">Name</option>
                                     <option value="dateAdded">Date Added</option>
+                                    <option value="dateEpisodeAdded">Date Episode Added</option>
                                     <option value="premiereDate">Release Date</option>
+                                    <option value="rating">Rating</option>
                                     <option value="runtime">Runtime</option>
                                     <option value="random">Random</option>
+                                    <option value="criticRating">Critic Rating</option>
+                                    <option value="communityRating">Community Rating</option>
+                                    <option value="myRating">My Rating</option>
+                                    <option value="datePlayed">Last Played</option>
+                                    <option value="playCount">Play Count</option>
+                                    <option value="albumArtist">Album Artist</option>
+                                    <option value="album">Album</option>
+                                    <option value="artist">Artist</option>
+                                    <option value="trackNumber">Number</option>
+                                    <option value="genre">Genre</option>
+                                    <option value="foldersFirst">Folders First</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPlaylistsRowSortOrder">Playlists Rows Sort Order</label>
+                                <select id="DefaultPlaylistsRowSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1243,6 +1339,47 @@
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDisplayStudiosRows">Studio Row</label>
+                                <select id="DefaultDisplayStudiosRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStudiosRowSortBy">Studio Row Sorting</label>
+                                <select id="DefaultStudiosRowSortBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="playlistOrder">Playlist Order</option>
+                                    <option value="name">Name</option>
+                                    <option value="dateAdded">Date Added</option>
+                                    <option value="dateEpisodeAdded">Date Episode Added</option>
+                                    <option value="premiereDate">Release Date</option>
+                                    <option value="rating">Rating</option>
+                                    <option value="runtime">Runtime</option>
+                                    <option value="random">Random</option>
+                                    <option value="criticRating">Critic Rating</option>
+                                    <option value="communityRating">Community Rating</option>
+                                    <option value="myRating">My Rating</option>
+                                    <option value="datePlayed">Last Played</option>
+                                    <option value="playCount">Play Count</option>
+                                    <option value="albumArtist">Album Artist</option>
+                                    <option value="album">Album</option>
+                                    <option value="artist">Artist</option>
+                                    <option value="trackNumber">Number</option>
+                                    <option value="genre">Genre</option>
+                                    <option value="foldersFirst">Folders First</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultStudiosRowSortOrder">Studio Row Sort Order</label>
+                                <select id="DefaultStudiosRowSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                         </div>
@@ -4412,14 +4549,22 @@
                     setSelectValue('#DefaultPosterSize', defaults.posterSize, 'Configured size');
                     setNullableBoolSelect('#DefaultDisplayFavoritesRows', defaults.displayFavoritesRows);
                     setSelectValue('#DefaultFavoritesRowSortBy', defaults.favoritesRowSortBy, 'Configured sort');
+                    setSelectValue('#DefaultFavoritesRowSortOrder', defaults.favoritesRowSortOrder, 'Configured sort');
                     setNullableBoolSelect('#DefaultDisplayCollectionsRows', defaults.displayCollectionsRows);
                     setSelectValue('#DefaultCollectionsRowSortBy', defaults.collectionsRowSortBy, 'Configured sort');
+                    setSelectValue('#DefaultCollectionsRowSortOrder', defaults.collectionsRowSortOrder, 'Configured sort');
                     setNullableBoolSelect('#DefaultDisplayGenresRows', defaults.displayGenresRows);
                     setSelectValue('#DefaultGenresRowSortBy', defaults.genresRowSortBy, 'Configured sort');
+                    setSelectValue('#DefaultGenresRowSortOrder', defaults.genresRowSortOrder, 'Configured sort');
                     setNullableBoolSelect('#DefaultDisplayPlaylistsRows', defaults.displayPlaylistsRows);
                     setSelectValue('#DefaultPlaylistsRowSortBy', defaults.playlistsRowSortBy, 'Configured sort');
+                    setSelectValue('#DefaultPlaylistsRowSortOrder', defaults.playlistsRowSortOrder, 'Configured sort');
                     setNullableBoolSelect('#DefaultDisplayAudioRows', defaults.displayAudioRows);
                     setSelectValue('#DefaultAudioRowsSortBy', defaults.audioRowsSortBy, 'Configured sort');
+                    setSelectValue('#DefaultAudioRowsSortOrder', defaults.audioRowsSortOrder, 'Configured sort');
+                    setNullableBoolSelect('#DefaultDisplayStudiosRows', defaults.displayStudiosRows); 
+                    setSelectValue('#DefaultStudiosRowSortBy, defaults.studiosRowSortBy, 'Configured Sort');
+                    setSelectValue('#DefaultStudiosRowSortOrder, defaults.studiosRowSortOrder, 'Configured Sort');
                     setNullableBoolSelect('#DefaultHomeImageUseSeriesImage', defaults.homeImageUseSeriesImage);
                     setNullableBoolSelect('#DefaultDisplayRewatchRow', defaults.displayRewatchRow);
                     setSelectValue('#DefaultRewatchSortBy', defaults.rewatchSortBy, 'Configured sort');
@@ -4833,14 +4978,22 @@
                         config.DefaultUserSettings.homeImageTypeContinueWatching = document.querySelector('#DefaultHomeImageTypeContinueWatching').value || null;
                         config.DefaultUserSettings.displayFavoritesRows = getNullableBoolSelect('#DefaultDisplayFavoritesRows');
                         config.DefaultUserSettings.favoritesRowSortBy = document.querySelector('#DefaultFavoritesRowSortBy').value || null;
+                        config.DefaultUserSettings.favoritesRowSortOrder = document.querySelector('#DefaultFavoritesRowSortOrder').value || null;
                         config.DefaultUserSettings.displayCollectionsRows = getNullableBoolSelect('#DefaultDisplayCollectionsRows');
                         config.DefaultUserSettings.collectionsRowSortBy = document.querySelector('#DefaultCollectionsRowSortBy').value || null;
+                        config.DefaultUserSettings.collectionsRowSortOrder = document.querySelector('#DefaultCollectionsRowSortOrder').value || null;
                         config.DefaultUserSettings.displayGenresRows = getNullableBoolSelect('#DefaultDisplayGenresRows');
                         config.DefaultUserSettings.genresRowSortBy = document.querySelector('#DefaultGenresRowSortBy').value || null;
+                        config.DefaultUserSettings.genresRowSortOrder = document.querySelector('#DefaultGenresRowSortOrder').value || null;
                         config.DefaultUserSettings.displayPlaylistsRows = getNullableBoolSelect('#DefaultDisplayPlaylistsRows');
                         config.DefaultUserSettings.playlistsRowSortBy = document.querySelector('#DefaultPlaylistsRowSortBy').value || null;
+                        config.DefaultUserSettings.playlistsRowSortOrder = document.querySelector('#DefaultPlaylistsRowSortOrder').value || null;
                         config.DefaultUserSettings.displayAudioRows = getNullableBoolSelect('#DefaultDisplayAudioRows');
                         config.DefaultUserSettings.audioRowsSortBy = document.querySelector('#DefaultAudioRowsSortBy').value || null;
+                        config.DefaultUserSettings.audioRowsSortOrder = document.querySelector('#DefaultAudioRowsSortOrder').value || null;
+                        config.DefaultUserSettings.displayStudiosRows = getNullableBoolSelect('#DefaultDisplayStudiosRows');
+                        config.DefaultUserSettings.studiosRowSortBy = document.querySelector('#DefaultStudiosRowSortBy').value || null;
+                        config.DefaultUserSettings.studiosRowSortOrder = document.querySelector('#DefaultStudiosRowSortOrder').value || null;
                         config.DefaultUserSettings.displayRewatchRow = getNullableBoolSelect('#DefaultDisplayRewatchRow');
                         config.DefaultUserSettings.rewatchSortBy = document.querySelector('#DefaultRewatchSortBy').value || null;
                         config.DefaultUserSettings.displaySinceYouWatchedRows = getNullableBoolSelect('#DefaultDisplaySinceYouWatchedRows');
