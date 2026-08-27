@@ -1588,11 +1588,47 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeEpisodesEnabled">Cinema Mode for Episodes</label>
+                                <select id="DefaultCinemaModeEpisodesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaSegmentCountdown">Media Segment Countdown</label>
+                                <select id="DefaultMediaSegmentCountdown" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="progressBar">Progress Bar</option>
+                                    <option value="timer">Timer</option>
+                                    <option value="both">Both</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaSegmentAutoHide">Auto Hide Skip Button</label>
+                                <select id="DefaultMediaSegmentAutoHide" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="s5">5 seconds</option>
+                                    <option value="s10">10 seconds</option>
+                                    <option value="off">Off</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultAutoplayNextEpisode">Autoplay Next Episode</label>
                                 <select id="DefaultAutoplayNextEpisode" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpBehavior">Next Up Display</label>
+                                <select id="DefaultNextUpBehavior" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="extended">Extended</option>
+                                    <option value="minimal">Minimal</option>
+                                    <option value="disabled">Disabled</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1615,6 +1651,14 @@
                                     <option value="medium">After 3 episodes</option>
                                     <option value="long_">After 5 episodes</option>
                                     <option value="veryLong">After 8 episodes</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultReplaceSkipOutroWithNextUp">Replace Skip Outro with Next Up Display</label>
+                                <select id="DefaultReplaceSkipOutroWithNextUp" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                         </div>
