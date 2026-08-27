@@ -486,6 +486,13 @@ public sealed class GameArtworkReconciliationService : IHostedService
 
         lock (_libraryWatcherLock)
         {
+            // Root resolution above can block in Jellyfin's library manager. StopAsync may cancel
+            // the service and dispose every watcher while that work is in progress.
+            if (_stop is not { IsCancellationRequested: false })
+            {
+                return;
+            }
+
             foreach (var root in _libraryWatchers.Keys.Where(root => !desired.Contains(root)).ToList())
             {
                 _libraryWatchers[root].Dispose();

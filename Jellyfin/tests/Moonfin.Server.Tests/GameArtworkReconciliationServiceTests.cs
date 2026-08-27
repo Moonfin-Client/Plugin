@@ -176,6 +176,73 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task StopAsync_DoesNotAllowAnInProgressWatcherSyncToRecreateWatchers()
+    {
+        var libraryRoot = Path.Combine(_root, "Games");
+        Directory.CreateDirectory(Path.Combine(libraryRoot, "SNES"));
+        await File.WriteAllBytesAsync(Path.Combine(libraryRoot, "SNES", "First.sfc"), [1, 2, 3]);
+
+        var libraryId = Guid.NewGuid().ToString();
+        var folders = new List<VirtualFolderInfo>
+        {
+            new() { Name = "Games", ItemId = libraryId, Locations = [libraryRoot] },
+        };
+        var blockNextResolution = 0;
+        var resolutionStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseResolution = new ManualResetEventSlim();
+        var libraryManager = new FakeLibraryManager(
+            folders,
+            () =>
+            {
+                if (Interlocked.Exchange(ref blockNextResolution, 0) == 0)
+                {
+                    return;
+                }
+
+                resolutionStarted.TrySetResult();
+                Assert.True(releaseResolution.Wait(TimeSpan.FromSeconds(10)), "Timed out waiting to release library-root resolution");
+            });
+        var catalog = new GameArtworkCatalog(Path.Combine(_root, "catalog-racing-stop"));
+        var service = new GameArtworkReconciliationService(
+            new GamesService(libraryManager),
+            (GameThumbService)RuntimeHelpers.GetUninitializedObject(typeof(GameThumbService)),
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null);
+
+        await service.StartAsync(CancellationToken.None);
+        Task? stopTask = null;
+        try
+        {
+            await WaitForDistinctGameCountAsync(catalog, libraryId, "snes", 1);
+            await WaitForWatchedRootsAsync(service, [libraryRoot]);
+
+            Interlocked.Exchange(ref blockNextResolution, 1);
+            service.OnGameLibrariesChanged();
+            await resolutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            stopTask = service.StopAsync(CancellationToken.None);
+            await WaitForWatchedRootsAsync(service, []);
+            releaseResolution.Set();
+            await stopTask;
+
+            Assert.Empty(service.WatchedLibraryRootsForTests);
+        }
+        finally
+        {
+            releaseResolution.Set();
+            if (stopTask == null)
+            {
+                await service.StopAsync(CancellationToken.None);
+            }
+            else
+            {
+                await stopTask;
+            }
+        }
+    }
+
+    [Fact]
     public void Scheduler_ForcesBulkAfterFourInteractiveSelections()
     {
         var scheduler = new ArtworkWorkScheduler();
