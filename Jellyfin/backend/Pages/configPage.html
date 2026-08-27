@@ -1417,11 +1417,47 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeEpisodesEnabled">Cinema Mode for Episodes</label>
+                                <select id="DefaultCinemaModeEpisodesEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaSegmentCountdown">Media Segment Countdown</label>
+                                <select id="DefaultMediaSegmentCountdown" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="progressBar">Progress Bar</option>
+                                    <option value="timer">Timer</option>
+                                    <option value="both">Both</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaSegmentAutoHide">Auto Hide Skip Button</label>
+                                <select id="DefaultMediaSegmentAutoHide" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="s5">5 seconds</option>
+                                    <option value="s10">10 seconds</option>
+                                    <option value="off">Off</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultAutoplayNextEpisode">Autoplay Next Episode</label>
                                 <select id="DefaultAutoplayNextEpisode" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpBehavior">Next Up Display</label>
+                                <select id="DefaultNextUpBehavior" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="extended">Extended</option>
+                                    <option value="minimal">Minimal</option>
+                                    <option value="disabled">Disabled</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -1433,6 +1469,14 @@
                                     <option value="10000">10 seconds</option>
                                     <option value="15000">15 seconds</option>
                                     <option value="30000">30 seconds</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultReplaceSkipOutroWithNextUp">Replace Skip Outro with Next Up Display</label>
+                                <select id="DefaultReplaceSkipOutroWithNextUp" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -4462,8 +4506,13 @@
                     setNullableBoolSelect('#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
 
                     setNullableBoolSelect('#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+                    setNullableBoolSelect('#DefaultCinemaModeEpisodesEnabled', defaults.cinemaModeEpisodesEnabled);
+                    setSelectValue('#DefaultMediaSegmentCountdown', defaults.mediaSegmentCountdown, 'Configured timeout');
+                    setSelectValue('#DefaultMediaSegmentAutoHide', defaults.mediaSegmentAutoHide, 'Configured timeout');
                     setNullableBoolSelect('#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
+                    setSelectValue('#DefaultNextUpBehavior', defaults.nextUpBehavior, 'Configured behavior');
                     setSelectValue('#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
+                    setNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp', defaults.replaceSkipOutroWithNextUp, 'Configured behavior');
                     setSelectValue('#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
 
                     setCheckbox('#DefaultMdblistEnabled', defaults.mdblistEnabled);
@@ -4802,8 +4851,13 @@
                         config.DefaultUserSettings.preferSdhSubtitles = getNullableBoolSelect('#DefaultPreferSdhSubtitles');
 
                         config.DefaultUserSettings.cinemaModeEnabled = getNullableBoolSelect('#DefaultCinemaModeEnabled');
+                        config.DefaultUserSettings.cinemaModeEpisodesEnabled = getNullableBoolSelect('#DefaultCinemaModeEpisodesEnabled');
+                        config.DefaultUserSettings.mediaSegmentCountdown = document.querySelector('#DefaultMediaSegmentCountdown').value || null;
+                        config.DefaultUserSettings.mediaSegmentAutoHide = document.querySelector('#DefaultMediaSegmentAutoHide').value || null;
                         config.DefaultUserSettings.autoplayNextEpisode = getNullableBoolSelect('#DefaultAutoplayNextEpisode');
+                        config.DefaultUserSettings.nextUpBehavior = document.querySelector('#DefaultNextUpBehavior').value || null;
                         config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
+                        config.DefaultUserSettings.replaceSkipOutroWithNextUp = getNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp');
                         config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;
 
                         if (document.querySelector('#DefaultCollectionPicker .adminCollectionCb') != null) {
