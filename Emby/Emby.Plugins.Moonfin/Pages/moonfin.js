@@ -1734,8 +1734,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
 
             setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+            setNullableBoolSelect(view, '#DefaultCinemaModeEpisodesEnabled', defaults.cinemaModeEpisodesEnabled);
+            setSelectValue(view, '#DefaultMediaSegmentCountdown', defaults.mediaSegmentCountdown, 'Configured timeout');
+            setSelectValue(view, '#DefaultMediaSegmentAutoHide', defaults.mediaSegmentAutoHide, 'Configred timeout');
             setNullableBoolSelect(view, '#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
+            setSelectValue(view, '#DefaultNextUpBehavior', defaults.nextUpBehavior, 'Configured bahevior');
             setSelectValue(view, '#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
+            setNullableBoolSelect(view, '#DefaultReplaceSkipOutroWithNextUp', defaults.replaceSkipOutroWithNextUp, 'Configured behavior');
             setSelectValue(view, '#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
 
             setSelectValue(view, '#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
@@ -1901,8 +1906,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.preferSdhSubtitles = getNullableBoolSelect(view, '#DefaultPreferSdhSubtitles');
 
             d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
+            d.cinemaModeEpisodesEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEpisodesEnabled');
+            d.mediaSegmentCountdown = view.querySelector(view, '#DefaultMediaSegmentCountdown').value || null;
+            d.mediaSegmentAutoHide = view.querySelector(view, '#DefaultMediaSegmentAutoHide').value || null;
             d.autoplayNextEpisode = getNullableBoolSelect(view, '#DefaultAutoplayNextEpisode');
+            d.nextUpBehavior = view.querySelector(view, '#DefaultNextUpBehavior').value || null;
             d.nextUpTimeout = getNullableIntInput(view, '#DefaultNextUpTimeout');
+            d.replaceSkipOutroWithNextUp = getNullableBoolSelect(view, '#DefaultReplaceSkipOutroWithNextUp');
             d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;
 
             if (view.querySelector('#DefaultCollectionPicker .adminCollectionCb')) {
