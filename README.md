@@ -36,7 +36,8 @@ On **Jellyfin**, you can optionally add a one-click Moonfin button to the stock 
 - **Extra rating sources** through MDBList and TMDB, with the API keys kept on the server.
 - **Seerr integration** with a built-in proxy, single sign-on, and optional request and issue notifications.
 - **Push notifications** that reach Moonfin apps even when they're closed, covering Seerr activity, new media added to your library, and admin broadcasts, with support for a self-hosted relay or your own FCM service account. See [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications).
-- **Admin tools** for setting server-wide defaults, including playback defaults for video, audio, subtitles, and automation, pushing them to existing users, and broadcasting messages to everyone at once.
+- **Admin tools** for setting server-wide defaults across every client setting, pushing them to existing users, and broadcasting a message to everyone at once.
+- **Server messages** that let an admin write a one-off note (title, Markdown body, colour, audience, start and end dates, an optional link button) that shows up in people's apps in a messages window, even if they were offline when it was sent. The old instant broadcast still works for the quick announcement.
 - **Custom themes** with a built-in editor, plus server-side upload and validation.
 - **Retro games** support for browsing and playing game libraries, with arcade ROMs matched offline against FBNeo and MAME data files you upload, server-side artwork with per-game overrides, and saves synced per user. See [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games).
 - **Custom rows** built from MDBList and IMDb lists, cached on the server.
@@ -93,9 +94,9 @@ Open your server dashboard, go to Plugins, and select **Moonbase** to configure 
 
 - Your Seerr URL and whether Seerr is enabled
 - Shared MDBList and TMDB API keys, so individual users don't need their own
-- Default user settings that new users inherit, with a button to push them to existing users
-- Playback defaults for autoplay, audio and subtitle language, subtitle mode, skip lengths, intro action, still watching behavior, and rewind durations
-- A broadcast message to announce something to everyone at once
+- Whether Moonbase Sync is on (required for the Seerr and ratings integrations)
+- Default user settings that new users inherit, with a button to push them to existing users. The Defaults tab covers every client setting in its own subtab, from General Style and Details Screen through Playback and Integrations
+- Server messages, so you can write a note with a title, Markdown body, colour, audience, and start and end dates that shows up in people's apps, plus the quick broadcast for an instant announcement
 - Web startup options and custom theme uploads
 
 Users change their own preferences from the in-app settings page in any Moonfin client. Settings are stored per user and shared across clients, with an optional per-device override for desktop, mobile, and TV.
@@ -106,7 +107,7 @@ The deeper reference material lives in the [Wiki](https://github.com/Moonfin-Cli
 
 | Page | What it covers |
 |------|----------------|
-| [API Reference](https://github.com/Moonfin-Client/Plugin/wiki/API-Reference) | Every plugin endpoint, with methods, auth, and the Seerr config response |
+| [API Reference](https://github.com/Moonfin-Client/Plugin/wiki/API-Reference) | Every plugin endpoint, with methods, auth, the Seerr config response, and the server messages endpoints |
 | [Settings Sync](https://github.com/Moonfin-Client/Plugin/wiki/Settings-Sync) | How sync works, the settings envelope, and the full list of synced settings |
 | [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games) | Game libraries, cores, ROMs, BIOS, saves, and in-browser play |
 | [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications) | Push delivery, webhooks, notification types, and self-hosted relays |
