@@ -27,11 +27,16 @@ public class MoonfinSettingsService
         typeof(MoonfinUserSettings).GetProperties();
 
     public MoonfinSettingsService(ILogger<MoonfinSettingsService> logger)
+        : this(logger, MoonfinPlugin.ResolveDataFolderPath())
+    {
+    }
+
+    /// <summary>Lets tests point the store at a temp directory.</summary>
+    internal MoonfinSettingsService(ILogger<MoonfinSettingsService> logger, string dataPath)
     {
         _logger = logger;
-        _dataPath = MoonfinPlugin.Instance?.DataFolderPath 
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
-        
+        _dataPath = dataPath;
+
         _jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = true,
@@ -995,10 +1000,12 @@ public class MoonfinSettingsService
 
             try
             {
+                // SaveProfileAsync mutates what it is handed, and the caller passes the live
+                // admin defaults, so sharing it leaves one user's hidden items in those defaults.
                 await SaveProfileAsync(
                     userId,
                     "global",
-                    defaults,
+                    CloneProfile(defaults),
                     "admin-default-merge",
                     notifySettingsChanged: false);
                 usersUpdated++;
@@ -1025,7 +1032,8 @@ public class MoonfinSettingsService
             return;
         }
 
-        await SaveProfileAsync(userId, "global", defaults, "admin-default-merge");
+        // Cloned for the same reason as the all-users path.
+        await SaveProfileAsync(userId, "global", CloneProfile(defaults), "admin-default-merge");
     }
 
     private static bool HasAnyProfileValues(MoonfinSettingsProfile profile)

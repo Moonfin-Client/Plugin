@@ -2279,18 +2279,22 @@
                         <!-- 8. Integrations -->
                         <div class="defaultsSubtabPanel" data-subtab="integrations">
                             <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Metadata &amp; Ratings</h4>
-                            <div class="checkboxContainer checkboxContainer-withDescription" style="margin-bottom: 1em;">
-                                <label class="emby-checkbox-label">
-                                    <input type="checkbox" id="DefaultMdblistEnabled" is="emby-checkbox" />
-                                    <span>MDBList Ratings</span>
-                                </label>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMdblistEnabled">MDBList Ratings</label>
+                                <select id="DefaultMdblistEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
                                 <div class="fieldDescription">Enable MDBList ratings by default (requires server-wide or user API key).</div>
                             </div>
-                            <div class="checkboxContainer checkboxContainer-withDescription" style="margin-bottom: 1.2em;">
-                                <label class="emby-checkbox-label">
-                                    <input type="checkbox" id="DefaultTmdbEpisodeRatingsEnabled" is="emby-checkbox" />
-                                    <span>TMDB Episode Ratings</span>
-                                </label>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbEpisodeRatingsEnabled">TMDB Episode Ratings</label>
+                                <select id="DefaultTmdbEpisodeRatingsEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
                                 <div class="fieldDescription">Enable TMDB episode ratings by default (requires server-wide or user API key).</div>
                             </div>
                             <div class="inputContainer">

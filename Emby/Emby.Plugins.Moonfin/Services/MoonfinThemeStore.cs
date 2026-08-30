@@ -113,7 +113,7 @@ namespace Emby.Plugins.Moonfin.Services
                 {
                     return (new UploadedThemeEntry
                     {
-                        Id = validation.ThemeId, DisplayName = validation.DisplayName,
+                        Id = validation.ThemeId, DisplayName = XmlText.Sanitize(validation.DisplayName),
                         FileName = fileName, SizeBytes = utf8Bytes.Length,
                         UploadedAtUtc = uploadTime, UploadedByUserId = uploadedByUserId?.ToString(),
                         ChecksumSha256 = checksum
@@ -127,7 +127,7 @@ namespace Emby.Plugins.Moonfin.Services
                 if (existing == null) { existing = new UploadedThemeEntry(); config.UploadedThemes.Add(existing); }
 
                 existing.Id = validation.ThemeId;
-                existing.DisplayName = validation.DisplayName;
+                existing.DisplayName = XmlText.Sanitize(validation.DisplayName);
                 existing.FileName = fileName;
                 existing.SizeBytes = utf8Bytes.Length;
                 existing.UploadedAtUtc = uploadTime;

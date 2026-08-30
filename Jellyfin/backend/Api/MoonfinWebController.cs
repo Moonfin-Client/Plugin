@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Moonfin.Server.Api;
 
@@ -14,6 +15,10 @@ namespace Moonfin.Server.Api;
 public class MoonfinWebController : ControllerBase
 {
     private readonly Assembly _assembly;
+    private readonly ILogger<MoonfinWebController> _logger;
+
+    // Every asset request hits the same failure, so warn once a run rather than per request.
+    private static int _missingWebRootLogged;
     private static readonly Regex BaseHrefRegex = new Regex(
         "<base\\s+href=\"[^\"]*\"\\s*/?>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -43,8 +48,9 @@ public class MoonfinWebController : ControllerBase
             [".otf"] = "font/otf",
         };
 
-    public MoonfinWebController()
+    public MoonfinWebController(ILogger<MoonfinWebController> logger)
     {
+        _logger = logger;
         _assembly = typeof(MoonfinWebController).Assembly;
     }
 
@@ -135,6 +141,7 @@ public class MoonfinWebController : ControllerBase
         var webRoot = ResolveWebRoot();
         if (string.IsNullOrWhiteSpace(webRoot) || !Directory.Exists(webRoot))
         {
+            WarnAboutMissingWebRoot(webRoot);
             return NotFound(new { Error = "Moonfin web root not found", Path = webRoot });
         }
 
@@ -325,19 +332,35 @@ public class MoonfinWebController : ControllerBase
             }
         }
 
+        // Returned whether or not it exists, so a caller can name it in a diagnostic.
         var dataFolder = MoonfinPlugin.Instance?.DataFolderPath;
         if (!string.IsNullOrWhiteSpace(dataFolder))
         {
-            var dataWeb = Path.Combine(dataFolder, "web");
-            if (Directory.Exists(dataWeb))
-            {
-                return Path.GetFullPath(dataWeb);
-            }
-
-            return Path.GetFullPath(dataWeb);
+            return Path.GetFullPath(Path.Combine(dataFolder, "web"));
         }
 
         return string.Empty;
+    }
+
+    /// <summary>
+    /// The assets normally live beside the assembly, so losing them usually means the plugin
+    /// folder has gone, which a bare 404 gives an admin no way to tell from a routing problem.
+    /// </summary>
+    private void WarnAboutMissingWebRoot(string resolved)
+    {
+        if (Interlocked.Exchange(ref _missingWebRootLogged, 1) != 0)
+        {
+            return;
+        }
+
+        var assemblyDir = Path.GetDirectoryName(_assembly.Location);
+        _logger.LogWarning(
+            "The Moonfin web app is not on disk, so /Moonfin/Web/ has nothing to serve. Looked "
+            + "beside the assembly at {AssemblyDir} for a frontend or web folder, then at "
+            + "{Resolved}. Reinstall the plugin, or copy the release zip's frontend contents "
+            + "into that second path.",
+            assemblyDir,
+            resolved);
     }
 
     private static bool TryResolvePath(string rootPath, string requestPath, out string fullPath)

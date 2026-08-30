@@ -102,10 +102,10 @@ $TimestampIso = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 $Meta = [ordered]@{
     category = "General"
     changelog = ""
-    description = "Moonfin brings a modern TV-style UI to Jellyfin web. Features include: custom navbar, media bar with featured content, Jellyseerr integration, and cross-device settings synchronization."
+    description = "Moonbase is the Moonfin server plugin for Jellyfin, powering settings sync, the Moonfin Web app at /Moonfin/Web/, a built-in theme editor with custom theme APIs, media bar and ratings integrations, and Seerr proxy/SSO with admin defaults and broadcasts across Moonfin clients."
     guid = $PluginGuid
-    name = "Moonfin"
-    overview = "Custom UI and settings sync for Jellyfin"
+    name = "Moonbase"
+    overview = "Moonfin server plugin for Jellyfin with web app hosting, settings sync, theming, and Seerr integrations"
     owner = "RadicalMuffinMan"
     targetAbi = "${TargetAbi}.0"
     timestamp = $TimestampIso
@@ -137,22 +137,47 @@ if (-not $SkipManifestUpdate -and (Test-Path $ManifestFile)) {
     $Manifest = [System.IO.File]::ReadAllText($ManifestFile) | ConvertFrom-Json
     $Manifest = @($Manifest)
 
-    $Manifest[0].versions[0].version = $Version
-    $Manifest[0].versions[0].targetAbi = "${TargetAbi}.0"
-    $Manifest[0].versions[0].checksum = $Hash
-    $Manifest[0].versions[0].timestamp = $Timestamp
-    if (-not [string]::IsNullOrWhiteSpace($SourceUrl)) {
-        $Manifest[0].versions[0].sourceUrl = $SourceUrl
-    } else {
-        $Manifest[0].versions[0].sourceUrl = $Manifest[0].versions[0].sourceUrl -replace '[^/]+$', $ZipName
+    # Prepend rather than assign into versions[0], so cutting a release can't overwrite the
+    # previous one's entry.
+    if (@($Manifest[0].versions | Where-Object { $_.version -eq $Version }).Count -gt 0) {
+        Write-Error "manifest.json already lists version $Version. Bump the version, or remove that entry first if you are deliberately re-cutting it."
+        exit 1
     }
+
+    if (-not [string]::IsNullOrWhiteSpace($SourceUrl)) {
+        $NewSourceUrl = $SourceUrl
+    } else {
+        # Release tags are the three-part version, so 2.2.0.0 is published under the tag 2.2.0
+        $ReleaseTag = $Version -replace '\.[^.]+$', ''
+        $UrlBase = $Manifest[0].versions[0].sourceUrl -replace '/download/[^/]+/[^/]+$', ''
+        $NewSourceUrl = "$UrlBase/download/$ReleaseTag/$ZipName"
+    }
+
+    $NewEntry = [ordered]@{
+        version = $Version
+        changelog = ""
+        targetAbi = "${TargetAbi}.0"
+        sourceUrl = $NewSourceUrl
+        checksum = $Hash
+        timestamp = $Timestamp
+        dependencies = @()
+    }
+
+    $Manifest[0].versions = @([pscustomobject]$NewEntry) + @($Manifest[0].versions)
 
     $Json = ConvertTo-Json -InputObject $Manifest -Depth 10
     if ($Manifest.Count -eq 1 -and -not $Json.TrimStart().StartsWith('[')) {
         $Json = "[$Json]"
     }
     [System.IO.File]::WriteAllText($ManifestFile, $Json, (New-Object System.Text.UTF8Encoding $false))
-    Write-Host "Updated manifest.json with new checksum and version"
+    Write-Host "Prepended version $Version to manifest.json (changelog left blank, fill it in)"
+
+    # The catalog URL people add points at the manifest in the repo root, not this one.
+    $RepoRootManifest = Join-Path (Split-Path $RootDir -Parent) "manifest.json"
+    if (Test-Path $RepoRootManifest) {
+        [System.IO.File]::WriteAllText($RepoRootManifest, $Json, (New-Object System.Text.UTF8Encoding $false))
+        Write-Host "Synced the repo root manifest.json"
+    }
     $ManifestUpdated = $true
 }
 

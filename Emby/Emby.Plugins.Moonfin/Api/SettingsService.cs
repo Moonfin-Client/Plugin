@@ -339,7 +339,9 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(503, new { Error = "Settings sync is disabled" });
 
             var body = await MoonfinJson.ReadBodyAsync<BroadcastBody>(request.RequestStream).ConfigureAwait(false);
-            var message = body?.Message?.Trim();
+            // Sanitize up front so the live websocket text, the push text and the stored
+            // copy all agree.
+            var message = XmlText.Sanitize(body?.Message).Trim();
             if (string.IsNullOrWhiteSpace(message)) return Json(400, new { Error = "message is required" });
 
             var deliveries = Settings.BroadcastMessage(message);
@@ -349,7 +351,7 @@ namespace Emby.Plugins.Moonfin.Api
             var config = Plugin.Instance?.Configuration;
             if (Plugin.Instance != null && config != null)
             {
-                config.Messages.Add(new ServerMessage
+                var stored = new ServerMessage
                 {
                     Id = Guid.NewGuid().ToString("N"),
                     Body = message,
@@ -358,7 +360,11 @@ namespace Emby.Plugins.Moonfin.Api
                     Audience = ServerMessage.AudienceAll,
                     CreatedUtc = DateTime.UtcNow,
                     CreatedByUserId = AuthHelpers.GetCurrentUserId(Request, _authContext)?.ToString("N")
-                });
+                };
+
+                stored.Sanitize();
+
+                config.Messages.Add(stored);
                 ServerMessage.Prune(config.Messages);
                 Plugin.Instance.UpdateConfiguration(config);
                 Settings.BroadcastSystemEvent("messagesChanged");

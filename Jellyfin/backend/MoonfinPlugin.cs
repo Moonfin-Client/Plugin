@@ -11,6 +11,8 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
     public static MoonfinPlugin? Instance { get; private set; }
 
+    private bool _migrationFailed;
+
     public IServiceProvider? ServiceProvider { get; }
 
     public MoonfinPlugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
@@ -24,11 +26,32 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
         Instance = this;
         ServiceProvider = serviceProvider;
 
-        var changed = Configuration.MigrateLegacyKeys();
-        changed |= Configuration.EnsureWebhookSecret();
-        if (changed)
+        // Nothing here is allowed to throw. Jellyfin reads an exception out of this constructor
+        // as the plugin malfunctioning, writes that into meta.json, and deletes the folder on the
+        // next startup. Touching Configuration is enough to get there, since Jellyfin answers an
+        // unreadable config by writing defaults over it and a failing write escapes.
+        TryMigrateConfiguration();
+    }
+
+    /// <summary>
+    /// Swallows any failure, and is safe to call again since it only writes when something changed.
+    /// </summary>
+    private void TryMigrateConfiguration()
+    {
+        try
         {
-            SaveConfiguration();
+            var changed = Configuration.MigrateLegacyKeys();
+            changed |= Configuration.EnsureWebhookSecret();
+            if (changed)
+            {
+                SaveConfiguration();
+            }
+
+            _migrationFailed = false;
+        }
+        catch (Exception)
+        {
+            _migrationFailed = true;
         }
     }
 
@@ -56,6 +79,12 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <inheritdoc />
     public override void UpdateConfiguration(BasePluginConfiguration configuration)
     {
+        if (_migrationFailed)
+        {
+            // Startup failed, most likely on transient I/O. A save is a good moment to retry.
+            TryMigrateConfiguration();
+        }
+
         var previousUrl = Configuration.PublicServerUrl;
         var previousGameLibraryIds = Configuration.GameLibraryIds?.ToList() ?? new List<string>();
         base.UpdateConfiguration(configuration);

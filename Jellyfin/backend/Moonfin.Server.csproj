@@ -4,9 +4,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>2.2.0.0</AssemblyVersion>
-    <FileVersion>2.2.0.0</FileVersion>
-    <Version>1.9.1</Version>
+    <!-- One place to bump, so the three can't drift apart. The release scripts still
+         override all of them with -p: switches. -->
+    <MoonfinVersion>2.2.0</MoonfinVersion>
+    <AssemblyVersion>$(MoonfinVersion).0</AssemblyVersion>
+    <FileVersion>$(MoonfinVersion).0</FileVersion>
+    <Version>$(MoonfinVersion)</Version>
     <RootNamespace>Moonfin.Server</RootNamespace>
     <AssemblyName>Moonfin.Server</AssemblyName>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

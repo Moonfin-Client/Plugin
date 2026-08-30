@@ -18,6 +18,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Read Jellyfin version and ABI
+        id: jf_meta
+        run: |
+          # MoonfinVersion is the three-part source of AssemblyVersion, hence the trailing .0
+          VERSION="$(grep -oPm1 '(?<=<MoonfinVersion>)[^<]+' Jellyfin/backend/Moonfin.Server.csproj).0"
+          ABI=$(grep 'Jellyfin.Controller' Jellyfin/backend/Moonfin.Server.csproj | grep -oP 'Version="\K[^"]+')
+
+          # build.sh's default version is a second copy of the same number.
+          SCRIPT_VERSION=$(grep -oPm1 'VERSION="\$\{1:-\K[^}]+' Jellyfin/build.sh)
+          if [ "$SCRIPT_VERSION" != "$VERSION" ]; then
+            echo "::error::Version drift: build.sh says ${SCRIPT_VERSION}, the csproj says ${VERSION}."
+            exit 1
+          fi
+
+          # build.sh hardcodes the ABI on purpose. Deriving it from the PackageReference would
+          # let a routine package bump raise the minimum server version and strand 10.10 installs.
+          SCRIPT_ABI=$(grep -oPm1 'TARGET_ABI="\$\{2:-\K[^}]+' Jellyfin/build.sh)
+          if [ "$SCRIPT_ABI" != "$ABI" ]; then
+            echo "::error::Target ABI drift: build.sh says ${SCRIPT_ABI}, Jellyfin.Controller says ${ABI}."
+            echo "::error::Change both together, and only when you mean to drop older servers."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "abi=${ABI}.0" >> "$GITHUB_OUTPUT"
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -51,8 +77,17 @@ jobs:
           cd Emby
           bash build.sh "$EMBY_VERSION" 2>&1 | tee "${{ runner.temp }}/emby-build.log"
 
-      - name: Fail if any build failed
-        if: steps.backend_build.outcome != 'success' || steps.emby_build.outcome != 'success'
+      - name: Run tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dotnet test Jellyfin/tests/Moonfin.Server.Tests/Moonfin.Server.Tests.csproj \
+            -c Release \
+            2>&1 | tee "${{ runner.temp }}/tests.log"
+
+      - name: Fail if any step failed
+        if: steps.backend_build.outcome != 'success' || steps.emby_build.outcome != 'success' || steps.tests.outcome != 'success'
         run: exit 1
 
       - name: Save build results
@@ -65,11 +100,12 @@ jobs:
             "pr_number": ${{ github.event.pull_request.number }},
             "sha": "${{ github.event.pull_request.head.sha }}",
             "backend_build": "${{ steps.backend_build.outcome }}",
-            "emby_build": "${{ steps.emby_build.outcome }}"
+            "emby_build": "${{ steps.emby_build.outcome }}",
+            "tests": "${{ steps.tests.outcome }}"
           }
           EOF
 
-          for log in backend-build.log emby-build.log; do
+          for log in backend-build.log emby-build.log tests.log; do
             if [ -f "${{ runner.temp }}/$log" ]; then
               cp "${{ runner.temp }}/$log" "${{ runner.temp }}/build-results/"
             fi
@@ -81,15 +117,6 @@ jobs:
         with:
           name: build-results
           path: ${{ runner.temp }}/build-results/
-
-      - name: Read Jellyfin version and ABI
-        if: github.event_name == 'push' && steps.backend_build.outcome == 'success' && steps.emby_build.outcome == 'success'
-        id: jf_meta
-        run: |
-          VERSION=$(grep -oPm1 '(?<=<AssemblyVersion>)[^<]+' Jellyfin/backend/Moonfin.Server.csproj)
-          ABI=$(grep 'Jellyfin.Controller' Jellyfin/backend/Moonfin.Server.csproj | grep -oP 'Version="\K[^"]+')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "abi=${ABI}.0" >> "$GITHUB_OUTPUT"
 
       - name: Package Jellyfin ZIP
         if: github.event_name == 'push' && steps.backend_build.outcome == 'success' && steps.emby_build.outcome == 'success'
@@ -115,10 +142,10 @@ jobs:
           {
             "category": "General",
             "changelog": "",
-            "description": "Moonfin brings a modern TV-style UI to Jellyfin web. Features include: custom navbar, media bar with featured content, Jellyseerr integration, and cross-device settings synchronization.",
+            "description": "Moonbase is the Moonfin server plugin for Jellyfin, powering settings sync, the Moonfin Web app at /Moonfin/Web/, a built-in theme editor with custom theme APIs, media bar and ratings integrations, and Seerr proxy/SSO with admin defaults and broadcasts across Moonfin clients.",
             "guid": "${PLUGIN_GUID}",
-            "name": "Moonfin",
-            "overview": "Custom UI and settings sync for Jellyfin",
+            "name": "Moonbase",
+            "overview": "Moonfin server plugin for Jellyfin with web app hosting, settings sync, theming, and Seerr integrations",
             "owner": "RadicalMuffinMan",
             "targetAbi": "${TARGET_ABI}",
             "timestamp": "${TIMESTAMP}",

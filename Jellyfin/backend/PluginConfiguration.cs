@@ -460,18 +460,9 @@ public class ServerMessage
     /// </summary>
     public void Sanitize()
     {
-        Title = (Title ?? string.Empty).Trim();
-        Body = (Body ?? string.Empty).Trim();
-
-        if (Body.Length > MaxBodyLength)
-        {
-            Body = Body.Substring(0, MaxBodyLength);
-        }
-
-        if (Title.Length > MaxTitleLength)
-        {
-            Title = Title.Substring(0, MaxTitleLength);
-        }
+        // Strip before cutting, so trimming an emoji in half can't put a lone surrogate back.
+        Title = XmlText.Truncate(XmlText.Sanitize(Title).Trim(), MaxTitleLength);
+        Body = XmlText.Truncate(XmlText.Sanitize(Body).Trim(), MaxBodyLength);
 
         Color = Color switch
         {
@@ -503,7 +494,7 @@ public class ServerMessage
                 .ToList();
         }
 
-        ActionLabel = string.IsNullOrWhiteSpace(ActionLabel) ? null : ActionLabel.Trim();
+        ActionLabel = XmlText.SanitizeOrNull(ActionLabel)?.Trim();
         ActionUrl = SanitizeActionUrl(ActionUrl);
 
         // A link with no label is useless to the user, and a label with no link does nothing.

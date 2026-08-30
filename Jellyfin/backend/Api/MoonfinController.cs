@@ -31,6 +31,7 @@ public class MoonfinController : ControllerBase
     private readonly ILibraryManager _libraryManager;
     private readonly NotificationStore _notificationStore;
     private readonly PushDeliveryService _pushDelivery;
+    private readonly ConfigBackupService _configBackup;
     private readonly ILogger<MoonfinController> _logger;
     
     private static readonly Type? _userManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
@@ -51,13 +52,61 @@ public class MoonfinController : ControllerBase
         ILibraryManager libraryManager,
         NotificationStore notificationStore,
         PushDeliveryService pushDelivery,
+        ConfigBackupService configBackup,
         ILogger<MoonfinController> logger)
     {
         _settingsService = settingsService;
         _libraryManager = libraryManager;
         _notificationStore = notificationStore;
         _pushDelivery = pushDelivery;
+        _configBackup = configBackup;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Tells the config page whether to offer a restore.
+    /// </summary>
+    [HttpGet("Admin/ConfigBackup")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult GetConfigBackupStatus()
+    {
+        return Ok(new
+        {
+            looksReset = _configBackup.ConfigurationLooksReset,
+            backupPath = _configBackup.BackupPath,
+        });
+    }
+
+    /// <summary>
+    /// Copies the backup over the live plugin configuration. Deliberately manual, so an admin who
+    /// reset the settings on purpose doesn't have that undone behind their back. Needs a restart.
+    /// </summary>
+    [HttpPost("Admin/RestoreConfig")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult RestoreConfigFromBackup()
+    {
+        try
+        {
+            if (!_configBackup.Restore())
+            {
+                return NotFound(new { error = "No configuration backup was found." });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to restore the Moonfin plugin configuration from backup");
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = ex.Message });
+        }
+
+        return Ok(new
+        {
+            restored = true,
+            restartRequired = true,
+            message = "Configuration restored. Restart the server for it to take effect.",
+        });
     }
 
     /// <summary>
@@ -499,7 +548,8 @@ public class MoonfinController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "Settings sync is disabled" });
         }
 
-        var message = request.Message?.Trim();
+        // Sanitize up front so the live SSE text, the push text and the stored copy all agree.
+        var message = XmlText.Sanitize(request.Message).Trim();
         if (string.IsNullOrWhiteSpace(message))
         {
             return BadRequest(new { Error = "message is required" });
@@ -519,6 +569,8 @@ public class MoonfinController : ControllerBase
             CreatedUtc = DateTime.UtcNow,
             CreatedByUserId = this.GetUserIdFromClaims()?.ToString("N")
         };
+
+        stored.Sanitize();
 
         config.Messages.Add(stored);
         ServerMessage.Prune(config.Messages);

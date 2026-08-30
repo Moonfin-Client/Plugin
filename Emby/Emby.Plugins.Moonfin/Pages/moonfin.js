@@ -692,7 +692,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             }
         });
 
+        var isConfigured = !!((order && order.length) || (hidden && hidden.length));
+
         container.innerHTML = '';
+
+        var bar = document.createElement('div');
+        bar.className = 'detailButtonPickerBar';
+        bar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;';
+        bar.innerHTML =
+            '<span class="detailButtonPickerState fieldDescription" style="flex:1;margin:0;"></span>' +
+            '<button type="button" class="detailButtonClearBtn" style="background:none;border:1px solid rgba(128,128,128,0.2);border-radius:3px;color:rgba(128,128,128,0.7);padding:2px 8px;cursor:pointer;font-size:0.85em;">Clear</button>';
+        container.appendChild(bar);
+
         ordered.forEach(function (item) {
             var row = document.createElement('div');
             row.className = 'detailButtonItem';
@@ -708,24 +719,63 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             container.appendChild(row);
         });
 
+        setButtonPickerConfigured(container, isConfigured);
+
         if (!container.dataset.hasListener) {
             container.dataset.hasListener = 'true';
             container.addEventListener('click', function (e) {
+                if (e.target.closest('.detailButtonClearBtn')) {
+                    // Back to not set, so the push stops carrying a layout at all.
+                    loadButtonPicker(view, selector, buttons, null, null);
+                    return;
+                }
+
                 var btn = e.target.closest('.detailButtonMoveBtn');
                 if (!btn) return;
                 var row = btn.closest('.detailButtonItem');
                 if (!row) return;
-                if (btn.dataset.dir === 'up' && row.previousElementSibling) {
+                if (btn.dataset.dir === 'up' && row.previousElementSibling
+                    && row.previousElementSibling.classList.contains('detailButtonItem')) {
                     container.insertBefore(row, row.previousElementSibling);
+                    setButtonPickerConfigured(container, true);
                 } else if (btn.dataset.dir === 'down' && row.nextElementSibling) {
                     container.insertBefore(row.nextElementSibling, row);
+                    setButtonPickerConfigured(container, true);
+                }
+            });
+
+            container.addEventListener('change', function (e) {
+                if (e.target && e.target.type === 'checkbox') {
+                    setButtonPickerConfigured(container, true);
                 }
             });
         }
     }
 
+    function setButtonPickerConfigured(container, configured) {
+        container.dataset.configured = configured ? 'true' : 'false';
+        var state = container.querySelector('.detailButtonPickerState');
+        var clear = container.querySelector('.detailButtonClearBtn');
+        if (state) {
+            state.textContent = configured
+                ? 'Set by you. Applying defaults will replace each user\'s button layout.'
+                : 'Not set. Users keep their own button layout.';
+        }
+        if (clear) {
+            clear.style.display = configured ? '' : 'none';
+        }
+    }
+
     function getButtonPickerValue(view, selector) {
-        var items = view.querySelectorAll(selector + ' .detailButtonItem');
+        var container = view.querySelector(selector);
+
+        // An untouched picker sends nothing. It renders every button either way, so its
+        // contents would read as a choice and overwrite what each user arranged.
+        if (!container || container.dataset.configured !== 'true') {
+            return { order: null, hidden: null };
+        }
+
+        var items = container.querySelectorAll('.detailButtonItem');
         var order = [];
         var hidden = [];
         items.forEach(function (item) {
@@ -1889,8 +1939,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultShowFavoritesButton', defaults.showFavoritesButton);
             setNullableBoolSelect(view, '#DefaultShowLibrariesInToolbar', defaults.showLibrariesInToolbar);
 
-            view.querySelector('#DefaultMdblistEnabled').checked = !!defaults.mdblistEnabled;
-            view.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked = !!defaults.tmdbEpisodeRatingsEnabled;
+            setNullableBoolSelect(view, '#DefaultMdblistEnabled', defaults.mdblistEnabled);
+            setNullableBoolSelect(view, '#DefaultTmdbEpisodeRatingsEnabled', defaults.tmdbEpisodeRatingsEnabled);
             setNullableBoolSelect(view, '#DefaultMdblistShowRatingBadges', defaults.mdblistShowRatingBadges);
             setNullableBoolSelect(view, '#DefaultMdblistShowRatingNames', defaults.mdblistShowRatingNames);
             loadRatingSourcesPicker(view, defaults.mdblistRatingSources || null);
@@ -2156,8 +2206,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.showFavoritesButton = getNullableBoolSelect(view, '#DefaultShowFavoritesButton');
             d.showLibrariesInToolbar = getNullableBoolSelect(view, '#DefaultShowLibrariesInToolbar');
 
-            d.mdblistEnabled = view.querySelector('#DefaultMdblistEnabled').checked;
-            d.tmdbEpisodeRatingsEnabled = view.querySelector('#DefaultTmdbEpisodeRatingsEnabled').checked;
+            d.mdblistEnabled = getNullableBoolSelect(view, '#DefaultMdblistEnabled');
+            d.tmdbEpisodeRatingsEnabled = getNullableBoolSelect(view, '#DefaultTmdbEpisodeRatingsEnabled');
             d.mdblistShowRatingBadges = getNullableBoolSelect(view, '#DefaultMdblistShowRatingBadges');
             d.mdblistShowRatingNames = getNullableBoolSelect(view, '#DefaultMdblistShowRatingNames');
             d.mdblistRatingSources = getRatingSourcesValue(view);

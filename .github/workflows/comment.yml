@@ -56,6 +56,7 @@ jobs:
 
             const steps = {
               'Backend Build':    outcomes.backend_build,
+              'Tests':            outcomes.tests,
             };
             const failed  = Object.entries(steps).filter(([, v]) => v !== 'success');
             const success = failed.length === 0;
@@ -78,6 +79,7 @@ jobs:
               // Append collapsible log for each failed step
               const logFiles = {
                 'Backend Build':    'backend-build.log',
+                'Tests':            'tests.log',
               };
 
               for (const [name] of failed) {

@@ -344,6 +344,17 @@
         <div data-role="content">
             <div class="content-primary">
                 <form id="MoonfinConfigForm">
+                    <div id="MoonfinConfigResetBanner" style="display:none; margin:0 0 1.2em 0; padding:1em 1.2em; border:1px solid rgba(245,158,11,0.6); border-left-width:4px; border-radius:4px; background:rgba(245,158,11,0.08);">
+                        <div style="font-weight:600; margin-bottom:0.4em;">These settings look like they were reset</div>
+                        <div class="fieldDescription" style="margin-bottom:0.8em;">
+                            Moonbase is running on default settings, but a backup holding real ones is still on disk at
+                            <code id="MoonfinConfigBackupPath"></code>. Restoring copies it back over the live file. The
+                            server has to be restarted afterwards for it to take effect. Per-user settings are stored
+                            separately and aren't affected by this.
+                        </div>
+                        <button is="emby-button" type="button" id="MoonfinRestoreConfigBtn" class="raised">Restore these settings</button>
+                        <div id="MoonfinRestoreConfigResult" class="fieldDescription" style="display:none; margin-top:0.6em;"></div>
+                    </div>
                     <div class="sectionTitleContainer flex align-items-center">
                         <h2 class="sectionTitle">Moonfin Settings</h2>
                     </div>
@@ -2138,18 +2149,22 @@
                         <!-- 8. Integrations -->
                         <div class="defaultsSubtabPanel" data-subtab="integrations">
                             <h4 style="margin: 1em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Metadata &amp; Ratings</h4>
-                            <div class="checkboxContainer checkboxContainer-withDescription" style="margin-bottom: 1em;">
-                                <label class="emby-checkbox-label">
-                                    <input type="checkbox" id="DefaultMdblistEnabled" is="emby-checkbox" />
-                                    <span>MDBList Ratings</span>
-                                </label>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMdblistEnabled">MDBList Ratings</label>
+                                <select id="DefaultMdblistEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
                                 <div class="fieldDescription">Enable MDBList ratings by default (requires server-wide or user API key).</div>
                             </div>
-                            <div class="checkboxContainer checkboxContainer-withDescription" style="margin-bottom: 1.2em;">
-                                <label class="emby-checkbox-label">
-                                    <input type="checkbox" id="DefaultTmdbEpisodeRatingsEnabled" is="emby-checkbox" />
-                                    <span>TMDB Episode Ratings</span>
-                                </label>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbEpisodeRatingsEnabled">TMDB Episode Ratings</label>
+                                <select id="DefaultTmdbEpisodeRatingsEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
                                 <div class="fieldDescription">Enable TMDB episode ratings by default (requires server-wide or user API key).</div>
                             </div>
                             <div class="inputContainer">
@@ -3071,16 +3086,6 @@
                 return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             }
 
-            function setCheckbox(selector, val) {
-                var el = document.querySelector(selector);
-                if (el) el.checked = !!val;
-            }
-
-            function getCheckbox(selector) {
-                var el = document.querySelector(selector);
-                return el ? !!el.checked : false;
-            }
-
             function getNullableBoolSelect(selector) {
                 var select = document.querySelector(selector);
                 if (!select) return null;
@@ -3452,7 +3457,18 @@
                     }
                 });
 
+                var isConfigured = !!((order && order.length) || (hidden && hidden.length));
+
                 container.innerHTML = '';
+
+                var bar = document.createElement('div');
+                bar.className = 'detailButtonPickerBar';
+                bar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;';
+                bar.innerHTML =
+                    '<span class="detailButtonPickerState fieldDescription" style="flex:1;margin:0;"></span>'
+                    + '<button type="button" class="detailButtonClearBtn" style="background:none;border:1px solid rgba(255,255,255,0.2);border-radius:3px;color:rgba(255,255,255,0.7);padding:2px 8px;cursor:pointer;font-size:0.85em;">Clear</button>';
+                container.appendChild(bar);
+
                 ordered.forEach(function(item) {
                     var row = document.createElement('div');
                     row.className = 'detailButtonItem';
@@ -3468,24 +3484,63 @@
                     container.appendChild(row);
                 });
 
+                setButtonPickerConfigured(container, isConfigured);
+
                 if (!container.dataset.hasListener) {
                     container.dataset.hasListener = 'true';
                     container.addEventListener('click', function(e) {
+                        if (e.target.closest('.detailButtonClearBtn')) {
+                            // Back to not set, so the push stops carrying a layout at all.
+                            loadButtonPicker(selector, buttons, null, null);
+                            return;
+                        }
+
                         var btn = e.target.closest('.detailButtonMoveBtn');
                         if (!btn) return;
                         var row = btn.closest('.detailButtonItem');
                         if (!row) return;
-                        if (btn.dataset.dir === 'up' && row.previousElementSibling) {
+                        if (btn.dataset.dir === 'up' && row.previousElementSibling
+                            && row.previousElementSibling.classList.contains('detailButtonItem')) {
                             container.insertBefore(row, row.previousElementSibling);
+                            setButtonPickerConfigured(container, true);
                         } else if (btn.dataset.dir === 'down' && row.nextElementSibling) {
                             container.insertBefore(row.nextElementSibling, row);
+                            setButtonPickerConfigured(container, true);
+                        }
+                    });
+
+                    container.addEventListener('change', function(e) {
+                        if (e.target && e.target.type === 'checkbox') {
+                            setButtonPickerConfigured(container, true);
                         }
                     });
                 }
             }
 
+            function setButtonPickerConfigured(container, configured) {
+                container.dataset.configured = configured ? 'true' : 'false';
+                var state = container.querySelector('.detailButtonPickerState');
+                var clear = container.querySelector('.detailButtonClearBtn');
+                if (state) {
+                    state.textContent = configured
+                        ? 'Set by you. Applying defaults will replace each user\'s button layout.'
+                        : 'Not set. Users keep their own button layout.';
+                }
+                if (clear) {
+                    clear.style.display = configured ? '' : 'none';
+                }
+            }
+
             function getButtonPickerValue(selector) {
-                var items = document.querySelectorAll(selector + ' .detailButtonItem');
+                var container = document.querySelector(selector);
+
+                // An untouched picker sends nothing. It renders every button either way, so its
+                // contents would read as a choice and overwrite what each user arranged.
+                if (!container || container.dataset.configured !== 'true') {
+                    return { order: null, hidden: null };
+                }
+
+                var items = container.querySelectorAll('.detailButtonItem');
                 var order = [];
                 var hidden = [];
                 items.forEach(function(item) {
@@ -4090,6 +4145,15 @@
             function loadHomeSectionsEditor(savedSections, legacyOrder) {
                 initializeHomeLayoutAvailableRows();
                 HOME_LAYOUT_STATE.sections = normalizeHomeSections(savedSections, legacyOrder);
+
+                // Adding a genre, collection or playlist row switches its category toggle on,
+                // and that has to mean rows added here and now, or every save forces them again.
+                HOME_LAYOUT_STATE.pluginSourcesAtLoad = {};
+                HOME_LAYOUT_STATE.sections.forEach(function(section) {
+                    if (section && section.pluginSource) {
+                        HOME_LAYOUT_STATE.pluginSourcesAtLoad[section.pluginSource] = true;
+                    }
+                });
                 HOME_LAYOUT_STATE.selectedIndex = HOME_LAYOUT_STATE.sections.length > 0 ? HOME_LAYOUT_STATE.sections.length - 1 : null;
                 renumberHomeLayoutSections();
                 bindHomeLayoutEditorEvents();
@@ -4995,8 +5059,64 @@
                 });
             }
 
+            // Jellyfin replaces a config it can't parse with defaults and logs nothing, so an
+            // admin's first sign of trouble is every setting being blank.
+            function loadConfigBackupStatus() {
+                var banner = document.querySelector('#MoonfinConfigResetBanner');
+                if (!banner) return;
+
+                ApiClient.getJSON(ApiClient.getUrl('Moonfin/Admin/ConfigBackup')).then(function(status) {
+                    if (!status || !status.looksReset) {
+                        banner.style.display = 'none';
+                        return;
+                    }
+
+                    var pathEl = document.querySelector('#MoonfinConfigBackupPath');
+                    if (pathEl) pathEl.textContent = status.backupPath || 'the Moonfin data folder';
+                    banner.style.display = '';
+                }, function() {
+                    // An older server, or the endpoint is unreachable. Nothing useful to show.
+                    banner.style.display = 'none';
+                });
+            }
+
+            function bindRestoreConfigButton() {
+                var button = document.querySelector('#MoonfinRestoreConfigBtn');
+                if (!button || button.dataset.bound) return;
+                button.dataset.bound = 'true';
+
+                button.addEventListener('click', function() {
+                    if (!window.confirm('Copy the backup over the current Moonbase settings? The server has to be restarted afterwards.')) {
+                        return;
+                    }
+
+                    var result = document.querySelector('#MoonfinRestoreConfigResult');
+                    button.disabled = true;
+
+                    ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('Moonfin/Admin/RestoreConfig'),
+                        dataType: 'json'
+                    }).then(function(response) {
+                        if (result) {
+                            result.style.display = '';
+                            result.textContent = (response && response.message)
+                                || 'Configuration restored. Restart the server for it to take effect.';
+                        }
+                    }, function() {
+                        button.disabled = false;
+                        if (result) {
+                            result.style.display = '';
+                            result.textContent = 'Could not restore the backup. Check the server log for details.';
+                        }
+                    });
+                });
+            }
+
             document.addEventListener('pageshow', function(e) {
                 if (e.target.id !== 'MoonfinConfigPage') return;
+
+                bindRestoreConfigButton();
 
                 ensureMoonfinAdminRuntimeStyles();
                 initializeAdminTabs();
@@ -5162,6 +5282,8 @@
                     loadMessagesList();
                 });
 
+                loadConfigBackupStatus();
+
                 Dashboard.showLoadingMsg();
                 ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
                     document.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
@@ -5312,8 +5434,8 @@
                     setNullableBoolSelect('#DefaultReplaceSkipOutroWithNextUp', defaults.replaceSkipOutroWithNextUp);
                     setNullableBoolSelect('#DefaultCinemaModeEpisodesEnabled', defaults.cinemaModeEpisodesEnabled);
 
-                    setCheckbox('#DefaultMdblistEnabled', defaults.mdblistEnabled);
-                    setCheckbox('#DefaultTmdbEpisodeRatingsEnabled', defaults.tmdbEpisodeRatingsEnabled);
+                    setNullableBoolSelect('#DefaultMdblistEnabled', defaults.mdblistEnabled);
+                    setNullableBoolSelect('#DefaultTmdbEpisodeRatingsEnabled', defaults.tmdbEpisodeRatingsEnabled);
                     setNullableBoolSelect('#DefaultMdblistShowRatingBadges', defaults.mdblistShowRatingBadges);
                     setNullableBoolSelect('#DefaultMdblistShowRatingNames', defaults.mdblistShowRatingNames);
                     loadRatingSourcesPicker(defaults.mdblistRatingSources || null);
@@ -5784,9 +5906,11 @@
                         config.DefaultUserSettings.rewatchSortBy = document.querySelector('#DefaultRewatchSortBy').value || null;
                         config.DefaultUserSettings.displaySinceYouWatchedRows = getNullableBoolSelect('#DefaultDisplaySinceYouWatchedRows');
                         config.DefaultUserSettings.homeImageUseSeriesImage = getNullableBoolSelect('#DefaultHomeImageUseSeriesImage');
+                        var pluginSourcesAtLoad = HOME_LAYOUT_STATE.pluginSourcesAtLoad || {};
                         HOME_LAYOUT_STATE.sections.forEach(function(section) {
                             var toggle = HOME_LAYOUT_ROW_TOGGLES[section.pluginSource];
                             if (!toggle || config.DefaultUserSettings[toggle.setting] === true) return;
+                            if (pluginSourcesAtLoad[section.pluginSource]) return;
                             config.DefaultUserSettings[toggle.setting] = true;
                             // Keep the select in step, otherwise it goes on reading No
                             // until the page is reloaded.
@@ -5811,8 +5935,8 @@
                         config.DefaultUserSettings.showFavoritesButton = getNullableBoolSelect('#DefaultShowFavoritesButton');
                         config.DefaultUserSettings.showSyncPlayButton = getNullableBoolSelect('#DefaultShowSyncPlayButton');
                         config.DefaultUserSettings.showLibrariesInToolbar = getNullableBoolSelect('#DefaultShowLibrariesInToolbar');
-                        config.DefaultUserSettings.mdblistEnabled = getCheckbox('#DefaultMdblistEnabled');
-                        config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = getCheckbox('#DefaultTmdbEpisodeRatingsEnabled');
+                        config.DefaultUserSettings.mdblistEnabled = getNullableBoolSelect('#DefaultMdblistEnabled');
+                        config.DefaultUserSettings.tmdbEpisodeRatingsEnabled = getNullableBoolSelect('#DefaultTmdbEpisodeRatingsEnabled');
                         config.DefaultUserSettings.mdblistShowRatingBadges = getNullableBoolSelect('#DefaultMdblistShowRatingBadges');
                         config.DefaultUserSettings.mdblistShowRatingNames = getNullableBoolSelect('#DefaultMdblistShowRatingNames');
                         config.DefaultUserSettings.mdblistRatingSources = getRatingSourcesValue();
@@ -5910,7 +6034,18 @@
                         config.DefaultUserSettings.hiddenOsdButtonsMobile = osdVal.hidden;
                         config.DefaultUserSettings.hiddenOsdButtonsDesktop = osdVal.hidden;
 
-                        return ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, config).then(function(result) {
+                        // Messages live in this object but are managed through their own
+                        // endpoints, so the copy read at the top of submit() is already stale.
+                        return ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(fresh) {
+                            config.Messages = fresh ? fresh.Messages : config.Messages;
+                            return config;
+                        }, function() {
+                            // Dropping the key would be worse: the server replaces the whole
+                            // object, so an absent Messages deserializes to an empty list.
+                            return config;
+                        }).then(function(payload) {
+                            return ApiClient.updatePluginConfiguration(MoonfinConfig.pluginUniqueId, payload);
+                        }).then(function(result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
                         });
                     });
@@ -5933,7 +6068,7 @@
 
                         var confirmMsg = overwrite
                             ? 'Reset ALL server users to the configured defaults?\n\nThis permanently erases every user\'s current Moonfin settings (including any device profile overrides) and replaces them with these defaults.'
-                            : 'Apply the configured defaults to all existing users?\n\nDefaults are merged into each user\'s settings without removing their personal customizations.';
+                            : 'Apply the configured defaults to all existing users?\n\nEvery default you have set replaces that user\'s own choice for that setting. Settings you left as "Not set" are left alone.';
                         if (!window.confirm(confirmMsg)) {
                             return;
                         }
@@ -6021,7 +6156,7 @@
                         var overwrite = !!(document.querySelector('#OverwriteSingleCheckbox') || {}).checked;
                         var confirmMsg = overwrite
                             ? 'Reset ' + (userName || 'this user') + ' to the configured defaults?\n\nThis permanently erases their current Moonfin settings and replaces them with these defaults.'
-                            : 'Apply the configured defaults to ' + (userName || 'this user') + '?\n\nDefaults are merged in without removing their personal customizations.';
+                            : 'Apply the configured defaults to ' + (userName || 'this user') + '?\n\nEvery default you have set replaces their own choice for that setting. Settings you left as "Not set" are left alone.';
                         if (!window.confirm(confirmMsg)) {
                             return;
                         }

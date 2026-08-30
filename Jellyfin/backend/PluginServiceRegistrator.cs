@@ -55,6 +55,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<UserBookmarksService>();
         serviceCollection.AddHttpClient();
 
+        serviceCollection.AddSingleton<ConfigBackupService>();
+        serviceCollection.AddHostedService(provider => provider.GetRequiredService<ConfigBackupService>());
+
         // Auto-register file transformations on plugin load (no manual task needed)
         serviceCollection.AddHostedService<FileTransformationHostedService>();
 

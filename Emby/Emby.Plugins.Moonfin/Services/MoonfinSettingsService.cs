@@ -508,7 +508,10 @@ namespace Emby.Plugins.Moonfin.Services
         public Task MergeDefaultsToUserAsync(Guid userId, MoonfinSettingsProfile defaults)
         {
             if (defaults == null) throw new ArgumentNullException("defaults");
-            return SaveProfileAsync(userId, "global", defaults, "admin-default-push", notifySettingsChanged: false);
+
+            // SaveProfileAsync mutates what it is handed, and the caller passes the live admin
+            // defaults, so sharing it leaves one user's hidden items in those defaults.
+            return SaveProfileAsync(userId, "global", CloneProfile(defaults), "admin-default-push", notifySettingsChanged: false);
         }
 
         /// <summary>Resets every server user to a clean defaults-only profile and deletes orphaned files for users that no longer exist.</summary>

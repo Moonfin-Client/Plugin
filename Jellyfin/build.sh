@@ -10,6 +10,8 @@ VERSION="${1:-2.2.0.0}"
 TARGET_ABI="${2:-10.10.0}"
 SOURCE_URL="${3:-}"
 BUILD_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+# Release tags are the three-part version, so 2.2.0.0 is published under the tag 2.2.0
+RELEASE_TAG="${VERSION%.*}"
 
 # Get repo root (where this script lives)
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -100,10 +102,10 @@ cat > "$RELEASE_DIR/meta.json" <<EOF
 {
   "category": "General",
   "changelog": "",
-  "description": "Moonfin brings a modern TV-style UI to Jellyfin web. Features include: custom navbar, media bar with featured content, Jellyseerr integration, and cross-device settings synchronization.",
+  "description": "Moonbase is the Moonfin server plugin for Jellyfin, powering settings sync, the Moonfin Web app at /Moonfin/Web/, a built-in theme editor with custom theme APIs, media bar and ratings integrations, and Seerr proxy/SSO with admin defaults and broadcasts across Moonfin clients.",
   "guid": "${PLUGIN_GUID}",
-  "name": "Moonfin",
-  "overview": "Custom UI and settings sync for Jellyfin",
+  "name": "Moonbase",
+  "overview": "Moonfin server plugin for Jellyfin with web app hosting, settings sync, theming, and Seerr integrations",
   "owner": "RadicalMuffinMan",
   "targetAbi": "${TARGET_ABI}.0",
   "timestamp": "${TIMESTAMP_ISO}",
@@ -141,23 +143,45 @@ if [ "${SKIP_MANIFEST_UPDATE:-0}" != "1" ] && [ -f "$MANIFEST_FILE" ]; then
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
     if command -v jq &> /dev/null; then
+        # Prepend rather than assign into versions[0], so cutting a release can't overwrite
+        # the previous one's entry.
+        EXISTING=$(jq -r --arg ver "$VERSION" \
+            '[.[0].versions[] | select(.version == $ver)] | length' "$MANIFEST_FILE")
+        if [ "$EXISTING" != "0" ]; then
+            echo "Error: manifest.json already lists version $VERSION." >&2
+            echo "Bump the version, or remove that entry first if you are deliberately re-cutting it." >&2
+            exit 1
+        fi
+
         jq --arg ver "$VERSION" \
            --arg abi "${TARGET_ABI}.0" \
            --arg sum "$CHECKSUM" \
            --arg time "$TIMESTAMP" \
-                     --arg source "$SOURCE_URL" \
-                     --arg zip "$ZIP_NAME" \
-           '.[0].versions[0].version = $ver |
-            .[0].versions[0].targetAbi = $abi |
-            .[0].versions[0].checksum = $sum |
-                        .[0].versions[0].timestamp = $time |
-                        .[0].versions[0].sourceUrl =
-                            (if $source != "" then $source
-                             else (.[0].versions[0].sourceUrl | sub("[^/]+$"; $zip))
-                             end)' \
+           --arg source "$SOURCE_URL" \
+           --arg zip "$ZIP_NAME" \
+           --arg tag "$RELEASE_TAG" \
+           '.[0].versions |= ([{
+                version: $ver,
+                changelog: "",
+                targetAbi: $abi,
+                sourceUrl: (if $source != "" then $source
+                            else ((.[0].sourceUrl | sub("/download/[^/]+/[^/]+$"; ""))
+                                  + "/download/" + $tag + "/" + $zip)
+                            end),
+                checksum: $sum,
+                timestamp: $time,
+                dependencies: []
+            }] + .)' \
            "$MANIFEST_FILE" > "${MANIFEST_FILE}.tmp" && mv "${MANIFEST_FILE}.tmp" "$MANIFEST_FILE"
-        echo "Updated manifest.json with new checksum and version"
-          MANIFEST_UPDATED="yes"
+        echo "Prepended version $VERSION to manifest.json (changelog left blank, fill it in)"
+
+        # The catalog URL people add points at the manifest in the repo root, not this one.
+        REPO_ROOT_MANIFEST="$(cd "$ROOT_DIR/.." && pwd)/manifest.json"
+        if [ -f "$REPO_ROOT_MANIFEST" ]; then
+            cp "$MANIFEST_FILE" "$REPO_ROOT_MANIFEST"
+            echo "Synced the repo root manifest.json"
+        fi
+        MANIFEST_UPDATED="yes"
     else
         echo "Error: jq not found. manifest.json was NOT updated." >&2
         echo "Install jq, or update versions[0] manually:" >&2

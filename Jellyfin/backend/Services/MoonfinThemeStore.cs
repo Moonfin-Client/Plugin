@@ -152,7 +152,7 @@ public sealed class MoonfinThemeStore
                 return (new UploadedThemeEntry
                 {
                     Id = validation.ThemeId,
-                    DisplayName = validation.DisplayName,
+                    DisplayName = XmlText.Sanitize(validation.DisplayName),
                     FileName = fileName,
                     SizeBytes = utf8Bytes.Length,
                     UploadedAtUtc = uploadTime,
@@ -173,7 +173,7 @@ public sealed class MoonfinThemeStore
             }
 
             existing.Id = validation.ThemeId;
-            existing.DisplayName = validation.DisplayName;
+            existing.DisplayName = XmlText.Sanitize(validation.DisplayName);
             existing.FileName = fileName;
             existing.SizeBytes = utf8Bytes.Length;
             existing.UploadedAtUtc = uploadTime;
