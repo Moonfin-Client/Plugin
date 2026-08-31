@@ -30,6 +30,19 @@ public class GameThumbServiceTests : IDisposable
     // Matches GameThumbService.LibretroThumbName's own escaping: '/' becomes '_'.
     private const string WorldThumbFileName = "Great Golf _ Masters Golf (World)";
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void DerivedThumbnailService_RejectsNonPositiveEncodeConcurrency(int concurrency)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DerivedThumbnailService(
+            new NoOpLogger<DerivedThumbnailService>(),
+            Path.Combine(_root, "game_thumbs"),
+            imageEncoder: null,
+            encodeConcurrencyForTests: concurrency,
+            derivedThumbBudgetForTests: null));
+    }
+
     [Fact]
     public async Task GetThumbPathAsync_BestMatchNameHasNoArt_FallsThroughToSiblingThatDoes()
     {

@@ -22,7 +22,16 @@ internal sealed class GameArtworkStore
     private const int MaxTotalProbesPerRequest = RdbService.MaxSiblingArtworkNamesPerRequest + 3;
     private static readonly TimeSpan MissTtl = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(6);
-    private static readonly TimeSpan OverallRequestBudget = TimeSpan.FromSeconds(3);
+
+    // A client is waiting on GetThumbPathAsync, so it gives up well inside one ProbeTimeout: a fast
+    // miss plus a background retry beats a long hang.
+    internal static readonly TimeSpan InteractiveRequestBudget = TimeSpan.FromSeconds(3);
+
+    // Nothing waits on a prewarm, and 3s cannot cover even one stalled probe of the ten a walk may
+    // make, so long arcade names expired every time and churned on the retry cycle forever. Still
+    // bounded, because a prewarm holds one of only two remote workers while it runs.
+    internal static readonly TimeSpan PrewarmRequestBudget = TimeSpan.FromSeconds(20);
+
     private static readonly char[] ReservedChars = { '&', '*', '/', ':', '`', '<', '>', '?', '\\', '|', '"' };
 
     // Ceiling on a single artwork response body, mirroring GamesService.MaxExtractedRomBytes and
@@ -77,7 +86,7 @@ internal sealed class GameArtworkStore
             .ConfigureAwait(false);
         if (result.TimedOut)
         {
-            throw new ThumbLookupTimedOutException(romPath, OverallRequestBudget);
+            throw new ThumbLookupTimedOutException(romPath, InteractiveRequestBudget);
         }
 
         return result.Path;
@@ -90,10 +99,12 @@ internal sealed class GameArtworkStore
         string romPath,
         string? title,
         GameThumbService.ThumbKind kind,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? budget = null)
     {
+        var effectiveBudget = budget ?? InteractiveRequestBudget;
         using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        budgetCts.CancelAfter(OverallRequestBudget);
+        budgetCts.CancelAfter(effectiveBudget);
 
         try
         {
@@ -105,8 +116,8 @@ internal sealed class GameArtworkStore
             _logger.LogDebug(
                 "Thumbnail lookup for {RomPath} exceeded its {BudgetSeconds}s overall budget; giving up",
                 romPath,
-                OverallRequestBudget.TotalSeconds);
-            return GameArtworkLookupResult.TransientFailure(OverallRequestBudget, timedOut: true);
+                effectiveBudget.TotalSeconds);
+            return GameArtworkLookupResult.TransientFailure(effectiveBudget, timedOut: true);
         }
     }
 

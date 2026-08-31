@@ -11,6 +11,12 @@ namespace Moonfin.Server.Services;
 /// </summary>
 internal sealed class DerivedThumbnailService
 {
+    /// <summary>
+    /// Concurrent encodes allowed, and therefore the number of background thumbnail workers worth
+    /// running: fewer leaves cores idle behind the downloaders, more only queues on this gate.
+    /// </summary>
+    internal static int DefaultEncodeConcurrency => Math.Max(1, Environment.ProcessorCount / 2);
+
     private const int MaxThumbDimension = 512;
     private const int ThumbQuality = 85;
 
@@ -45,10 +51,17 @@ internal sealed class DerivedThumbnailService
         int? encodeConcurrencyForTests,
         TimeSpan? derivedThumbBudgetForTests)
     {
+        if (encodeConcurrencyForTests is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(encodeConcurrencyForTests),
+                "Encode concurrency must be at least one.");
+        }
+
         _logger = logger;
         _cacheDir = cacheDir;
         _imageEncoder = imageEncoder;
-        _encodeSemaphore = new SemaphoreSlim(encodeConcurrencyForTests ?? Math.Max(1, Environment.ProcessorCount / 2));
+        _encodeSemaphore = new SemaphoreSlim(encodeConcurrencyForTests ?? DefaultEncodeConcurrency);
         _derivedThumbBudget = derivedThumbBudgetForTests ?? DerivedThumbBudget;
     }
 

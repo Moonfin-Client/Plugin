@@ -95,6 +95,68 @@ public sealed class GameArtworkCatalogTests : IDisposable
         Assert.Null(service.ResolveLocalArtwork(thumbnail, thumbnail.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture)));
     }
 
+    [Fact]
+    public async Task RepairMissingArtifacts_ReopensOnlyEntriesWhoseCacheFilesWereDeleted()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var artifacts = Path.Combine(_root, "artifacts");
+        Directory.CreateDirectory(artifacts);
+        var missingOriginal = Path.Combine(artifacts, "boxart.png");
+        var missingThumbnail = Path.Combine(artifacts, "boxart_thumb.jpg");
+        var retainedOriginal = Path.Combine(artifacts, "snap.png");
+        var removedThumbnail = Path.Combine(artifacts, "snap_thumb.jpg");
+        var healthyOriginal = Path.Combine(artifacts, "title.png");
+        var healthyThumbnail = Path.Combine(artifacts, "title_thumb.jpg");
+        foreach (var path in new[] { missingOriginal, missingThumbnail, retainedOriginal, removedThumbnail, healthyOriginal, healthyThumbnail })
+        {
+            await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        }
+
+        var boxart = ArtworkCatalogKey.Create("library-a", "SNES/Game.sfc", "fingerprint", "boxart");
+        var snap = ArtworkCatalogKey.Create("library-a", "SNES/Game.sfc", "fingerprint", "snap");
+        var title = ArtworkCatalogKey.Create("library-a", "SNES/Game.sfc", "fingerprint", "title");
+        foreach (var key in new[] { boxart, snap, title })
+        {
+            await catalog.GetOrCreateAsync(key, "snes", "provider-v1", "game");
+        }
+
+        await catalog.MarkOriginalReadyAsync(boxart, "snes", missingOriginal);
+        await catalog.MarkThumbnailReadyAsync(boxart, "snes", missingThumbnail);
+        await catalog.MarkOriginalReadyAsync(snap, "snes", retainedOriginal);
+        var snapReady = await catalog.MarkThumbnailReadyAsync(snap, "snes", removedThumbnail);
+        await catalog.MarkOriginalReadyAsync(title, "snes", healthyOriginal);
+        await catalog.MarkThumbnailReadyAsync(title, "snes", healthyThumbnail);
+        await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", ["game"]);
+        var published = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+        Assert.Single(published.PreviewGameIds);
+
+        File.Delete(missingOriginal);
+        File.Delete(missingThumbnail);
+        File.Delete(removedThumbnail);
+
+        Assert.Equal(2, await catalog.RepairMissingArtifactsAsync("library-a"));
+
+        var repairedBoxart = await catalog.GetAsync(boxart);
+        var repairedSnap = await catalog.GetAsync(snap);
+        var unchangedTitle = await catalog.GetAsync(title);
+        var repairedSystem = await catalog.GetSystemAsync("library-a", "snes");
+        Assert.Equal(ArtworkCatalogState.Pending, repairedBoxart?.State);
+        Assert.Null(repairedBoxart?.OriginalPath);
+        Assert.Null(repairedBoxart?.ThumbnailPath);
+        Assert.Equal(ArtworkCatalogState.OriginalReady, repairedSnap?.State);
+        Assert.Equal(retainedOriginal, repairedSnap?.OriginalPath);
+        Assert.Null(repairedSnap?.ThumbnailPath);
+        Assert.True(repairedSnap?.Revision > snapReady.Revision);
+        Assert.Equal(ArtworkCatalogState.ThumbnailReady, unchangedTitle?.State);
+        Assert.Empty(repairedSystem.PreviewGameIds);
+        Assert.Null(repairedSystem.PreviewSelectionGeneration);
+
+        var recovery = await catalog.GetStartupRecoveryWorkAsync();
+        Assert.Contains(recovery, item => item.Entry.Key == boxart && item.Stage == ArtworkCatalogWorkStage.AcquireOriginal);
+        Assert.Contains(recovery, item => item.Entry.Key == snap && item.Stage == ArtworkCatalogWorkStage.DeriveThumbnail);
+        Assert.DoesNotContain(recovery, item => item.Entry.Key == title);
+    }
+
     private static GameArtworkReconciliationService BuildReconciliationService(GameArtworkCatalog catalog)
     {
         var libraryManager = new FakeLibraryManager(new List<VirtualFolderInfo>());
@@ -110,28 +172,383 @@ public sealed class GameArtworkCatalogTests : IDisposable
     [Fact]
     public async Task PreviewSelection_IsStableForInventoryGenerationAndChangesWhenInventoryChanges()
     {
-        // GetOrCreatePreviewSelectionAsync was removed (dead: production only ever used the
-        // discovery/commit pair below). This exercises the same stability guarantee through the
-        // surviving two-step API: discovery fixes the deterministic candidate order for an
-        // inventory generation, and commit publishes the confirmed panels from that order.
         var catalog = new GameArtworkCatalog(_root);
         var candidates = new[] { "g1", "g2", "g3", "g4", "g5", "g6" };
+        await catalog.SynchronizeProjectionAsync(
+            "library-a",
+            Array.Empty<ArtworkCatalogProjectionEntry>(),
+            "provider-v1",
+            new ArtworkCatalogSystemMetadata("snes", "Super Nintendo", "snes9x", candidates.Length));
 
         var discoveryFirst = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates);
-        var confirmedFirst = discoveryFirst.PreviewCandidateGameIds.Take(4).ToList();
-        var first = await catalog.CommitPreviewSelectionAsync("library-a", "snes", "inventory-a", confirmedFirst);
+        foreach (var gameId in discoveryFirst.PreviewCandidateGameIds.Take(4))
+        {
+            var key = ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart");
+            await catalog.GetOrCreateAsync(key, "snes", "provider-v1", gameId);
+            await catalog.MarkOriginalReadyAsync(key, "snes", $"C:/catalog/{gameId}.png");
+        }
+
+        var first = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
 
         var discoveryRepeated = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates.Reverse());
-        var repeated = await catalog.CommitPreviewSelectionAsync("library-a", "snes", "inventory-a", confirmedFirst);
+        var repeated = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+
+        foreach (var gameId in discoveryFirst.PreviewCandidateGameIds.Skip(4))
+        {
+            var key = ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart");
+            await catalog.GetOrCreateAsync(key, "snes", "provider-v1", gameId);
+            await catalog.MarkOriginalReadyAsync(key, "snes", $"C:/catalog/{gameId}.png");
+        }
 
         var discoveryChanged = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-b", candidates);
-        var confirmedChanged = discoveryChanged.PreviewCandidateGameIds.Take(4).ToList();
-        var changed = await catalog.CommitPreviewSelectionAsync("library-a", "snes", "inventory-b", confirmedChanged);
+        var changed = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-b");
 
         Assert.Equal(discoveryFirst.PreviewCandidateGameIds, discoveryRepeated.PreviewCandidateGameIds);
         Assert.Equal(first.PreviewGameIds, repeated.PreviewGameIds);
         Assert.Equal(4, first.PreviewGameIds.Count);
+        Assert.Equal("inventory-a", first.PreviewSelectionGeneration);
+        Assert.Equal("inventory-b", changed.PreviewSelectionGeneration);
         Assert.True(changed.Generation > first.Generation);
+        var metadata = Assert.Single(await catalog.GetSystemMetadataAsync("library-a"));
+        Assert.Equal(("Super Nintendo", "snes9x", candidates.Length), (metadata.Name, metadata.Core, metadata.GameCount));
+    }
+
+    [Fact]
+    public async Task PreviewSelection_NextUnresolvedCandidateBlocksPublicationUntilItBecomesTerminal()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var candidates = new[] { "g1", "g2", "g3", "g4", "g5" };
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates);
+        var ordered = discovery.PreviewCandidateGameIds;
+        var keys = ordered.ToDictionary(
+            gameId => gameId,
+            gameId => ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart"),
+            StringComparer.Ordinal);
+
+        foreach (var gameId in ordered)
+        {
+            await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
+        }
+
+        foreach (var gameId in ordered.Skip(1).Take(4))
+        {
+            await catalog.MarkOriginalReadyAsync(keys[gameId], "snes", $"C:/catalog/{gameId}.png");
+        }
+
+        var blocked = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+        Assert.Empty(blocked.PreviewGameIds);
+        Assert.Null(blocked.PreviewSelectionGeneration);
+
+        await catalog.MarkMissingAsync(keys[ordered[0]], "snes", "provider-v1");
+        var complete = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+
+        Assert.Equal(ordered.Skip(1).Take(4), complete.PreviewGameIds);
+        Assert.Equal("inventory-a", complete.PreviewSelectionGeneration);
+    }
+
+    // A completion elsewhere in the system recomputes the selection while a reopened candidate is
+    // still non-terminal. Publishing an empty list there would blank the panels mid-import.
+    [Fact]
+    public async Task PreviewSelection_KeepsPublishedPanelsWhileACandidateReopens()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var candidates = new[] { "g1", "g2", "g3", "g4", "g5" };
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates);
+        var ordered = discovery.PreviewCandidateGameIds;
+        var keys = ordered.ToDictionary(
+            gameId => gameId,
+            gameId => ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart"),
+            StringComparer.Ordinal);
+        foreach (var gameId in ordered)
+        {
+            await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
+            await catalog.MarkOriginalReadyAsync(keys[gameId], "snes", $"C:/catalog/{gameId}.png");
+        }
+
+        var completed = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+        Assert.Equal(4, completed.PreviewGameIds.Count);
+
+        await catalog.RequestRefreshAsync(keys[ordered[0]], "snes", ordered[0]);
+        var reopened = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+
+        Assert.Equal(completed.PreviewGameIds, reopened.PreviewGameIds);
+        Assert.Null(reopened.PreviewSelectionGeneration);
+        Assert.Equal(ordered[0], reopened.NextUnresolvedGameId);
+    }
+
+    // The resumable scan trusts its stored prefix. Removing a confirmed entry through the
+    // single-entry path must invalidate that checkpoint, or the selection keeps publishing a game
+    // whose catalog entry is gone.
+    [Fact]
+    public async Task PreviewSelection_RemovingAConfirmedEntryInvalidatesTheScanCheckpoint()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var candidates = new[] { "g1", "g2", "g3", "g4", "g5", "g6" };
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates);
+        var ordered = discovery.PreviewCandidateGameIds;
+        var keys = ordered.ToDictionary(
+            gameId => gameId,
+            gameId => ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart"),
+            StringComparer.Ordinal);
+        foreach (var gameId in ordered)
+        {
+            await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
+            await catalog.MarkOriginalReadyAsync(keys[gameId], "snes", $"C:/catalog/{gameId}.png");
+        }
+
+        var completed = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+        var dropped = completed.PreviewGameIds[0];
+        Assert.True(await catalog.RemoveAsync(keys[dropped], "snes"));
+
+        var after = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+
+        Assert.DoesNotContain(dropped, after.PreviewGameIds);
+
+        await catalog.GetOrCreateAsync(keys[dropped], "snes", "provider-v1", dropped);
+        await catalog.MarkOriginalReadyAsync(keys[dropped], "snes", $"C:/catalog/{dropped}.png");
+        var rediscovered = await catalog.GetOrCreatePreviewDiscoveryAsync(
+            "library-a",
+            "snes",
+            "inventory-a",
+            candidates);
+        var restored = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+
+        Assert.Contains(dropped, rediscovered.PreviewCandidateGameIds);
+        Assert.Contains(dropped, restored.PreviewGameIds);
+    }
+
+    [Fact]
+    public async Task PreviewSelection_EmptyCompletionPersistsAndANewInventoryResetsIt()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var candidates = new[] { "g1", "g2", "g3" };
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates);
+
+        foreach (var gameId in discovery.PreviewCandidateGameIds)
+        {
+            var key = ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart");
+            await catalog.GetOrCreateAsync(key, "snes", "provider-v1", gameId);
+            await catalog.MarkMissingAsync(key, "snes", "provider-v1");
+        }
+
+        var complete = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+        Assert.Empty(complete.PreviewGameIds);
+        Assert.Equal("inventory-a", complete.PreviewSelectionGeneration);
+
+        await catalog.FlushAsync();
+        var reloaded = new GameArtworkCatalog(_root);
+        var persisted = await reloaded.GetSystemAsync("library-a", "snes");
+        Assert.Empty(persisted.PreviewGameIds);
+        Assert.Equal("inventory-a", persisted.PreviewSelectionGeneration);
+
+        var reset = await reloaded.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-b", candidates);
+        Assert.Empty(reset.PreviewGameIds);
+        Assert.Null(reset.PreviewSelectionGeneration);
+    }
+
+    [Fact]
+    public async Task PreviewSelection_TraversesThousandsOfCachedTerminalCandidatesIteratively()
+    {
+        const int candidateCount = 5_000;
+        var catalog = new GameArtworkCatalog(_root);
+        var entries = Enumerable.Range(0, candidateCount)
+            .Select(index => new ArtworkCatalogProjectionEntry(
+                ArtworkCatalogKey.Create("library-a", $"SNES/Game-{index:D4}.sfc", $"fingerprint-{index:D4}", "boxart"),
+                "snes",
+                $"game-{index:D4}"))
+            .ToArray();
+
+        await catalog.SynchronizeProjectionAsync(
+            "library-a",
+            entries,
+            "provider-v1",
+            new ArtworkCatalogSystemMetadata("snes", "SNES", "snes9x", candidateCount));
+        await catalog.GetOrCreatePreviewDiscoveryAsync(
+            "library-a",
+            "snes",
+            "inventory-a",
+            entries.Select(entry => entry.GameId));
+        foreach (var entry in entries)
+        {
+            await catalog.MarkMissingAsync(entry.Key, "snes", "provider-v1");
+        }
+
+        var complete = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+
+        Assert.Empty(complete.PreviewGameIds);
+        Assert.Equal("inventory-a", complete.PreviewSelectionGeneration);
+    }
+
+    // Reconciliation calls RecomputePreviewSelectionAsync once per boxart completion, always
+    // restarting the walk at index 0. On a sparse system (most games never get artwork) the
+    // terminal prefix grows with every call, so a full reconciliation pass is O(N^2) lookups.
+    // The scan must resume from where the last call proved the prefix terminal instead.
+    [Fact]
+    public async Task PreviewSelection_ResumesFromLastProvenIndexInsteadOfRescanningFromZero()
+    {
+        const int candidateCount = 2_000;
+        var catalog = new GameArtworkCatalog(_root);
+        var entries = Enumerable.Range(0, candidateCount)
+            .Select(index => new ArtworkCatalogProjectionEntry(
+                ArtworkCatalogKey.Create("library-a", $"SNES/Game-{index:D4}.sfc", $"fingerprint-{index:D4}", "boxart"),
+                "snes",
+                $"game-{index:D4}"))
+            .ToArray();
+
+        await catalog.SynchronizeProjectionAsync(
+            "library-a",
+            entries,
+            "provider-v1",
+            new ArtworkCatalogSystemMetadata("snes", "SNES", "snes9x", candidateCount));
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync(
+            "library-a",
+            "snes",
+            "inventory-a",
+            entries.Select(entry => entry.GameId));
+        var keysByGameId = entries.ToDictionary(entry => entry.GameId, entry => entry.Key, StringComparer.Ordinal);
+
+        // Resolved in the walk's own order (discovery permutes candidates by hash, not insertion
+        // order), so the terminal prefix genuinely grows by one every call -- the pathological
+        // pattern this fix targets. Mirrors the real call pattern: one boxart completion, then one
+        // recompute, repeated for every candidate; almost all resolve Missing, matching a large
+        // arcade set with poor provider coverage.
+        foreach (var gameId in discovery.PreviewCandidateGameIds)
+        {
+            await catalog.MarkMissingAsync(keysByGameId[gameId], "snes", "provider-v1");
+            await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+        }
+
+        // O(N) resumed scanning costs roughly one lookup per candidate per call; O(N^2) rescanning
+        // from zero costs roughly N^2/2. A generous linear-ish bound still rejects the quadratic
+        // behavior by three orders of magnitude at this N.
+        Assert.True(
+            catalog.PreviewScanLookupCount <= candidateCount * 4L,
+            $"Expected roughly linear lookup cost (~{candidateCount * 4L}), but observed {catalog.PreviewScanLookupCount} lookups.");
+    }
+
+    // A candidate strictly before the resumed scan's stored index can still reopen (an explicit
+    // refresh, a reopened metadata defer, a provider-version change). The resumed scan must not
+    // treat a stale cached classification as authoritative once that happens.
+    [Fact]
+    public async Task PreviewSelection_ReopeningAConfirmedCandidateBeforeTheScanIndexIsPickedUpOnResume()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var candidates = new[] { "g0", "g1", "g2", "g3", "g4", "g5", "g6" };
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates);
+        var ordered = discovery.PreviewCandidateGameIds;
+        var keys = ordered.ToDictionary(
+            gameId => gameId,
+            gameId => ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart"),
+            StringComparer.Ordinal);
+
+        foreach (var gameId in ordered)
+        {
+            await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
+        }
+
+        // ordered[0] is a durable miss; ordered[1..4] are confirmed -- the walk advances the scan
+        // index past all five and publishes the first four confirmed candidates.
+        await catalog.MarkMissingAsync(keys[ordered[0]], "snes", "provider-v1");
+        foreach (var gameId in ordered.Skip(1).Take(4))
+        {
+            await catalog.MarkOriginalReadyAsync(keys[gameId], "snes", $"C:/catalog/{gameId}.png");
+        }
+
+        var initial = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+        Assert.Equal(ordered.Skip(1).Take(4), initial.PreviewGameIds);
+
+        // ordered[0] reopens and becomes confirmed too. In candidate order it now outranks the
+        // fourth previously-confirmed candidate, so a correct from-scratch scan swaps it in.
+        await catalog.RequestRefreshAsync(keys[ordered[0]], "snes", ordered[0]);
+        await catalog.MarkOriginalReadyAsync(keys[ordered[0]], "snes", $"C:/catalog/{ordered[0]}.png");
+
+        var resumed = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+
+        var expected = new[] { ordered[0] }.Concat(ordered.Skip(1).Take(3)).ToArray();
+        Assert.Equal(expected, resumed.PreviewGameIds);
+    }
+
+    // Same sparse-scan pattern as PreviewSelection_ResumesFromLastProvenIndexInsteadOfRescanningFromZero,
+    // but comparing against a fresh catalog that only ever does one full scan from index 0 -- the
+    // resumed scan's incremental result must match it exactly at every step, not just at the end.
+    [Fact]
+    public async Task PreviewSelection_ResumedScanMatchesAFullScanFromScratch()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var candidates = Enumerable.Range(0, 30).Select(index => $"game-{index:D2}").ToArray();
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates);
+        var ordered = discovery.PreviewCandidateGameIds;
+        var keys = ordered.ToDictionary(
+            gameId => gameId,
+            gameId => ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart"),
+            StringComparer.Ordinal);
+
+        foreach (var gameId in ordered)
+        {
+            await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
+        }
+
+        // Every fifth candidate confirms; the rest resolve missing. Resolve them one at a time,
+        // recomputing (resumed) after each, and compare against an independent from-scratch scan.
+        // An incomplete from-scratch walk keeps the previously published selection, exactly as
+        // RecomputePreviewSelectionAsync does -- so the oracle tracks that same "last published"
+        // state itself rather than assuming every step is complete.
+        var expectedPublished = new List<string>();
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            var gameId = ordered[index];
+            if (index % 5 == 0)
+            {
+                await catalog.MarkOriginalReadyAsync(keys[gameId], "snes", $"C:/catalog/{gameId}.png");
+            }
+            else
+            {
+                await catalog.MarkMissingAsync(keys[gameId], "snes", "provider-v1");
+            }
+
+            var resumed = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+            var (fromScratch, complete) = await ComputeFromScratchSelectionAsync(catalog, ordered);
+            if (complete)
+            {
+                expectedPublished = fromScratch;
+            }
+
+            Assert.Equal(expectedPublished, resumed.PreviewGameIds);
+        }
+    }
+
+    /// <summary>Independent oracle: an unindexed, always-from-zero walk of the current boxart states.</summary>
+    private static async Task<(List<string> Confirmed, bool Complete)> ComputeFromScratchSelectionAsync(
+        GameArtworkCatalog catalog,
+        IReadOnlyList<string> ordered)
+    {
+        var confirmed = new List<string>(4);
+        foreach (var gameId in ordered)
+        {
+            var entry = await catalog.GetByGameIdAsync("library-a", gameId, "boxart");
+            var isConfirmed = entry is { State: ArtworkCatalogState.ThumbnailReady } ||
+                (entry is { State: ArtworkCatalogState.OriginalReady } && !string.IsNullOrWhiteSpace(entry.OriginalPath));
+            if (isConfirmed)
+            {
+                confirmed.Add(gameId);
+                if (confirmed.Count == 4)
+                {
+                    return (confirmed, true);
+                }
+
+                continue;
+            }
+
+            var isTerminalSkip = entry is { State: ArtworkCatalogState.Missing or ArtworkCatalogState.MetadataDeferred };
+            if (isTerminalSkip)
+            {
+                continue;
+            }
+
+            return (confirmed, false);
+        }
+
+        return (confirmed, true);
     }
 
     [Fact]
@@ -184,8 +601,10 @@ public sealed class GameArtworkCatalogTests : IDisposable
 
         await catalog.GetOrCreateAsync(retained, "snes", "provider-v1", "current-game");
         await catalog.GetOrCreateAsync(removed, "snes", "provider-v1", "removed-game");
+        await catalog.MarkOriginalReadyAsync(retained, "snes", "C:/catalog/retained.png");
+        await catalog.MarkOriginalReadyAsync(removed, "snes", "C:/catalog/removed.png");
         await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", new[] { "current-game", "removed-game" });
-        await catalog.CommitPreviewSelectionAsync("library-a", "snes", "inventory-a", new[] { "current-game", "removed-game" });
+        await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
         var before = await catalog.GetSystemProjectionAsync("library-a", "snes");
 
         await catalog.PruneAsync("library-a", new[] { retained });
@@ -297,6 +716,7 @@ public sealed class GameArtworkCatalogTests : IDisposable
         var metadata = await reloaded.GetSystemMetadataAsync("library-a");
 
         Assert.Equal(5, snapshot.Generation);
+        Assert.Null(snapshot.PreviewSelectionGeneration);
         Assert.Single(metadata);
         Assert.Equal("Super Nintendo", metadata[0].Name);
     }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Net.Http;
@@ -225,7 +226,10 @@ public class GameArtworkStoreTests : IDisposable
             maxArtworkBytes ?? GameArtworkStore.MaxArtworkBytes);
     }
 
-    private Task<GameArtworkLookupResult> LookupAsync(GameArtworkStore store, CancellationToken cancellationToken = default) =>
+    private Task<GameArtworkLookupResult> LookupAsync(
+        GameArtworkStore store,
+        CancellationToken cancellationToken = default,
+        TimeSpan? budget = null) =>
         store.LookupThumbAsync(
             core: "segaMS",
             coreWasDefaulted: false,
@@ -233,7 +237,35 @@ public class GameArtworkStoreTests : IDisposable
             romPath: Path.Combine(_root, RomFileName),
             title: null,
             kind: GameThumbService.ThumbKind.Boxart,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken,
+            budget: budget);
+
+    // A prewarm has no client waiting on it and must be able to outlast the interactive budget,
+    // which is itself the ceiling on how long a /Thumb/ response may hang for an old client and so
+    // must not move.
+    [Fact]
+    public async Task Lookup_HonoursAnExplicitBudgetWithoutMovingTheInteractiveDefault()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(3), GameArtworkStore.InteractiveRequestBudget);
+        Assert.True(GameArtworkStore.PrewarmRequestBudget > GameArtworkStore.InteractiveRequestBudget);
+
+        var gate = new SemaphoreSlim(0);
+        var body = new UnseekableStream(new byte[64], blockAfterFirstReadOn: gate);
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ThumbUrl(RomFileName), HttpStatusCode.OK, new StreamContent(body));
+        var store = CreateStore(handler);
+
+        var elapsed = Stopwatch.StartNew();
+        var result = await LookupAsync(store, budget: TimeSpan.FromMilliseconds(250));
+        elapsed.Stop();
+
+        // An ignored budget would instead park on the gate for the 3s default.
+        Assert.True(result.TimedOut);
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(2), $"Lookup took {elapsed.Elapsed}");
+
+        gate.Release();
+        await WaitUntil(() => Directory.GetFiles(_root, "*.tmp").Length == 0, TimeSpan.FromSeconds(5));
+    }
 
     private void AssertNothingCached()
     {
