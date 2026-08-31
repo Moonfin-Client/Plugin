@@ -153,6 +153,12 @@ public sealed record ArtworkCatalogSystemSnapshot(
     /// from <see cref="PreviewGameIds"/>: a remote miss must not consume one of the four panels.
     /// </summary>
     public IReadOnlyList<string> PreviewCandidateGameIds { get; init; } = Array.Empty<string>();
+
+    /// <summary>The inventory generation whose preview panels are stable and final.</summary>
+    public string? PreviewSelectionGeneration { get; init; }
+
+    /// <summary>The next candidate whose artwork state can still change the final panels.</summary>
+    public string? NextUnresolvedGameId { get; init; }
 }
 
 /// <summary>An item workers must reconstruct after a process restart.</summary>
@@ -195,6 +201,7 @@ public sealed class GameArtworkCatalog
     private readonly TimeSpan _persistDebounce;
     private readonly ConcurrentDictionary<string, Lazy<Task<LibraryCatalog>>> _libraries = new(StringComparer.Ordinal);
     private long _documentWrites;
+    private long _previewScanLookups;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -212,6 +219,9 @@ public sealed class GameArtworkCatalog
 
     /// <summary>Whole-document writes performed so far; the debounce's only observable effect.</summary>
     internal long DocumentWriteCount => Interlocked.Read(ref _documentWrites);
+
+    /// <summary>Boxart lookups performed by preview-selection scans; the resumable scan's observable cost.</summary>
+    internal long PreviewScanLookupCount => Interlocked.Read(ref _previewScanLookups);
 
     /// <summary>
     /// Plugin-owned catalog directory. The reconciliation service uses its sibling artwork cache
@@ -259,7 +269,10 @@ public sealed class GameArtworkCatalog
                 .ToArray();
             foreach (var staleKey in staleKeys)
             {
+                // A re-fingerprinted ROM drops an entry a preview scan may already have counted as
+                // terminal, so the resume index can no longer be trusted for this system.
                 library.RemoveEntry(staleKey);
+                ResetPreviewScanProgress(library.Document, systemId);
                 changed = true;
             }
 
@@ -274,6 +287,9 @@ public sealed class GameArtworkCatalog
                 entry.State == ArtworkCatalogState.MetadataDeferred &&
                 !string.Equals(entry.MetadataDeferredProviderVersion, providerVersion, StringComparison.Ordinal))
             {
+                // A durable miss/defer reopens to Pending -- a preview scan may have already
+                // counted this candidate as terminal.
+                ResetPreviewScanProgress(library.Document, entry.SystemId);
                 entry = NewPending(key, systemId, entry.Revision, gameId);
                 library.SetEntry(key.StorageKey, entry);
                 changed = true;
@@ -489,11 +505,22 @@ public sealed class GameArtworkCatalog
         await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!library.RemoveEntry(key.StorageKey))
+            if (!library.Entries.TryGetValue(key.StorageKey, out var removed) || !library.RemoveEntry(key.StorageKey))
             {
                 return false;
             }
 
+            // Mirrors PruneAsync's preview repair for the single-entry path: drop the game from any
+            // published selection and from the resumable scan's trusted prefix, then reset the
+            // checkpoint. Without this the panels keep advertising a game that has no entry left.
+            if (!string.IsNullOrWhiteSpace(removed.GameId) &&
+                library.Document.Systems.TryGetValue(systemId, out var system))
+            {
+                system.PreviewGameIds = system.PreviewGameIds
+                    .Where(id => !string.Equals(id, removed.GameId, StringComparison.Ordinal)).ToList();
+            }
+
+            ResetPreviewScanProgress(library.Document, systemId);
             BumpSystemGeneration(library.Document, systemId);
             await MarkDirtyUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
             return true;
@@ -692,6 +719,7 @@ public sealed class GameArtworkCatalog
                 {
                     system.PreviewGameIds = previewIds;
                     system.PreviewCandidateGameIds = candidateIds;
+                    system.PreviewSelectionGeneration = null;
                     affectedSystems.Add(systemId);
                     changed = true;
                 }
@@ -707,6 +735,10 @@ public sealed class GameArtworkCatalog
                 if (library.Document.Systems.ContainsKey(systemId))
                 {
                     BumpSystemGeneration(library.Document, systemId);
+
+                    // A removed entry or a reindexed candidate list can silently un-confirm or
+                    // shift a candidate the scan already counted; always rescan from zero.
+                    ResetPreviewScanProgress(library.Document, systemId);
                 }
             }
 
@@ -727,6 +759,60 @@ public sealed class GameArtworkCatalog
             // one write per library rather than one per entry.
             await WriteUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
             return orphaned;
+        }
+        finally
+        {
+            library.Gate.Release();
+        }
+    }
+
+    /// <summary>Reopens ready entries whose cached files were removed outside the catalog.</summary>
+    public async Task<int> RepairMissingArtifactsAsync(
+        string libraryId,
+        CancellationToken cancellationToken = default)
+    {
+        var library = await GetLibraryAsync(NormalizeLibraryId(libraryId), cancellationToken).ConfigureAwait(false);
+        await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var repaired = 0;
+            var affectedSystems = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (storageKey, entry) in library.Entries.ToArray())
+            {
+                var updated = RepairMissingArtifact(entry);
+                if (updated == entry)
+                {
+                    continue;
+                }
+
+                library.SetEntry(storageKey, updated);
+                InvalidatePreviewScanIfReopened(library.Document, entry.SystemId, entry, updated);
+                if (entry.Key.Role == "boxart" &&
+                    !string.IsNullOrWhiteSpace(entry.GameId) &&
+                    ClassifyForPreviewScan(updated) == PreviewCandidateOutcome.NonTerminal &&
+                    library.Document.Systems.TryGetValue(entry.SystemId, out var system))
+                {
+                    system.PreviewGameIds = system.PreviewGameIds
+                        .Where(id => !string.Equals(id, entry.GameId, StringComparison.Ordinal)).ToList();
+                    system.PreviewSelectionGeneration = null;
+                }
+
+                affectedSystems.Add(entry.SystemId);
+                repaired++;
+            }
+
+            if (repaired == 0)
+            {
+                return 0;
+            }
+
+            foreach (var systemId in affectedSystems)
+            {
+                BumpSystemGeneration(library.Document, systemId);
+            }
+
+            await MarkDirtyUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
+            return repaired;
         }
         finally
         {
@@ -808,6 +894,7 @@ public sealed class GameArtworkCatalog
                     library.SetEntry(item.Key.StorageKey, updated);
                     affectedSystems.Add(existing.SystemId);
                     affectedSystems.Add(item.SystemId);
+                    InvalidatePreviewScanIfReopened(library.Document, existing.SystemId, existing, updated);
                 }
             }
 
@@ -831,9 +918,8 @@ public sealed class GameArtworkCatalog
 
     /// <summary>
     /// Persists the complete deterministic preview-discovery permutation for an inventory
-    /// generation without prematurely publishing any panel. Workers walk this list until they
-    /// have confirmed up to four artwork-bearing games, then call
-    /// <see cref="CommitPreviewSelectionAsync"/>.
+    /// generation without prematurely publishing any panel. Preview selection is derived later
+    /// from this order and the catalog's terminal artwork states.
     /// </summary>
     public async Task<ArtworkCatalogSystemSnapshot> GetOrCreatePreviewDiscoveryAsync(
         string libraryId,
@@ -863,10 +949,18 @@ public sealed class GameArtworkCatalog
             var system = new PersistedSystem
             {
                 SystemId = systemId,
+                Name = existing?.Name ?? string.Empty,
+                Core = existing?.Core ?? string.Empty,
+                GameCount = existing?.GameCount ?? 0,
                 Generation = (existing?.Generation ?? 0) + 1,
                 InventoryGeneration = inventoryGeneration,
                 PreviewCandidateGameIds = candidates,
                 PreviewGameIds = new List<string>(),
+                PreviewSelectionGeneration = null,
+                // A new candidate order invalidates any prior scan checkpoint (indices no longer
+                // line up); explicit here even though a fresh PersistedSystem defaults to this.
+                PreviewScanStartIndex = 0,
+                PreviewScanConfirmedGameIds = new List<string>(),
             };
             library.Document.Systems[systemId] = system;
             await MarkDirtyUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
@@ -879,19 +973,16 @@ public sealed class GameArtworkCatalog
     }
 
     /// <summary>
-    /// Publishes only artwork-bearing preview panels already confirmed by a worker. The set is
-    /// locked to the stored inventory generation and must be an ordered subset of its discovery
-    /// permutation.
+    /// Recomputes one system's stable preview selection from its persisted candidate order and
+    /// current box-art states. No filesystem work is performed.
     /// </summary>
-    public async Task<ArtworkCatalogSystemSnapshot> CommitPreviewSelectionAsync(
+    public async Task<ArtworkCatalogSystemSnapshot> RecomputePreviewSelectionAsync(
         string libraryId,
         string systemId,
         string inventoryGeneration,
-        IEnumerable<string> confirmedGameIds,
         CancellationToken cancellationToken = default)
     {
         systemId = NormalizeSystemId(systemId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(inventoryGeneration);
         var library = await GetLibraryAsync(NormalizeLibraryId(libraryId), cancellationToken).ConfigureAwait(false);
         await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -899,28 +990,68 @@ public sealed class GameArtworkCatalog
             if (!library.Document.Systems.TryGetValue(systemId, out var system) ||
                 !string.Equals(system.InventoryGeneration, inventoryGeneration, StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("Preview discovery must be initialized before its selection is committed.");
+                return Snapshot(system ?? new PersistedSystem { SystemId = systemId });
             }
 
-            var confirmed = confirmedGameIds
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(id => id.Trim())
-                .Distinct(StringComparer.Ordinal)
-                .Take(4)
-                .ToList();
-            if (confirmed.Any(id => !system.PreviewCandidateGameIds.Contains(id, StringComparer.Ordinal)))
+            var candidates = system.PreviewCandidateGameIds;
+
+            // Resuming trusts that every candidate before this index is still terminal (confirmed
+            // or a durable skip); every mutation that can reopen one resets it back to 0 (see
+            // ResetPreviewScanProgress and its callers).
+            var scanIndex = Math.Clamp(system.PreviewScanStartIndex, 0, candidates.Count);
+            var previousScanIndex = scanIndex;
+            var previousConfirmedPrefix = system.PreviewScanConfirmedGameIds;
+            var confirmed = scanIndex > 0 ? new List<string>(previousConfirmedPrefix) : new List<string>(4);
+            var complete = true;
+            string? nextUnresolvedGameId = null;
+
+            while (scanIndex < candidates.Count && confirmed.Count < 4)
             {
-                throw new ArgumentException("Preview panels must come from the persisted discovery order.", nameof(confirmedGameIds));
+                var gameId = candidates[scanIndex];
+                var outcome = ClassifyForPreviewScan(library.FindByGameRole(gameId, "boxart"));
+                Interlocked.Increment(ref _previewScanLookups);
+                if (outcome == PreviewCandidateOutcome.Confirmed)
+                {
+                    confirmed.Add(gameId);
+                    scanIndex++;
+                    continue;
+                }
+
+                if (outcome == PreviewCandidateOutcome.TerminalSkip)
+                {
+                    scanIndex++;
+                    continue;
+                }
+
+                complete = false;
+                nextUnresolvedGameId = gameId;
+                break;
             }
 
-            if (!system.PreviewGameIds.SequenceEqual(confirmed, StringComparer.Ordinal))
+            var scanProgressed = previousScanIndex != scanIndex || !previousConfirmedPrefix.SequenceEqual(confirmed, StringComparer.Ordinal);
+            system.PreviewScanStartIndex = scanIndex;
+            system.PreviewScanConfirmedGameIds = new List<string>(confirmed);
+
+            // An incomplete walk keeps whatever was last published: a candidate reopening mid-walk
+            // must not blank a system's panels until its replacement selection is known. A new
+            // inventory generation still clears them, in GetOrCreatePreviewDiscoveryAsync.
+            var selection = complete ? confirmed : system.PreviewGameIds;
+            var completedGeneration = complete ? inventoryGeneration : null;
+            var selectionChanged = !system.PreviewGameIds.SequenceEqual(selection, StringComparer.Ordinal) ||
+                !string.Equals(system.PreviewSelectionGeneration, completedGeneration, StringComparison.Ordinal);
+            if (selectionChanged)
             {
-                system.PreviewGameIds = confirmed;
+                system.PreviewGameIds = selection;
+                system.PreviewSelectionGeneration = completedGeneration;
                 system.Generation++;
+            }
+
+            if (scanProgressed || selectionChanged)
+            {
                 await MarkDirtyUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
             }
 
-            return Snapshot(system);
+            return Snapshot(system) with { NextUnresolvedGameId = nextUnresolvedGameId };
         }
         finally
         {
@@ -995,9 +1126,11 @@ public sealed class GameArtworkCatalog
                 entry = NewPending(key, systemId);
             }
 
+            var before = entry;
             entry = update(entry);
             library.SetEntry(key.StorageKey, entry);
             BumpSystemGeneration(library.Document, systemId);
+            InvalidatePreviewScanIfReopened(library.Document, before.SystemId, before, entry);
             await MarkDirtyUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
             return entry;
         }
@@ -1245,10 +1378,94 @@ public sealed class GameArtworkCatalog
         system.Generation++;
     }
 
+    /// <summary>How the preview scan treats one candidate's current boxart entry.</summary>
+    private enum PreviewCandidateOutcome
+    {
+        NonTerminal,
+        Confirmed,
+        TerminalSkip,
+    }
+
+    /// <summary>Mirrors the classification the preview scan loop applies to a boxart entry.</summary>
+    private static PreviewCandidateOutcome ClassifyForPreviewScan(ArtworkCatalogEntry? entry)
+    {
+        if (entry == null)
+        {
+            return PreviewCandidateOutcome.NonTerminal;
+        }
+
+        return entry.State switch
+        {
+            ArtworkCatalogState.ThumbnailReady => PreviewCandidateOutcome.Confirmed,
+            ArtworkCatalogState.OriginalReady when !string.IsNullOrWhiteSpace(entry.OriginalPath) => PreviewCandidateOutcome.Confirmed,
+            ArtworkCatalogState.Missing or ArtworkCatalogState.MetadataDeferred => PreviewCandidateOutcome.TerminalSkip,
+            _ => PreviewCandidateOutcome.NonTerminal,
+        };
+    }
+
+    private static ArtworkCatalogEntry RepairMissingArtifact(ArtworkCatalogEntry entry)
+    {
+        var originalExists = !string.IsNullOrWhiteSpace(entry.OriginalPath) && File.Exists(entry.OriginalPath);
+        if (entry.State == ArtworkCatalogState.OriginalReady)
+        {
+            return originalExists
+                ? entry
+                : NewPending(entry.Key, entry.SystemId, entry.Revision, entry.GameId);
+        }
+
+        var thumbnailExists = !string.IsNullOrWhiteSpace(entry.ThumbnailPath) && File.Exists(entry.ThumbnailPath);
+        if (entry.State != ArtworkCatalogState.ThumbnailReady || thumbnailExists)
+        {
+            return entry;
+        }
+
+        return originalExists
+            ? entry with
+            {
+                State = ArtworkCatalogState.OriginalReady,
+                ThumbnailPath = null,
+                RetryAfterUtc = null,
+                Revision = entry.Revision + 1,
+                UpdatedAtUtc = DateTimeOffset.UtcNow,
+            }
+            : NewPending(entry.Key, entry.SystemId, entry.Revision, entry.GameId);
+    }
+
+    /// <summary>
+    /// Resets a resumable preview scan back to the start. Called wherever an entry mutation can
+    /// change a candidate the scan already classified as terminal -- a stale resume index would
+    /// then skip a candidate the panel selection needs to re-examine.
+    /// </summary>
+    private static void ResetPreviewScanProgress(PersistedCatalog document, string systemId)
+    {
+        if (document.Systems.TryGetValue(systemId, out var system))
+        {
+            system.PreviewScanStartIndex = 0;
+            system.PreviewScanConfirmedGameIds = new List<string>();
+        }
+    }
+
+    /// <summary>
+    /// Resets the scan only when a transition actually reopens a previously terminal entry: the
+    /// old state was terminal (confirmed or a durable skip) and its classification changed. A
+    /// non-terminal entry could never have been in a previously scanned prefix, and a terminal
+    /// entry keeping the same classification (e.g. OriginalReady -&gt; ThumbnailReady) is not a
+    /// reopening, so both are left alone to keep the common paths cheap.
+    /// </summary>
+    private static void InvalidatePreviewScanIfReopened(PersistedCatalog document, string systemId, ArtworkCatalogEntry before, ArtworkCatalogEntry after)
+    {
+        var previousOutcome = ClassifyForPreviewScan(before);
+        if (previousOutcome != PreviewCandidateOutcome.NonTerminal && previousOutcome != ClassifyForPreviewScan(after))
+        {
+            ResetPreviewScanProgress(document, systemId);
+        }
+    }
+
     private static ArtworkCatalogSystemSnapshot Snapshot(PersistedSystem system) =>
         new(system.SystemId, system.Generation, system.InventoryGeneration, system.PreviewGameIds.ToArray())
         {
             PreviewCandidateGameIds = system.PreviewCandidateGameIds.ToArray(),
+            PreviewSelectionGeneration = system.PreviewSelectionGeneration,
         };
 
     private static string NormalizeLibraryId(string libraryId) =>
@@ -1491,5 +1708,18 @@ public sealed class GameArtworkCatalog
         public List<string> PreviewGameIds { get; set; } = new();
 
         public List<string> PreviewCandidateGameIds { get; set; } = new();
+
+        public string? PreviewSelectionGeneration { get; set; }
+
+        /// <summary>
+        /// How far into <see cref="PreviewCandidateGameIds"/> every entry is proven terminal
+        /// (confirmed or a durable skip). Defaults to 0 -- an older catalog file without this field
+        /// simply scans from the start, which is still correct. See
+        /// <see cref="ResetPreviewScanProgress"/> for what invalidates it.
+        /// </summary>
+        public int PreviewScanStartIndex { get; set; }
+
+        /// <summary>Confirmed candidates found strictly before <see cref="PreviewScanStartIndex"/>.</summary>
+        public List<string> PreviewScanConfirmedGameIds { get; set; } = new();
     }
 }

@@ -100,7 +100,8 @@ public class GameThumbService
 
     /// <summary>
     /// Performs a state-aware artwork lookup for background workers. Unlike <see cref="GetThumbPathAsync"/>,
-    /// this preserves the difference between confirmed absence and a retryable provider failure.
+    /// this preserves the difference between confirmed absence and a retryable provider failure,
+    /// and runs on the prewarm budget because no client is waiting on it.
     /// </summary>
     internal Task<GameArtworkLookupResult> LookupThumbAsync(
         string core,
@@ -110,7 +111,7 @@ public class GameThumbService
         string? title,
         ThumbKind kind,
         CancellationToken cancellationToken = default) =>
-        _artworkStore.LookupThumbAsync(core, coreWasDefaulted, systemName, romPath, title, kind, cancellationToken);
+        _artworkStore.LookupThumbAsync(core, coreWasDefaulted, systemName, romPath, title, kind, cancellationToken, GameArtworkStore.PrewarmRequestBudget);
 
     /// <summary>
     /// Gets the cached size/format-optimized thumbnail derived from an already-acquired original.

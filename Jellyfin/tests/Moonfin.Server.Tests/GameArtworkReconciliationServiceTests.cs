@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Jellyfin.Data.Events;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moonfin.Server.Services;
 using Xunit;
@@ -316,14 +317,384 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
     }
 
     [Fact]
+    public void RemoteQueue_AtCapacityGuaranteesPreviewAdmissionWithoutLettingInteractiveEvictIt()
+    {
+        const int bestEffortCapacity = 20_000;
+        var service = BuildService(_root);
+        for (var index = 0; index < bestEffortCapacity; index++)
+        {
+            Assert.True(service.EnqueueRemoteForTest(Candidate("library", $"bulk-{index}"), ArtworkLane.Bulk));
+        }
+
+        var preview = Candidate("library", "preview");
+        Assert.True(service.EnqueueRemoteForTest(preview, ArtworkLane.Preview));
+        Assert.Contains("remote:" + preview.Key.StorageKey, QueuedRemoteIdentities(service));
+
+        Assert.True(service.EnqueueRemoteForTest(Candidate("library", "interactive"), ArtworkLane.Interactive));
+        Assert.Contains("remote:" + preview.Key.StorageKey, QueuedRemoteIdentities(service));
+        Assert.Equal(bestEffortCapacity + 1, QueuedRemoteIdentities(service).Count);
+
+        Assert.False(service.EnqueueRemoteForTest(Candidate("library", "rejected-bulk"), ArtworkLane.Bulk));
+        Assert.Equal(bestEffortCapacity + 1, QueuedRemoteIdentities(service).Count);
+    }
+
+    private static ICollection<string> QueuedRemoteIdentities(GameArtworkReconciliationService service)
+    {
+        var field = typeof(GameArtworkReconciliationService)
+            .GetField("_queued", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var queued = (System.Collections.IDictionary)field.GetValue(service)!;
+        return queued.Keys.Cast<string>().ToArray();
+    }
+
+    [Fact]
+    public async Task SaturatedQueue_AdvancesToTheNextUnresolvedPreviewCandidateAfterAMiss()
+    {
+        const int bestEffortCapacity = 20_000;
+        var libraryRoot = Path.Combine(_root, "Games");
+        var systemRoot = Path.Combine(libraryRoot, "SNES");
+        Directory.CreateDirectory(systemRoot);
+        await File.WriteAllBytesAsync(Path.Combine(systemRoot, "First.sfc"), [1]);
+        await File.WriteAllBytesAsync(Path.Combine(systemRoot, "Second.sfc"), [2]);
+
+        var libraryId = Guid.NewGuid().ToString();
+        var folders = new List<VirtualFolderInfo>
+        {
+            new() { Name = "Games", ItemId = libraryId, Locations = [libraryRoot] },
+        };
+        var service = CreateWatchingService(folders, out var catalog);
+        var gamesField = typeof(GameArtworkReconciliationService)
+            .GetField("_games", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var games = (GamesService)gamesField.GetValue(service)!;
+        var candidates = games.GetGames(libraryId, null)
+            .Select(game => ResolveCandidate(service, libraryId, game.Id))
+            .ToDictionary(candidate => candidate.GameId, StringComparer.Ordinal);
+        foreach (var candidate in candidates.Values)
+        {
+            await catalog.GetOrCreateAsync(candidate.Key, candidate.SystemId, "libretro-thumbnails-v3", candidate.GameId);
+        }
+
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync(
+            libraryId,
+            "snes",
+            "inventory-a",
+            candidates.Keys);
+        var first = candidates[discovery.PreviewCandidateGameIds[0]];
+        var second = candidates[discovery.PreviewCandidateGameIds[1]];
+        for (var index = 0; index < bestEffortCapacity; index++)
+        {
+            Assert.True(service.EnqueueRemoteForTest(Candidate("bulk-library", $"bulk-{index}"), ArtworkLane.Bulk));
+        }
+
+        Assert.True(service.EnqueueRemoteForTest(first, ArtworkLane.Preview));
+        Assert.False(service.EnqueueRemoteForTest(second, ArtworkLane.Bulk));
+
+        await catalog.MarkMissingAsync(first.Key, first.SystemId, "libretro-thumbnails-v3");
+        await RefreshPreviewSelectionAsync(service, first);
+
+        Assert.Contains("remote:" + second.Key.StorageKey, QueuedRemoteIdentities(service));
+    }
+
+    [Fact]
+    public async Task RequestRefresh_DoesNotItselfRepublishThePreviewSelection()
+    {
+        var (service, catalog, libraryId, candidates) = await CreatePreviewFixtureAsync(4);
+        foreach (var candidate in candidates.Values)
+        {
+            await catalog.MarkOriginalReadyAsync(candidate.Key, candidate.SystemId, $"C:/catalog/{candidate.GameId}.png");
+        }
+
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync(
+            libraryId,
+            "snes",
+            "inventory-a",
+            candidates.Keys);
+        var completed = await catalog.RecomputePreviewSelectionAsync(libraryId, "snes", "inventory-a");
+        var refreshed = candidates[discovery.PreviewCandidateGameIds[0]];
+
+        Assert.True(await service.RequestRefreshAsync(libraryId, refreshed.GameId, "boxart"));
+
+        var after = await catalog.GetSystemAsync(libraryId, "snes");
+        Assert.Equal(completed.PreviewGameIds, after.PreviewGameIds);
+        Assert.Equal(completed.PreviewSelectionGeneration, after.PreviewSelectionGeneration);
+        Assert.Equal(ArtworkCatalogState.Pending, (await catalog.GetAsync(refreshed.Key))?.State);
+    }
+
+    [Fact]
+    public async Task ReopeningMetadataDeferred_DoesNotItselfRepublishThePreviewSelection()
+    {
+        var (service, catalog, libraryId, candidates) = await CreatePreviewFixtureAsync(5);
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync(
+            libraryId,
+            "snes",
+            "inventory-a",
+            candidates.Keys);
+        var reopened = candidates[discovery.PreviewCandidateGameIds[0]];
+        var started = DateTimeOffset.UtcNow.AddHours(-25);
+        await catalog.MarkMetadataPendingAsync(
+            reopened.Key,
+            reopened.SystemId,
+            "libretro-thumbnails-v3",
+            started,
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromHours(3),
+            TimeSpan.FromHours(24));
+        await catalog.MarkMetadataPendingAsync(
+            reopened.Key,
+            reopened.SystemId,
+            "libretro-thumbnails-v3",
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromHours(3),
+            TimeSpan.FromHours(24));
+        foreach (var candidate in discovery.PreviewCandidateGameIds.Skip(1).Select(gameId => candidates[gameId]))
+        {
+            await catalog.MarkOriginalReadyAsync(candidate.Key, candidate.SystemId, $"C:/catalog/{candidate.GameId}.png");
+        }
+
+        var completed = await catalog.RecomputePreviewSelectionAsync(libraryId, "snes", "inventory-a");
+
+        Assert.True(await QueueCandidateAsync(service, reopened, reopenMetadataDeferred: true));
+
+        var after = await catalog.GetSystemAsync(libraryId, "snes");
+        Assert.Equal(completed.PreviewGameIds, after.PreviewGameIds);
+        Assert.Equal(completed.PreviewSelectionGeneration, after.PreviewSelectionGeneration);
+        Assert.Equal(ArtworkCatalogState.Pending, (await catalog.GetAsync(reopened.Key))?.State);
+    }
+
+    private async Task<(GameArtworkReconciliationService Service, GameArtworkCatalog Catalog, string LibraryId,
+        Dictionary<string, GameArtworkReconciliationService.ArtworkCandidate> Candidates)> CreatePreviewFixtureAsync(int gameCount)
+    {
+        var libraryRoot = Path.Combine(_root, $"Games-{gameCount}");
+        var systemRoot = Path.Combine(libraryRoot, "SNES");
+        Directory.CreateDirectory(systemRoot);
+        for (var index = 0; index < gameCount; index++)
+        {
+            await File.WriteAllBytesAsync(Path.Combine(systemRoot, $"Game-{index}.sfc"), [(byte)index]);
+        }
+
+        var libraryId = Guid.NewGuid().ToString();
+        var folders = new List<VirtualFolderInfo>
+        {
+            new() { Name = "Games", ItemId = libraryId, Locations = [libraryRoot] },
+        };
+        var service = CreateWatchingService(folders, out var catalog);
+        var gamesField = typeof(GameArtworkReconciliationService)
+            .GetField("_games", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var games = (GamesService)gamesField.GetValue(service)!;
+        var candidates = games.GetGames(libraryId, null)
+            .Select(game => ResolveCandidate(service, libraryId, game.Id))
+            .ToDictionary(candidate => candidate.GameId, StringComparer.Ordinal);
+        foreach (var candidate in candidates.Values)
+        {
+            await catalog.GetOrCreateAsync(candidate.Key, candidate.SystemId, "libretro-thumbnails-v3", candidate.GameId);
+        }
+
+        return (service, catalog, libraryId, candidates);
+    }
+
+    private static async Task<bool> QueueCandidateAsync(
+        GameArtworkReconciliationService service,
+        GameArtworkReconciliationService.ArtworkCandidate candidate,
+        bool reopenMetadataDeferred)
+    {
+        var method = typeof(GameArtworkReconciliationService)
+            .GetMethod("QueueCandidateAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var task = (Task<bool>)method.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: [candidate, ArtworkLane.Preview, CancellationToken.None, reopenMetadataDeferred],
+            culture: null)!;
+        return await task;
+    }
+
+    private static GameArtworkReconciliationService.ArtworkCandidate ResolveCandidate(
+        GameArtworkReconciliationService service,
+        string libraryId,
+        string gameId)
+    {
+        var method = typeof(GameArtworkReconciliationService)
+            .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
+            .Single(candidate => candidate.Name == "TryCreateCandidate" &&
+                candidate.GetParameters().FirstOrDefault()?.ParameterType == typeof(string));
+        return Assert.IsType<GameArtworkReconciliationService.ArtworkCandidate>(method.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: [libraryId, gameId, GameThumbService.ThumbKind.Boxart, null],
+            culture: null));
+    }
+
+    private static Task RefreshPreviewSelectionAsync(
+        GameArtworkReconciliationService service,
+        GameArtworkReconciliationService.ArtworkCandidate candidate)
+    {
+        var method = typeof(GameArtworkReconciliationService)
+            .GetMethod("RefreshPreviewSelectionAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (Task)method.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: [candidate, CancellationToken.None],
+            culture: null)!;
+    }
+
+    [Fact]
     public async Task StopAsync_CompletesCleanlyAndDisposesTheTokenSource()
     {
         var service = BuildService(_root);
 
         await service.StartAsync(CancellationToken.None);
-        await service.StopAsync(CancellationToken.None); // currently throws TaskCanceledException
+        await service.StopAsync(CancellationToken.None);
         await service.StartAsync(CancellationToken.None); // must be restartable
         await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StopAsync_AllowsAnActiveButPartiallyInitializedLifetime()
+    {
+        var service = BuildService(_root);
+        StopSourceField.SetValue(service, new CancellationTokenSource());
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StopAsync_HonorsItsDeadlineAndAllowsRestartAfterGrace()
+    {
+        var libraryRoot = Path.Combine(_root, "Games-blocked-stop");
+        Directory.CreateDirectory(Path.Combine(libraryRoot, "SNES"));
+        await File.WriteAllBytesAsync(Path.Combine(libraryRoot, "SNES", "First.sfc"), [1, 2, 3]);
+
+        var libraryId = Guid.NewGuid().ToString();
+        var folders = new List<VirtualFolderInfo>
+        {
+            new() { Name = "Games", ItemId = libraryId, Locations = [libraryRoot] },
+        };
+        var blockNextResolution = 0;
+        var resolutionStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseResolution = new ManualResetEventSlim();
+        var libraryManager = new FakeLibraryManager(
+            folders,
+            () =>
+            {
+                if (Interlocked.Exchange(ref blockNextResolution, 0) != 0)
+                {
+                    resolutionStarted.TrySetResult();
+                    releaseResolution.Wait();
+                }
+            });
+        var service = new GameArtworkReconciliationService(
+            new GamesService(libraryManager),
+            (GameThumbService)RuntimeHelpers.GetUninitializedObject(typeof(GameThumbService)),
+            new GameArtworkCatalog(Path.Combine(_root, "catalog-blocked-stop")),
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null,
+            watchLibraryFileSystem: true,
+            workerStopGraceForTests: TimeSpan.FromMilliseconds(200));
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            Interlocked.Exchange(ref blockNextResolution, 1);
+            service.OnGameLibrariesChanged();
+            await resolutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            using var stopDeadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+            await service.StopAsync(stopDeadline.Token).WaitAsync(TimeSpan.FromSeconds(2));
+
+            // The blocked worker is parked in a non-cancelable call, so cleanup gives up on it
+            // after the grace and restart must still succeed -- otherwise one wedged filesystem
+            // call leaves the plugin permanently unstartable.
+            await service.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+
+            releaseResolution.Set();
+        }
+        finally
+        {
+            releaseResolution.Set();
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public void WatcherSync_FromCanceledLifetimeDoesNotUseTheReplacementStopSource()
+    {
+        var libraryRoot = Path.Combine(_root, "Games-canceled-lifetime");
+        Directory.CreateDirectory(libraryRoot);
+        var folders = new List<VirtualFolderInfo>
+        {
+            new() { Name = "Games", ItemId = Guid.NewGuid().ToString(), Locations = [libraryRoot] },
+        };
+        var service = CreateWatchingService(folders, out _);
+        using var replacementStop = new CancellationTokenSource();
+        using var canceledLifetime = new CancellationTokenSource();
+        canceledLifetime.Cancel();
+        StopSourceField.SetValue(service, replacementStop);
+
+        var sync = typeof(GameArtworkReconciliationService)
+            .GetMethod("SyncLibraryWatchers", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        sync.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: [canceledLifetime.Token],
+            culture: null);
+
+        Assert.Empty(service.WatchedLibraryRootsForTests);
+    }
+
+    [Fact]
+    public async Task Restart_DoesNotLetCanceledDelayedPreviewWorkRemoveItsReplacement()
+    {
+        var service = BuildService(_root);
+        var candidate = Candidate("library", "delayed-preview");
+        var thumbnailCandidate = candidate with { OriginalPath = "C:/catalog/delayed-preview.png" };
+        var retryAfter = DateTimeOffset.UtcNow.AddHours(1);
+
+        await service.StartAsync(CancellationToken.None);
+        Assert.True(service.EnqueueRemoteForTest(candidate, ArtworkLane.Preview, retryAfter));
+        QueueThumbnail(service, thumbnailCandidate, retryAfter);
+        await service.StopAsync(CancellationToken.None);
+        Assert.DoesNotContain("remote:" + candidate.Key.StorageKey, QueuedRemoteIdentities(service));
+        Assert.DoesNotContain("thumbnail:" + candidate.Key.StorageKey, QueuedThumbnailIdentities(service));
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            Assert.True(service.EnqueueRemoteForTest(candidate, ArtworkLane.Preview, retryAfter));
+            QueueThumbnail(service, thumbnailCandidate, retryAfter);
+            await Task.Delay(100);
+            Assert.Contains("remote:" + candidate.Key.StorageKey, QueuedRemoteIdentities(service));
+            Assert.Contains("thumbnail:" + candidate.Key.StorageKey, QueuedThumbnailIdentities(service));
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static void QueueThumbnail(
+        GameArtworkReconciliationService service,
+        GameArtworkReconciliationService.ArtworkCandidate candidate,
+        DateTimeOffset notBefore)
+    {
+        var method = typeof(GameArtworkReconciliationService)
+            .GetMethod("QueueThumbnail", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        method.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: [candidate, notBefore],
+            culture: null);
+    }
+
+    private static ICollection<string> QueuedThumbnailIdentities(GameArtworkReconciliationService service)
+    {
+        var field = typeof(GameArtworkReconciliationService)
+            .GetField("_thumbnailQueued", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var queued = (IEnumerable<KeyValuePair<string, int>>)field.GetValue(service)!;
+        return queued.Select(entry => entry.Key).ToArray();
     }
 
     [Fact]
@@ -512,6 +883,160 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Equal(2, await DistinctGameCountAsync(catalog, libraryId, "snes"));
     }
 
+    // Overflows arrive in bursts during a romset copy, and queueing a pass directly ran a full
+    // library enumeration back to back for the length of the import. Debouncing still guarantees
+    // the pass, since the overflow itself arms the timer.
+    [Fact]
+    public async Task WatcherOverflow_WaitsForTheQuietPeriodInsteadOfReconcilingImmediately()
+    {
+        var service = BuildService(_root);
+        var stop = new CancellationTokenSource();
+        StopSourceField.SetValue(service, stop);
+        try
+        {
+            RaiseWatcherOverflow(service);
+
+            Assert.Equal(0, PendingReconciliations(service));
+            await WaitForPendingReconciliationAsync(service);
+        }
+        finally
+        {
+            stop.Cancel();
+        }
+    }
+
+    private static readonly FieldInfo StopSourceField = typeof(GameArtworkReconciliationService)
+        .GetField("_stop", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    private static void RaiseWatcherOverflow(GameArtworkReconciliationService service)
+    {
+        var handler = typeof(GameArtworkReconciliationService)
+            .GetMethod("OnLibraryWatcherError", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        handler.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: [service, new ErrorEventArgs(new InternalBufferOverflowException())],
+            culture: null);
+    }
+
+    // The service is never started here, so nothing drains the semaphore and its count is stable.
+    private static int PendingReconciliations(GameArtworkReconciliationService service)
+    {
+        var field = typeof(GameArtworkReconciliationService)
+            .GetField("_reconciliationAvailable", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return ((SemaphoreSlim)field.GetValue(service)!).CurrentCount;
+    }
+
+    private static async Task WaitForPendingReconciliationAsync(GameArtworkReconciliationService service)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (PendingReconciliations(service) > 0)
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+
+        Assert.Fail("Timed out waiting for the quiet period to queue the reconciliation pass");
+    }
+
+    // Only overflow leaves a working watcher. Any other error -- a deleted or disconnected root --
+    // leaves one that never reports again, and SyncLibraryWatchers skips any root already in the
+    // dictionary, so without recycling the root stays unwatched until a restart.
+    [Fact]
+    public async Task WatcherFailure_RecreatesTheWatcherSoTheRootStaysWatched()
+    {
+        var libraryRoot = Path.Combine(_root, "Games");
+        Directory.CreateDirectory(Path.Combine(libraryRoot, "SNES"));
+        await File.WriteAllBytesAsync(Path.Combine(libraryRoot, "SNES", "First.sfc"), [1, 2, 3]);
+
+        var folders = new List<VirtualFolderInfo>
+        {
+            new() { Name = "Games", ItemId = Guid.NewGuid().ToString(), Locations = [libraryRoot] },
+        };
+        var service = CreateWatchingService(folders, out _);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitForWatchedRootsAsync(service, [libraryRoot]);
+            var original = LibraryWatchers(service)[libraryRoot];
+
+            RaiseWatcherError(service, original, new IOException("root disconnected"));
+
+            await WaitUntilAsync(() => LibraryWatchers(service).TryGetValue(libraryRoot, out var current)
+                && !ReferenceEquals(current, original));
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public void WatcherOverflow_KeepsTheWatcherItAlreadyHas()
+    {
+        var service = BuildService(_root);
+        var stop = new CancellationTokenSource();
+        StopSourceField.SetValue(service, stop);
+        try
+        {
+            Directory.CreateDirectory(_root);
+            using var watcher = new FileSystemWatcher(_root) { EnableRaisingEvents = true };
+            LibraryWatchers(service).Add(_root, watcher);
+
+            RaiseWatcherError(service, watcher, new InternalBufferOverflowException());
+
+            Assert.Same(watcher, LibraryWatchers(service)[_root]);
+        }
+        finally
+        {
+            stop.Cancel();
+        }
+    }
+
+    private static Dictionary<string, FileSystemWatcher> LibraryWatchers(GameArtworkReconciliationService service)
+    {
+        var field = typeof(GameArtworkReconciliationService)
+            .GetField("_libraryWatchers", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (Dictionary<string, FileSystemWatcher>)field.GetValue(service)!;
+    }
+
+    private static void RaiseWatcherError(
+        GameArtworkReconciliationService service,
+        FileSystemWatcher sender,
+        Exception error)
+    {
+        var handler = typeof(GameArtworkReconciliationService)
+            .GetMethod("OnLibraryWatcherError", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        handler.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: [sender, new ErrorEventArgs(error)],
+            culture: null);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+
+        Assert.Fail("Timed out waiting for the watcher to be recreated");
+    }
+
     private static async Task<int> DistinctGameCountAsync(GameArtworkCatalog catalog, string libraryId, string systemId)
     {
         var projection = await catalog.GetSystemProjectionAsync(libraryId, systemId);
@@ -585,7 +1110,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         var key = ArtworkCatalogKey.Create("library", gameId + ".sfc", "fingerprint", "boxart");
         var source = new GameThumbSource(new[] { "snes" }, gameId, "C:/roms/" + gameId + ".sfc", system, false);
         var candidate = new GameArtworkReconciliationService.ArtworkCandidate(gameId, system, GameThumbService.ThumbKind.Boxart, source, key, null);
-        return GameArtworkReconciliationService.ArtworkWork.Remote(candidate, lane, null);
+        return GameArtworkReconciliationService.ArtworkWork.Remote(candidate, lane);
     }
 
     private static GameArtworkReconciliationService.ArtworkCandidate Candidate(string libraryId, string gameId, string system = "snes")

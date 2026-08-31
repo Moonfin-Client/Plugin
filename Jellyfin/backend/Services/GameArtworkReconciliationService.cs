@@ -17,6 +17,7 @@ namespace Moonfin.Server.Services;
 public sealed class GameArtworkReconciliationService : IHostedService
 {
     private static readonly TimeSpan LibraryFileSystemQuietPeriod = TimeSpan.FromSeconds(5);
+    private long _lastWatcherOverflowWarningTicks = long.MinValue / 2;
 
     // v3 repairs false terminal misses caused by RDB and thumbnail alternate-title separators.
     private const string ProviderVersion = "libretro-thumbnails-v3";
@@ -30,25 +31,40 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private static readonly TimeSpan MetadataFirstRetryDelay = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan MetadataRepeatRetryDelay = TimeSpan.FromHours(3);
     private static readonly TimeSpan MetadataRetryWindow = TimeSpan.FromHours(24);
-    private const int MaxQueuedRemoteWork = 20_000;
+    // Bulk and interactive acquisition are best-effort at this threshold. One unresolved preview
+    // per incomplete system may exceed it so preview discovery can never be stranded by admission.
+    private const int MaxQueuedBestEffortRemoteWork = 20_000;
     private const int MaxQueuedThumbnailWork = 20_000;
+
+    // Bounded well below the encode gate on large hosts: artwork backfill is background work
+    // sharing a box with playback and transcoding, and only two downloaders feed it, so more
+    // encoders buy nothing. On the NAS-class hardware Jellyfin often runs on this resolves to
+    // 1-2 -- i.e. unchanged from the single worker it replaces.
+    private const int MaxThumbnailWorkers = 4;
+
+    private static readonly TimeSpan WorkerStopGrace = TimeSpan.FromSeconds(10);
+
+    private static int ThumbnailWorkerCount =>
+        Math.Clamp(DerivedThumbnailService.DefaultEncodeConcurrency, 1, MaxThumbnailWorkers);
     private readonly GamesService _games;
     private readonly GameThumbService _thumbs;
     private readonly GameArtworkCatalog _catalog;
     private readonly ILogger<GameArtworkReconciliationService> _logger;
     private readonly ITaskManager? _taskManager;
     private readonly bool _watchLibraryFileSystem;
+    private readonly TimeSpan _workerStopGrace;
     private readonly ArtworkWorkScheduler _remote = new();
     private readonly ConcurrentQueue<ArtworkWork> _thumbnail = new();
     private readonly SemaphoreSlim _thumbnailAvailable = new(0);
     private readonly object _remoteQueueGate = new();
+    private readonly object _thumbnailQueueGate = new();
+    private readonly object _lifecycleGate = new();
     private readonly Dictionary<string, QueuedRemoteWork> _queued = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, byte> _thumbnailQueued = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, PreviewPlan> _previewPlans = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, int> _thumbnailQueued = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _reconciliationAvailable = new(0, 1);
     private CancellationTokenSource? _stop;
     private Task[] _remoteWorkers = Array.Empty<Task>();
-    private Task? _thumbnailWorker;
+    private Task[] _thumbnailWorkers = Array.Empty<Task>();
     private Task? _reconciliationWorker;
     private readonly Dictionary<string, FileSystemWatcher> _libraryWatchers = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _libraryWatcherLock = new();
@@ -56,6 +72,9 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private Timer? _libraryWatcherDebounce;
     private bool _startupRecoveryDone;
     private int _reopenMetadataDeferred;
+    private int _nextRemoteQueueVersion;
+    private int _nextThumbnailQueueVersion;
+    private Task _shutdownCleanup = Task.CompletedTask;
 
     /// <param name="games">Resolves game libraries/systems/games from the filesystem.</param>
     /// <param name="thumbs">Looks up and derives artwork thumbnails.</param>
@@ -83,7 +102,10 @@ public sealed class GameArtworkReconciliationService : IHostedService
         GameArtworkCatalog catalog,
         ILogger<GameArtworkReconciliationService> logger,
         ITaskManager? taskManager,
-        bool watchLibraryFileSystem)
+        bool watchLibraryFileSystem,
+        // The grace exists so a wedged worker cannot strand restart; a test drives it with
+        // milliseconds rather than waiting out the production value.
+        TimeSpan? workerStopGraceForTests = null)
     {
         _games = games;
         _thumbs = thumbs;
@@ -91,6 +113,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         _logger = logger;
         _taskManager = taskManager;
         _watchLibraryFileSystem = watchLibraryFileSystem;
+        _workerStopGrace = workerStopGraceForTests ?? WorkerStopGrace;
     }
 
     /// <summary>
@@ -110,7 +133,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
 
         await _catalog.RequestRefreshAsync(candidate.Key, candidate.SystemId, candidate.GameId, cancellationToken).ConfigureAwait(false);
-        QueueRemote(candidate, ArtworkLane.Interactive, null, null);
+        QueueRemote(candidate, ArtworkLane.Interactive, null);
         return true;
     }
 
@@ -156,7 +179,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
         else if (entry.State is ArtworkCatalogState.Pending or ArtworkCatalogState.Retryable)
         {
-            QueueRemote(candidate, ArtworkLane.Interactive, null, entry.RetryAfterUtc);
+            QueueRemote(candidate, ArtworkLane.Interactive, entry.RetryAfterUtc);
         }
 
         return true;
@@ -332,88 +355,212 @@ public sealed class GameArtworkReconciliationService : IHostedService
     /// <see cref="RequestRefreshAsync"/>, one of the <c>PromoteAsync</c> overloads, or
     /// <see cref="ReconcileAsync"/>.
     /// </summary>
-    internal void EnqueueRemoteForTest(ArtworkCandidate candidate) => QueueRemote(candidate, ArtworkLane.Interactive, null, null);
+    internal bool EnqueueRemoteForTest(
+        ArtworkCandidate candidate,
+        ArtworkLane lane = ArtworkLane.Interactive,
+        DateTimeOffset? notBefore = null) =>
+        QueueRemote(candidate, lane, notBefore);
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var token = _stop.Token;
-        // Do not call ILibraryManager.AddParts here, and do not implement ILibraryPostScanTask to
-        // register a post-scan hook through it. AddParts assigns wholesale rather than appending
-        // (see Emby.Server.Implementations.Library.LibraryManager.AddParts) -- Jellyfin calls it
-        // exactly once at startup with every discovered resolver/rule/comparer export, and a plugin
-        // calling it again afterwards replaces that with only what the plugin itself passed in,
-        // wiping every other library's ability to resolve files into items. Reconciliation is
-        // therefore driven by the startup queue below plus a subscription to
-        // ITaskManager.TaskCompleted (see OnTaskCompleted): that is a plain event handler `+=` on a
-        // DI singleton, not a library-manager mutation, so it carries none of the AddParts risk.
-        //
-        // Per-library scans bypass TaskCompleted; ROM-root watchers cover their raw-file changes.
-        _remoteWorkers = Enumerable.Range(0, 2).Select(_ => Task.Run(() => RemoteWorkerAsync(token), token)).ToArray();
-        _thumbnailWorker = Task.Run(() => ThumbnailWorkerAsync(token), token);
-        _reconciliationWorker = Task.Run(() => ReconciliationWorkerAsync(token), token);
-        _thumbs.MetadataIndexAvailable += OnMetadataIndexAvailable;
-        if (_taskManager != null)
+        while (true)
         {
-            _taskManager.TaskCompleted += OnTaskCompleted;
-        }
-        else
-        {
-            // File-system events still cover ROM changes, but scheduled refreshes will not.
-            _logger.LogWarning(
-                "No task manager was supplied to game artwork reconciliation; scheduled library refreshes will not signal artwork reconciliation");
-        }
+            Task priorCleanup;
+            var started = false;
+            lock (_lifecycleGate)
+            {
+                if (_stop is { IsCancellationRequested: false })
+                {
+                    return;
+                }
 
-        QueueReconciliation("plugin startup");
-        return Task.CompletedTask;
+                priorCleanup = _shutdownCleanup;
+                if (_stop == null && priorCleanup.IsCompleted)
+                {
+                    // Do not call ILibraryManager.AddParts here. It replaces Jellyfin's complete
+                    // resolver set instead of appending, so reconciliation is driven by the task
+                    // completion event and ROM-root watchers without mutating library parts.
+                    _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    var token = _stop.Token;
+                    _remoteWorkers = Enumerable.Range(0, 2).Select(_ => Task.Run(() => RemoteWorkerAsync(token), token)).ToArray();
+                    // One worker could never reach the concurrency the encode gate already
+                    // allows, so downloads outran encoding and left a backlog in OriginalReady.
+                    _thumbnailWorkers = Enumerable.Range(0, ThumbnailWorkerCount)
+                        .Select(_ => Task.Run(() => ThumbnailWorkerAsync(token), token)).ToArray();
+                    _reconciliationWorker = Task.Run(() => ReconciliationWorkerAsync(token), token);
+                    _thumbs.MetadataIndexAvailable += OnMetadataIndexAvailable;
+                    if (_taskManager != null)
+                    {
+                        _taskManager.TaskCompleted += OnTaskCompleted;
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "No task manager was supplied to game artwork reconciliation; scheduled library refreshes will not signal artwork reconciliation");
+                    }
+
+                    started = true;
+                }
+            }
+
+            if (started)
+            {
+                QueueReconciliation("plugin startup");
+                return;
+            }
+
+            await priorCleanup.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        _thumbs.MetadataIndexAvailable -= OnMetadataIndexAvailable;
-        if (_taskManager != null)
+        Task cleanup;
+        CancellationTokenSource? stop = null;
+        TaskCompletionSource? cleanupCompletion = null;
+        lock (_lifecycleGate)
         {
-            _taskManager.TaskCompleted -= OnTaskCompleted;
+            if (_stop is { IsCancellationRequested: false } activeStop)
+            {
+                stop = activeStop;
+                cleanupCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                cleanup = cleanupCompletion.Task;
+                _shutdownCleanup = cleanup;
+                stop.Cancel();
+            }
+            else
+            {
+                cleanup = _shutdownCleanup;
+            }
         }
 
-        if (_stop == null)
+        if (stop != null)
         {
-            return;
+            _thumbs.MetadataIndexAvailable -= OnMetadataIndexAvailable;
+            if (_taskManager != null)
+            {
+                _taskManager.TaskCompleted -= OnTaskCompleted;
+            }
+
+            CancelLibraryWatcherDebounce();
+            StopLibraryWatchers();
+            if (_remoteWorkers.Length > 0)
+            {
+                _remote.Available.Release(_remoteWorkers.Length);
+            }
+
+            if (_thumbnailWorkers.Length > 0)
+            {
+                _thumbnailAvailable.Release(_thumbnailWorkers.Length);
+            }
+
+            TrySignalReconciliation();
+            var workers = _remoteWorkers.Concat(_thumbnailWorkers).Concat(new[] { _reconciliationWorker }.OfType<Task>());
+            _ = CompleteStopAsync(stop, Task.WhenAll(workers), cleanupCompletion!);
         }
 
-        _stop.Cancel();
-        CancelLibraryWatcherDebounce();
-        StopLibraryWatchers();
-        _remote.Available.Release(_remoteWorkers.Length);
-        _thumbnailAvailable.Release();
-        TrySignalReconciliation();
-        var workers = _remoteWorkers.Concat(new[] { _thumbnailWorker, _reconciliationWorker }.OfType<Task>());
         try
         {
-            await Task.WhenAll(workers).WaitAsync(cancellationToken).ConfigureAwait(false);
+            await cleanup.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Expected: _stop.Cancel() above is exactly how these workers are asked to exit. Each
-            // worker loop now catches its own cancellation and returns cleanly, but this stays as a
-            // safety net for the WaitAsync(cancellationToken) call itself.
+            // Cleanup continues independently; StartAsync waits for it before creating new workers.
+        }
+    }
+
+    private async Task CompleteStopAsync(
+        CancellationTokenSource stop,
+        Task workersStopped,
+        TaskCompletionSource completion)
+    {
+        try
+        {
+            await FinishStopAsync(stop, workersStopped).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Completed rather than faulted: every later StartAsync awaits this same task, so a
+            // faulted cleanup would leave the service permanently unstartable.
+            _logger.LogWarning(ex, "Cleaning up after game artwork reconciliation shutdown failed");
         }
         finally
         {
-            _stop.Dispose();
-            _stop = null;
+            completion.TrySetResult();
+        }
+    }
 
-            // The workers have stopped, so nothing can dirty the catalog after this point. Catalog
-            // writes are debounced; paying one write per library here is what keeps a clean
-            // shutdown from discarding the last window of state transitions.
-            try
+    private async Task FinishStopAsync(CancellationTokenSource stop, Task workersStopped)
+    {
+        var workersQuiesced = false;
+        try
+        {
+            // Bounded: a worker parked in a non-cancelable call (a filesystem operation on a dead
+            // NAS mount) would otherwise never complete, and every later StartAsync waits on this
+            // cleanup -- so an unbounded wait here makes one wedged worker permanently unstartable.
+            // A straggler keeps its canceled lifetime token; queue versions and lifetime checks
+            // prevent it from publishing into the replacement lifetime.
+            await workersStopped.WaitAsync(_workerStopGrace).ConfigureAwait(false);
+            workersQuiesced = true;
+        }
+        catch (TimeoutException)
+        {
+            _logger.LogWarning(
+                "A game artwork worker did not stop within {Seconds}s; cleaning up without it",
+                _workerStopGrace.TotalSeconds);
+        }
+        catch (OperationCanceledException)
+        {
+            // A canceled worker is stopped and therefore safe to clean up.
+            workersQuiesced = true;
+        }
+        catch (Exception ex)
+        {
+            // Task.WhenAll only faults after every worker has finished.
+            workersQuiesced = true;
+            _logger.LogWarning(ex, "A game artwork worker failed while stopping");
+        }
+        finally
+        {
+            lock (_remoteQueueGate)
             {
-                await _catalog.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+                _queued.Clear();
+                _remote.Clear();
             }
-            catch (Exception ex)
+
+            lock (_thumbnailQueueGate)
             {
-                // Shutdown must not fault: the lost state is re-derivable by startup recovery.
-                _logger.LogWarning(ex, "Flushing the game artwork catalog during shutdown failed");
+                _thumbnail.Clear();
+                _thumbnailQueued.Clear();
+                while (_thumbnailAvailable.Wait(0))
+                {
+                    // Late delayed work rechecks this cleared identity before publishing a permit.
+                }
+            }
+
+            _startupRecoveryDone = false;
+            stop.Dispose();
+            lock (_lifecycleGate)
+            {
+                if (ReferenceEquals(_stop, stop))
+                {
+                    _stop = null;
+                }
+            }
+
+            // Never wait on a catalog gate that an abandoned worker may still hold. Its state is
+            // re-derived by startup recovery and the next reconciliation pass.
+            if (workersQuiesced)
+            {
+                try
+                {
+                    await _catalog.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    // Shutdown must not fault: the lost state is re-derivable by startup recovery.
+                    _logger.LogWarning(ex, "Flushing the game artwork catalog during shutdown failed");
+                }
             }
         }
     }
@@ -461,9 +608,9 @@ public sealed class GameArtworkReconciliationService : IHostedService
     /// startup, a library location changed outside Moonfin's own configuration page, or a watcher
     /// whose construction threw.
     /// </summary>
-    private void SyncLibraryWatchers()
+    private void SyncLibraryWatchers(CancellationToken lifetimeToken)
     {
-        if (!_watchLibraryFileSystem || _stop is not { IsCancellationRequested: false })
+        if (!_watchLibraryFileSystem || lifetimeToken.IsCancellationRequested)
         {
             return;
         }
@@ -485,9 +632,9 @@ public sealed class GameArtworkReconciliationService : IHostedService
 
         lock (_libraryWatcherLock)
         {
-            // Root resolution above can block in Jellyfin's library manager. StopAsync may cancel
-            // the service and dispose every watcher while that work is in progress.
-            if (_stop is not { IsCancellationRequested: false })
+            // Root resolution can outlive shutdown. Check this worker's token rather than _stop,
+            // which may already belong to a replacement lifetime.
+            if (lifetimeToken.IsCancellationRequested)
             {
                 return;
             }
@@ -512,6 +659,10 @@ public sealed class GameArtworkReconciliationService : IHostedService
                     {
                         IncludeSubdirectories = true,
                         NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
+
+                        // The 8 KB default overflows within a second of a romset copy. 64 KB is the
+                        // documented maximum; overflow is still handled, just made rarer.
+                        InternalBufferSize = 64 * 1024,
                         EnableRaisingEvents = true,
                     };
                     watcher.Created += OnLibraryFileSystemChanged;
@@ -608,8 +759,64 @@ public sealed class GameArtworkReconciliationService : IHostedService
 
     private void OnLibraryWatcherError(object sender, ErrorEventArgs e)
     {
-        _logger.LogWarning(e.GetException(), "Game-library watcher overflowed; reconciling artwork catalog");
-        QueueReconciliation("game-library watcher error");
+        var error = e.GetException();
+        var watcher = sender as FileSystemWatcher;
+
+        if (error is InternalBufferOverflowException && watcher is { EnableRaisingEvents: true })
+        {
+            // Only events were lost; the watcher itself keeps working. A romset copy raises this
+            // many times a second, so one warning per quiet period explains the reconcile without
+            // burying the rest of the log.
+            if (ShouldWarnAboutWatcherOverflow())
+            {
+                _logger.LogWarning(error, "Game-library watcher overflowed; reconciling artwork catalog");
+            }
+        }
+        else
+        {
+            // Unlike overflow this leaves a watcher that never reports again, and SyncLibraryWatchers
+            // skips any root it still holds, so the root would go unwatched until a restart.
+            _logger.LogWarning(error, "Game-library watcher failed; recreating it and reconciling artwork catalog");
+            RecycleLibraryWatcher(watcher);
+        }
+
+        // Debounced like an ordinary change: queueing directly ran a full library enumeration back
+        // to back for the length of an import. The pass is still guaranteed, because this call arms
+        // the timer itself.
+        DebounceLibraryFileSystemReconciliation();
+    }
+
+    private bool ShouldWarnAboutWatcherOverflow()
+    {
+        var now = DateTime.UtcNow.Ticks;
+        var previous = Interlocked.Read(ref _lastWatcherOverflowWarningTicks);
+        return now - previous >= LibraryFileSystemQuietPeriod.Ticks
+            && Interlocked.CompareExchange(ref _lastWatcherOverflowWarningTicks, now, previous) == previous;
+    }
+
+    /// <summary>
+    /// Drops a watcher that can no longer report, so the next <see cref="SyncLibraryWatchers"/>
+    /// treats its root as unwatched and builds a replacement.
+    /// </summary>
+    private void RecycleLibraryWatcher(FileSystemWatcher? watcher)
+    {
+        if (watcher == null)
+        {
+            return;
+        }
+
+        lock (_libraryWatcherLock)
+        {
+            foreach (var root in _libraryWatchers
+                .Where(entry => ReferenceEquals(entry.Value, watcher))
+                .Select(entry => entry.Key)
+                .ToList())
+            {
+                _libraryWatchers.Remove(root);
+            }
+        }
+
+        watcher.Dispose();
     }
 
     private void TrySignalReconciliation()
@@ -635,7 +842,8 @@ public sealed class GameArtworkReconciliationService : IHostedService
 
                 // Before scanning, not after: a root added since the last pass must be watched and
                 // scanned in the same pass, or its ROMs wait for the pass after next.
-                SyncLibraryWatchers();
+                SyncLibraryWatchers(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 var reopenMetadataDeferred = Interlocked.Exchange(ref _reopenMetadataDeferred, 0) != 0;
                 await ReconcileAsync(cancellationToken, reopenMetadataDeferred).ConfigureAwait(false);
             }
@@ -660,6 +868,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
             if (!_startupRecoveryDone)
             {
                 recovery = await _catalog.GetStartupRecoveryWorkAsync(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // Latched only after the read succeeds. Latching first would let one failed or
                 // cancelled startup pass strand the recoverable jobs until the next process start,
@@ -691,9 +900,31 @@ public sealed class GameArtworkReconciliationService : IHostedService
                     library.Id,
                     reconciledSystems.SelectMany(item => item.All).Select(candidate => candidate.Key),
                     cancellationToken).ConfigureAwait(false);
-                foreach (var path in orphaned.Where(IsManagedArtworkPath))
+                var deletable = orphaned.Where(IsManagedArtworkPath).ToList();
+                if (deletable.Count > 0)
+                {
+                    // Deleting cached artwork is the one destructive thing reconciliation does and
+                    // it was previously silent, which made a mass loss impossible to attribute.
+                    _logger.LogWarning(
+                        "Deleting {Count} orphaned game artwork files for library {LibraryId} (of {Orphaned} reported); first: {Sample}",
+                        deletable.Count,
+                        library.Id,
+                        orphaned.Count,
+                        string.Join(", ", deletable.Take(3)));
+                }
+
+                foreach (var path in deletable)
                 {
                     try { File.Delete(path); } catch (Exception ex) { _logger.LogDebug(ex, "Removing orphaned game artwork {Path} failed", path); }
+                }
+
+                var repaired = await _catalog.RepairMissingArtifactsAsync(library.Id, cancellationToken).ConfigureAwait(false);
+                if (repaired > 0)
+                {
+                    _logger.LogWarning(
+                        "Reopened {Count} game artwork entries whose cached files were missing for library {LibraryId}",
+                        repaired,
+                        library.Id);
                 }
 
                 foreach (var (system, allCandidates, candidates) in reconciledSystems)
@@ -727,23 +958,23 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         .Cast<ArtworkCandidate>()
                         .ToArray();
 
-                    if (discovery.PreviewGameIds.Count == 0)
+                    discovery = await _catalog.RecomputePreviewSelectionAsync(
+                        library.Id,
+                        candidates[0].SystemId,
+                        inventoryGeneration,
+                        cancellationToken).ConfigureAwait(false);
+                    var selectionComplete = string.Equals(
+                        discovery.PreviewSelectionGeneration,
+                        inventoryGeneration,
+                        StringComparison.Ordinal);
+                    var previewQueued = selectionComplete;
+                    foreach (var candidate in ordered)
                     {
-                        var plan = new PreviewPlan(library.Id, candidates[0].SystemId, inventoryGeneration, ordered);
-                        if (_previewPlans.TryAdd(plan.Identity, plan))
+                        var lane = previewQueued ? ArtworkLane.Bulk : ArtworkLane.Preview;
+                        if (await QueueCandidateAsync(candidate, lane, cancellationToken, reopenMetadataDeferred).ConfigureAwait(false) &&
+                            lane == ArtworkLane.Preview)
                         {
-                            var first = plan.TakeNext();
-                            if (first != null)
-                            {
-                                await QueueCandidateAsync(first, ArtworkLane.Preview, plan, cancellationToken, reopenMetadataDeferred).ConfigureAwait(false);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        foreach (var candidate in ordered)
-                        {
-                            await QueueCandidateAsync(candidate, ArtworkLane.Bulk, null, cancellationToken, reopenMetadataDeferred).ConfigureAwait(false);
+                            previewQueued = true;
                         }
                     }
                 }
@@ -752,10 +983,9 @@ public sealed class GameArtworkReconciliationService : IHostedService
             await EnqueueRecoveryAsync(recovery, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task QueueCandidateAsync(
+    private async Task<bool> QueueCandidateAsync(
         ArtworkCandidate candidate,
         ArtworkLane lane,
-        PreviewPlan? preview,
         CancellationToken cancellationToken,
         bool reopenMetadataDeferred = false)
     {
@@ -768,15 +998,12 @@ public sealed class GameArtworkReconciliationService : IHostedService
         switch (entry.State)
         {
             case ArtworkCatalogState.ThumbnailReady:
-                await AdvancePreviewAsync(preview, candidate, true, cancellationToken).ConfigureAwait(false);
-                break;
+                return false;
             case ArtworkCatalogState.OriginalReady when !string.IsNullOrWhiteSpace(entry.OriginalPath):
                 QueueThumbnail(candidate with { OriginalPath = entry.OriginalPath }, entry.RetryAfterUtc);
-                await AdvancePreviewAsync(preview, candidate, true, cancellationToken).ConfigureAwait(false);
-                break;
+                return false;
             case ArtworkCatalogState.Missing:
-                await AdvancePreviewAsync(preview, candidate, false, cancellationToken).ConfigureAwait(false);
-                break;
+                return false;
             case ArtworkCatalogState.MetadataDeferred:
                 if (reopenMetadataDeferred)
                 {
@@ -785,16 +1012,11 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         candidate.SystemId,
                         candidate.GameId,
                         cancellationToken).ConfigureAwait(false);
-                    QueueRemote(candidate, lane, preview, null);
+                    return QueueRemote(candidate, lane, null);
                 }
-                else
-                {
-                    await AdvancePreviewAsync(preview, candidate, false, cancellationToken).ConfigureAwait(false);
-                }
-                break;
+                return false;
             default:
-                QueueRemote(candidate, lane, preview, entry.RetryAfterUtc);
-                break;
+                return QueueRemote(candidate, lane, entry.RetryAfterUtc);
         }
     }
 
@@ -823,7 +1045,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
             }
             else if (item.Stage == ArtworkCatalogWorkStage.AcquireOriginal)
             {
-                QueueRemote(candidate, ArtworkLane.Bulk, null, item.NotBeforeUtc);
+                QueueRemote(candidate, ArtworkLane.Bulk, item.NotBeforeUtc);
             }
         }
 
@@ -889,13 +1111,13 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         }
 
                         await _catalog.MarkMissingAsync(work.Candidate.Key, work.Candidate.SystemId, ProviderVersion, cancellationToken).ConfigureAwait(false);
-                        await AdvancePreviewAsync(work.Preview, work.Candidate, false, cancellationToken).ConfigureAwait(false);
+                        await RefreshPreviewSelectionAsync(work.Candidate, cancellationToken).ConfigureAwait(false);
                         continue;
                     }
 
                     await _catalog.MarkOriginalReadyAsync(work.Candidate.Key, work.Candidate.SystemId, original, cancellationToken).ConfigureAwait(false);
                     QueueThumbnail(work.Candidate with { OriginalPath = original });
-                    await AdvancePreviewAsync(work.Preview, work.Candidate, true, cancellationToken).ConfigureAwait(false);
+                    await RefreshPreviewSelectionAsync(work.Candidate, cancellationToken).ConfigureAwait(false);
                 }
                 catch (ThumbLookupTimedOutException)
                 {
@@ -946,7 +1168,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         var retryAfter = DateTimeOffset.UtcNow.Add(delay);
         await _catalog.MarkRetryableAsync(work.Candidate.Key, work.Candidate.SystemId, ArtworkCatalogWorkStage.AcquireOriginal, retryAfter, cancellationToken).ConfigureAwait(false);
         CompleteRemote(work);
-        QueueRemote(work.Candidate, work.Lane, work.Preview, retryAfter);
+        QueueRemote(work.Candidate, work.Lane, retryAfter);
     }
 
     private async Task DeferMetadataAsync(ArtworkWork work, CancellationToken cancellationToken)
@@ -967,7 +1189,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 "Deferring artwork for {GameId} until {RetryAfterUtc} while its metadata index is pending",
                 work.Candidate.GameId,
                 scheduled);
-            QueueRemote(work.Candidate, work.Lane, work.Preview, scheduled);
+            QueueRemote(work.Candidate, work.Lane, scheduled);
         }
         else
         {
@@ -975,7 +1197,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 "Stopped automatic metadata retries for {GameId} after the {Hours}-hour retry window",
                 work.Candidate.GameId,
                 MetadataRetryWindow.TotalHours);
-            await AdvancePreviewAsync(work.Preview, work.Candidate, false, cancellationToken).ConfigureAwait(false);
+            await RefreshPreviewSelectionAsync(work.Candidate, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -987,6 +1209,11 @@ public sealed class GameArtworkReconciliationService : IHostedService
             {
                 await _thumbnailAvailable.WaitAsync(cancellationToken).ConfigureAwait(false);
                 if (!_thumbnail.TryDequeue(out var work))
+                {
+                    continue;
+                }
+
+                if (!IsCurrentThumbnailWork(work))
                 {
                     continue;
                 }
@@ -1003,7 +1230,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         // original forever.
                         var retryAfter = DateTimeOffset.UtcNow.Add(RetryDelay);
                         await _catalog.MarkRetryableAsync(work.Candidate.Key, work.Candidate.SystemId, ArtworkCatalogWorkStage.DeriveThumbnail, retryAfter, cancellationToken).ConfigureAwait(false);
-                        _thumbnailQueued.TryRemove(work.Identity, out _);
+                        CompleteThumbnail(work);
                         QueueThumbnail(work.Candidate, retryAfter);
                         retryQueued = true;
                     }
@@ -1021,7 +1248,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                     _logger.LogDebug(ex, "Artwork thumbnail generation failed for {GameId}", work.Candidate.GameId);
                     var retryAfter = DateTimeOffset.UtcNow.Add(RetryDelay);
                     await _catalog.MarkRetryableAsync(work.Candidate.Key, work.Candidate.SystemId, ArtworkCatalogWorkStage.DeriveThumbnail, retryAfter, cancellationToken).ConfigureAwait(false);
-                    _thumbnailQueued.TryRemove(work.Identity, out _);
+                    CompleteThumbnail(work);
                     QueueThumbnail(work.Candidate, retryAfter);
                     retryQueued = true;
                 }
@@ -1029,7 +1256,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 {
                     if (!retryQueued)
                     {
-                        _thumbnailQueued.TryRemove(work.Identity, out _);
+                        CompleteThumbnail(work);
                     }
                 }
             }
@@ -1053,56 +1280,79 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
     }
 
-    private async Task AdvancePreviewAsync(PreviewPlan? plan, ArtworkCandidate candidate, bool artworkFound, CancellationToken cancellationToken)
+    private async Task RefreshPreviewSelectionAsync(ArtworkCandidate candidate, CancellationToken cancellationToken)
     {
-        if (plan == null)
+        if (candidate.Kind != GameThumbService.ThumbKind.Boxart)
         {
             return;
         }
 
-        var next = plan.Complete(candidate, artworkFound, out var confirmed, out var bulkRemainder);
-        if (confirmed != null)
+        var system = await _catalog.GetSystemAsync(
+            candidate.Key.LibraryId,
+            candidate.SystemId,
+            cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(system.InventoryGeneration))
         {
-            await _catalog.CommitPreviewSelectionAsync(plan.LibraryId, plan.SystemId, plan.InventoryGeneration, confirmed, cancellationToken).ConfigureAwait(false);
-            _previewPlans.TryRemove(plan.Identity, out _);
-            foreach (var bulk in bulkRemainder!)
+            return;
+        }
+
+        var selection = await _catalog.RecomputePreviewSelectionAsync(
+            candidate.Key.LibraryId,
+            candidate.SystemId,
+            system.InventoryGeneration,
+            cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(selection.NextUnresolvedGameId))
+        {
+            var expected = await _catalog.GetByGameIdAsync(
+                candidate.Key.LibraryId,
+                selection.NextUnresolvedGameId,
+                "boxart",
+                cancellationToken).ConfigureAwait(false);
+            var nextUnresolved = expected == null
+                ? null
+                : TryCreatePersistedCandidate(
+                    candidate.Key.LibraryId,
+                    selection.NextUnresolvedGameId,
+                    GameThumbService.ThumbKind.Boxart,
+                    expected.Key.StorageKey);
+            if (nextUnresolved != null)
             {
-                await QueueCandidateAsync(bulk, ArtworkLane.Bulk, null, cancellationToken).ConfigureAwait(false);
+                await QueueCandidateAsync(nextUnresolved, ArtworkLane.Preview, cancellationToken).ConfigureAwait(false);
+                return;
             }
 
-            return;
-        }
-
-        if (next != null)
-        {
-            await QueueCandidateAsync(next, ArtworkLane.Preview, plan, cancellationToken).ConfigureAwait(false);
+            // A missing source or changed fingerprint means the persisted inventory is stale; only
+            // a normal reconciliation should replace that inventory and its deterministic order.
+            DebounceLibraryFileSystemReconciliation();
         }
     }
 
-    private void QueueRemote(ArtworkCandidate candidate, ArtworkLane lane, PreviewPlan? preview, DateTimeOffset? notBefore)
+    private bool QueueRemote(ArtworkCandidate candidate, ArtworkLane lane, DateTimeOffset? notBefore)
     {
-        var work = ArtworkWork.Remote(candidate, lane, preview);
+        var work = ArtworkWork.Remote(candidate, lane);
         lock (_remoteQueueGate)
         {
             if (_queued.TryGetValue(work.Identity, out var existing))
             {
                 if (existing.Started || !IsHigherPriority(lane, existing.Lane))
                 {
-                    return;
+                    return true;
                 }
 
-                existing = existing with { Lane = lane, Version = existing.Version + 1 };
+                existing = existing with { Lane = lane, Version = NextRemoteQueueVersion() };
                 _queued[work.Identity] = existing;
                 work = work with { QueueVersion = existing.Version };
             }
             else
             {
-                if (_queued.Count >= MaxQueuedRemoteWork && !MakeRoomForRemoteUnsafe(lane))
+                if (_queued.Count >= MaxQueuedBestEffortRemoteWork &&
+                    !MakeRoomForRemoteUnsafe(lane) &&
+                    lane != ArtworkLane.Preview)
                 {
-                    return;
+                    return false;
                 }
 
-                var queued = new QueuedRemoteWork(lane, 1, false);
+                var queued = new QueuedRemoteWork(lane, NextRemoteQueueVersion(), false);
                 _queued.Add(work.Identity, queued);
                 work = work with { QueueVersion = queued.Version };
             }
@@ -1111,10 +1361,11 @@ public sealed class GameArtworkReconciliationService : IHostedService
         if (notBefore is { } retryAfter && retryAfter > DateTimeOffset.UtcNow)
         {
             _ = DelayQueueRemoteAsync(work, retryAfter, _stop?.Token ?? CancellationToken.None);
-            return;
+            return true;
         }
 
-        _remote.Enqueue(work);
+        EnqueueRemoteIfCurrent(work);
+        return true;
     }
 
     private async Task DelayQueueRemoteAsync(ArtworkWork work, DateTimeOffset notBefore, CancellationToken cancellationToken)
@@ -1122,7 +1373,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         try
         {
             await Task.Delay(notBefore - DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-            _remote.Enqueue(work);
+            EnqueueRemoteIfCurrent(work);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1130,16 +1381,33 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
     }
 
+    private void EnqueueRemoteIfCurrent(ArtworkWork work)
+    {
+        lock (_remoteQueueGate)
+        {
+            if (_queued.TryGetValue(work.Identity, out var queued) &&
+                queued.Version == work.QueueVersion &&
+                !queued.Started)
+            {
+                _remote.Enqueue(work);
+            }
+        }
+    }
+
     private void QueueThumbnail(ArtworkCandidate candidate, DateTimeOffset? notBefore = null)
     {
-        var work = ArtworkWork.Thumbnail(candidate);
-        if (_thumbnailQueued.Count >= MaxQueuedThumbnailWork)
+        lock (_thumbnailQueueGate)
         {
-            return;
-        }
+            var work = ArtworkWork.Thumbnail(candidate) with
+            {
+                QueueVersion = Interlocked.Increment(ref _nextThumbnailQueueVersion),
+            };
+            if (_thumbnailQueued.Count >= MaxQueuedThumbnailWork ||
+                !_thumbnailQueued.TryAdd(work.Identity, work.QueueVersion))
+            {
+                return;
+            }
 
-        if (_thumbnailQueued.TryAdd(work.Identity, 0))
-        {
             if (notBefore is { } retryAfter && retryAfter > DateTimeOffset.UtcNow)
             {
                 _ = DelayQueueThumbnailAsync(work, retryAfter, _stop?.Token ?? CancellationToken.None);
@@ -1156,12 +1424,40 @@ public sealed class GameArtworkReconciliationService : IHostedService
         try
         {
             await Task.Delay(notBefore - DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-            _thumbnail.Enqueue(work);
-            _thumbnailAvailable.Release();
+            lock (_thumbnailQueueGate)
+            {
+                if (_thumbnailQueued.TryGetValue(work.Identity, out var version) &&
+                    version == work.QueueVersion)
+                {
+                    _thumbnail.Enqueue(work);
+                    _thumbnailAvailable.Release();
+                }
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _thumbnailQueued.TryRemove(work.Identity, out _);
+            // Stop cleanup owns removal; a late continuation must not remove a restarted lifetime's work.
+        }
+    }
+
+    private bool IsCurrentThumbnailWork(ArtworkWork work)
+    {
+        lock (_thumbnailQueueGate)
+        {
+            return _thumbnailQueued.TryGetValue(work.Identity, out var version) &&
+                version == work.QueueVersion;
+        }
+    }
+
+    private void CompleteThumbnail(ArtworkWork work)
+    {
+        lock (_thumbnailQueueGate)
+        {
+            if (_thumbnailQueued.TryGetValue(work.Identity, out var version) &&
+                version == work.QueueVersion)
+            {
+                _thumbnailQueued.TryRemove(work.Identity, out _);
+            }
         }
     }
 
@@ -1197,7 +1493,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
             return false;
         }
 
-        var evictable = _queued.FirstOrDefault(pair => !pair.Value.Started && pair.Value.Lane != ArtworkLane.Interactive);
+        var evictable = _queued.FirstOrDefault(pair => !pair.Value.Started && pair.Value.Lane == ArtworkLane.Bulk);
         if (string.IsNullOrEmpty(evictable.Key))
         {
             return false;
@@ -1208,6 +1504,8 @@ public sealed class GameArtworkReconciliationService : IHostedService
     }
 
     private static bool IsHigherPriority(ArtworkLane candidate, ArtworkLane existing) => candidate < existing;
+
+    private int NextRemoteQueueVersion() => Interlocked.Increment(ref _nextRemoteQueueVersion);
 
     private ArtworkCandidate? TryCreateCandidate(
         string libraryId,
@@ -1225,18 +1523,28 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
 
         var library = _games.GetGameLibraries().FirstOrDefault(item => string.Equals(item.Id, libraryId, StringComparison.OrdinalIgnoreCase));
-        var game = _games.GetGames(libraryId, null).FirstOrDefault(item => string.Equals(item.Id, gameId, StringComparison.Ordinal));
-        return library == null || game == null ? null : TryCreateCandidate(library, game, kind);
+        if (library == null)
+        {
+            return null;
+        }
+
+        var game = _games.GetGames(library.Id, null)
+            .FirstOrDefault(item => string.Equals(item.Id, gameId, StringComparison.Ordinal));
+        return game == null ? null : TryCreateCandidate(library, game, kind);
     }
 
     private ArtworkCandidate? TryCreateCandidate(GameLibrary library, GameSummary game, GameThumbService.ThumbKind kind)
     {
         var source = _games.ResolveThumbSource(library.Id, game.Id);
-        if (source == null)
-        {
-            return null;
-        }
+        return source == null ? null : TryCreateCandidate(library, game.Id, source, kind);
+    }
 
+    private static ArtworkCandidate? TryCreateCandidate(
+        GameLibrary library,
+        string gameId,
+        GameThumbSource source,
+        GameThumbService.ThumbKind kind)
+    {
         var root = library.Locations.Where(path => GamePathResolver.IsWithinRoot(path, source.RomPath)).OrderByDescending(path => path.Length).FirstOrDefault();
         if (root == null)
         {
@@ -1251,7 +1559,25 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
 
         var key = ArtworkCatalogKey.Create(library.Id, relativePath, $"{info.Length:x}-{info.LastWriteTimeUtc.Ticks:x}", KindName(kind));
-        return new ArtworkCandidate(game.Id, source.SystemName, kind, source, key, null);
+        return new ArtworkCandidate(gameId, source.SystemName, kind, source, key, null);
+    }
+
+    private ArtworkCandidate? TryCreatePersistedCandidate(
+        string libraryId,
+        string gameId,
+        GameThumbService.ThumbKind kind,
+        string expectedStorageKey)
+    {
+        var library = _games.GetGameLibraries().FirstOrDefault(item =>
+            string.Equals(item.Id, libraryId, StringComparison.OrdinalIgnoreCase));
+        var source = _games.ResolveThumbSource(libraryId, gameId);
+        var candidate = library == null || source == null
+            ? null
+            : TryCreateCandidate(library, gameId, source, kind);
+        return candidate != null &&
+            string.Equals(candidate.Key.StorageKey, expectedStorageKey, StringComparison.Ordinal)
+                ? candidate
+                : null;
     }
 
     private static GameThumbService.ThumbKind ParseKind(string? kind) => GameThumbService.ParseKind(kind);
@@ -1299,72 +1625,17 @@ public sealed class GameArtworkReconciliationService : IHostedService
 
     internal sealed record ArtworkCandidate(string GameId, string SystemId, GameThumbService.ThumbKind Kind, GameThumbSource Source, ArtworkCatalogKey Key, string? OriginalPath);
 
-    internal sealed record ArtworkWork(ArtworkCandidate Candidate, ArtworkLane Lane, PreviewPlan? Preview, bool IsThumbnail, int QueueVersion = 0)
+    internal sealed record ArtworkWork(ArtworkCandidate Candidate, ArtworkLane Lane, bool IsThumbnail, int QueueVersion = 0)
     {
-        public string Identity => (IsThumbnail ? "thumbnail:" : "remote:") + Candidate.Key.StorageKey;
-        public static ArtworkWork Remote(ArtworkCandidate candidate, ArtworkLane lane, PreviewPlan? preview) => new(candidate, lane, preview, false);
-        public static ArtworkWork Thumbnail(ArtworkCandidate candidate) => new(candidate, ArtworkLane.Interactive, null, true);
+        public string Identity => IsThumbnail
+            ? "thumbnail:" + Candidate.Key.StorageKey
+            : "remote:" + Candidate.Key.StorageKey;
+        public static ArtworkWork Remote(ArtworkCandidate candidate, ArtworkLane lane) => new(candidate, lane, false);
+        public static ArtworkWork Thumbnail(ArtworkCandidate candidate) => new(candidate, ArtworkLane.Interactive, true);
     }
 
     private sealed record QueuedRemoteWork(ArtworkLane Lane, int Version, bool Started);
 
-    internal sealed class PreviewPlan
-    {
-        private readonly object _gate = new();
-        private readonly IReadOnlyList<ArtworkCandidate> _candidates;
-        private readonly List<string> _confirmed = new(4);
-        private int _next;
-        private bool _finished;
-
-        public PreviewPlan(string libraryId, string systemId, string inventoryGeneration, IReadOnlyList<ArtworkCandidate> candidates)
-        {
-            LibraryId = libraryId;
-            SystemId = systemId;
-            InventoryGeneration = inventoryGeneration;
-            _candidates = candidates;
-        }
-
-        public string LibraryId { get; }
-        public string SystemId { get; }
-        public string InventoryGeneration { get; }
-        public string Identity => LibraryId + "/" + SystemId + "/" + InventoryGeneration;
-
-        public ArtworkCandidate? TakeNext()
-        {
-            lock (_gate)
-            {
-                return _next < _candidates.Count ? _candidates[_next++] : null;
-            }
-        }
-
-        public ArtworkCandidate? Complete(ArtworkCandidate candidate, bool found, out IReadOnlyList<string>? confirmed, out IReadOnlyList<ArtworkCandidate>? bulkRemainder)
-        {
-            lock (_gate)
-            {
-                confirmed = null;
-                bulkRemainder = null;
-                if (_finished)
-                {
-                    return null;
-                }
-
-                if (found && !_confirmed.Contains(candidate.GameId, StringComparer.Ordinal))
-                {
-                    _confirmed.Add(candidate.GameId);
-                }
-
-                if (_confirmed.Count == 4 || _next >= _candidates.Count)
-                {
-                    _finished = true;
-                    confirmed = _confirmed.ToArray();
-                    bulkRemainder = _candidates.Skip(_next).ToArray();
-                    return null;
-                }
-
-                return _candidates[_next++];
-            }
-        }
-    }
 }
 
 /// <summary>
@@ -1433,9 +1704,8 @@ internal sealed class ArtworkWorkScheduler
             {
                 _bulk.Enqueue(work);
             }
+            Available.Release();
         }
-
-        Available.Release();
     }
 
     public bool TryDequeue(out GameArtworkReconciliationService.ArtworkWork work)
@@ -1483,6 +1753,22 @@ internal sealed class ArtworkWorkScheduler
 
             work = null!;
             return false;
+        }
+    }
+
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _interactive.Clear();
+            _bulk.Clear();
+            _preview.Clear();
+            _previewSystems.Clear();
+            _nonBulkSelections = 0;
+            while (Available.Wait(0))
+            {
+                // Cleared work must not leave stale permits for workers created by a later start.
+            }
         }
     }
 }
