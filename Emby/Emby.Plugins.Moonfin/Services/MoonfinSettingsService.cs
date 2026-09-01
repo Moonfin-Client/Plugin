@@ -716,22 +716,23 @@ namespace Emby.Plugins.Moonfin.Services
             }
 
             // Content hiding is a global preference, so lift each device's hidden lists into the
-            // global profile. Union across devices so a file that hid items on more than one device
-            // keeps them all instead of the last device winning.
-            var devices = new[] { settings.Desktop, settings.Mobile, settings.Tv };
+            // global profile. Union across global and all devices so items hidden on any device
+            // persist instead of subsequent device pushes overwriting the global list.
+            var allProfiles = new[] { settings.Global, settings.Desktop, settings.Mobile, settings.Tv };
 
-            var hiddenContinueWatching = UnionHiddenEntries(devices, p => p.HiddenContinueWatchingItems);
+            var hiddenContinueWatching = UnionHiddenEntries(allProfiles, p => p.HiddenContinueWatchingItems);
             if (hiddenContinueWatching != null)
             {
                 settings.Global.HiddenContinueWatchingItems = hiddenContinueWatching;
             }
 
-            var hiddenNextUp = UnionHiddenEntries(devices, p => p.HiddenNextUpSeries);
+            var hiddenNextUp = UnionHiddenEntries(allProfiles, p => p.HiddenNextUpSeries);
             if (hiddenNextUp != null)
             {
                 settings.Global.HiddenNextUpSeries = hiddenNextUp;
             }
 
+            var devices = new[] { settings.Desktop, settings.Mobile, settings.Tv };
             foreach (var device in devices)
             {
                 if (device == null) continue;
@@ -741,14 +742,14 @@ namespace Emby.Plugins.Moonfin.Services
         }
 
         private static string? UnionHiddenEntries(
-            MoonfinSettingsProfile?[] devices,
+            MoonfinSettingsProfile?[] profiles,
             Func<MoonfinSettingsProfile, string?> selector)
         {
             Dictionary<string, string>? merged = null;
-            foreach (var device in devices)
+            foreach (var profile in profiles)
             {
-                if (device == null) continue;
-                var value = selector(device);
+                if (profile == null) continue;
+                var value = selector(profile);
                 if (value == null) continue;
 
                 if (merged == null)
@@ -757,7 +758,11 @@ namespace Emby.Plugins.Moonfin.Services
                 }
                 foreach (var pair in ParseHiddenEntries(value))
                 {
-                    merged[pair.Key] = pair.Value;
+                    if (!merged.TryGetValue(pair.Key, out var existingDate) ||
+                        string.Compare(pair.Value, existingDate, StringComparison.Ordinal) > 0)
+                    {
+                        merged[pair.Key] = pair.Value;
+                    }
                 }
             }
 
