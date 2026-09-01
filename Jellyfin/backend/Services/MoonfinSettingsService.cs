@@ -1188,4 +1188,25 @@ public class MoonfinSettingsService
         StripServerWideKeys(settings.Mobile);
         StripServerWideKeys(settings.Tv);
     }
+
+    public async Task<List<(Guid UserId, MoonfinUserSettings Settings)>> GetAllUserSettingsAsync()
+    {
+        var result = new List<(Guid, MoonfinUserSettings)>();
+        if (!Directory.Exists(_dataPath)) return result;
+
+        foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
+        {
+            var fileName = Path.GetFileNameWithoutExtension(file);
+            if (Guid.TryParse(fileName, out var userId))
+            {
+                var settings = await GetUserSettingsAsync(userId);
+                if (settings != null)
+                {
+                    result.Add((userId, settings));
+                }
+            }
+        }
+
+        return result;
+    }
 }
