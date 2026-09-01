@@ -146,4 +146,53 @@ public sealed class AdminDefaultsMergeTests : IDisposable
 
         Assert.Null(defaults.HiddenContinueWatchingItems);
     }
+
+    [Fact]
+    public async Task SuccessiveDeviceProfileSavesPreserveGlobalHiddenItems()
+    {
+        var userId = Guid.NewGuid();
+
+        // 1. TV saves an item to hide
+        await _service.SaveProfileAsync(
+            userId,
+            "tv",
+            new MoonfinSettingsProfile { HiddenContinueWatchingItems = "{\"item-tv\":\"2026-09-01T01:00:00Z\"}" },
+            "tv-client",
+            notifySettingsChanged: false);
+
+        var afterTv = Read(userId);
+        Assert.Contains("item-tv", afterTv.Global?.HiddenContinueWatchingItems ?? string.Empty, StringComparison.Ordinal);
+
+        // 2. Mobile saves a different item to hide (or pushes without hidden items)
+        await _service.SaveProfileAsync(
+            userId,
+            "mobile",
+            new MoonfinSettingsProfile { HiddenContinueWatchingItems = "{\"item-mobile\":\"2026-09-01T02:00:00Z\"}" },
+            "mobile-client",
+            notifySettingsChanged: false);
+
+        var afterMobile = Read(userId);
+        var globalHidden = afterMobile.Global?.HiddenContinueWatchingItems ?? string.Empty;
+        Assert.Contains("item-tv", globalHidden, StringComparison.Ordinal);
+        Assert.Contains("item-mobile", globalHidden, StringComparison.Ordinal);
+
+        // 3. TV saves an unrelated setting with null/empty hidden items
+        await _service.SaveProfileAsync(
+            userId,
+            "tv",
+            new MoonfinSettingsProfile { CinemaModeEnabled = true },
+            "tv-client",
+            notifySettingsChanged: false);
+
+        var afterTvUpdate = Read(userId);
+        var finalGlobalHidden = afterTvUpdate.Global?.HiddenContinueWatchingItems ?? string.Empty;
+        Assert.Contains("item-tv", finalGlobalHidden, StringComparison.Ordinal);
+        Assert.Contains("item-mobile", finalGlobalHidden, StringComparison.Ordinal);
+
+        // 4. Resolving TV profile retrieves both items from Global
+        var resolvedTv = _service.ResolveProfile(afterTvUpdate, "tv");
+        Assert.Contains("item-tv", resolvedTv.HiddenContinueWatchingItems ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("item-mobile", resolvedTv.HiddenContinueWatchingItems ?? string.Empty, StringComparison.Ordinal);
+    }
 }
+
