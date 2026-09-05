@@ -315,6 +315,11 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mergeRecentRowsByType")] public bool? MergeRecentRowsByType { get; set; }
         [JsonPropertyName("playlistsRowShowEpisodes")] public bool? PlaylistsRowShowEpisodes { get; set; }
         [JsonPropertyName("recentlyReleasedSeriesType")] public string? RecentlyReleasedSeriesType { get; set; }
+        [JsonPropertyName("loadingAnimationImage")] public string? LoadingAnimationImage { get; set; }
+        [JsonPropertyName("loadingAnimationSize")] public string? LoadingAnimationSize { get; set; }
+        [JsonPropertyName("loadingAnimationPosition")] public string? LoadingAnimationPosition { get; set; }
+        [JsonPropertyName("loadingAnimationSpeed")] public string? LoadingAnimationSpeed { get; set; }
+        [JsonPropertyName("showLoadingAnimationText")] public bool? ShowLoadingAnimationText { get; set; }
     }
 
     /// <summary>
