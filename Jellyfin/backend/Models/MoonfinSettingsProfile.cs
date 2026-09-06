@@ -379,6 +379,33 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("screensaverRequireRating")]
     public bool? ScreensaverRequireRating { get; set; }
 
+    [JsonPropertyName("screensaverBackdrop")]
+    public string? ScreensaverBackdrop { get; set; }
+
+    [JsonPropertyName("screensaverComponent")]
+    public string? ScreensaverComponent { get; set; }
+
+    [JsonPropertyName("screensaverMovement")]
+    public string? ScreensaverMovement { get; set; }
+
+    [JsonPropertyName("screensaverPosition")]
+    public string? ScreensaverPosition { get; set; }
+
+    [JsonPropertyName("screensaverSize")]
+    public string? ScreensaverSize { get; set; }
+
+    [JsonPropertyName("screensaverContentType")]
+    public string? ScreensaverContentType { get; set; }
+
+    [JsonPropertyName("screensaverLibraryIds")]
+    public List<string>? ScreensaverLibraryIds { get; set; }
+
+    [JsonPropertyName("screensaverCollectionIds")]
+    public List<string>? ScreensaverCollectionIds { get; set; }
+
+    [JsonPropertyName("screensaverExcludedGenres")]
+    public List<string>? ScreensaverExcludedGenres { get; set; }
+
     // Subtitles. Colours travel as #AARRGGBB strings so clients that store an int and
     // clients that store a CSS colour can both round-trip them without loss.
 
