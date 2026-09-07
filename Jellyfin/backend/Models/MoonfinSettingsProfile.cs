@@ -848,6 +848,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("crashReportsEnabled")]
     public bool? CrashReportsEnabled { get; set; }
 
+    [JsonPropertyName("showDownloadsButton")]
+    public bool? ShowDownloadsButton { get; set; }
+
     [JsonPropertyName("showServerMessagesButton")]
     public bool? ShowServerMessagesButton { get; set; }
 
