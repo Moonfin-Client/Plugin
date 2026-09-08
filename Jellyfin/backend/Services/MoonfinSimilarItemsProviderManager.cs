@@ -1,6 +1,6 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -9,14 +9,16 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Moonfin.Server.Services;
 
 /// <summary>
-/// Hosted service that detects whether Jellyfin 12's ISimilarItemsManager is available
-/// and dynamically generates and registers an ILocalSimilarItemsProvider implementation ("Moonfin Recommends").
+/// Registers "Moonfin Recommends" with Jellyfin 12's similar items pipeline when the host exposes
+/// one. The provider is emitted at runtime rather than declared because the plugin compiles against
+/// Jellyfin.Controller 10.10, where none of those interfaces exist yet.
 /// </summary>
 public class MoonfinSimilarItemsProviderManager : IHostedService
 {
@@ -24,7 +26,14 @@ public class MoonfinSimilarItemsProviderManager : IHostedService
     private readonly MoonfinSimilarItemsService _similarItemsService;
     private readonly ILogger<MoonfinSimilarItemsProviderManager> _logger;
 
-    private static readonly List<object> _stockProviders = [];
+    private readonly List<object> _stockProviders = [];
+
+    private Type? _localProviderType;
+    private MethodInfo? _stockSupports;
+    private MethodInfo? _stockGetSimilarItemsAsync;
+    private PropertyInfo? _queryUser;
+    private PropertyInfo? _queryLimit;
+    private PropertyInfo? _queryExcludeItemIds;
 
     public MoonfinSimilarItemsProviderManager(
         IServiceProvider serviceProvider,
@@ -35,6 +44,9 @@ public class MoonfinSimilarItemsProviderManager : IHostedService
         _similarItemsService = similarItemsService;
         _logger = logger;
     }
+
+    private static bool IsProviderEnabled =>
+        MoonfinPlugin.Instance?.Configuration?.RecommendationsProviderEnabled ?? true;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -60,7 +72,7 @@ public class MoonfinSimilarItemsProviderManager : IHostedService
         var simMgrInterfaceType = Type.GetType("MediaBrowser.Controller.Library.ISimilarItemsManager, MediaBrowser.Controller");
         if (simMgrInterfaceType == null)
         {
-            _logger.LogInformation("MediaBrowser.Controller.Library.ISimilarItemsManager not found; running on Jellyfin 10.x or Emby. Native similar items provider registration skipped.");
+            _logger.LogDebug("ISimilarItemsManager not found, so this is Jellyfin 10.x or Emby. Provider registration skipped.");
             return;
         }
 
@@ -80,114 +92,78 @@ public class MoonfinSimilarItemsProviderManager : IHostedService
             return;
         }
 
-        var providerInstance = CreateDynamicProvider(localProvType, provBaseType);
-        if (providerInstance == null)
+        var addPartsMethod = simMgrInterfaceType.GetMethod("AddParts");
+        if (addPartsMethod == null)
         {
-            _logger.LogWarning("Failed to create dynamic Moonfin similar items provider.");
+            _logger.LogWarning("ISimilarItemsManager.AddParts method not found.");
             return;
         }
 
-        // Preserve existing registered providers (e.g. built-in Local Genre/Tag) alongside Moonfin Recommends
+        // AddParts replaces the provider set rather than appending to it, so the providers Jellyfin
+        // registered at startup have to be read back and passed in again. If that read ever fails
+        // we have to leave the pipeline alone, because registering Moonfin on its own would
+        // silently drop every stock provider.
         var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
         var existingField = simMgr.GetType().GetField("_similarItemsProviders", flags);
-        var existingArr = existingField?.GetValue(simMgr) as Array;
+        if (existingField?.GetValue(simMgr) is not Array existingArr)
+        {
+            _logger.LogWarning(
+                "Could not read the existing similar items providers from {ManagerType}, so Moonfin Recommends was not registered. Registering it would have removed Jellyfin's own providers.",
+                simMgr.GetType().FullName);
+            return;
+        }
+
+        var providerInstance = CreateDynamicProvider(localProvType, provBaseType);
+        if (providerInstance == null)
+        {
+            return;
+        }
 
         var allList = new List<object>();
-        var stockList = new List<object>();
-        if (existingArr != null)
+        foreach (var existing in existingArr)
         {
-            foreach (var item in existingArr)
+            if (existing != null && !existing.GetType().FullName!.Contains("Moonfin", StringComparison.Ordinal))
             {
-                if (item != null && item != providerInstance && !item.GetType().FullName!.Contains("Moonfin"))
-                {
-                    allList.Add(item);
-                    stockList.Add(item);
-                }
+                allList.Add(existing);
             }
         }
 
         lock (_stockProviders)
         {
             _stockProviders.Clear();
-            _stockProviders.AddRange(stockList);
+            _stockProviders.AddRange(allList);
         }
 
-        allList.Add(providerInstance);
+        // The manager sorts providers by their configured order and that sort is stable, so sitting
+        // at the head of the array is what puts Moonfin first among equals.
+        allList.Insert(0, providerInstance);
 
-        // Register with ISimilarItemsManager.AddParts
-        var addPartsMethod = simMgrInterfaceType.GetMethod("AddParts");
-        if (addPartsMethod != null)
+        var arr = Array.CreateInstance(provBaseType, allList.Count);
+        for (var i = 0; i < allList.Count; i++)
         {
-            var arr = Array.CreateInstance(provBaseType, allList.Count);
-            for (var i = 0; i < allList.Count; i++)
-            {
-                arr.SetValue(allList[i], i);
-            }
-            addPartsMethod.Invoke(simMgr, [arr]);
-            _logger.LogInformation("Successfully registered 'Moonfin Recommends' provider alongside {ExistingCount} existing providers via ISimilarItemsManager.AddParts.", allList.Count - 1);
-        }
-        else
-        {
-            _logger.LogWarning("ISimilarItemsManager.AddParts method not found.");
+            arr.SetValue(allList[i], i);
         }
 
-        // Ensure Moonfin Recommends is prioritized by moving to the beginning of internal provider lists if accessible
-        PrioritizeProvider(simMgr, providerInstance);
-    }
-
-    private void PrioritizeProvider(object simMgr, object providerInstance)
-    {
-        try
-        {
-            var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-            var currType = simMgr.GetType();
-
-            while (currType != null && currType != typeof(object))
-            {
-                foreach (var field in currType.GetFields(flags))
-                {
-                    var val = field.GetValue(simMgr);
-                    if (val == null) continue;
-
-                    if (val is IList list)
-                    {
-                        _logger.LogInformation("ISimilarItemsManager field {FieldName} has IList with {Count} elements.", field.Name, list.Count);
-                        if (list.Contains(providerInstance))
-                        {
-                            list.Remove(providerInstance);
-                            list.Insert(0, providerInstance);
-                            _logger.LogInformation("Prioritized 'Moonfin Recommends' at head of {FieldName} (IList).", field.Name);
-                        }
-                    }
-                    else if (val is Array arr && arr.Length > 0)
-                    {
-                        _logger.LogInformation("ISimilarItemsManager field {FieldName} has Array with {Count} elements of type {ElemType}.", field.Name, arr.Length, arr.GetType().GetElementType());
-                        var elemType = arr.GetType().GetElementType()!;
-                        var listType = typeof(List<>).MakeGenericType(elemType);
-                        var listObj = (IList)Activator.CreateInstance(listType, arr)!;
-                        if (listObj.Contains(providerInstance))
-                        {
-                            listObj.Remove(providerInstance);
-                            listObj.Insert(0, providerInstance);
-                            var newArr = Array.CreateInstance(elemType, listObj.Count);
-                            listObj.CopyTo(newArr, 0);
-                            field.SetValue(simMgr, newArr);
-                            _logger.LogInformation("Prioritized 'Moonfin Recommends' at head of {FieldName} (Array).", field.Name);
-                        }
-                    }
-                }
-
-                currType = currType.BaseType;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Could not adjust provider priority ordering (non-critical).");
-        }
+        addPartsMethod.Invoke(simMgr, [arr]);
+        _logger.LogInformation(
+            "Registered 'Moonfin Recommends' ahead of {ExistingCount} existing similar items providers.",
+            allList.Count - 1);
     }
 
     private object? CreateDynamicProvider(Type localProvType, Type provBaseType)
     {
+        var ifaceSupports = localProvType.GetMethod("Supports")!;
+        var ifaceGetSimilar = localProvType.GetMethod("GetSimilarItemsAsync")!;
+        var queryType = ifaceGetSimilar.GetParameters()[1].ParameterType;
+
+        var ifacePropType = provBaseType.GetProperty("Type")!;
+        var metaPluginEnumType = ifacePropType.PropertyType;
+        if (!Enum.TryParse(metaPluginEnumType, "LocalSimilarityProvider", out var localSimilarityKind) || localSimilarityKind == null)
+        {
+            _logger.LogWarning("{EnumType} has no LocalSimilarityProvider member, so Moonfin Recommends was not registered.", metaPluginEnumType.FullName);
+            return null;
+        }
+
         var asmName = new AssemblyName("Moonfin.Server.DynamicSimilarity");
         var asmBuilder = AssemblyBuilder.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.Run);
         var moduleBuilder = asmBuilder.DefineDynamicModule("MainModule");
@@ -201,202 +177,173 @@ public class MoonfinSimilarItemsProviderManager : IHostedService
         const MethodAttributes ifaceMethodAttrs = MethodAttributes.Public | MethodAttributes.Virtual | MethodAttributes.NewSlot | MethodAttributes.HideBySig | MethodAttributes.Final;
         const MethodAttributes propMethodAttrs = MethodAttributes.Public | MethodAttributes.Virtual | MethodAttributes.NewSlot | MethodAttributes.SpecialName | MethodAttributes.HideBySig | MethodAttributes.Final;
 
-        // Explicit parameterless constructor calling base()
         var ctor = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, Type.EmptyTypes);
         var ilCtor = ctor.GetILGenerator();
         ilCtor.Emit(OpCodes.Ldarg_0);
         ilCtor.Emit(OpCodes.Call, typeof(object).GetConstructor(Type.EmptyTypes)!);
         ilCtor.Emit(OpCodes.Ret);
 
-        // string Name { get; } => "Moonfin Recommends"
         var ifacePropName = provBaseType.GetProperty("Name")!;
-        var ifaceGetName = ifacePropName.GetGetMethod()!;
         var propName = typeBuilder.DefineProperty("Name", PropertyAttributes.None, typeof(string), Type.EmptyTypes);
         var getName = typeBuilder.DefineMethod("get_Name", propMethodAttrs, typeof(string), Type.EmptyTypes);
         var ilName = getName.GetILGenerator();
         ilName.Emit(OpCodes.Ldstr, "Moonfin Recommends");
         ilName.Emit(OpCodes.Ret);
         propName.SetGetMethod(getName);
-        typeBuilder.DefineMethodOverride(getName, ifaceGetName);
+        typeBuilder.DefineMethodOverride(getName, ifacePropName.GetGetMethod()!);
 
-        // MetadataPluginType Type { get; }
-        var ifacePropType = provBaseType.GetProperty("Type")!;
-        var ifaceGetType = ifacePropType.GetGetMethod()!;
-        var metaPluginEnumType = ifacePropType.PropertyType;
         var propType = typeBuilder.DefineProperty("Type", PropertyAttributes.None, metaPluginEnumType, Type.EmptyTypes);
         var getType = typeBuilder.DefineMethod("get_Type", propMethodAttrs, metaPluginEnumType, Type.EmptyTypes);
         var ilType = getType.GetILGenerator();
-        int enumVal = 9; // Default fallback for LocalSimilarityProvider
-        try
-        {
-            enumVal = Convert.ToInt32(Enum.Parse(metaPluginEnumType, "LocalSimilarityProvider"));
-        }
-        catch
-        {
-            // Fallback to integer 9
-        }
-        ilType.Emit(OpCodes.Ldc_I4, enumVal);
+        ilType.Emit(OpCodes.Ldc_I4, Convert.ToInt32(localSimilarityKind, CultureInfo.InvariantCulture));
         ilType.Emit(OpCodes.Ret);
         propType.SetGetMethod(getType);
-        typeBuilder.DefineMethodOverride(getType, ifaceGetType);
+        typeBuilder.DefineMethodOverride(getType, ifacePropType.GetGetMethod()!);
 
-        // TimeSpan? CacheDuration { get; } => 1 day
+        // Jellyfin only caches remote providers, so this value is never read. The interface still
+        // asks for one.
         var ifacePropCache = provBaseType.GetProperty("CacheDuration")!;
-        var ifaceGetCache = ifacePropCache.GetGetMethod()!;
         var nullableTimeSpanType = ifacePropCache.PropertyType;
         var propCache = typeBuilder.DefineProperty("CacheDuration", PropertyAttributes.None, nullableTimeSpanType, Type.EmptyTypes);
         var getCache = typeBuilder.DefineMethod("get_CacheDuration", propMethodAttrs, nullableTimeSpanType, Type.EmptyTypes);
         var ilCache = getCache.GetILGenerator();
-        var ctorNullable = nullableTimeSpanType.GetConstructor([typeof(TimeSpan)])!;
-        var fromHoursMethod = typeof(TimeSpan).GetMethod("FromHours", [typeof(double)])!;
         ilCache.Emit(OpCodes.Ldc_R8, 24.0);
-        ilCache.Emit(OpCodes.Call, fromHoursMethod);
-        ilCache.Emit(OpCodes.Newobj, ctorNullable);
+        ilCache.Emit(OpCodes.Call, typeof(TimeSpan).GetMethod("FromHours", [typeof(double)])!);
+        ilCache.Emit(OpCodes.Newobj, nullableTimeSpanType.GetConstructor([typeof(TimeSpan)])!);
         ilCache.Emit(OpCodes.Ret);
         propCache.SetGetMethod(getCache);
-        typeBuilder.DefineMethodOverride(getCache, ifaceGetCache);
+        typeBuilder.DefineMethodOverride(getCache, ifacePropCache.GetGetMethod()!);
 
-        // Static delegate fields
-        var fSupports = typeBuilder.DefineField("_supportsDelegate", typeof(Func<object, bool>), FieldAttributes.Public | FieldAttributes.Static);
-        var fGetSimilar = typeBuilder.DefineField("_getSimilarDelegate", typeof(Func<object, object, CancellationToken, Task<IReadOnlyList<BaseItem>>>), FieldAttributes.Public | FieldAttributes.Static);
+        // The emitted methods hold no state of their own, they just forward to handlers on this
+        // instance through static delegate fields.
+        var fSupports = typeBuilder.DefineField("_supportsDelegate", typeof(Func<Type, bool>), FieldAttributes.Public | FieldAttributes.Static);
+        var fGetSimilar = typeBuilder.DefineField("_getSimilarDelegate", typeof(Func<BaseItem, object, CancellationToken, Task<IReadOnlyList<BaseItem>>>), FieldAttributes.Public | FieldAttributes.Static);
 
-        // bool Supports(BaseItem item)
-        var ifaceSupports = localProvType.GetMethod("Supports")!;
-        var supportsParams = ifaceSupports.GetParameters().Select(p => p.ParameterType).ToArray();
-        var mSupports = typeBuilder.DefineMethod("Supports", ifaceMethodAttrs, typeof(bool), supportsParams);
+        var mSupports = typeBuilder.DefineMethod("Supports", ifaceMethodAttrs, typeof(bool), ifaceSupports.GetParameters().Select(p => p.ParameterType).ToArray());
         var ilSupports = mSupports.GetILGenerator();
         ilSupports.Emit(OpCodes.Ldsfld, fSupports);
         ilSupports.Emit(OpCodes.Ldarg_1);
-        ilSupports.Emit(OpCodes.Callvirt, typeof(Func<object, bool>).GetMethod("Invoke")!);
+        ilSupports.Emit(OpCodes.Callvirt, typeof(Func<Type, bool>).GetMethod("Invoke")!);
         ilSupports.Emit(OpCodes.Ret);
         typeBuilder.DefineMethodOverride(mSupports, ifaceSupports);
 
-        // Task<IReadOnlyList<BaseItem>> GetSimilarItemsAsync(BaseItem item, SimilarItemsQuery query, CancellationToken cancellationToken)
-        var ifaceGetSimilar = localProvType.GetMethod("GetSimilarItemsAsync")!;
-        var getSimilarParams = ifaceGetSimilar.GetParameters().Select(p => p.ParameterType).ToArray();
-        var getSimilarReturn = ifaceGetSimilar.ReturnType;
-        var mGetSimilar = typeBuilder.DefineMethod("GetSimilarItemsAsync", ifaceMethodAttrs, getSimilarReturn, getSimilarParams);
+        var mGetSimilar = typeBuilder.DefineMethod(
+            "GetSimilarItemsAsync",
+            ifaceMethodAttrs,
+            ifaceGetSimilar.ReturnType,
+            ifaceGetSimilar.GetParameters().Select(p => p.ParameterType).ToArray());
         var ilGetSimilar = mGetSimilar.GetILGenerator();
         ilGetSimilar.Emit(OpCodes.Ldsfld, fGetSimilar);
         ilGetSimilar.Emit(OpCodes.Ldarg_1);
         ilGetSimilar.Emit(OpCodes.Ldarg_2);
         ilGetSimilar.Emit(OpCodes.Ldarg_3);
-        ilGetSimilar.Emit(OpCodes.Callvirt, typeof(Func<object, object, CancellationToken, Task<IReadOnlyList<BaseItem>>>).GetMethod("Invoke")!);
+        ilGetSimilar.Emit(OpCodes.Callvirt, typeof(Func<BaseItem, object, CancellationToken, Task<IReadOnlyList<BaseItem>>>).GetMethod("Invoke")!);
         ilGetSimilar.Emit(OpCodes.Ret);
         typeBuilder.DefineMethodOverride(mGetSimilar, ifaceGetSimilar);
 
         var generatedType = typeBuilder.CreateType();
-        if (generatedType == null) return null;
+        if (generatedType == null)
+        {
+            _logger.LogWarning("Failed to create dynamic Moonfin similar items provider.");
+            return null;
+        }
 
-        // Hook up handlers
-        generatedType.GetField("_supportsDelegate")!.SetValue(null, (Func<object, bool>)HandleSupports);
+        generatedType.GetField("_supportsDelegate")!.SetValue(null, (Func<Type, bool>)HandleSupports);
         generatedType.GetField("_getSimilarDelegate")!.SetValue(
             null,
-            (Func<object, object, CancellationToken, Task<IReadOnlyList<BaseItem>>>)HandleGetSimilarAsync);
+            (Func<BaseItem, object, CancellationToken, Task<IReadOnlyList<BaseItem>>>)HandleGetSimilarAsync);
+
+        _localProviderType = localProvType;
+        _stockSupports = ifaceSupports;
+        _stockGetSimilarItemsAsync = ifaceGetSimilar;
+        _queryUser = queryType.GetProperty("User");
+        _queryLimit = queryType.GetProperty("Limit");
+        _queryExcludeItemIds = queryType.GetProperty("ExcludeItemIds");
 
         return Activator.CreateInstance(generatedType);
     }
 
-    private bool HandleSupports(object? rawItem)
+    /// <summary>
+    /// Jellyfin asks this on every similar items request, so an admin turning the setting off takes
+    /// Moonfin back out of the pipeline straight away without needing a restart.
+    /// </summary>
+    private bool HandleSupports(Type? itemType)
     {
-        try
+        if (itemType == null || !IsProviderEnabled)
         {
-            if (rawItem == null) return false;
-
-            if (rawItem is Type t)
-            {
-                var supported = t.Name is "Movie" or "Series"
-                    || typeof(Movie).IsAssignableFrom(t)
-                    || typeof(Series).IsAssignableFrom(t);
-                _logger.LogInformation("Moonfin Recommends HandleSupports(Type: {TypeName}): {Supported}", t.FullName, supported);
-                return supported;
-            }
-
-            var typeName = rawItem.GetType().Name;
-            var isSupported = typeName is "Movie" or "Series" || rawItem is Movie or Series;
-            _logger.LogInformation("Moonfin Recommends HandleSupports(Instance: {TypeName}): {Supported}", typeName, isSupported);
-            return isSupported;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in Moonfin Recommends HandleSupports");
             return false;
         }
+
+        return typeof(Movie).IsAssignableFrom(itemType) || typeof(Series).IsAssignableFrom(itemType);
     }
 
     private async Task<IReadOnlyList<BaseItem>> HandleGetSimilarAsync(
-        object? rawItem,
+        BaseItem item,
         object? rawQuery,
         CancellationToken cancellationToken)
     {
+        if (WantsStockEngine())
+        {
+            return await InvokeStockProviderAsync(item, rawQuery, cancellationToken).ConfigureAwait(false);
+        }
+
+        object? user = null;
+        int? limit = null;
+        IReadOnlyList<Guid>? excludeItemIds = null;
+
+        if (rawQuery != null)
+        {
+            user = _queryUser?.GetValue(rawQuery);
+            limit = _queryLimit?.GetValue(rawQuery) as int?;
+            excludeItemIds = _queryExcludeItemIds?.GetValue(rawQuery) as IReadOnlyList<Guid>;
+        }
+
         try
         {
-            if (rawItem is not BaseItem item)
-            {
-                _logger.LogWarning("Moonfin Recommends HandleGetSimilarAsync called with non-BaseItem: {Type}", rawItem?.GetType().FullName);
-                return Array.Empty<BaseItem>();
-            }
-
-            // Check if the current HTTP request explicitly requested stock/bypass (e.g. asking specifically for Jellyfin stock engine)
-            try
-            {
-                var httpAccessorType = Type.GetType("Microsoft.AspNetCore.Http.IHttpContextAccessor, Microsoft.AspNetCore.Http.Abstractions");
-                if (httpAccessorType != null)
-                {
-                    var accessor = _serviceProvider.GetService(httpAccessorType);
-                    if (accessor != null)
-                    {
-                        var httpContext = accessor.GetType().GetProperty("HttpContext")?.GetValue(accessor);
-                        if (httpContext != null)
-                        {
-                            var req = httpContext.GetType().GetProperty("Request")?.GetValue(httpContext);
-                            var queryString = req?.GetType().GetProperty("QueryString")?.GetValue(req)?.ToString() ?? string.Empty;
-                            if (queryString.Contains("bypass=moonfin", StringComparison.OrdinalIgnoreCase) ||
-                                queryString.Contains("engine=jellyfin", StringComparison.OrdinalIgnoreCase) ||
-                                queryString.Contains("engine=stock", StringComparison.OrdinalIgnoreCase))
-                            {
-                                _logger.LogInformation("Moonfin Recommends bypassed via query parameter for '{ItemName}'. Invoking stock provider directly.", item.Name);
-                                var stockResults = await InvokeStockProviderAsync(item, rawQuery, cancellationToken).ConfigureAwait(false);
-                                return stockResults;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Could not check HttpContext for bypass parameter.");
-            }
-
-            _logger.LogInformation("Moonfin Recommends HandleGetSimilarAsync invoked for '{ItemName}' ({ItemId}).", item.Name, item.Id);
-
-            object? user = null;
-            int? limit = null;
-            IReadOnlyList<Guid>? excludeItemIds = null;
-
-            if (rawQuery != null)
-            {
-                var qType = rawQuery.GetType();
-                user = qType.GetProperty("User")?.GetValue(rawQuery);
-                limit = qType.GetProperty("Limit")?.GetValue(rawQuery) as int?;
-                excludeItemIds = qType.GetProperty("ExcludeItemIds")?.GetValue(rawQuery) as IReadOnlyList<Guid>;
-            }
-
-            var results = await _similarItemsService.GetSimilarItemsAsync(
+            return await _similarItemsService.GetSimilarItemsAsync(
                 item,
                 user,
                 limit,
                 excludeItemIds,
                 cancellationToken).ConfigureAwait(false);
-
-            _logger.LogInformation("Moonfin Recommends returning {Count} recommendations for '{ItemName}'.", results.Count, item.Name);
-            return results;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating similar items in provider.");
+            // Returning nothing lets the stock providers fill the slots instead of failing the
+            // whole request.
+            _logger.LogError(ex, "Error generating similar items for '{ItemName}'.", item.Name);
             return Array.Empty<BaseItem>();
         }
+    }
+
+    /// <summary>
+    /// Lets a caller ask for Jellyfin's own recommendations on a single request, so the two engines
+    /// can be compared without touching the server config.
+    /// </summary>
+    private bool WantsStockEngine()
+    {
+        var httpContext = _serviceProvider.GetService(typeof(IHttpContextAccessor)) is IHttpContextAccessor accessor
+            ? accessor.HttpContext
+            : null;
+
+        if (httpContext == null)
+        {
+            return false;
+        }
+
+        var query = httpContext.Request.Query;
+        if (string.Equals(query["bypass"].ToString(), "moonfin", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var engine = query["engine"].ToString();
+        return string.Equals(engine, "jellyfin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(engine, "stock", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<IReadOnlyList<BaseItem>> InvokeStockProviderAsync(
@@ -404,96 +351,48 @@ public class MoonfinSimilarItemsProviderManager : IHostedService
         object? rawQuery,
         CancellationToken cancellationToken)
     {
+        if (_localProviderType == null || _stockSupports == null || _stockGetSimilarItemsAsync == null)
+        {
+            return Array.Empty<BaseItem>();
+        }
+
         List<object> providers;
         lock (_stockProviders)
         {
             providers = new List<object>(_stockProviders);
         }
 
-        // Boost candidate limit for stock provider so internal Take(limit) covers entire library
-        if (rawQuery != null)
+        var itemType = item.GetType();
+
+        foreach (var provider in providers)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var providerType = provider.GetType();
+            if (!_localProviderType.IsAssignableFrom(providerType))
+            {
+                continue;
+            }
+
             try
             {
-                var limitProp = rawQuery.GetType().GetProperty("Limit");
-                if (limitProp != null && limitProp.CanWrite)
+                if (_stockSupports.Invoke(provider, [itemType]) is not true)
                 {
-                    var currentLimit = limitProp.GetValue(rawQuery) as int?;
-                    if (currentLimit == null || currentLimit < 5000)
-                    {
-                        limitProp.SetValue(rawQuery, 5000);
-                    }
+                    continue;
+                }
+
+                if (_stockGetSimilarItemsAsync.Invoke(provider, [item, rawQuery, cancellationToken]) is Task<IReadOnlyList<BaseItem>> typedTask)
+                {
+                    return await typedTask.ConfigureAwait(false);
                 }
             }
-            catch { }
-        }
-
-        var itemType = item.GetType();
-        foreach (var sp in providers)
-        {
-            try
+            catch (OperationCanceledException)
             {
-                var spType = sp.GetType();
-                var localProvType = Type.GetType("MediaBrowser.Controller.Library.ILocalSimilarItemsProvider, MediaBrowser.Controller");
-                var isLocalProv = localProvType != null && localProvType.IsAssignableFrom(spType);
-                var supportsMethod = isLocalProv
-                    ? localProvType!.GetMethod("Supports")
-                    : spType.GetMethod("Supports", [typeof(Type)]);
-
-                var isSupported = false;
-                if (supportsMethod != null)
-                {
-                    var res = supportsMethod.Invoke(sp, [itemType]);
-                    if (res is bool b && b)
-                    {
-                        isSupported = true;
-                    }
-                }
-                else
-                {
-                    var directSupports = spType.GetMethod("Supports", [typeof(BaseItem)])
-                        ?? spType.GetMethod("Supports", [itemType]);
-                    if (directSupports != null)
-                    {
-                        var res = directSupports.Invoke(sp, [item]);
-                        if (res is bool b && b)
-                        {
-                            isSupported = true;
-                        }
-                    }
-                }
-
-                if (isSupported)
-                {
-                    var getSimMethod = isLocalProv
-                        ? localProvType!.GetMethod("GetSimilarItemsAsync")
-                        : spType.GetMethod("GetSimilarItemsAsync");
-
-                    if (getSimMethod != null)
-                    {
-                        var taskObj = getSimMethod.Invoke(sp, [item, rawQuery, cancellationToken]);
-                        if (taskObj is Task<IReadOnlyList<BaseItem>> typedTask)
-                        {
-                            var list = await typedTask.ConfigureAwait(false);
-                            _logger.LogInformation("Stock provider {ProviderName} returned {Count} items for '{ItemName}'.", spType.Name, list.Count, item.Name);
-                            return list;
-                        }
-                        if (taskObj is Task genericTask)
-                        {
-                            await genericTask.ConfigureAwait(false);
-                            var prop = genericTask.GetType().GetProperty("Result");
-                            if (prop?.GetValue(genericTask) is IReadOnlyList<BaseItem> list)
-                            {
-                                _logger.LogInformation("Stock provider {ProviderName} returned {Count} items for '{ItemName}'.", spType.Name, list.Count, item.Name);
-                                return list;
-                            }
-                        }
-                    }
-                }
+                throw;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to invoke stock similarity provider {ProviderType} for '{ItemName}'.", sp.GetType().FullName, item.Name);
+                _logger.LogWarning(ex, "Failed to invoke stock similarity provider {ProviderType} for '{ItemName}'.", providerType.FullName, item.Name);
             }
         }
 

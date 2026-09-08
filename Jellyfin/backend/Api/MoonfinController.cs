@@ -1086,10 +1086,10 @@ public class MoonfinController : ControllerBase
     /// </summary>
     /// <param name="id">Item ID of the seed movie or series.</param>
     /// <param name="userId">Optional user ID for library filtering.</param>
-    /// <param name="limit">Optional maximum number of suggestions to return (default 15).</param>
+    /// <param name="limit">Optional maximum number of suggestions to return. Defaults to 20 and is capped at 200.</param>
     /// <param name="excludeItemIds">Optional item IDs to exclude from results.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Scored similar items matching Jellyfin BaseItemDto shape.</returns>
+    /// <returns>Scored similar items, as the same trimmed card shape the other Moonfin browse endpoints return.</returns>
     [HttpGet("Items/{id}/Similar")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -1110,6 +1110,13 @@ public class MoonfinController : ControllerBase
         var effectiveUserId = (userId.HasValue && userId.Value != Guid.Empty) ? userId : this.GetUserIdFromClaims();
         var queryUser = (effectiveUserId.HasValue && effectiveUserId.Value != Guid.Empty) ? ResolveQueryUser(effectiveUserId.Value) : null;
 
+        // Without a resolved user we can't tell which libraries this caller is allowed to see, so
+        // return nothing rather than everything.
+        if (queryUser == null)
+        {
+            return Ok(new { Items = Array.Empty<object>(), TotalRecordCount = 0 });
+        }
+
         var items = await _similarItemsService.GetSimilarItemsAsync(
             item,
             queryUser,
@@ -1117,7 +1124,9 @@ public class MoonfinController : ControllerBase
             excludeItemIds,
             cancellationToken).ConfigureAwait(false);
 
-        var dtos = items.Select(MapItemToDto).ToList();
+        // The query only applies parental ratings and blocked tags. Library access is a separate
+        // check every other browse endpoint here makes, so make it here too.
+        var dtos = items.Where(i => IsItemVisibleToUser(i, queryUser)).Select(MapItemToDto).ToList();
         return Ok(new
         {
             Items = dtos,

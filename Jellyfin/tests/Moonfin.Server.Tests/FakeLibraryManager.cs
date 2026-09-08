@@ -10,7 +10,8 @@ namespace Moonfin.Server.Tests;
 /// plugin host runs here, so <c>MoonfinPlugin.Instance</c> stays null and configuredIds is empty).
 /// Every other member of the (large, mostly server-internal) interface is stubbed to throw, since
 /// GamesService never reaches them from this path; a test that somehow does exercise one will fail
-/// loudly rather than silently returning bogus data.
+/// loudly rather than silently returning bogus data. The similar items tests opt two of those
+/// members back in by setting <see cref="ItemsResultHandler"/> and <see cref="PeopleHandler"/>.
 /// </summary>
 internal sealed class FakeLibraryManager : ILibraryManager
 {
@@ -22,6 +23,15 @@ internal sealed class FakeLibraryManager : ILibraryManager
         _folders = folders;
         _beforeGetVirtualFolders = beforeGetVirtualFolders;
     }
+
+    public FakeLibraryManager()
+        : this(new List<VirtualFolderInfo>())
+    {
+    }
+
+    internal Func<MediaBrowser.Controller.Entities.InternalItemsQuery, List<MediaBrowser.Controller.Entities.BaseItem>>? ItemsResultHandler { get; set; }
+
+    internal Func<MediaBrowser.Controller.Entities.BaseItem, List<MediaBrowser.Controller.Entities.PersonInfo>>? PeopleHandler { get; set; }
 
     List<VirtualFolderInfo> ILibraryManager.GetVirtualFolders()
     {
@@ -315,7 +325,8 @@ internal sealed class FakeLibraryManager : ILibraryManager
 
     System.Collections.Generic.List<MediaBrowser.Controller.Entities.PersonInfo> ILibraryManager.GetPeople(MediaBrowser.Controller.Entities.BaseItem item)
     {
-        throw new NotImplementedException();
+        if (PeopleHandler == null) throw new NotImplementedException();
+        return PeopleHandler(item);
     }
 
     System.Collections.Generic.List<MediaBrowser.Controller.Entities.PersonInfo> ILibraryManager.GetPeople(MediaBrowser.Controller.Entities.InternalPeopleQuery query)
@@ -380,7 +391,9 @@ internal sealed class FakeLibraryManager : ILibraryManager
 
     MediaBrowser.Model.Querying.QueryResult<MediaBrowser.Controller.Entities.BaseItem> ILibraryManager.GetItemsResult(MediaBrowser.Controller.Entities.InternalItemsQuery query)
     {
-        throw new NotImplementedException();
+        if (ItemsResultHandler == null) throw new NotImplementedException();
+        var items = ItemsResultHandler(query);
+        return new MediaBrowser.Model.Querying.QueryResult<MediaBrowser.Controller.Entities.BaseItem>(items);
     }
 
     System.Boolean ILibraryManager.IgnoreFile(MediaBrowser.Model.IO.FileSystemMetadata file, MediaBrowser.Controller.Entities.BaseItem parent)
