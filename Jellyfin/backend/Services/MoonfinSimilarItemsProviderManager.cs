@@ -435,8 +435,9 @@ public class MoonfinSimilarItemsProviderManager : IHostedService
             {
                 var spType = sp.GetType();
                 var localProvType = Type.GetType("MediaBrowser.Controller.Library.ILocalSimilarItemsProvider, MediaBrowser.Controller");
-                var supportsMethod = localProvType != null
-                    ? localProvType.GetMethod("Supports")
+                var isLocalProv = localProvType != null && localProvType.IsAssignableFrom(spType);
+                var supportsMethod = isLocalProv
+                    ? localProvType!.GetMethod("Supports")
                     : spType.GetMethod("Supports", [typeof(Type)]);
 
                 var isSupported = false;
@@ -464,8 +465,8 @@ public class MoonfinSimilarItemsProviderManager : IHostedService
 
                 if (isSupported)
                 {
-                    var getSimMethod = localProvType != null
-                        ? localProvType.GetMethod("GetSimilarItemsAsync")
+                    var getSimMethod = isLocalProv
+                        ? localProvType!.GetMethod("GetSimilarItemsAsync")
                         : spType.GetMethod("GetSimilarItemsAsync");
 
                     if (getSimMethod != null)
