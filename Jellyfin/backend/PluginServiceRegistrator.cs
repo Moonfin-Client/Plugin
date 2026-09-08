@@ -65,5 +65,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddHostedService<SeerrProvisioningStartupService>();
         serviceCollection.AddHostedService<NewMediaNotifier>();
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<GameArtworkReconciliationService>());
+
+        // Recommendations / Similar Items
+        serviceCollection.AddSingleton<MoonfinSimilarItemsService>();
+        serviceCollection.AddHostedService<MoonfinSimilarItemsProviderManager>();
     }
 }
