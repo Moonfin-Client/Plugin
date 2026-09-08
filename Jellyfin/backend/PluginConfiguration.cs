@@ -80,6 +80,15 @@ public class PluginConfiguration : BasePluginConfiguration
     public int MdblistOfficialListsMaxItems { get; set; } = 250;
 
     /// <summary>
+    /// Register Moonfin Recommends with Jellyfin 12's similar items pipeline. When this is on,
+    /// Moonfin scores recommendations for every client on the server, including the stock web
+    /// client, and Jellyfin's own providers only fill in whatever slots Moonfin leaves empty.
+    /// Turn it off to hand recommendations back to the server. Has no effect before Jellyfin 12,
+    /// where the Moonfin endpoint is the only way to reach this scoring.
+    /// </summary>
+    public bool RecommendationsProviderEnabled { get; set; } = true;
+
+    /// <summary>
     /// Fetch and cache TMDB studio (production company) logos on a schedule so clients
     /// can show them on the details screen. Uses the server-wide TMDB key above.
     /// </summary>

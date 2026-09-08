@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Dto;
+using MediaBrowser.Controller.Dto;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -32,6 +33,7 @@ public class MoonfinController : ControllerBase
     private readonly NotificationStore _notificationStore;
     private readonly PushDeliveryService _pushDelivery;
     private readonly ConfigBackupService _configBackup;
+    private readonly MoonfinSimilarItemsService _similarItemsService;
     private readonly ILogger<MoonfinController> _logger;
     
     private static readonly Type? _userManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
@@ -67,6 +69,7 @@ public class MoonfinController : ControllerBase
         NotificationStore notificationStore,
         PushDeliveryService pushDelivery,
         ConfigBackupService configBackup,
+        MoonfinSimilarItemsService similarItemsService,
         ILogger<MoonfinController> logger)
     {
         _settingsService = settingsService;
@@ -74,6 +77,7 @@ public class MoonfinController : ControllerBase
         _notificationStore = notificationStore;
         _pushDelivery = pushDelivery;
         _configBackup = configBackup;
+        _similarItemsService = similarItemsService;
         _logger = logger;
     }
 
@@ -147,6 +151,7 @@ public class MoonfinController : ControllerBase
             MdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey),
             TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
             MessagesSupported = true,
+            RecommendationsSupported = true,
             DefaultSettings = config?.DefaultUserSettings
         });
     }
@@ -1077,6 +1082,59 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
+    /// Gets similar items (recommendations) for an item scored by Moonfin's recommendation algorithm.
+    /// </summary>
+    /// <param name="id">Item ID of the seed movie or series.</param>
+    /// <param name="userId">Optional user ID for library filtering.</param>
+    /// <param name="limit">Optional maximum number of suggestions to return. Defaults to 20 and is capped at 200.</param>
+    /// <param name="excludeItemIds">Optional item IDs to exclude from results.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Scored similar items, as the same trimmed card shape the other Moonfin browse endpoints return.</returns>
+    [HttpGet("Items/{id}/Similar")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> GetSimilarItems(
+        [FromRoute] Guid id,
+        [FromQuery] Guid? userId,
+        [FromQuery] int? limit,
+        [FromQuery] Guid[]? excludeItemIds,
+        CancellationToken cancellationToken)
+    {
+        var item = _libraryManager.GetItemById(id);
+        if (item == null)
+        {
+            return NotFound();
+        }
+
+        var effectiveUserId = (userId.HasValue && userId.Value != Guid.Empty) ? userId : this.GetUserIdFromClaims();
+        var queryUser = (effectiveUserId.HasValue && effectiveUserId.Value != Guid.Empty) ? ResolveQueryUser(effectiveUserId.Value) : null;
+
+        // Without a resolved user we can't tell which libraries this caller is allowed to see, so
+        // return nothing rather than everything.
+        if (queryUser == null)
+        {
+            return Ok(new { Items = Array.Empty<object>(), TotalRecordCount = 0 });
+        }
+
+        var items = await _similarItemsService.GetSimilarItemsAsync(
+            item,
+            queryUser,
+            limit,
+            excludeItemIds,
+            cancellationToken).ConfigureAwait(false);
+
+        // The query only applies parental ratings and blocked tags. Library access is a separate
+        // check every other browse endpoint here makes, so make it here too.
+        var dtos = items.Where(i => IsItemVisibleToUser(i, queryUser)).Select(MapItemToDto).ToList();
+        return Ok(new
+        {
+            Items = dtos,
+            TotalRecordCount = dtos.Count
+        });
+    }
+
+    /// <summary>
     /// Gets resolved media bar content for the current user.
     /// Combines user settings resolution with server-side item queries so all clients
     /// (web, Android, TV) get identical results from a single call.
@@ -1189,6 +1247,11 @@ public class MoonfinController : ControllerBase
 
     private object? ResolveQueryUser(Guid userId)
     {
+        if (userId == Guid.Empty)
+        {
+            return null;
+        }
+
         if (_userManagerType == null || _userManagerGetUserById == null)
         {
             return null;
@@ -1630,6 +1693,12 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("messagesSupported")]
     public bool? MessagesSupported { get; set; }
+
+    /// <summary>
+    /// True when this plugin supports server-side recommendations scoring.
+    /// </summary>
+    [JsonPropertyName("recommendationsSupported")]
+    public bool? RecommendationsSupported { get; set; }
 
     [JsonPropertyName("defaultSettings")]
     public MoonfinSettingsProfile? DefaultSettings { get; set; }

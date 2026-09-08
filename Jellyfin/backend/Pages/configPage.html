@@ -611,6 +611,22 @@
                     </div>
 
                     <div class="verticalSection">
+                        <h3 class="sectionTitle">Recommendations</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="RecommendationsProviderEnabled" is="emby-checkbox" />
+                                <span>Use Moonfin Recommends for similar items (Jellyfin 12+)</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Registers Moonfin's scoring with Jellyfin's similar items pipeline, so every client
+                                on this server gets Moonfin recommendations, including the stock web client.
+                                Jellyfin's own providers only fill slots Moonfin leaves empty. Turn this off to hand
+                                similar items back to the server. Moonfin clients keep working either way.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
                         <h3 class="sectionTitle">Studio Logos</h3>
                         <div class="checkboxContainer">
                             <label>
@@ -5301,6 +5317,7 @@
                     document.querySelector('#MdblistOfficialListsEnabled').checked = config.MdblistOfficialListsEnabled !== false;
                     document.querySelector('#MdblistOfficialListsMaxItems').value = config.MdblistOfficialListsMaxItems || 250;
                     document.querySelector('#ImdbListsEnabled').checked = config.ImdbListsEnabled !== false;
+                    document.querySelector('#RecommendationsProviderEnabled').checked = config.RecommendationsProviderEnabled !== false;
                     document.querySelector('#StudioLogosEnabled').checked = config.StudioLogosEnabled !== false;
                     document.querySelector('#StudioLogosMaxAgeDays').value = config.StudioLogosMaxAgeDays || 30;
                     document.querySelector('#WebDefaultServerUrl').value = config.WebDefaultServerUrl || '';
@@ -5774,6 +5791,7 @@
                         config.MdblistOfficialListsEnabled = document.querySelector('#MdblistOfficialListsEnabled').checked;
                         config.MdblistOfficialListsMaxItems = parseInt(document.querySelector('#MdblistOfficialListsMaxItems').value, 10) || 250;
                         config.ImdbListsEnabled = document.querySelector('#ImdbListsEnabled').checked;
+                        config.RecommendationsProviderEnabled = document.querySelector('#RecommendationsProviderEnabled').checked;
                         config.StudioLogosEnabled = document.querySelector('#StudioLogosEnabled').checked;
                         config.StudioLogosMaxAgeDays = parseInt(document.querySelector('#StudioLogosMaxAgeDays').value, 10) || 30;
                         config.WebDefaultServerUrl = document.querySelector('#WebDefaultServerUrl').value || null;
