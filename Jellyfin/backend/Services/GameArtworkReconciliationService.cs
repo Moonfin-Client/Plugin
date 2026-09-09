@@ -17,7 +17,6 @@ namespace Moonfin.Server.Services;
 public sealed class GameArtworkReconciliationService : IHostedService
 {
     private static readonly TimeSpan LibraryFileSystemQuietPeriod = TimeSpan.FromSeconds(5);
-    private long _lastWatcherOverflowWarningTicks = long.MinValue / 2;
 
     // v3 repairs false terminal misses caused by RDB and thumbnail alternate-title separators.
     private const string ProviderVersion = "libretro-thumbnails-v3";
@@ -31,15 +30,17 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private static readonly TimeSpan MetadataFirstRetryDelay = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan MetadataRepeatRetryDelay = TimeSpan.FromHours(3);
     private static readonly TimeSpan MetadataRetryWindow = TimeSpan.FromHours(24);
-    // Bulk and interactive acquisition are best-effort at this threshold. One unresolved preview
-    // per incomplete system may exceed it so preview discovery can never be stranded by admission.
+    // Bulk and interactive acquisition are best-effort at this threshold. Preview work admits past
+    // it so discovery is never stranded, but only into a bounded reserve. A pass queues at most one
+    // unresolved preview per system, so the reserve outlasts any real library's system count.
     private const int MaxQueuedBestEffortRemoteWork = 20_000;
+    private const int MaxQueuedPreviewReserve = 1_000;
     private const int MaxQueuedThumbnailWork = 20_000;
 
     // Bounded well below the encode gate on large hosts: artwork backfill is background work
     // sharing a box with playback and transcoding, and only two downloaders feed it, so more
     // encoders buy nothing. On the NAS-class hardware Jellyfin often runs on this resolves to
-    // 1-2 -- i.e. unchanged from the single worker it replaces.
+    // 1-2, unchanged from the single worker it replaces.
     private const int MaxThumbnailWorkers = 4;
 
     private static readonly TimeSpan WorkerStopGrace = TimeSpan.FromSeconds(10);
@@ -70,6 +71,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private readonly object _libraryWatcherLock = new();
     private readonly object _libraryWatcherDebounceLock = new();
     private Timer? _libraryWatcherDebounce;
+    private long _lastWatcherOverflowWarningTicks = long.MinValue / 2;
     private bool _startupRecoveryDone;
     private int _reopenMetadataDeferred;
     private int _nextRemoteQueueVersion;
@@ -497,7 +499,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         {
             // Bounded: a worker parked in a non-cancelable call (a filesystem operation on a dead
             // NAS mount) would otherwise never complete, and every later StartAsync waits on this
-            // cleanup -- so an unbounded wait here makes one wedged worker permanently unstartable.
+            // cleanup, so an unbounded wait here makes one wedged worker permanently unstartable.
             // A straggler keeps its canceled lifetime token; queue versions and lifetime checks
             // prevent it from publishing into the replacement lifetime.
             await workersStopped.WaitAsync(_workerStopGrace).ConfigureAwait(false);
@@ -816,7 +818,29 @@ public sealed class GameArtworkReconciliationService : IHostedService
             }
         }
 
-        watcher.Dispose();
+        // Clearing this is what silences the watcher, and it's safe from inside the watcher's own
+        // Error callback. Dispose isn't: it tears down the runner that raised the event we're
+        // standing on, so it goes to the thread pool rather than this stack.
+        try
+        {
+            watcher.EnableRaisingEvents = false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Silencing a failed game-library watcher failed");
+        }
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                watcher.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Disposing a failed game-library watcher failed");
+            }
+        });
     }
 
     private void TrySignalReconciliation()
@@ -952,11 +976,23 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         inventoryGeneration,
                         candidates.Select(candidate => candidate.GameId),
                         cancellationToken).ConfigureAwait(false);
-                    var ordered = discovery.PreviewCandidateGameIds
-                        .Select(id => candidates.FirstOrDefault(candidate => string.Equals(candidate.GameId, id, StringComparison.Ordinal)))
-                        .Where(candidate => candidate != null)
-                        .Cast<ArtworkCandidate>()
-                        .ToArray();
+                    // One index rather than a FirstOrDefault per candidate, which cost systems
+                    // times candidates squared on every pass. TryAdd keeps the first match the
+                    // FirstOrDefault would have taken.
+                    var candidatesByGameId = new Dictionary<string, ArtworkCandidate>(candidates.Count, StringComparer.Ordinal);
+                    foreach (var candidate in candidates)
+                    {
+                        candidatesByGameId.TryAdd(candidate.GameId, candidate);
+                    }
+
+                    var ordered = new List<ArtworkCandidate>(discovery.PreviewCandidateGameIds.Count);
+                    foreach (var gameId in discovery.PreviewCandidateGameIds)
+                    {
+                        if (candidatesByGameId.TryGetValue(gameId, out var candidate))
+                        {
+                            ordered.Add(candidate);
+                        }
+                    }
 
                     discovery = await _catalog.RecomputePreviewSelectionAsync(
                         library.Id,
@@ -1345,9 +1381,10 @@ public sealed class GameArtworkReconciliationService : IHostedService
             }
             else
             {
-                if (_queued.Count >= MaxQueuedBestEffortRemoteWork &&
-                    !MakeRoomForRemoteUnsafe(lane) &&
-                    lane != ArtworkLane.Preview)
+                var admissionCap = lane == ArtworkLane.Preview
+                    ? MaxQueuedBestEffortRemoteWork + MaxQueuedPreviewReserve
+                    : MaxQueuedBestEffortRemoteWork;
+                if (_queued.Count >= admissionCap && !MakeRoomForRemoteUnsafe(lane))
                 {
                     return false;
                 }

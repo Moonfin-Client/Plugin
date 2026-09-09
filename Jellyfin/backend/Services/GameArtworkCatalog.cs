@@ -196,6 +196,8 @@ public sealed class GameArtworkCatalog
     /// </summary>
     private static readonly TimeSpan DefaultPersistDebounce = TimeSpan.FromSeconds(2);
 
+    private const string BoxartRole = "boxart";
+
     private readonly string _root;
     private readonly ILogger<GameArtworkCatalog>? _logger;
     private readonly TimeSpan _persistDebounce;
@@ -220,8 +222,27 @@ public sealed class GameArtworkCatalog
     /// <summary>Whole-document writes performed so far; the debounce's only observable effect.</summary>
     internal long DocumentWriteCount => Interlocked.Read(ref _documentWrites);
 
-    /// <summary>Boxart lookups performed by preview-selection scans; the resumable scan's observable cost.</summary>
+    /// <summary>Boxart lookups performed by preview-selection scans, the resumable scan's observable cost.</summary>
     internal long PreviewScanLookupCount => Interlocked.Read(ref _previewScanLookups);
+
+    /// <summary>Reads one system's persisted preview-scan checkpoint. Test seam.</summary>
+    internal async Task<int> PreviewScanStartIndexForTestsAsync(
+        string libraryId,
+        string systemId,
+        CancellationToken cancellationToken = default)
+    {
+        systemId = NormalizeSystemId(systemId);
+        var library = await GetLibraryAsync(NormalizeLibraryId(libraryId), cancellationToken).ConfigureAwait(false);
+        await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return library.Document.Systems.TryGetValue(systemId, out var system) ? system.PreviewScanStartIndex : -1;
+        }
+        finally
+        {
+            library.Gate.Release();
+        }
+    }
 
     /// <summary>
     /// Plugin-owned catalog directory. The reconciliation service uses its sibling artwork cache
@@ -287,9 +308,11 @@ public sealed class GameArtworkCatalog
                 entry.State == ArtworkCatalogState.MetadataDeferred &&
                 !string.Equals(entry.MetadataDeferredProviderVersion, providerVersion, StringComparison.Ordinal))
             {
-                // A durable miss/defer reopens to Pending -- a preview scan may have already
-                // counted this candidate as terminal.
+                // A durable miss or defer reopens to Pending, and a preview scan may have already
+                // counted this candidate as terminal. It reopens under the caller's systemId, which
+                // isn't always the one it was filed under, so both sides reset.
                 ResetPreviewScanProgress(library.Document, entry.SystemId);
+                ResetPreviewScanProgress(library.Document, systemId);
                 entry = NewPending(key, systemId, entry.Revision, gameId);
                 library.SetEntry(key.StorageKey, entry);
                 changed = true;
@@ -297,6 +320,10 @@ public sealed class GameArtworkCatalog
             else if ((gameId != null && !string.Equals(entry.GameId, gameId, StringComparison.Ordinal)) ||
                 !string.Equals(entry.SystemId, systemId, StringComparison.Ordinal))
             {
+                // The entry leaves one candidate list and joins another, so no resume index that
+                // counted it still lines up.
+                ResetPreviewScanProgress(library.Document, entry.SystemId);
+                ResetPreviewScanProgress(library.Document, systemId);
                 entry = entry with { GameId = gameId ?? entry.GameId, SystemId = systemId };
                 library.SetEntry(key.StorageKey, entry);
                 changed = true;
@@ -516,8 +543,15 @@ public sealed class GameArtworkCatalog
             if (!string.IsNullOrWhiteSpace(removed.GameId) &&
                 library.Document.Systems.TryGetValue(systemId, out var system))
             {
-                system.PreviewGameIds = system.PreviewGameIds
+                var remaining = system.PreviewGameIds
                     .Where(id => !string.Equals(id, removed.GameId, StringComparison.Ordinal)).ToList();
+                if (remaining.Count != system.PreviewGameIds.Count)
+                {
+                    // The published selection is a panel short now, so it isn't the final answer
+                    // for its generation any more.
+                    system.PreviewGameIds = remaining;
+                    system.PreviewSelectionGeneration = null;
+                }
             }
 
             ResetPreviewScanProgress(library.Document, systemId);
@@ -787,7 +821,7 @@ public sealed class GameArtworkCatalog
 
                 library.SetEntry(storageKey, updated);
                 InvalidatePreviewScanIfReopened(library.Document, entry.SystemId, entry, updated);
-                if (entry.Key.Role == "boxart" &&
+                if (entry.Key.Role == BoxartRole &&
                     !string.IsNullOrWhiteSpace(entry.GameId) &&
                     ClassifyForPreviewScan(updated) == PreviewCandidateOutcome.NonTerminal &&
                     library.Document.Systems.TryGetValue(entry.SystemId, out var system))
@@ -894,7 +928,18 @@ public sealed class GameArtworkCatalog
                     library.SetEntry(item.Key.StorageKey, updated);
                     affectedSystems.Add(existing.SystemId);
                     affectedSystems.Add(item.SystemId);
-                    InvalidatePreviewScanIfReopened(library.Document, existing.SystemId, existing, updated);
+                    if (!string.Equals(existing.GameId, updated.GameId, StringComparison.Ordinal) ||
+                        !string.Equals(existing.SystemId, updated.SystemId, StringComparison.Ordinal))
+                    {
+                        // An identity move is invisible to a state comparison, and it leaves one
+                        // candidate list and joins another, so both sides reset.
+                        ResetPreviewScanProgress(library.Document, existing.SystemId);
+                        ResetPreviewScanProgress(library.Document, updated.SystemId);
+                    }
+                    else
+                    {
+                        InvalidatePreviewScanIfReopened(library.Document, existing.SystemId, existing, updated);
+                    }
                 }
             }
 
@@ -1008,7 +1053,7 @@ public sealed class GameArtworkCatalog
             while (scanIndex < candidates.Count && confirmed.Count < 4)
             {
                 var gameId = candidates[scanIndex];
-                var outcome = ClassifyForPreviewScan(library.FindByGameRole(gameId, "boxart"));
+                var outcome = ClassifyForPreviewScan(library.FindByGameRole(gameId, BoxartRole));
                 Interlocked.Increment(ref _previewScanLookups);
                 if (outcome == PreviewCandidateOutcome.Confirmed)
                 {
@@ -1433,8 +1478,8 @@ public sealed class GameArtworkCatalog
 
     /// <summary>
     /// Resets a resumable preview scan back to the start. Called wherever an entry mutation can
-    /// change a candidate the scan already classified as terminal -- a stale resume index would
-    /// then skip a candidate the panel selection needs to re-examine.
+    /// change a candidate the scan already classified as terminal, since a stale resume index
+    /// would then skip a candidate the panel selection needs to re-examine.
     /// </summary>
     private static void ResetPreviewScanProgress(PersistedCatalog document, string systemId)
     {
@@ -1713,7 +1758,7 @@ public sealed class GameArtworkCatalog
 
         /// <summary>
         /// How far into <see cref="PreviewCandidateGameIds"/> every entry is proven terminal
-        /// (confirmed or a durable skip). Defaults to 0 -- an older catalog file without this field
+        /// (confirmed or a durable skip). Defaults to 0, so an older catalog file without this field
         /// simply scans from the start, which is still correct. See
         /// <see cref="ResetPreviewScanProgress"/> for what invalidates it.
         /// </summary>

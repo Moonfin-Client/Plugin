@@ -317,6 +317,94 @@ public sealed class GameArtworkCatalogTests : IDisposable
         Assert.Contains(dropped, restored.PreviewGameIds);
     }
 
+    // A completed selection stops being the final answer the moment one of its games leaves the
+    // catalog, because the panels it publishes are a panel short.
+    [Fact]
+    public async Task PreviewSelection_RemovingAConfirmedEntryRetiresTheCompletionMarker()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var candidates = new[] { "g1", "g2", "g3", "g4", "g5", "g6" };
+        var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync("library-a", "snes", "inventory-a", candidates);
+        var keys = discovery.PreviewCandidateGameIds.ToDictionary(
+            gameId => gameId,
+            gameId => ArtworkCatalogKey.Create("library-a", $"SNES/{gameId}.sfc", $"fingerprint-{gameId}", "boxart"),
+            StringComparer.Ordinal);
+        foreach (var gameId in discovery.PreviewCandidateGameIds)
+        {
+            await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
+            await catalog.MarkOriginalReadyAsync(keys[gameId], "snes", $"C:/catalog/{gameId}.png");
+        }
+
+        var completed = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-a");
+        Assert.Equal("inventory-a", completed.PreviewSelectionGeneration);
+        Assert.Equal(4, completed.PreviewGameIds.Count);
+
+        Assert.True(await catalog.RemoveAsync(keys[completed.PreviewGameIds[0]], "snes"));
+
+        // Read straight through with no recompute in between, which is what a browse request that
+        // lands in that window actually gets.
+        var stale = await catalog.GetSystemAsync("library-a", "snes");
+
+        Assert.Null(stale.PreviewSelectionGeneration);
+        Assert.Equal(3, stale.PreviewGameIds.Count);
+    }
+
+    // An entry that moves to another system leaves one candidate list and joins another, so neither
+    // side's resume index still describes the list it was taken against. The state comparison that
+    // guards the cheap path can't see this, because a move doesn't change the entry's state.
+    [Fact]
+    public async Task PreviewSelection_MovingAnEntryBetweenSystemsResetsBothScans()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var snes = await catalog.GetOrCreatePreviewDiscoveryAsync(
+            "library-a",
+            "snes",
+            "inventory-snes",
+            new[] { "g1", "g2", "g3", "g4", "g5", "g6" });
+        var nes = await catalog.GetOrCreatePreviewDiscoveryAsync(
+            "library-a",
+            "nes",
+            "inventory-nes",
+            new[] { "n1", "n2", "n3", "n4", "n5", "n6" });
+
+        var keys = snes.PreviewCandidateGameIds.Concat(nes.PreviewCandidateGameIds).ToDictionary(
+            gameId => gameId,
+            gameId => ArtworkCatalogKey.Create("library-a", $"roms/{gameId}.rom", $"fingerprint-{gameId}", "boxart"),
+            StringComparer.Ordinal);
+        foreach (var gameId in snes.PreviewCandidateGameIds)
+        {
+            await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
+            await catalog.MarkOriginalReadyAsync(keys[gameId], "snes", $"C:/catalog/{gameId}.png");
+        }
+
+        // The destination stalls on its third candidate, so its checkpoint is non-zero but its
+        // selection is still open. Resetting it has to be observable, not vacuously already-zero.
+        foreach (var gameId in nes.PreviewCandidateGameIds.Take(2))
+        {
+            await catalog.GetOrCreateAsync(keys[gameId], "nes", "provider-v1", gameId);
+            await catalog.MarkOriginalReadyAsync(keys[gameId], "nes", $"C:/catalog/{gameId}.png");
+        }
+
+        var completed = await catalog.RecomputePreviewSelectionAsync("library-a", "snes", "inventory-snes");
+        await catalog.RecomputePreviewSelectionAsync("library-a", "nes", "inventory-nes");
+        Assert.Equal("inventory-snes", completed.PreviewSelectionGeneration);
+        Assert.Equal(4, await catalog.PreviewScanStartIndexForTestsAsync("library-a", "snes"));
+        Assert.Equal(2, await catalog.PreviewScanStartIndexForTestsAsync("library-a", "nes"));
+
+        // Refile a confirmed entry under the other system with its state untouched, which is what
+        // a re-identified ROM looks like to the projection.
+        var moved = completed.PreviewGameIds[0];
+        await catalog.SynchronizeProjectionAsync(
+            "library-a",
+            new[] { new ArtworkCatalogProjectionEntry(keys[moved], "nes", moved) },
+            "provider-v1");
+
+        // Both sides rescan from zero. Resuming the source's index would keep counting a game it
+        // no longer holds, and resuming the destination's would skip straight past the arrival.
+        Assert.Equal(0, await catalog.PreviewScanStartIndexForTestsAsync("library-a", "snes"));
+        Assert.Equal(0, await catalog.PreviewScanStartIndexForTestsAsync("library-a", "nes"));
+    }
+
     [Fact]
     public async Task PreviewSelection_EmptyCompletionPersistsAndANewInventoryResetsIt()
     {
@@ -408,10 +496,10 @@ public sealed class GameArtworkCatalogTests : IDisposable
         var keysByGameId = entries.ToDictionary(entry => entry.GameId, entry => entry.Key, StringComparer.Ordinal);
 
         // Resolved in the walk's own order (discovery permutes candidates by hash, not insertion
-        // order), so the terminal prefix genuinely grows by one every call -- the pathological
-        // pattern this fix targets. Mirrors the real call pattern: one boxart completion, then one
-        // recompute, repeated for every candidate; almost all resolve Missing, matching a large
-        // arcade set with poor provider coverage.
+        // order), so the terminal prefix genuinely grows by one every call, which is the
+        // pathological pattern this fix targets. Mirrors the real call pattern: one boxart
+        // completion, then one recompute, repeated for every candidate, and almost all resolve
+        // Missing, matching a large arcade set with poor provider coverage.
         foreach (var gameId in discovery.PreviewCandidateGameIds)
         {
             await catalog.MarkMissingAsync(keysByGameId[gameId], "snes", "provider-v1");
@@ -446,8 +534,8 @@ public sealed class GameArtworkCatalogTests : IDisposable
             await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
         }
 
-        // ordered[0] is a durable miss; ordered[1..4] are confirmed -- the walk advances the scan
-        // index past all five and publishes the first four confirmed candidates.
+        // ordered[0] is a durable miss and ordered[1..4] are confirmed, so the walk advances the
+        // scan index past all five and publishes the first four confirmed candidates.
         await catalog.MarkMissingAsync(keys[ordered[0]], "snes", "provider-v1");
         foreach (var gameId in ordered.Skip(1).Take(4))
         {
@@ -469,7 +557,7 @@ public sealed class GameArtworkCatalogTests : IDisposable
     }
 
     // Same sparse-scan pattern as PreviewSelection_ResumesFromLastProvenIndexInsteadOfRescanningFromZero,
-    // but comparing against a fresh catalog that only ever does one full scan from index 0 -- the
+    // but comparing against a fresh catalog that only ever does one full scan from index 0. The
     // resumed scan's incremental result must match it exactly at every step, not just at the end.
     [Fact]
     public async Task PreviewSelection_ResumedScanMatchesAFullScanFromScratch()
@@ -488,10 +576,10 @@ public sealed class GameArtworkCatalogTests : IDisposable
             await catalog.GetOrCreateAsync(keys[gameId], "snes", "provider-v1", gameId);
         }
 
-        // Every fifth candidate confirms; the rest resolve missing. Resolve them one at a time,
+        // Every fifth candidate confirms and the rest resolve missing. Resolve them one at a time,
         // recomputing (resumed) after each, and compare against an independent from-scratch scan.
         // An incomplete from-scratch walk keeps the previously published selection, exactly as
-        // RecomputePreviewSelectionAsync does -- so the oracle tracks that same "last published"
+        // RecomputePreviewSelectionAsync does, so the oracle tracks that same "last published"
         // state itself rather than assuming every step is complete.
         var expectedPublished = new List<string>();
         for (var index = 0; index < ordered.Count; index++)

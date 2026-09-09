@@ -604,7 +604,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
             await service.StopAsync(stopDeadline.Token).WaitAsync(TimeSpan.FromSeconds(2));
 
             // The blocked worker is parked in a non-cancelable call, so cleanup gives up on it
-            // after the grace and restart must still succeed -- otherwise one wedged filesystem
+            // after the grace and restart must still succeed, otherwise one wedged filesystem
             // call leaves the plugin permanently unstartable.
             await service.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -944,8 +944,8 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Fail("Timed out waiting for the quiet period to queue the reconciliation pass");
     }
 
-    // Only overflow leaves a working watcher. Any other error -- a deleted or disconnected root --
-    // leaves one that never reports again, and SyncLibraryWatchers skips any root already in the
+    // Only overflow leaves a working watcher. Any other error, such as a deleted or disconnected
+    // root, leaves one that never reports again, and SyncLibraryWatchers skips any root already in the
     // dictionary, so without recycling the root stays unwatched until a restart.
     [Fact]
     public async Task WatcherFailure_RecreatesTheWatcherSoTheRootStaysWatched()

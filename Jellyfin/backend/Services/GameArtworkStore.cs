@@ -27,7 +27,7 @@ internal sealed class GameArtworkStore
     // miss plus a background retry beats a long hang.
     internal static readonly TimeSpan InteractiveRequestBudget = TimeSpan.FromSeconds(3);
 
-    // Nothing waits on a prewarm, and 3s cannot cover even one stalled probe of the ten a walk may
+    // Nothing waits on a prewarm, and 3s can't cover even one stalled probe of the nine a walk may
     // make, so long arcade names expired every time and churned on the retry cycle forever. Still
     // bounded, because a prewarm holds one of only two remote workers while it runs.
     internal static readonly TimeSpan PrewarmRequestBudget = TimeSpan.FromSeconds(20);
