@@ -34,6 +34,7 @@ public class MoonfinController : ControllerBase
     private readonly PushDeliveryService _pushDelivery;
     private readonly ConfigBackupService _configBackup;
     private readonly MoonfinSimilarItemsService _similarItemsService;
+    private readonly IUserDataManager _userDataManager;
     private readonly ILogger<MoonfinController> _logger;
     
     private static readonly Type? _userManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
@@ -44,6 +45,22 @@ public class MoonfinController : ControllerBase
     private static readonly PropertyInfo? _userManagerUsersProperty = _userManagerType?.GetProperty("Users");
     private static readonly MethodInfo? _internalItemsQuerySetUser = typeof(InternalItemsQuery).GetMethod("SetUser", BindingFlags.Public | BindingFlags.Instance);
     private static readonly PropertyInfo? _internalItemsQueryUserProperty = typeof(InternalItemsQuery).GetProperty(nameof(InternalItemsQuery.User), BindingFlags.Public | BindingFlags.Instance);
+    // Takes the User these endpoints only ever hold as an object, so it's bound the same
+    // reflective way the user manager calls above are.
+    private static readonly MethodInfo? _getUserDataDto = typeof(IUserDataManager)
+        .GetMethods()
+        .FirstOrDefault(m =>
+        {
+            if (m.Name != "GetUserDataDto")
+            {
+                return false;
+            }
+
+            var parameters = m.GetParameters();
+            return parameters.Length == 2 &&
+                parameters[0].ParameterType == typeof(BaseItem) &&
+                typeof(UserItemDataDto).IsAssignableFrom(m.ReturnType);
+        });
     // IsVisible grew a skipAllowedTagsCheck parameter in Jellyfin 10.11, so the lookup
     // takes any overload whose extra parameters are booleans and fills them with false.
     private static readonly MethodInfo? _baseItemIsVisible = typeof(BaseItem)
@@ -70,6 +87,7 @@ public class MoonfinController : ControllerBase
         PushDeliveryService pushDelivery,
         ConfigBackupService configBackup,
         MoonfinSimilarItemsService similarItemsService,
+        IUserDataManager userDataManager,
         ILogger<MoonfinController> logger)
     {
         _settingsService = settingsService;
@@ -78,6 +96,7 @@ public class MoonfinController : ControllerBase
         _pushDelivery = pushDelivery;
         _configBackup = configBackup;
         _similarItemsService = similarItemsService;
+        _userDataManager = userDataManager;
         _logger = logger;
     }
 
@@ -151,7 +170,7 @@ public class MoonfinController : ControllerBase
             MdblistAvailable = !string.IsNullOrWhiteSpace(config?.MdblistApiKey),
             TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
             MessagesSupported = true,
-            RecommendationsSupported = true,
+            RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             DefaultSettings = config?.DefaultUserSettings
         });
     }
@@ -1101,6 +1120,14 @@ public class MoonfinController : ControllerBase
         [FromQuery] Guid[]? excludeItemIds,
         CancellationToken cancellationToken)
     {
+        // The provider pipeline rechecks this per request, so this endpoint has to as well or
+        // turning recommendations off leaves it serving scored results anyway. Empty rather than
+        // 404 because that's what the client falls back to stock similars on.
+        if (MoonfinPlugin.Instance?.Configuration?.RecommendationsProviderEnabled == false)
+        {
+            return Ok(new { Items = Array.Empty<object>(), TotalRecordCount = 0 });
+        }
+
         var item = _libraryManager.GetItemById(id);
         if (item == null)
         {
@@ -1126,7 +1153,7 @@ public class MoonfinController : ControllerBase
 
         // The query only applies parental ratings and blocked tags. Library access is a separate
         // check every other browse endpoint here makes, so make it here too.
-        var dtos = items.Where(i => IsItemVisibleToUser(i, queryUser)).Select(MapItemToDto).ToList();
+        var dtos = items.Where(i => IsItemVisibleToUser(i, queryUser)).Select(i => MapItemToDto(i, queryUser)).ToList();
         return Ok(new
         {
             Items = dtos,
@@ -1186,7 +1213,7 @@ public class MoonfinController : ControllerBase
 
         var dtos = items
             .Where(HasBackdropImage)
-            .Select(MapItemToDto)
+            .Select(i => MapItemToDto(i, queryUser))
             .ToList();
 
         return Ok(new
@@ -1200,7 +1227,7 @@ public class MoonfinController : ControllerBase
     /// Maps a BaseItem to a lightweight DTO matching Jellyfin's BaseItemDto shape.
     /// Uses only stable BaseItem properties to avoid version-specific API issues.
     /// </summary>
-    private static object MapItemToDto(BaseItem item)
+    private object MapItemToDto(BaseItem item, object? user)
     {
         // Build image tags dict
         var imageTags = new Dictionary<string, string>();
@@ -1236,8 +1263,33 @@ public class MoonfinController : ControllerBase
             item.CommunityRating,
             item.CriticRating,
             ImageTags = imageTags,
-            BackdropImageTags = backdropTags
+            BackdropImageTags = backdropTags,
+            UserData = BuildUserData(item, user)
         };
+    }
+
+    /// <summary>
+    /// The calling user's played state, built by the server so it matches what a stock item
+    /// response carries. Cards read Played for the checkmark, PlaybackPositionTicks for the resume
+    /// bar and UnplayedItemCount for the series badge, so leaving it off makes everything these
+    /// endpoints return look unwatched.
+    /// </summary>
+    private UserItemDataDto? BuildUserData(BaseItem item, object? user)
+    {
+        if (user == null || _getUserDataDto == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return _getUserDataDto.Invoke(_userDataManager, [item, user]) as UserItemDataDto;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not read user data for {ItemId}", item.Id);
+            return null;
+        }
     }
 
     private static bool HasBackdropImage(BaseItem item)
