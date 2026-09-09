@@ -1896,6 +1896,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultCinemaModeEpisodesEnabled', defaults.cinemaModeEpisodesEnabled);
 
             setSelectValue(view, '#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
+            setNullableBoolSelect(view, '#DefaultModernCardsOnMyMediaRow', defaults.modernCardsOnMyMediaRow);
             setNullableBoolSelect(view, '#DefaultFullScreenRows', defaults.fullScreenRows);
             setNullableBoolSelect(view, '#DefaultHomeRowInfoOverlay', defaults.homeRowInfoOverlay);
             bindNullableRangeInput(view, '#DefaultClassicHomeRowsPadding', 'px');
@@ -2167,6 +2168,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             }
 
             d.homeRowsStyle = view.querySelector('#DefaultHomeRowsStyle').value || null;
+            d.modernCardsOnMyMediaRow = getNullableBoolSelect(view, '#DefaultModernCardsOnMyMediaRow');
             d.fullScreenRows = getNullableBoolSelect(view, '#DefaultFullScreenRows');
             d.homeRowInfoOverlay = getNullableBoolSelect(view, '#DefaultHomeRowInfoOverlay');
             d.classicHomeRowsPadding = getNullableRangeInput(view, '#DefaultClassicHomeRowsPadding');
