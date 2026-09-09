@@ -33,6 +33,14 @@ public class MoonfinUserSettings
     [JsonPropertyName("tv")]
     public MoonfinSettingsProfile? Tv { get; set; }
 
+    /// <summary>
+    /// What each profile was last handed for the hidden content maps, keyed by profile name.
+    /// Clients push their whole map rather than a delta, so this is what tells an item a profile
+    /// unhid apart from one it never received.
+    /// </summary>
+    [JsonPropertyName("hiddenContentBaselines")]
+    public Dictionary<string, HiddenContentBaseline>? HiddenContentBaselines { get; set; }
+
     // ─── Legacy v1 flat fields (for migration) ─────────────────────────
     // These are populated when reading a v1 file, then migrated to profiles.
 
@@ -184,6 +192,18 @@ public class MoonfinUserSettings
 
     /// <summary>Valid profile names.</summary>
     public static readonly string[] ValidProfiles = { "global", "desktop", "mobile", "tv" };
+}
+
+/// <summary>
+/// The hidden content maps one profile is known to hold.
+/// </summary>
+public class HiddenContentBaseline
+{
+    [JsonPropertyName("continueWatching")]
+    public string? ContinueWatching { get; set; }
+
+    [JsonPropertyName("nextUpSeries")]
+    public string? NextUpSeries { get; set; }
 }
 
 public class SeerrRowsConfig

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -85,6 +86,48 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 _logger.ErrorException("Error reading settings for user " + userId, ex);
                 return null;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Notes what a profile was just handed for the hidden content maps, which is what the
+        /// next push from it gets merged against.
+        /// </summary>
+        public async Task RecordHiddenContentBaselineAsync(Guid userId, string profileName, MoonfinSettingsProfile resolved)
+        {
+            if (string.IsNullOrEmpty(profileName)) return;
+
+            var name = profileName.ToLowerInvariant();
+            var filePath = GetUserSettingsPath(userId);
+
+            await _lock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
+                if (settings == null) return;
+
+                if (settings.HiddenContentBaselines != null &&
+                    settings.HiddenContentBaselines.TryGetValue(name, out var known) &&
+                    known.ContinueWatching == resolved.HiddenContinueWatchingItems &&
+                    known.NextUpSeries == resolved.HiddenNextUpSeries)
+                {
+                    return;
+                }
+
+                var baseline = BaselineFor(settings, name);
+                baseline.ContinueWatching = resolved.HiddenContinueWatchingItems;
+                baseline.NextUpSeries = resolved.HiddenNextUpSeries;
+
+                var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
+                await Task.Run(() => AtomicFile.WriteAllText(filePath, serialized)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Could not record the hidden content baseline for user " + userId, ex);
             }
             finally
             {
@@ -226,12 +269,16 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 MoonfinUserSettings finalSettings;
                 string? beforeComparisonJson = null;
+                string? storedHiddenContinueWatching = null;
+                string? storedHiddenNextUp = null;
                 if (mergeMode == "merge")
                 {
                     var existingSettings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
                     if (existingSettings != null && existingSettings.NeedsMigration)
                         existingSettings = MigrateV1ToV2(existingSettings);
                     beforeComparisonJson = SerializeForComparison(existingSettings ?? new MoonfinUserSettings());
+                    storedHiddenContinueWatching = existingSettings?.Global?.HiddenContinueWatchingItems;
+                    storedHiddenNextUp = existingSettings?.Global?.HiddenNextUpSeries;
                     finalSettings = MergeSettings(existingSettings, settings);
                 }
                 else
@@ -244,7 +291,7 @@ namespace Emby.Plugins.Moonfin.Services
                 finalSettings.LastUpdatedBy = clientId ?? "unknown";
                 finalSettings.SchemaVersion = 2;
 
-                MoveContentHidingToGlobal(finalSettings);
+                MoveContentHidingToGlobal(finalSettings, storedHiddenContinueWatching, storedHiddenNextUp);
 
                 settingsChanged = SettingsDiffer(beforeComparisonJson, finalSettings);
 
@@ -274,6 +321,8 @@ namespace Emby.Plugins.Moonfin.Services
                 if (settings.NeedsMigration) settings = MigrateV1ToV2(settings);
 
                 var beforeComparisonJson = SerializeForComparison(settings);
+                var storedHiddenContinueWatching = settings.Global?.HiddenContinueWatchingItems;
+                var storedHiddenNextUp = settings.Global?.HiddenNextUpSeries;
 
                 var existingProfile = string.Equals(profileName, "global", StringComparison.OrdinalIgnoreCase)
                     ? settings.Global
@@ -289,7 +338,7 @@ namespace Emby.Plugins.Moonfin.Services
                 settings.LastUpdatedBy = clientId ?? "unknown";
                 settings.SchemaVersion = 2;
 
-                MoveContentHidingToGlobal(settings);
+                MoveContentHidingToGlobal(settings, storedHiddenContinueWatching, storedHiddenNextUp);
 
                 settingsChanged = SettingsDiffer(beforeComparisonJson, settings);
 
@@ -329,6 +378,7 @@ namespace Emby.Plugins.Moonfin.Services
             node.Remove("schemaVersion");
             node.Remove("lastUpdated");
             node.Remove("lastUpdatedBy");
+            node.Remove("hiddenContentBaselines");
             return node.ToJsonString();
         }
 
@@ -708,25 +758,50 @@ namespace Emby.Plugins.Moonfin.Services
             };
         }
 
-        private void MoveContentHidingToGlobal(MoonfinUserSettings settings)
+        private static readonly (string Name, Func<MoonfinUserSettings, MoonfinSettingsProfile?> Get)[] HidingProfiles =
+        {
+            ("global", s => s.Global),
+            ("desktop", s => s.Desktop),
+            ("mobile", s => s.Mobile),
+            ("tv", s => s.Tv),
+        };
+
+        /// <summary>
+        /// Content hiding is a global preference, so each profile's hidden lists get lifted into
+        /// the global one. Everything a profile pushed is merged in, anything its baseline still
+        /// lists that the push leaves out counts as unhidden and is dropped, and hides it hasn't
+        /// pulled yet are left alone. The stored global maps are passed in because a push to the
+        /// global profile overwrites them in place before this runs.
+        /// </summary>
+        private static void MoveContentHidingToGlobal(
+            MoonfinUserSettings settings,
+            string? storedContinueWatching,
+            string? storedNextUp)
         {
             if (settings.Global == null)
             {
                 settings.Global = new MoonfinSettingsProfile();
             }
 
-            // Content hiding is a global preference, so lift each device's hidden lists into the
-            // global profile. Union across global and all devices so items hidden on any device
-            // persist instead of subsequent device pushes overwriting the global list.
-            var allProfiles = new[] { settings.Global, settings.Desktop, settings.Mobile, settings.Tv };
+            var hiddenContinueWatching = MergeHiddenEntries(
+                settings,
+                storedContinueWatching,
+                p => p.HiddenContinueWatchingItems,
+                b => b.ContinueWatching,
+                (b, v) => b.ContinueWatching = v);
 
-            var hiddenContinueWatching = UnionHiddenEntries(allProfiles, p => p.HiddenContinueWatchingItems);
             if (hiddenContinueWatching != null)
             {
                 settings.Global.HiddenContinueWatchingItems = hiddenContinueWatching;
             }
 
-            var hiddenNextUp = UnionHiddenEntries(allProfiles, p => p.HiddenNextUpSeries);
+            var hiddenNextUp = MergeHiddenEntries(
+                settings,
+                storedNextUp,
+                p => p.HiddenNextUpSeries,
+                b => b.NextUpSeries,
+                (b, v) => b.NextUpSeries = v);
+
             if (hiddenNextUp != null)
             {
                 settings.Global.HiddenNextUpSeries = hiddenNextUp;
@@ -741,35 +816,97 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
-        private static string? UnionHiddenEntries(
-            MoonfinSettingsProfile?[] profiles,
-            Func<MoonfinSettingsProfile, string?> selector)
+        /// <summary>
+        /// Folds every profile's push of one hidden map into the stored global value. Null when no
+        /// profile pushed the field, so a partial save leaves what is on file alone.
+        /// </summary>
+        private static string? MergeHiddenEntries(
+            MoonfinUserSettings settings,
+            string? stored,
+            Func<MoonfinSettingsProfile, string?> selector,
+            Func<HiddenContentBaseline, string?> readBaseline,
+            Action<HiddenContentBaseline, string?> writeBaseline)
         {
-            Dictionary<string, string>? merged = null;
-            foreach (var profile in profiles)
+            var merged = ParseHiddenEntries(stored);
+            var pushed = false;
+
+            foreach (var (name, get) in HidingProfiles)
             {
+                var profile = get(settings);
                 if (profile == null) continue;
+
                 var value = selector(profile);
                 if (value == null) continue;
 
-                if (merged == null)
+                // The global profile is where the stored map lives, so it only counts as a push
+                // when a client sent something other than what was already on file.
+                if (name == "global" && value == stored) continue;
+
+                pushed = true;
+                var entries = ParseHiddenEntries(value);
+
+                string? baseline = null;
+                if (settings.HiddenContentBaselines != null &&
+                    settings.HiddenContentBaselines.TryGetValue(name, out var known))
                 {
-                    merged = new Dictionary<string, string>();
+                    baseline = readBaseline(known);
                 }
-                foreach (var pair in ParseHiddenEntries(value))
+
+                foreach (var key in ParseHiddenEntries(baseline).Keys)
+                {
+                    if (!entries.ContainsKey(key))
+                    {
+                        merged.Remove(key);
+                    }
+                }
+
+                foreach (var pair in entries)
                 {
                     if (!merged.TryGetValue(pair.Key, out var existingDate) ||
-                        string.Compare(pair.Value, existingDate, StringComparison.Ordinal) > 0)
+                        IsLaterHide(pair.Value, existingDate))
                     {
                         merged[pair.Key] = pair.Value;
                     }
                 }
+
+                writeBaseline(BaselineFor(settings, name), value);
             }
 
-            return merged == null ? null : JsonSerializer.Serialize(merged);
+            return pushed ? JsonSerializer.Serialize(merged) : null;
         }
 
-        private static Dictionary<string, string> ParseHiddenEntries(string value)
+        private static HiddenContentBaseline BaselineFor(MoonfinUserSettings settings, string profileName)
+        {
+            if (settings.HiddenContentBaselines == null)
+            {
+                settings.HiddenContentBaselines = new Dictionary<string, HiddenContentBaseline>();
+            }
+
+            if (!settings.HiddenContentBaselines.TryGetValue(profileName, out var baseline))
+            {
+                baseline = new HiddenContentBaseline();
+                settings.HiddenContentBaselines[profileName] = baseline;
+            }
+
+            return baseline;
+        }
+
+        /// <summary>
+        /// Whether one hide timestamp is later than another. Clients write ISO-8601, but the field
+        /// is free-form, so anything that won't parse falls back to comparing the text.
+        /// </summary>
+        private static bool IsLaterHide(string candidate, string existing)
+        {
+            if (DateTimeOffset.TryParse(candidate, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var candidateAt) &&
+                DateTimeOffset.TryParse(existing, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var existingAt))
+            {
+                return candidateAt > existingAt;
+            }
+
+            return string.Compare(candidate, existing, StringComparison.Ordinal) > 0;
+        }
+
+        private static Dictionary<string, string> ParseHiddenEntries(string? value)
         {
             if (string.IsNullOrWhiteSpace(value))
             {
