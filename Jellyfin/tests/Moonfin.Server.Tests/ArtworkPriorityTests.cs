@@ -70,9 +70,25 @@ public sealed class ArtworkPriorityTests : IDisposable
     /// exactly what the per-call filesystem path resolves, including rejecting an unknown game id.
     /// </summary>
     [Fact]
-    public void GameLookup_MatchesTheUncachedMembershipDecision()
+    public async Task GameLookup_MatchesTheUncachedMembershipDecision()
     {
         var harness = CreateHarness(gameCount: 8);
+        var libraryRoot = Path.Combine(_root, "Games");
+        var systemRoot = Path.Combine(libraryRoot, "SNES");
+        var hiddenRoot = Path.Combine(libraryRoot, ".hidden");
+        Directory.CreateDirectory(hiddenRoot);
+        var invalidPaths = new[]
+        {
+            Path.Combine(libraryRoot, "readme.txt"),
+            Path.Combine(hiddenRoot, "Hidden.sfc"),
+            Path.Combine(systemRoot, "readme.txt"),
+            Path.Combine(systemRoot, "firmware.bin"),
+        };
+        foreach (var path in invalidPaths)
+        {
+            await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        }
+
         var lookup = harness.Service.CreateGameLookup(harness.LibraryId);
 
         foreach (var game in harness.Games.GetGames(harness.LibraryId, null))
@@ -85,6 +101,13 @@ public sealed class ArtworkPriorityTests : IDisposable
         var unknown = GamePathResolver.EncodeToken(Path.Combine(_root, "Games", "SNES", "Not Installed.sfc"));
         Assert.False(harness.Service.IsCurrentGameMember(harness.LibraryId, unknown));
         Assert.False(harness.Service.IsCurrentGameMember(harness.LibraryId, unknown, lookup));
+        foreach (var path in invalidPaths)
+        {
+            var invalid = GamePathResolver.EncodeToken(path);
+            Assert.False(harness.Service.IsCurrentGameMember(harness.LibraryId, invalid));
+            Assert.False(harness.Service.IsCurrentGameMember(harness.LibraryId, invalid, lookup));
+            Assert.False(await harness.Service.RequestRefreshAsync(harness.LibraryId, invalid, "boxart"));
+        }
 
         // A snapshot taken against a different library must never answer for this one. It is
         // ignored and the uncached resolve runs instead, so the answer stays correct (true)
