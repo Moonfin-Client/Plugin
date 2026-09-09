@@ -627,6 +627,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'watchWithGroup', label: 'Watch with group' },
         { id: 'watched', label: 'Watched' },
         { id: 'favorite', label: 'Favorite' },
+        { id: 'personalRating', label: 'Rate' },
         { id: 'playlist', label: 'Playlist' },
         { id: 'download', label: 'Download' },
         { id: 'deleteFiles', label: 'Delete files' },
