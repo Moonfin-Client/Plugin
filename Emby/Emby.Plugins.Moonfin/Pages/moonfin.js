@@ -1141,7 +1141,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return title || 'Seerr slider';
     }
 
-    function isSeerrCustomSliderType(type) {
+    function isSeerrSliderType(type) {
         var n = Number(type);
         if (!Number.isFinite(n)) return false;
         if (n >= 1 && n <= 12) return false;
@@ -1639,7 +1639,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             state.seerrDiscoverSliders = sliders;
             var candidates = sliders.filter(function (slider) {
                 if (!slider || slider.enabled === false || !slider.id) return false;
-                return isSeerrCustomSliderType(slider.type);
+                return isSeerrSliderType(slider.type);
             }).map(createSeerrSliderCandidate);
             setHomeLayoutAvailable(view, 'seerr', seerrBuiltinCandidates().concat(candidates));
             renderHomeSectionsEditor(view);

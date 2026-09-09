@@ -4032,9 +4032,7 @@
             };
 
             function isSeerrHomeSectionType(type) {
-                return (type && type.indexOf('seerr_') === 0) ||
-                    type === 'radarr_calendar' ||
-                    type === 'sonarr_calendar';
+                return !!(type && type.indexOf('seerr_') === 0);
             }
 
             function isSeerrSliderSection(section) {
@@ -4071,7 +4069,7 @@
                 return title || 'Seerr slider';
             }
 
-            function isSeerrCustomSliderType(type) {
+            function isSeerrSliderType(type) {
                 var n = Number(type);
                 if (!Number.isFinite(n)) return false;
                 if (n >= 1 && n <= 12) return false;
@@ -4585,7 +4583,7 @@
                     HOME_LAYOUT_STATE.seerrDiscoverSliders = sliders;
                     var candidates = sliders.filter(function(slider) {
                         if (!slider || slider.enabled === false || !slider.id) return false;
-                        return isSeerrCustomSliderType(slider.type);
+                        return isSeerrSliderType(slider.type);
                     }).map(createSeerrSliderCandidate);
                     setHomeLayoutAvailable('seerr', seerrBuiltinCandidates().concat(candidates));
                     renderHomeSectionsEditor();
