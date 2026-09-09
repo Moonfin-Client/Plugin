@@ -21,6 +21,10 @@ public class CustomRowsSyncTask : IScheduledTask
     public string Description => "Fetches and caches custom home rows (such as Letterboxd, TMDB, and MDBList custom lists) configured across user profiles.";
     public string Category => "Moonfin";
 
+    // The endpoint serves anything younger than a day out of the cache, so a row refreshed
+    // this recently doesn't need fetching again when the server restarts.
+    private static readonly TimeSpan StillFresh = TimeSpan.FromHours(12);
+
     private readonly MoonfinSettingsService _settingsService;
     private readonly CustomRowCacheService _cacheService;
     private readonly CustomRowFetchService _fetchService;
@@ -84,6 +88,10 @@ public class CustomRowsSyncTask : IScheduledTask
                         {
                             foreach (var prop in pProp.EnumerateObject())
                             {
+                                // The endpoint drops underscore-prefixed params before hashing, so
+                                // skipping them keeps the warmed entry on a key it will read back.
+                                if (prop.Name.StartsWith('_')) continue;
+
                                 if (prop.Value.ValueKind == JsonValueKind.String)
                                 {
                                     paramsDict[prop.Name] = prop.Value.GetString() ?? string.Empty;
@@ -121,37 +129,41 @@ public class CustomRowsSyncTask : IScheduledTask
         _logger.LogInformation("Found {Count} distinct enabled custom home row(s) to refresh.", distinctRows.Count);
 
         var processed = 0;
+        var refreshed = 0;
         var total = distinctRows.Count;
 
         foreach (var (cacheKey, (source, type, parsedParams, userId)) in distinctRows)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            try
+            if (_cacheService.TryGet(cacheKey, StillFresh) == null)
             {
-                _logger.LogInformation("Refreshing custom row [{CacheKey}] ({Source}/{Type})...", cacheKey, source, type);
-                var items = await _fetchService.FetchCustomRowAsync(source, type, parsedParams, userId, cancellationToken);
-                if (items.Count > 0)
+                try
                 {
-                    _cacheService.Set(cacheKey, items);
-                    _logger.LogInformation("Successfully cached {Count} items for custom row [{CacheKey}].", items.Count, cacheKey);
+                    var items = await _fetchService.FetchCustomRowAsync(source, type, parsedParams, userId, cancellationToken);
+                    if (items.Count > 0)
+                    {
+                        _cacheService.Set(cacheKey, items);
+                        refreshed++;
+                        _logger.LogInformation("Cached {Count} items for custom row [{CacheKey}].", items.Count, cacheKey);
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to refresh custom row [{CacheKey}] ({Source}/{Type})", cacheKey, source, type);
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to refresh custom row [{CacheKey}] ({Source}/{Type})", cacheKey, source, type);
+                }
+
+                // Brief polite pause between external API requests
+                await Task.Delay(250, cancellationToken).ConfigureAwait(false);
             }
 
             processed++;
             progress.Report((double)processed / total * 100.0);
-
-            // Brief polite pause between external API requests
-            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
         }
 
         _cacheService.PruneOlderThan(TimeSpan.FromDays(7));
         await _cacheService.FlushAsync().ConfigureAwait(false);
-        _logger.LogInformation("Completed scheduled sync of Moonfin custom home rows ({Processed}/{Total} processed).", processed, total);
+        _logger.LogInformation("Completed scheduled sync of Moonfin custom home rows ({Refreshed} of {Total} refreshed, the rest were still cached).", refreshed, total);
     }
 
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()

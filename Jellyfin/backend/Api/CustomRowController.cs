@@ -112,6 +112,10 @@ public class CustomRowController : ControllerBase
                 Items = items
             });
         }
+        catch (NotSupportedException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to resolve custom row for source: {Source}, type: {Type}", source, type);

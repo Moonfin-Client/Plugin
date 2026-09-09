@@ -54,7 +54,7 @@ public class CustomRowFetchService
         var canonicalParams = JsonSerializer.Serialize(
             new SortedDictionary<string, string>(parsedParams, StringComparer.Ordinal));
         var paramHash = GetStringSha256Hash(canonicalParams);
-        return $"{source.ToLowerInvariant()}:{type.ToLowerInvariant()}:{paramHash}";
+        return $"{source.Trim().ToLowerInvariant()}:{type.Trim().ToLowerInvariant()}:{paramHash}";
     }
 
     public static string GetStringSha256Hash(string text)
@@ -87,7 +87,7 @@ public class CustomRowFetchService
             "tmdb" => await FetchTmdb(type, parsedParams, userId, cancellationToken),
             "tmdb_chart" => await FetchTmdbChart(type, userId, cancellationToken),
             "letterboxd" => await FetchLetterboxd(type, parsedParams, userId, cancellationToken),
-            _ => throw new ArgumentException($"Unsupported custom row source: {source}")
+            _ => throw new NotSupportedException($"Unsupported custom row source: {source}")
         };
     }
 
@@ -267,39 +267,65 @@ public class CustomRowFetchService
     {
         foreach (var item in itemsArray.EnumerateArray())
         {
-            var id = item.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.Number
-                ? idProp.GetInt64()
-                : (long?)null;
-            var rank = item.TryGetProperty("rank", out var rankProp) && rankProp.ValueKind == JsonValueKind.Number
-                ? rankProp.GetInt32()
-                : (int?)null;
-            var title = item.TryGetProperty("title", out var titleProp) && titleProp.ValueKind == JsonValueKind.String
-                ? titleProp.GetString() ?? string.Empty
-                : string.Empty;
-            var mediatype = item.TryGetProperty("mediatype", out var mediaProp) && mediaProp.ValueKind == JsonValueKind.String
-                ? mediaProp.GetString() ?? "movie"
-                : "movie";
-            var year = item.TryGetProperty("release_year", out var yearProp) && yearProp.ValueKind == JsonValueKind.Number
-                ? yearProp.GetInt32()
-                : (int?)null;
-            var imdbId = item.TryGetProperty("imdbid", out var imdbProp) && imdbProp.ValueKind == JsonValueKind.String
-                ? imdbProp.GetString()
-                : null;
-            var tmdbId = item.TryGetProperty("tmdbid", out var tmdbProp) && tmdbProp.ValueKind == JsonValueKind.Number
-                ? tmdbProp.GetInt64().ToString()
-                : null;
-            var posterUrl = item.TryGetProperty("poster", out var posterProp) && posterProp.ValueKind == JsonValueKind.String
-                ? posterProp.GetString()
-                : null;
+            string? imdbId = null;
+            string? tmdbId = null;
 
-            var finalType = mediatype.Equals("show", StringComparison.OrdinalIgnoreCase) ||
-                            mediatype.Equals("tv", StringComparison.OrdinalIgnoreCase)
-                ? "Series"
-                : "Movie";
+            if (item.TryGetProperty("ids", out var idsObj) && idsObj.ValueKind == JsonValueKind.Object)
+            {
+                if (idsObj.TryGetProperty("imdb", out var imdbProp) && imdbProp.ValueKind == JsonValueKind.String)
+                {
+                    imdbId = imdbProp.GetString();
+                }
+
+                if (idsObj.TryGetProperty("tmdb", out var tmdbProp))
+                {
+                    tmdbId = tmdbProp.ValueKind == JsonValueKind.Number
+                        ? tmdbProp.GetInt64().ToString()
+                        : tmdbProp.ValueKind == JsonValueKind.String ? tmdbProp.GetString() : null;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(imdbId) && item.TryGetProperty("imdb_id", out var imdbIdProp) && imdbIdProp.ValueKind == JsonValueKind.String)
+            {
+                imdbId = imdbIdProp.GetString();
+            }
+
+            if (string.IsNullOrWhiteSpace(tmdbId) && item.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.Number)
+            {
+                tmdbId = idProp.GetInt64().ToString();
+            }
+
+            var title = item.TryGetProperty("title", out var titleProp) && titleProp.ValueKind == JsonValueKind.String
+                ? titleProp.GetString() ?? "Unknown"
+                : "Unknown";
+
+            int? year = null;
+            if (item.TryGetProperty("release_year", out var yearProp) && yearProp.ValueKind == JsonValueKind.Number)
+            {
+                year = yearProp.GetInt32();
+            }
+
+            var mediaType = item.TryGetProperty("mediatype", out var mediaProp) && mediaProp.ValueKind == JsonValueKind.String
+                ? mediaProp.GetString()?.ToLowerInvariant()
+                : null;
+            var finalType = (mediaType == "show" || mediaType == "shows" || mediaType == "series" || mediaType == "tv") ? "Series" : "Movie";
+
+            int? rank = null;
+            if (item.TryGetProperty("rank", out var rankProp) && rankProp.ValueKind == JsonValueKind.Number)
+            {
+                rank = rankProp.GetInt32();
+            }
+
+            string? posterUrl = null;
+            if (item.TryGetProperty("poster", out var posterProp) && posterProp.ValueKind == JsonValueKind.String)
+            {
+                posterUrl = MdbListApiHelper.NormalizeTmdbImagePath(posterProp.GetString());
+            }
 
             items.Add(new CustomRowItem
             {
-                Id = id,
+                // The backdrop lookup and the clients key off the TMDB id, not MDBList's own.
+                Id = long.TryParse(tmdbId, out var parsedTmdbId) ? parsedTmdbId : null,
                 Name = title,
                 Type = finalType,
                 ProductionYear = year,
@@ -448,25 +474,15 @@ public class CustomRowFetchService
             throw new InvalidOperationException("TMDB API key is not configured.");
         }
 
-        var endpoint = type switch
-        {
-            "trending_movies" => "trending/movie/week",
-            "trending_shows" => "trending/tv/week",
-            "top_rated_movies" => "movie/top_rated",
-            "top_rated_shows" => "tv/top_rated",
-            "popular_movies" => "movie/popular",
-            "popular_shows" => "tv/popular",
-            _ => throw new ArgumentException($"Unsupported TMDB chart type: {type}")
-        };
-
-        var url = $"https://api.themoviedb.org/3/{endpoint}";
+        // type is the API path the client sends, so movie/popular, trending/movie/day and the rest.
+        var url = $"https://api.themoviedb.org/3/{type}";
         var client = CreateClient();
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         TmdbRequestHelper.ApplyAuth(req, tmdbKey);
         using var response = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            throw new Exception($"TMDB API returned status {(int)response.StatusCode} for {endpoint}");
+            throw new Exception($"TMDB API returned status {(int)response.StatusCode} for chart {type}");
         }
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -655,13 +671,23 @@ public class CustomRowFetchService
                 {
                     Tmdb = pItem.TmdbId
                 },
-                UserRating = pItem.Rating.HasValue ? pItem.Rating.Value.ToString("0.#") : null,
+                UserRating = pItem.Rating.HasValue ? FormatRatingToStars(pItem.Rating.Value) : null,
+                Rating = pItem.Rating,
                 PosterUrl = pItem.PosterUrl,
                 BackdropUrl = pItem.BackdropUrl
             });
         }
 
         return items;
+    }
+
+    private static string FormatRatingToStars(double rating)
+    {
+        int fullStars = (int)Math.Floor(rating);
+        bool halfStar = (rating - fullStars) >= 0.25;
+        var stars = new string('★', fullStars);
+        if (halfStar) stars += "½";
+        return stars;
     }
 
     private async Task<List<CustomRowItem>> FetchImdbList(string type, CancellationToken cancellationToken)
