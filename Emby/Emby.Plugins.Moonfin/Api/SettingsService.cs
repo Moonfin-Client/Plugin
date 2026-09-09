@@ -188,6 +188,11 @@ namespace Emby.Plugins.Moonfin.Api
                 if (adminDefaults != null) return Json(adminDefaults);
                 return Json(404, new { Error = "No settings found" });
             }
+
+            // A pull is the only place a client learns about hides made elsewhere, so this is
+            // where its baseline moves.
+            await Settings.RecordHiddenContentBaselineAsync(userId.Value, profile, resolved).ConfigureAwait(false);
+
             return Json(resolved);
         }
 

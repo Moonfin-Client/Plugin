@@ -694,6 +694,10 @@ public class MoonfinController : ControllerBase
             return adminDefaults != null ? Ok(adminDefaults) : NotFound(new { Error = "No settings found" });
         }
 
+        // A pull is the only place a client learns about hides made elsewhere, so this is where
+        // its baseline moves.
+        await _settingsService.RecordHiddenContentBaselineAsync(userId.Value, profile, resolved);
+
         return Ok(resolved);
     }
 
