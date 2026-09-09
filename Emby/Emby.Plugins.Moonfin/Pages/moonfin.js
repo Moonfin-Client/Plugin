@@ -1102,24 +1102,51 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'seerr', label: 'Seerr' }
     ];
 
-    var HOME_LAYOUT_SEERR_TYPES = {
-        seerr_shortcuts: true,
-        seerr_recent_requests: true,
-        seerr_recently_added: true,
-        seerr_popular_movies: true,
-        seerr_upcoming_movies: true,
-        seerr_popular_series: true,
-        seerr_upcoming_series: true,
-        seerr_trending: true,
-        seerr_movie_genres: true,
-        seerr_studios: true,
-        seerr_series_genres: true,
-        seerr_networks: true,
-        seerr_watchlist: true
-    };
-
     function isSeerrHomeSectionType(type) {
-        return !!HOME_LAYOUT_SEERR_TYPES[type];
+        return !!(type && type.indexOf('seerr_') === 0);
+    }
+
+    function isSeerrSliderSection(section) {
+        return !!section && (section.kind === 'seerrSlider' ||
+            (section.kind === 'pluginDynamic' && section.pluginSource === 'seerr') ||
+            section.type === 'seerr_slider');
+    }
+
+    function seerrSliderIdOf(section) {
+        if (!section) return '';
+        if (section.sliderId) return String(section.sliderId);
+        if (section.pluginAdditionalData) return String(section.pluginAdditionalData);
+        return '';
+    }
+
+    function seerrSliderTypeOf(section) {
+        if (!section || section.sliderType == null || section.sliderType === '') return null;
+        var n = Number(section.sliderType);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function seerrSliderLiveTitle(view, section) {
+        var state = getHomeLayoutState(view);
+        var sliders = state.seerrDiscoverSliders || [];
+        var id = seerrSliderIdOf(section);
+        for (var i = 0; i < sliders.length; i++) {
+            if (String(sliders[i].id) !== id) continue;
+            return (sliders[i].title || '').trim();
+        }
+        return (section.pluginDisplayText || '').trim();
+    }
+
+    function seerrSliderLabel(slider) {
+        var title = (slider && slider.title ? String(slider.title) : '').trim();
+        return title || 'Seerr slider';
+    }
+
+    function isSeerrCustomSliderType(type) {
+        var n = Number(type);
+        if (!Number.isFinite(n)) return false;
+        if (n >= 1 && n <= 12) return false;
+        if (n >= 38 && n <= 43) return false;
+        return n > 12;
     }
 
     function getHomeLayoutState(view) {
@@ -1139,8 +1166,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return HOME_SECTION_DEFINITIONS.find(function (row) { return row.type === type; }) || null;
     }
 
-    function homeSectionLabel(section) {
+    function homeSectionLabel(view, section) {
         if (!section) return 'Unknown row';
+        if (isSeerrSliderSection(section)) {
+            return seerrSliderLiveTitle(view, section) ||
+                section.pluginDisplayText ||
+                'Seerr slider';
+        }
         if (section.kind === 'pluginDynamic') {
             return section.pluginDisplayText || section.pluginSection || 'Dynamic row';
         }
@@ -1150,8 +1182,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     function homeSectionMeta(section) {
         if (!section) return 'Basics';
+        if (isSeerrSliderSection(section) || isSeerrHomeSectionType(section.type)) return 'Seerr';
         if (section.kind !== 'pluginDynamic') {
-            return isSeerrHomeSectionType(section.type) ? 'Seerr' : 'Basics';
+            return 'Basics';
         }
         if (section.pluginSource === 'collections') return 'Collection';
         if (section.pluginSource === 'playlists') return 'Playlist';
@@ -1161,8 +1194,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function homeSectionBadgeClass(section) {
+        if (isSeerrSliderSection(section) || (section && isSeerrHomeSectionType(section.type))) {
+            return 'homeLayoutBadge-seerr';
+        }
         if (!section || section.kind !== 'pluginDynamic') {
-            if (section && isSeerrHomeSectionType(section.type)) return 'homeLayoutBadge-seerr';
             return 'homeLayoutBadge-builtin';
         }
         if (section.pluginSource === 'collections') return 'homeLayoutBadge-collections';
@@ -1173,6 +1208,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     function homeSectionKey(section) {
         if (!section) return '';
+        if (isSeerrSliderSection(section)) {
+            return 'seerrSlider:' + seerrSliderIdOf(section);
+        }
         if (section.kind === 'pluginDynamic') {
             return [
                 'pluginDynamic',
@@ -1202,7 +1240,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     function renumberHomeLayoutSections(state) {
         state.sections.forEach(function (section, index) {
-            section.enabled = true;
+            if (section.kind !== 'pluginDynamic' && section.kind !== 'seerrSlider') {
+                section.enabled = true;
+            }
             section.order = index;
         });
     }
@@ -1234,7 +1274,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }).forEach(function (section) {
             if (!section) return;
             var normalized;
-            if (section.kind === 'pluginDynamic') {
+            if (isSeerrSliderSection(section)) {
+                var sliderId = seerrSliderIdOf(section);
+                if (!sliderId) return;
+                var sliderType = seerrSliderTypeOf(section);
+                normalized = {
+                    kind: 'seerrSlider',
+                    type: 'seerr_slider',
+                    enabled: section.enabled !== false,
+                    order: ordered.length,
+                    sliderId: sliderId
+                };
+                if (sliderType != null) normalized.sliderType = sliderType;
+                if (section.pluginDisplayText) {
+                    normalized.pluginDisplayText = section.pluginDisplayText;
+                }
+            } else if (section.kind === 'pluginDynamic') {
                 normalized = {
                     kind: 'pluginDynamic',
                     type: 'none',
@@ -1283,6 +1338,29 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         };
     }
 
+    function createSeerrSliderCandidate(slider) {
+        var sliderId = String(slider.id);
+        var label = seerrSliderLabel(slider);
+        var candidate = {
+            key: 'seerrSlider:' + sliderId,
+            tab: 'seerr',
+            label: label,
+            meta: 'Seerr',
+            badgeClass: 'homeLayoutBadge-seerr',
+            section: {
+                kind: 'seerrSlider',
+                type: 'seerr_slider',
+                enabled: true,
+                order: 0,
+                sliderId: sliderId,
+                pluginDisplayText: label
+            }
+        };
+        var sliderType = Number(slider.type);
+        if (Number.isFinite(sliderType)) candidate.section.sliderType = sliderType;
+        return candidate;
+    }
+
     function createDynamicCandidate(tab, source, sectionName, id, label, meta, serverId) {
         return {
             key: ['pluginDynamic', source, sectionName, id || ''].join(':'),
@@ -1309,7 +1387,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             .filter(function (definition) { return !isSeerrHomeSectionType(definition.type); })
             .map(createBuiltinCandidate);
         state.available.seerr = HOME_SECTION_DEFINITIONS
-            .filter(function (definition) { return isSeerrHomeSectionType(definition.type); })
+            .filter(function (definition) {
+                return isSeerrHomeSectionType(definition.type);
+            })
             .map(createBuiltinCandidate);
     }
 
@@ -1393,7 +1473,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             row.dataset.index = String(index);
             row.innerHTML =
                 '<div class="homeLayoutRowText">' +
-                '<div class="homeLayoutRowTitle">' + esc(homeSectionLabel(section)) + '</div>' +
+                '<div class="homeLayoutRowTitle">' + esc(homeSectionLabel(view, section)) + '</div>' +
                 '<span class="homeLayoutBadge ' + homeSectionBadgeClass(section) + '">' + esc(homeSectionMeta(section)) + '</span>' +
                 '</div>' +
                 '<button type="button" class="homeLayoutIconButton" data-action="up" title="Move up"' + (index === 0 ? ' disabled' : '') + '>&#x2191;</button>' +
@@ -1534,6 +1614,39 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         loadHomeLayoutCollections(view);
         loadHomeLayoutPlaylists(view);
         loadHomeLayoutGenres(view);
+        loadHomeLayoutSeerrSliders(view);
+    }
+
+    function seerrBuiltinCandidates() {
+        return HOME_SECTION_DEFINITIONS
+            .filter(function (definition) {
+                return isSeerrHomeSectionType(definition.type);
+            })
+            .map(createBuiltinCandidate);
+    }
+
+    function loadHomeLayoutSeerrSliders(view) {
+        var serverId = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        fetch(serverId + '/Moonfin/Seerr/Api/settings/discover', {
+            method: 'GET',
+            headers: moonfinAuthHeaders()
+        }).then(function (response) {
+            if (!response.ok) return [];
+            return response.json();
+        }).then(function (data) {
+            var sliders = Array.isArray(data) ? data : [];
+            var state = getHomeLayoutState(view);
+            state.seerrDiscoverSliders = sliders;
+            var candidates = sliders.filter(function (slider) {
+                if (!slider || slider.enabled === false || !slider.id) return false;
+                return isSeerrCustomSliderType(slider.type);
+            }).map(createSeerrSliderCandidate);
+            setHomeLayoutAvailable(view, 'seerr', seerrBuiltinCandidates().concat(candidates));
+            renderHomeSectionsEditor(view);
+        }).catch(function () {
+            getHomeLayoutState(view).seerrDiscoverSliders = [];
+            setHomeLayoutAvailable(view, 'seerr', seerrBuiltinCandidates());
+        });
     }
 
     function setHomeLayoutAvailable(view, tab, candidates) {
@@ -1635,15 +1748,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         if (state.sections.length === 0) return null;
         renumberHomeLayoutSections(state);
         return state.sections.map(function (section) {
+            var isSlider = section.kind === 'seerrSlider';
             var isDynamic = section.kind === 'pluginDynamic';
             var result = {
-                type: isDynamic ? 'none' : section.type,
+                type: isSlider ? (section.type || 'seerr_slider') : (isDynamic ? 'none' : section.type),
                 // Dynamic rows stay in the editor when disabled, unlike builtins, so writing
                 // them all back as enabled would switch every custom row on.
-                enabled: isDynamic ? section.enabled !== false : true,
+                enabled: (isDynamic || isSlider) ? section.enabled !== false : true,
                 order: section.order
             };
-            if (isDynamic) {
+            if (isSlider) {
+                result.kind = 'seerrSlider';
+                result.type = 'seerr_slider';
+                result.sliderId = section.sliderId;
+                if (section.sliderType != null) result.sliderType = section.sliderType;
+                if (section.pluginDisplayText) result.pluginDisplayText = section.pluginDisplayText;
+            } else if (isDynamic) {
                 result.kind = 'pluginDynamic';
                 result.pluginSource = section.pluginSource || 'hss';
                 // Custom rows have no server of their own and the client keys them on this,

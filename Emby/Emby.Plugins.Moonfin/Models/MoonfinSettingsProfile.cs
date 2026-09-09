@@ -349,5 +349,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("pluginSection")] public string? PluginSection { get; set; }
         [JsonPropertyName("pluginAdditionalData")] public string? PluginAdditionalData { get; set; }
         [JsonPropertyName("pluginDisplayText")] public string? PluginDisplayText { get; set; }
+        [JsonPropertyName("sliderId")] public string? SliderId { get; set; }
+        [JsonPropertyName("sliderType")] public int? SliderType { get; set; }
     }
 }
