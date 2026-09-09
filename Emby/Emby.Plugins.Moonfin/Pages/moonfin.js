@@ -1854,6 +1854,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded', defaults.navbarAlwaysExpanded);
             setNullableBoolSelect(view, '#DefaultEnableFolderView', defaults.enableFolderView);
             setNullableBoolSelect(view, '#DefaultShowSeerrButton', defaults.showSeerrButton);
+            setNullableBoolSelect(view, '#DefaultShowDownloadsButton', defaults.showDownloadsButton);
             setNullableBoolSelect(view, '#DefaultShowServerMessagesButton', defaults.showServerMessagesButton);
 
             setSelectValue(view, '#DefaultMediaBarSourceType', defaults.mediaBarSourceType, 'Configured source');
@@ -2116,6 +2117,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.navbarAlwaysExpanded = getNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded');
             d.enableFolderView = getNullableBoolSelect(view, '#DefaultEnableFolderView');
             d.showSeerrButton = getNullableBoolSelect(view, '#DefaultShowSeerrButton');
+            d.showDownloadsButton = getNullableBoolSelect(view, '#DefaultShowDownloadsButton');
             d.showServerMessagesButton = getNullableBoolSelect(view, '#DefaultShowServerMessagesButton');
 
             d.mediaBarSourceType = view.querySelector('#DefaultMediaBarSourceType').value || null;
