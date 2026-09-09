@@ -212,10 +212,13 @@ namespace Emby.Plugins.Moonfin.Services
             if (profile.HomeSections == null) return null;
 
             var homeRowOrder = profile.HomeSections
-                .Where(section => !string.Equals(section.Kind, "pluginDynamic", StringComparison.OrdinalIgnoreCase))
+                .Where(section =>
+                    string.IsNullOrEmpty(section.Kind) ||
+                    string.Equals(section.Kind, "builtin", StringComparison.OrdinalIgnoreCase))
                 .Where(section => section.Enabled != false)
                 .Where(section => !string.IsNullOrWhiteSpace(section.Type) &&
-                    !string.Equals(section.Type, "none", StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(section.Type, "none", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(section.Type, "seerr_slider", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(section => section.Order ?? int.MaxValue)
                 .Select(section => section.Type!)
                 .ToList();
