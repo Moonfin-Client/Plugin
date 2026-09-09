@@ -29,6 +29,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<StudioLogoCacheService>();
         serviceCollection.AddSingleton<StudioLogoFetchService>();
         serviceCollection.AddSingleton<CustomRowCacheService>();
+        serviceCollection.AddSingleton<CustomRowFetchService>();
         serviceCollection.AddSingleton<CollectionOrderService>();
         serviceCollection.AddSingleton<GamesService>();
         serviceCollection.AddSingleton<GameSavesService>();
@@ -54,6 +55,14 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<LaunchBoxService>();
         serviceCollection.AddSingleton<UserBookmarksService>();
         serviceCollection.AddHttpClient();
+
+        // The custom row scrapes need a browser user agent to get a normal page back, and a
+        // short timeout so one unresponsive host can't stall the whole sync.
+        serviceCollection.AddHttpClient("MoonfinHttpClient", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        });
 
         serviceCollection.AddSingleton<ConfigBackupService>();
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<ConfigBackupService>());
