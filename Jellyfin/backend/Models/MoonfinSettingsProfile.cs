@@ -197,6 +197,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("homeRowsStyle")]
     public string? HomeRowsStyle { get; set; }
 
+    [JsonPropertyName("modernCardsOnMyMediaRow")]
+    public bool? ModernCardsOnMyMediaRow { get; set; }
+
     [JsonPropertyName("modernHomeRowsPadding")]
     public int? ModernHomeRowsPadding { get; set; }
 

@@ -1160,6 +1160,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultModernCardsOnMyMediaRow">Modern cards on My Media row</label>
+                                <select id="DefaultModernCardsOnMyMediaRow" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Display customizable posters that expand on focus. Disable to always show landscape thumbnail.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultMergeContinueWatchingNextUp">Merge Continue Watching and Next Up</label>
                                 <select id="DefaultMergeContinueWatchingNextUp" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -5392,6 +5401,7 @@
                     setSelectValue('#DefaultSeasonalSurprise', defaults.seasonalSurprise, 'Configured surprise');
 
                     setSelectValue('#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
+                    setNullableBoolSelect('#DefaultModernCardsOnMyMediaRow', defaults.modernCardsOnMyMediaRow);
                     setNullableBoolSelect('#DefaultFullScreenRows', defaults.fullScreenRows);
                     setNullableBoolSelect('#DefaultHomeRowInfoOverlay', defaults.homeRowInfoOverlay);
                     bindNullableRangeInput('#DefaultClassicHomeRowsPadding', 'px');
@@ -5915,6 +5925,7 @@
 
 
                         config.DefaultUserSettings.homeRowsStyle = document.querySelector('#DefaultHomeRowsStyle').value || null;
+                        config.DefaultUserSettings.modernCardsOnMyMediaRow = getNullableBoolSelect('#DefaultModernCardsOnMyMediaRow');
                         config.DefaultUserSettings.fullScreenRows = getNullableBoolSelect('#DefaultFullScreenRows');
                         config.DefaultUserSettings.homeRowInfoOverlay = getNullableBoolSelect('#DefaultHomeRowInfoOverlay');
                         config.DefaultUserSettings.classicHomeRowsPadding = getNullableRangeInput('#DefaultClassicHomeRowsPadding');

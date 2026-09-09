@@ -64,6 +64,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("backdropEnabled")] public bool? BackdropEnabled { get; set; }
         [JsonPropertyName("homeRowsImageTypeOverride")] public bool? HomeRowsImageTypeOverride { get; set; }
         [JsonPropertyName("homeRowsStyle")] public string? HomeRowsStyle { get; set; }
+        [JsonPropertyName("modernCardsOnMyMediaRow")] public bool? ModernCardsOnMyMediaRow { get; set; }
         [JsonPropertyName("modernHomeRowsPadding")] public int? ModernHomeRowsPadding { get; set; }
         [JsonPropertyName("classicHomeRowsPadding")] public int? ClassicHomeRowsPadding { get; set; }
         [JsonPropertyName("fullScreenRows")] public bool? FullScreenRows { get; set; }
