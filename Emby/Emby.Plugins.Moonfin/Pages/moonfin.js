@@ -528,6 +528,86 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             });
     }
 
+    function renderScreensaverPickerRows(picker, cbClass, entries, selectedValues) {
+        var html = '';
+        for (var i = 0; i < entries.length; i++) {
+            var entry = entries[i];
+            var isChecked = selectedValues.indexOf(entry.value) !== -1;
+            html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
+                '<input type="checkbox" class="' + cbClass + '" data-value="' + esc(entry.value) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(128,128,128,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(entry.label) + '</div></div></label>';
+        }
+        picker.innerHTML = html;
+    }
+
+    function loadScreensaverLibraryPicker(view, selectedIds) {
+        var picker = view.querySelector('#DefaultScreensaverLibraryPicker');
+        if (!picker) return;
+        picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">Loading...</div>';
+        var userId = ApiClient.getCurrentUserId();
+        ApiClient.getUserViews(userId).then(function (result) {
+            var items = (result.Items || []).filter(function (item) {
+                var ct = item.CollectionType;
+                return ct === 'movies' || ct === 'tvshows' || ct === 'mixed' || !ct;
+            });
+            if (items.length === 0) {
+                picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">No media libraries found.</div>';
+                return;
+            }
+            renderScreensaverPickerRows(picker, 'screensaverLibraryCb', items.map(function (item) {
+                return { value: item.Id, label: item.Name || 'Untitled' };
+            }), selectedIds);
+        });
+    }
+
+    function loadScreensaverCollectionPicker(view, selectedIds) {
+        var picker = view.querySelector('#DefaultScreensaverCollectionPicker');
+        if (!picker) return;
+        picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">Loading...</div>';
+        var userId = ApiClient.getCurrentUserId();
+        ApiClient.getItems(userId, {
+            userId: userId,
+            includeItemTypes: 'BoxSet',
+            sortBy: 'SortName',
+            sortOrder: 'Ascending',
+            recursive: true,
+            limit: 100
+        }).then(function (result) {
+            var items = result.Items || [];
+            if (items.length === 0) {
+                picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">No collections found.</div>';
+                return;
+            }
+            renderScreensaverPickerRows(picker, 'screensaverCollectionCb', items.map(function (item) {
+                return { value: item.Id, label: item.Name || 'Untitled' };
+            }), selectedIds);
+        });
+    }
+
+    function loadScreensaverGenrePicker(view, selectedNames) {
+        var picker = view.querySelector('#DefaultScreensaverGenrePicker');
+        if (!picker) return;
+        picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">Loading...</div>';
+        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        fetch(serverUrl + '/Moonfin/Genres', { method: 'GET', headers: moonfinAuthHeaders() })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var genres = data.Items || data.items || [];
+                if (genres.length === 0) {
+                    picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">No genres found.</div>';
+                    return;
+                }
+                // Clients store screensaver genre exclusions by name, not id
+                renderScreensaverPickerRows(picker, 'screensaverGenreCb', genres.map(function (g) {
+                    var gName = g.name || g.Name || '';
+                    return { value: gName, label: gName };
+                }), selectedNames);
+            })
+            .catch(function () {
+                picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">Failed to load genres.</div>';
+            });
+    }
+
     function loadRatingSourcesPicker(view, selectedIds) {
         var container = view.querySelector('#DefaultMdblistRatingSourcesList');
         if (!container) return;
@@ -618,7 +698,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'seerrRequest4k', label: 'Request 4K' },
         { id: 'shuffle', label: 'Shuffle' },
         { id: 'restart', label: 'Restart', canHide: false },
-        { id: 'playOffline', label: 'Play Offline', canHide: false },
         { id: 'audio', label: 'Audio' },
         { id: 'subtitles', label: 'Subtitles' },
         { id: 'version', label: 'Version' },
@@ -1847,6 +1926,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setSelectValue(view, '#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
             setNullableBoolSelect(view, '#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
             setSelectValue(view, '#DefaultScreensaverMode', defaults.screensaverMode, 'Configured mode');
+            setSelectValue(view, '#DefaultScreensaverBackdrop', defaults.screensaverBackdrop, 'Configured backdrop');
+            setSelectValue(view, '#DefaultScreensaverComponent', defaults.screensaverComponent, 'Configured component');
+            setSelectValue(view, '#DefaultScreensaverMovement', defaults.screensaverMovement, 'Configured movement');
+            setSelectValue(view, '#DefaultScreensaverPosition', defaults.screensaverPosition, 'Configured position');
+            setSelectValue(view, '#DefaultScreensaverSize', defaults.screensaverSize, 'Configured size');
+            setSelectValue(view, '#DefaultScreensaverContentType', defaults.screensaverContentType, 'Configured content type');
+            loadScreensaverLibraryPicker(view, defaults.screensaverLibraryIds || []);
+            loadScreensaverCollectionPicker(view, defaults.screensaverCollectionIds || []);
+            loadScreensaverGenrePicker(view, defaults.screensaverExcludedGenres || []);
+            setSelectValue(view, '#DefaultLoadingAnimationImage', defaults.loadingAnimationImage, 'Configured image');
+            setSelectValue(view, '#DefaultLoadingAnimationPosition', defaults.loadingAnimationPosition, 'Configured position');
+            setSelectValue(view, '#DefaultLoadingAnimationSize', defaults.loadingAnimationSize, 'Configured size');
+            setSelectValue(view, '#DefaultLoadingAnimationSpeed', defaults.loadingAnimationSpeed, 'Configured speed');
+            setNullableBoolSelect(view, '#DefaultShowLoadingAnimationText', defaults.showLoadingAnimationText);
 
             setSelectValue(view, '#DefaultNavbarPosition', defaults.navbarPosition, 'Configured position');
             setSelectValue(view, '#DefaultNavbarColor', defaults.navbarColor, 'Configured color');
@@ -2112,6 +2205,29 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.watchedIndicator = view.querySelector('#DefaultWatchedIndicator').value || null;
             d.cardFocusExpansion = getNullableBoolSelect(view, '#DefaultCardFocusExpansion');
             d.screensaverMode = view.querySelector('#DefaultScreensaverMode').value || null;
+            d.screensaverBackdrop = view.querySelector('#DefaultScreensaverBackdrop').value || null;
+            d.screensaverComponent = view.querySelector('#DefaultScreensaverComponent').value || null;
+            d.screensaverMovement = view.querySelector('#DefaultScreensaverMovement').value || null;
+            d.screensaverPosition = view.querySelector('#DefaultScreensaverPosition').value || null;
+            d.screensaverSize = view.querySelector('#DefaultScreensaverSize').value || null;
+            d.screensaverContentType = view.querySelector('#DefaultScreensaverContentType').value || null;
+            if (view.querySelector('#DefaultScreensaverLibraryPicker .screensaverLibraryCb')) {
+                var screensaverLibraryIds = Array.prototype.slice.call(view.querySelectorAll('#DefaultScreensaverLibraryPicker .screensaverLibraryCb:checked')).map(function (cb) { return cb.dataset.value; });
+                d.screensaverLibraryIds = screensaverLibraryIds.length > 0 ? screensaverLibraryIds : null;
+            }
+            if (view.querySelector('#DefaultScreensaverCollectionPicker .screensaverCollectionCb')) {
+                var screensaverCollectionIds = Array.prototype.slice.call(view.querySelectorAll('#DefaultScreensaverCollectionPicker .screensaverCollectionCb:checked')).map(function (cb) { return cb.dataset.value; });
+                d.screensaverCollectionIds = screensaverCollectionIds.length > 0 ? screensaverCollectionIds : null;
+            }
+            if (view.querySelector('#DefaultScreensaverGenrePicker .screensaverGenreCb')) {
+                var screensaverGenreNames = Array.prototype.slice.call(view.querySelectorAll('#DefaultScreensaverGenrePicker .screensaverGenreCb:checked')).map(function (cb) { return cb.dataset.value; });
+                d.screensaverExcludedGenres = screensaverGenreNames.length > 0 ? screensaverGenreNames : null;
+            }
+            d.loadingAnimationImage = view.querySelector('#DefaultLoadingAnimationImage').value || null;
+            d.loadingAnimationPosition = view.querySelector('#DefaultLoadingAnimationPosition').value || null;
+            d.loadingAnimationSize = view.querySelector('#DefaultLoadingAnimationSize').value || null;
+            d.loadingAnimationSpeed = view.querySelector('#DefaultLoadingAnimationSpeed').value || null;
+            d.showLoadingAnimationText = getNullableBoolSelect(view, '#DefaultShowLoadingAnimationText');
 
             d.navbarPosition = view.querySelector('#DefaultNavbarPosition').value || null;
             d.navbarColor = view.querySelector('#DefaultNavbarColor').value || null;

@@ -869,12 +869,153 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLoadingAnimationImage">Loading Animation Image</label>
+                                <select id="DefaultLoadingAnimationImage" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="none">None</option>
+                                    <option value="moonfinLogo">Moonfin Logo</option>
+                                    <option value="spinner">Spinner</option>
+                                    <option value="runner">Runner</option>
+                                    <option value="moonPhases">Moon Phases</option>
+                                    <option value="moonfinPhases">Moonfin Phases</option>
+                                    <option value="neonfinPhases">Neonfin Phases</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLoadingAnimationPosition">Loading Animation Position</label>
+                                <select id="DefaultLoadingAnimationPosition" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="topLeft">Top-Left</option>
+                                    <option value="topCenter">Top-Center</option>
+                                    <option value="topRight">Top-Right</option>
+                                    <option value="middleLeft">Middle-Left</option>
+                                    <option value="middle">Middle</option>
+                                    <option value="middleRight">Middle-Right</option>
+                                    <option value="bottomLeft">Bottom-Left</option>
+                                    <option value="bottomCenter">Bottom-Center</option>
+                                    <option value="bottomRight">Bottom-Right</option>
+                                    <option value="bouncing">Bouncing</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLoadingAnimationSize">Loading Animation Size</label>
+                                <select id="DefaultLoadingAnimationSize" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="thumbnail">Thumbnail</option>
+                                    <option value="small">Small</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="large">Large</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLoadingAnimationSpeed">Loading Animation Speed</label>
+                                <select id="DefaultLoadingAnimationSpeed" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="slow">Slow</option>
+                                    <option value="moderate">Moderate</option>
+                                    <option value="fast">Fast</option>
+                                    <option value="ultra">Ultra</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowLoadingAnimationText">Show Loading Animation Text</label>
+                                <select id="DefaultShowLoadingAnimationText" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverMode">Screensaver Mode (TV clients only)</label>
                                 <select id="DefaultScreensaverMode" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="logo">Logo</option>
                                     <option value="library">Library</option>
                                 </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverBackdrop">Screensaver Backdrop</label>
+                                <select id="DefaultScreensaverBackdrop" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="library">Library Art</option>
+                                    <option value="black">Black</option>
+                                    <option value="moonfin">Moonfin</option>
+                                    <option value="calm">Calm</option>
+                                    <option value="neonPulse">Neon Pulse</option>
+                                    <option value="aurora">Aurora</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverComponent">Screensaver Additional Component</label>
+                                <select id="DefaultScreensaverComponent" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="none">None</option>
+                                    <option value="moonfinLogo">Moonfin Logo</option>
+                                    <option value="clock">Clock</option>
+                                    <option value="runner">Runner</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverMovement">Screensaver Component Movement</label>
+                                <select id="DefaultScreensaverMovement" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="staticCorner">Static</option>
+                                    <option value="slow">Slow</option>
+                                    <option value="moderate">Moderate</option>
+                                    <option value="fast">Fast</option>
+                                    <option value="ultra">Ultra</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverPosition">Screensaver Component Position</label>
+                                <select id="DefaultScreensaverPosition" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="topLeft">Top-Left</option>
+                                    <option value="topCenter">Top-Center</option>
+                                    <option value="topRight">Top-Right</option>
+                                    <option value="middleLeft">Middle-Left</option>
+                                    <option value="middle">Middle</option>
+                                    <option value="middleRight">Middle-Right</option>
+                                    <option value="bottomLeft">Bottom-Left</option>
+                                    <option value="bottomCenter">Bottom-Center</option>
+                                    <option value="bottomRight">Bottom-Right</option>
+                                </select>
+                                <div class="fieldDescription">Applies when the component movement is Static.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverSize">Screensaver Component Size</label>
+                                <select id="DefaultScreensaverSize" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="thumbnail">Thumbnail</option>
+                                    <option value="small">Small</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="large">Large</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultScreensaverContentType">Screensaver Content Type</label>
+                                <select id="DefaultScreensaverContentType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Movies &amp; TV Shows</option>
+                                    <option value="movies">Movies Only</option>
+                                    <option value="tvshows">TV Shows Only</option>
+                                </select>
+                                <div class="fieldDescription">What the Library Art backdrop shows.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Screensaver Source Libraries</label>
+                                <div id="DefaultScreensaverLibraryPicker" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                                <div class="fieldDescription">Libraries the Library Art backdrop draws from. Leave all unchecked to use every movie and show library.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Screensaver Source Collections</label>
+                                <div id="DefaultScreensaverCollectionPicker" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                                <div class="fieldDescription">Limit the Library Art backdrop to these collections.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Screensaver Excluded Genres</label>
+                                <div id="DefaultScreensaverGenrePicker" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                                <div class="fieldDescription">Titles in these genres never appear in the screensaver.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultConfirmExit">Confirm Exit (TV clients only)</label>
@@ -3326,6 +3467,92 @@
                     });
             }
 
+            function renderScreensaverPickerRows(picker, cbClass, entries, selectedValues) {
+                var html = '';
+                for (var i = 0; i < entries.length; i++) {
+                    var entry = entries[i];
+                    var isChecked = selectedValues.indexOf(entry.value) !== -1;
+                    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
+                        '<input type="checkbox" class="' + cbClass + '" data-value="' + esc(entry.value) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                        '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(entry.label) + '</div></div></label>';
+                }
+                picker.innerHTML = html;
+            }
+
+            function loadScreensaverLibraryPicker(selectedIds) {
+                var picker = document.querySelector('#DefaultScreensaverLibraryPicker');
+                if (!picker) return;
+                picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
+
+                var userId = ApiClient.getCurrentUserId();
+                ApiClient.getUserViews(userId).then(function(result) {
+                    var items = (result.Items || []).filter(function(item) {
+                        var ct = item.CollectionType;
+                        return ct === 'movies' || ct === 'tvshows' || ct === 'mixed' || !ct;
+                    });
+                    if (items.length === 0) {
+                        picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No media libraries found.</div>';
+                        return;
+                    }
+                    renderScreensaverPickerRows(picker, 'screensaverLibraryCb', items.map(function(item) {
+                        return { value: item.Id, label: item.Name || 'Untitled' };
+                    }), selectedIds);
+                });
+            }
+
+            function loadScreensaverCollectionPicker(selectedIds) {
+                var picker = document.querySelector('#DefaultScreensaverCollectionPicker');
+                if (!picker) return;
+                picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
+
+                var userId = ApiClient.getCurrentUserId();
+                ApiClient.getItems(userId, {
+                    userId: userId,
+                    includeItemTypes: 'BoxSet',
+                    sortBy: 'SortName',
+                    sortOrder: 'Ascending',
+                    recursive: true,
+                    limit: 100
+                }).then(function(result) {
+                    var items = result.Items || [];
+                    if (items.length === 0) {
+                        picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No collections found.</div>';
+                        return;
+                    }
+                    renderScreensaverPickerRows(picker, 'screensaverCollectionCb', items.map(function(item) {
+                        return { value: item.Id, label: item.Name || 'Untitled' };
+                    }), selectedIds);
+                });
+            }
+
+            function loadScreensaverGenrePicker(selectedNames) {
+                var picker = document.querySelector('#DefaultScreensaverGenrePicker');
+                if (!picker) return;
+                picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
+
+                var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                var token = ApiClient.accessToken ? ApiClient.accessToken() : '';
+                var headers = token ? { 'Authorization': 'MediaBrowser Token="' + token + '"' } : {};
+
+                fetch(serverUrl + '/Moonfin/Genres', { method: 'GET', headers: headers })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        var genres = data.Items || data.items || [];
+                        if (genres.length === 0) {
+                            picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No genres found.</div>';
+                            return;
+                        }
+                        // Clients store screensaver genre exclusions by name, not id
+                        renderScreensaverPickerRows(picker, 'screensaverGenreCb', genres.map(function(g) {
+                            var gName = g.name || g.Name || '';
+                            return { value: gName, label: gName };
+                        }), selectedNames);
+                    })
+                    .catch(function() {
+                        picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Failed to load genres.</div>';
+                    });
+            }
+
             function loadRatingSourcesPicker(selectedIds) {
                 var container = document.querySelector('#DefaultMdblistRatingSourcesList');
                 if (!container) return;
@@ -3416,7 +3643,6 @@
                 { id: 'seerrRequest4k', label: 'Request 4K' },
                 { id: 'shuffle', label: 'Shuffle' },
                 { id: 'restart', label: 'Restart', canHide: false },
-                { id: 'playOffline', label: 'Play Offline', canHide: false },
                 { id: 'audio', label: 'Audio' },
                 { id: 'subtitles', label: 'Subtitles' },
                 { id: 'version', label: 'Version' },
@@ -5375,6 +5601,20 @@
                     setSelectValue('#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
                     setNullableBoolSelect('#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
                     setSelectValue('#DefaultScreensaverMode', defaults.screensaverMode, 'Configured mode');
+                    setSelectValue('#DefaultScreensaverBackdrop', defaults.screensaverBackdrop, 'Configured backdrop');
+                    setSelectValue('#DefaultScreensaverComponent', defaults.screensaverComponent, 'Configured component');
+                    setSelectValue('#DefaultScreensaverMovement', defaults.screensaverMovement, 'Configured movement');
+                    setSelectValue('#DefaultScreensaverPosition', defaults.screensaverPosition, 'Configured position');
+                    setSelectValue('#DefaultScreensaverSize', defaults.screensaverSize, 'Configured size');
+                    setSelectValue('#DefaultScreensaverContentType', defaults.screensaverContentType, 'Configured content type');
+                    loadScreensaverLibraryPicker(defaults.screensaverLibraryIds || []);
+                    loadScreensaverCollectionPicker(defaults.screensaverCollectionIds || []);
+                    loadScreensaverGenrePicker(defaults.screensaverExcludedGenres || []);
+                    setSelectValue('#DefaultLoadingAnimationImage', defaults.loadingAnimationImage, 'Configured image');
+                    setSelectValue('#DefaultLoadingAnimationPosition', defaults.loadingAnimationPosition, 'Configured position');
+                    setSelectValue('#DefaultLoadingAnimationSize', defaults.loadingAnimationSize, 'Configured size');
+                    setSelectValue('#DefaultLoadingAnimationSpeed', defaults.loadingAnimationSpeed, 'Configured speed');
+                    setNullableBoolSelect('#DefaultShowLoadingAnimationText', defaults.showLoadingAnimationText);
 
                     setSelectValue('#DefaultNavbarPosition', defaults.navbarPosition, 'Configured position');
                     setSelectValue('#DefaultNavbarColor', defaults.navbarColor, 'Configured color');
@@ -5853,6 +6093,41 @@
                         config.DefaultUserSettings.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
                         config.DefaultUserSettings.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
                         config.DefaultUserSettings.screensaverMode = document.querySelector('#DefaultScreensaverMode').value || null;
+                        config.DefaultUserSettings.screensaverBackdrop = document.querySelector('#DefaultScreensaverBackdrop').value || null;
+                        config.DefaultUserSettings.screensaverComponent = document.querySelector('#DefaultScreensaverComponent').value || null;
+                        config.DefaultUserSettings.screensaverMovement = document.querySelector('#DefaultScreensaverMovement').value || null;
+                        config.DefaultUserSettings.screensaverPosition = document.querySelector('#DefaultScreensaverPosition').value || null;
+                        config.DefaultUserSettings.screensaverSize = document.querySelector('#DefaultScreensaverSize').value || null;
+                        config.DefaultUserSettings.screensaverContentType = document.querySelector('#DefaultScreensaverContentType').value || null;
+                        if (document.querySelector('#DefaultScreensaverLibraryPicker .screensaverLibraryCb') != null) {
+                            var screensaverLibraryCbs = document.querySelectorAll('#DefaultScreensaverLibraryPicker .screensaverLibraryCb:checked');
+                            var screensaverLibraryIds = [];
+                            for (var sli = 0; sli < screensaverLibraryCbs.length; sli++) {
+                                screensaverLibraryIds.push(screensaverLibraryCbs[sli].dataset.value);
+                            }
+                            config.DefaultUserSettings.screensaverLibraryIds = screensaverLibraryIds.length > 0 ? screensaverLibraryIds : null;
+                        }
+                        if (document.querySelector('#DefaultScreensaverCollectionPicker .screensaverCollectionCb') != null) {
+                            var screensaverCollectionCbs = document.querySelectorAll('#DefaultScreensaverCollectionPicker .screensaverCollectionCb:checked');
+                            var screensaverCollectionIds = [];
+                            for (var sci = 0; sci < screensaverCollectionCbs.length; sci++) {
+                                screensaverCollectionIds.push(screensaverCollectionCbs[sci].dataset.value);
+                            }
+                            config.DefaultUserSettings.screensaverCollectionIds = screensaverCollectionIds.length > 0 ? screensaverCollectionIds : null;
+                        }
+                        if (document.querySelector('#DefaultScreensaverGenrePicker .screensaverGenreCb') != null) {
+                            var screensaverGenreCbs = document.querySelectorAll('#DefaultScreensaverGenrePicker .screensaverGenreCb:checked');
+                            var screensaverGenreNames = [];
+                            for (var sgi = 0; sgi < screensaverGenreCbs.length; sgi++) {
+                                screensaverGenreNames.push(screensaverGenreCbs[sgi].dataset.value);
+                            }
+                            config.DefaultUserSettings.screensaverExcludedGenres = screensaverGenreNames.length > 0 ? screensaverGenreNames : null;
+                        }
+                        config.DefaultUserSettings.loadingAnimationImage = document.querySelector('#DefaultLoadingAnimationImage').value || null;
+                        config.DefaultUserSettings.loadingAnimationPosition = document.querySelector('#DefaultLoadingAnimationPosition').value || null;
+                        config.DefaultUserSettings.loadingAnimationSize = document.querySelector('#DefaultLoadingAnimationSize').value || null;
+                        config.DefaultUserSettings.loadingAnimationSpeed = document.querySelector('#DefaultLoadingAnimationSpeed').value || null;
+                        config.DefaultUserSettings.showLoadingAnimationText = getNullableBoolSelect('#DefaultShowLoadingAnimationText');
 
                         config.DefaultUserSettings.navbarPosition = document.querySelector('#DefaultNavbarPosition').value || null;
                         config.DefaultUserSettings.navbarColor = document.querySelector('#DefaultNavbarColor').value || null;
