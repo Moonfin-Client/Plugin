@@ -35,6 +35,12 @@ namespace Emby.Plugins.Moonfin.Services
 
         private static readonly string[] RadiusCornerKeys = { "topLeft", "topRight", "bottomLeft", "bottomRight" };
 
+        // Optional fields the lists above don't cover. A wrong type still breaks theme
+        // loading, and the flags go through a hard cast, so they throw rather than fall back.
+        private static readonly string[] OptionalColorKeys = { "error", "card" };
+
+        private static readonly string[] OptionalFlagKeys = { "transparentNavbarSurface", "isGlass", "isPixel" };
+
         public MoonfinThemeValidationResult Validate(JsonElement payload)
         {
             var errors = new List<string>();
@@ -61,21 +67,36 @@ namespace Emby.Plugins.Moonfin.Services
             if (ContainsScriptTag(displayName))
                 errors.Add("displayName cannot contain script tags.");
 
+            ValidateOptionalString(payload, "description", "description", errors);
             if (TryGetProperty(payload, "description", out var descEl) && descEl.ValueKind == JsonValueKind.String)
             {
                 var desc = descEl.GetString() ?? string.Empty;
                 if (ContainsScriptTag(desc)) errors.Add("description cannot contain script tags.");
             }
 
+            ValidateOptionalString(payload, "fontFamily", "fontFamily", errors);
+
+            foreach (var key in OptionalFlagKeys)
+                ValidateOptionalBool(payload, key, key, errors);
+
             var colors = GetRequiredObject(payload, "colors", "colors", errors);
             if (colors.HasValue)
+            {
                 foreach (var key in RequiredColorKeys)
                     ValidateRequiredColor(colors.Value, key, "colors." + key, errors);
 
+                foreach (var key in OptionalColorKeys)
+                    ValidateOptionalColor(colors.Value, key, "colors." + key, errors);
+            }
+
             var semantic = GetRequiredObject(payload, "semantic", "semantic", errors);
             if (semantic.HasValue)
+            {
                 foreach (var key in RequiredSemanticKeys)
                     ValidateRequiredColor(semantic.Value, key, "semantic." + key, errors);
+
+                ValidateOptionalColor(semantic.Value, "statusError", "semantic.statusError", errors);
+            }
 
             var book = GetRequiredObject(payload, "book", "book", errors);
             if (book.HasValue)
@@ -207,6 +228,27 @@ namespace Emby.Plugins.Moonfin.Services
         {
             if (!TryGetProperty(owner, prop, out var el)) { errors.Add(path + " is required."); return; }
             ValidateColorElement(el, path, errors);
+        }
+
+        private static void ValidateOptionalColor(JsonElement owner, string prop, string path, List<string> errors)
+        {
+            if (TryGetProperty(owner, prop, out var el)) ValidateColorElement(el, path, errors);
+        }
+
+        private static void ValidateOptionalBool(JsonElement owner, string prop, string path, List<string> errors)
+        {
+            if (TryGetProperty(owner, prop, out var el)
+                && el.ValueKind != JsonValueKind.True
+                && el.ValueKind != JsonValueKind.False)
+            {
+                errors.Add(path + " must be true or false.");
+            }
+        }
+
+        private static void ValidateOptionalString(JsonElement owner, string prop, string path, List<string> errors)
+        {
+            if (TryGetProperty(owner, prop, out var el) && el.ValueKind != JsonValueKind.String)
+                errors.Add(path + " must be a string.");
         }
 
         private static void ValidateColorElement(JsonElement el, string path, List<string> errors)

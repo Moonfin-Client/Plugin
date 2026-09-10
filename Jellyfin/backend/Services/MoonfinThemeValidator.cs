@@ -36,6 +36,12 @@ public sealed class MoonfinThemeValidator
 
     private static readonly string[] RadiusCornerKeys = ["topLeft", "topRight", "bottomLeft", "bottomRight"];
 
+    // Optional fields the lists above don't cover. A wrong type still breaks theme
+    // loading, and the flags go through a hard cast, so they throw rather than fall back.
+    private static readonly string[] OptionalColorKeys = ["error", "card"];
+
+    private static readonly string[] OptionalFlagKeys = ["transparentNavbarSurface", "isGlass", "isPixel"];
+
     /// <summary>
     /// Validate a candidate theme JSON object.
     /// </summary>
@@ -73,6 +79,7 @@ public sealed class MoonfinThemeValidator
             errors.Add("displayName cannot contain script tags.");
         }
 
+        ValidateOptionalString(payload, "description", "description", errors);
         if (TryGetProperty(payload, "description", out var descriptionElement) && descriptionElement.ValueKind == JsonValueKind.String)
         {
             var description = descriptionElement.GetString() ?? string.Empty;
@@ -82,12 +89,24 @@ public sealed class MoonfinThemeValidator
             }
         }
 
+        ValidateOptionalString(payload, "fontFamily", "fontFamily", errors);
+
+        foreach (var key in OptionalFlagKeys)
+        {
+            ValidateOptionalBool(payload, key, key, errors);
+        }
+
         var colors = GetRequiredObject(payload, "colors", "colors", errors);
         if (colors is { } colorsObject)
         {
             foreach (var key in RequiredColorKeys)
             {
                 ValidateRequiredColor(colorsObject, key, "colors." + key, errors);
+            }
+
+            foreach (var key in OptionalColorKeys)
+            {
+                ValidateOptionalColor(colorsObject, key, "colors." + key, errors);
             }
         }
 
@@ -98,6 +117,8 @@ public sealed class MoonfinThemeValidator
             {
                 ValidateRequiredColor(semanticObject, key, "semantic." + key, errors);
             }
+
+            ValidateOptionalColor(semanticObject, "statusError", "semantic.statusError", errors);
         }
 
         var book = GetRequiredObject(payload, "book", "book", errors);
@@ -352,6 +373,32 @@ public sealed class MoonfinThemeValidator
         }
 
         ValidateColorElement(valueElement, fieldPath, errors);
+    }
+
+    private static void ValidateOptionalColor(JsonElement owner, string propertyName, string fieldPath, List<string> errors)
+    {
+        if (TryGetProperty(owner, propertyName, out var valueElement))
+        {
+            ValidateColorElement(valueElement, fieldPath, errors);
+        }
+    }
+
+    private static void ValidateOptionalBool(JsonElement owner, string propertyName, string fieldPath, List<string> errors)
+    {
+        if (TryGetProperty(owner, propertyName, out var valueElement)
+            && valueElement.ValueKind != JsonValueKind.True
+            && valueElement.ValueKind != JsonValueKind.False)
+        {
+            errors.Add(fieldPath + " must be true or false.");
+        }
+    }
+
+    private static void ValidateOptionalString(JsonElement owner, string propertyName, string fieldPath, List<string> errors)
+    {
+        if (TryGetProperty(owner, propertyName, out var valueElement) && valueElement.ValueKind != JsonValueKind.String)
+        {
+            errors.Add(fieldPath + " must be a string.");
+        }
     }
 
     private static void ValidateColorElement(JsonElement colorElement, string fieldPath, List<string> errors)

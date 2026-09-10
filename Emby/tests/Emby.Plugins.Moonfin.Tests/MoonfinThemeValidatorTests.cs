@@ -268,4 +268,70 @@ public class MoonfinThemeValidatorTests
         Assert.False(result.IsValid);
         Assert.True(result.Errors.Count >= 3, string.Join(" | ", result.Errors));
     }
+
+    [Theory]
+    [InlineData("transparentNavbarSurface")]
+    [InlineData("isGlass")]
+    [InlineData("isPixel")]
+    public void Validate_RejectsAFlagThatIsNotABoolean(string key)
+    {
+        var result = ThemeFixture.ValidateWith(t => t[key] = "true");
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e == key + " must be true or false.");
+    }
+
+    [Theory]
+    [InlineData("transparentNavbarSurface")]
+    [InlineData("isGlass")]
+    [InlineData("isPixel")]
+    public void Validate_AcceptsAFlagThatIsABoolean(string key)
+    {
+        Assert.True(ThemeFixture.ValidateWith(t => t[key] = true).IsValid);
+        Assert.True(ThemeFixture.ValidateWith(t => t[key] = false).IsValid);
+    }
+
+    [Theory]
+    [InlineData("error")]
+    [InlineData("card")]
+    public void Validate_RejectsAnOptionalColorThatIsMalformed(string key)
+    {
+        var result = ThemeFixture.ValidateWith(t => t["colors"]![key] = "notacolor");
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.StartsWith("colors." + key, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_RejectsAMalformedStatusError()
+    {
+        var result = ThemeFixture.ValidateWith(t => t["semantic"]!["statusError"] = "nope");
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.StartsWith("semantic.statusError", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_AcceptsTheOptionalColorsWhenTheyAreWellFormed()
+    {
+        var result = ThemeFixture.ValidateWith(t =>
+        {
+            t["colors"]!["error"] = "#FF0000";
+            t["colors"]!["card"] = "#112233AA";
+            t["semantic"]!["statusError"] = "#EF4444";
+        });
+
+        Assert.True(result.IsValid, string.Join(" | ", result.Errors));
+    }
+
+    [Theory]
+    [InlineData("description")]
+    [InlineData("fontFamily")]
+    public void Validate_RejectsAnOptionalStringThatIsNotAString(string key)
+    {
+        var result = ThemeFixture.ValidateWith(t => t[key] = 42);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e == key + " must be a string.");
+    }
 }
