@@ -20,6 +20,8 @@ This repo ships two plugins from one place: a Jellyfin plugin under `Jellyfin/` 
 
 ## Installation
 
+Moonbase needs **Jellyfin 10.10 or newer** or **Emby 4.8 or newer**. The wiki's [Installation](https://github.com/Moonfin-Client/Plugin/wiki/Installation) page has the steps plus updating and uninstalling.
+
 ### Jellyfin
 
 The plugin repository is the recommended route, because it updates through the catalog like any other plugin:
@@ -107,7 +109,7 @@ On Emby, the web app is served the same way at `/Moonfin/Web/`, but there's no h
 
 ## Configuration
 
-Open your server dashboard, go to Plugins, and select **Moonbase**. The main things to set up:
+Open your server dashboard, go to Plugins, and select **Moonbase**. The [Admin Guide](https://github.com/Moonfin-Client/Plugin/wiki/Admin-Guide) walks through every tab. The main things to set up:
 
 - Your Seerr URL and whether Seerr is enabled
 - Shared MDBList and TMDB API keys, so individual users don't need their own
@@ -131,6 +133,9 @@ The deeper reference material lives in the [Wiki](https://github.com/Moonfin-Cli
 
 | Page | What it covers |
 |------|----------------|
+| [Installation](https://github.com/Moonfin-Client/Plugin/wiki/Installation) | The Jellyfin catalogue route, the Emby zip, the first things to switch on, updating and uninstalling |
+| [Admin Guide](https://github.com/Moonfin-Client/Plugin/wiki/Admin-Guide) | The plugin page tab by tab, the scheduled tasks, and what differs on Emby |
+| [Common Problems](https://github.com/Moonfin-Client/Plugin/wiki/Common-Problems) | Plain fixes for catalogue, web app, sync, Seerr, ratings, rows and games trouble |
 | [API Reference](https://github.com/Moonfin-Client/Plugin/wiki/API-Reference) | Every plugin endpoint, with methods, auth, the Seerr config response, and the server messages endpoints |
 | [Settings Sync](https://github.com/Moonfin-Client/Plugin/wiki/Settings-Sync) | How sync works, the settings envelope, and the full list of synced settings |
 | [Data Locations](https://github.com/Moonfin-Client/Plugin/wiki/Data-Locations) | Where the plugin stores user settings, themes, saves, and caches on the server |
