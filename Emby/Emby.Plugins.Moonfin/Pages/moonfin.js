@@ -2041,6 +2041,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultMdblistShowRatingNames', defaults.mdblistShowRatingNames);
             loadRatingSourcesPicker(view, defaults.mdblistRatingSources || null);
             setNullableBoolSelect(view, '#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
+            setNullableBoolSelect(view, '#DefaultSeerrShowMissingCollectionItems', defaults.seerrShowMissingCollectionItems);
             var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
             loadSeerrDiscoveryPicker(view, seerrPicker.order, seerrPicker.hidden);
 
@@ -2333,6 +2334,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.mdblistShowRatingNames = getNullableBoolSelect(view, '#DefaultMdblistShowRatingNames');
             d.mdblistRatingSources = getRatingSourcesValue(view);
             d.seerrBlockNsfw = getNullableBoolSelect(view, '#DefaultSeerrBlockNsfw');
+            d.seerrShowMissingCollectionItems = getNullableBoolSelect(view, '#DefaultSeerrShowMissingCollectionItems');
             // seerrRows carries more than the ordering, so merge rather than replace.
             var seerrRows = Object.assign({}, d.seerrRows || {});
             seerrRows.rowOrder = getSeerrDiscoveryRowOrder(view);
