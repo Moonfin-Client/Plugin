@@ -2527,6 +2527,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrShowMissingCollectionItems">Show Missing Collection Items</label>
+                                <div class="fieldDescription">Include missing items on Collection pages.</div>
+                                <select id="DefaultSeerrShowMissingCollectionItems" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Seerr Discovery Rows &amp; Order</label>
                                 <div class="fieldDescription">Enable rows to see on Seerr mainpage and use the arrows to set their order.</div>
                                 <div id="DefaultSeerrDiscoveryList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
@@ -5717,6 +5726,7 @@
                     setNullableBoolSelect('#DefaultMdblistShowRatingNames', defaults.mdblistShowRatingNames);
                     loadRatingSourcesPicker(defaults.mdblistRatingSources || null);
                     setNullableBoolSelect('#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
+                    setNullableBoolSelect('#DefaultSeerrShowMissingCollectionItems', defaults.seerrShowMissingCollectionItems);
                     var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
                     loadSeerrDiscoveryPicker(seerrPicker.order, seerrPicker.hidden);
 
@@ -6256,6 +6266,7 @@
                         config.DefaultUserSettings.mdblistShowRatingNames = getNullableBoolSelect('#DefaultMdblistShowRatingNames');
                         config.DefaultUserSettings.mdblistRatingSources = getRatingSourcesValue();
                         config.DefaultUserSettings.seerrBlockNsfw = getNullableBoolSelect('#DefaultSeerrBlockNsfw');
+                        config.DefaultUserSettings.seerrShowMissingCollectionItems = getNullableBoolSelect('#DefaultSeerrShowMissingCollectionItems');
                         // seerrRows carries more than the ordering, so merge rather than replace.
                         var seerrRows = Object.assign({}, config.DefaultUserSettings.seerrRows || {});
                         seerrRows.rowOrder = getSeerrDiscoveryRowOrder();

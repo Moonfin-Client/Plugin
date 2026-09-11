@@ -9,6 +9,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("seerrEnabled")] public bool? SeerrEnabled { get; set; }
         [JsonPropertyName("seerrApiKey")] public string? SeerrApiKey { get; set; }
         [JsonPropertyName("seerrBlockNsfw")] public bool? SeerrBlockNsfw { get; set; }
+        [JsonPropertyName("seerrShowMissingCollectionItems")] public bool? SeerrShowMissingCollectionItems { get; set; }
         [JsonPropertyName("seerrRows")] public SeerrRowsConfig? SeerrRows { get; set; }
         // Legacy jellyseerr* aliases: read old payloads and keep serializing the old keys for un-migrated clients.
         [JsonPropertyName("jellyseerrEnabled")] public bool? JellyseerrEnabledCompat { get => SeerrEnabled; set { if (value != null) { SeerrEnabled = value; } } }

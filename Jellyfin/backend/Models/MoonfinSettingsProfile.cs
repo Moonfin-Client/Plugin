@@ -21,6 +21,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("seerrBlockNsfw")]
     public bool? SeerrBlockNsfw { get; set; }
 
+    [JsonPropertyName("seerrShowMissingCollectionItems")]
+    public bool? SeerrShowMissingCollectionItems { get; set; }
+
     [JsonPropertyName("seerrRows")]
     public SeerrRowsConfig? SeerrRows { get; set; }
 
