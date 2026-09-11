@@ -24,6 +24,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("seerrShowMissingCollectionItems")]
     public bool? SeerrShowMissingCollectionItems { get; set; }
 
+    [JsonPropertyName("showSeerrAvailabilityBadges")]
+    public bool? ShowSeerrAvailabilityBadges { get; set; }
+
     [JsonPropertyName("seerrRows")]
     public SeerrRowsConfig? SeerrRows { get; set; }
 
