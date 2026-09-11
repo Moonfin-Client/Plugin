@@ -99,6 +99,99 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public int StudioLogosMaxAgeDays { get; set; } = 30;
 
+    // ---------------------------------------------------------------------
+    // Anime filler, canon and recap markers
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Classifies anime episodes as manga canon, anime canon, mixed or filler so Moonfin
+    /// clients can badge them. Data comes from animefillerlist.com, which needs no account
+    /// or key. Off by default.
+    /// </summary>
+    public bool AnimeMarkersEnabled { get; set; }
+
+    /// <summary>
+    /// Jellyfin library IDs (GUID strings) to look for anime. When empty, every library
+    /// is considered.
+    /// </summary>
+    public List<string> AnimeMarkerLibraryIds { get; set; } = new();
+
+    /// <summary>
+    /// Also ask MyAnimeList which episodes are recaps, which AnimeFillerList does not
+    /// categorise. Best-effort and additive: when the lookup fails nothing is recorded, so
+    /// the filler data is never held up by it.
+    /// </summary>
+    public bool AnimeMarkerRecapLookup { get; set; } = true;
+
+    /// <summary>
+    /// How long a cached show stays fresh before the sync task refetches it. A finished
+    /// show's classifications never change, so this mostly governs how quickly a currently
+    /// airing show picks up its new episodes.
+    /// </summary>
+    public int AnimeMarkerMaxAgeDays { get; set; } = 30;
+
+    /// <summary>
+    /// Enable verbose logging of every marker request a client makes and what it was answered with.
+    /// This is a debug feature to help work out why a badge is or is not appearing.
+    /// </summary>
+    public bool AnimeMarkerVerboseLogging { get; set; }
+
+    /// <summary>
+    /// Enable the "Audio Markers" feature, which shows a badge on episodes that have
+    /// multiple audio tracks (e.g., Japanese and English) so users can find them quickly.
+    /// </summary>
+    public bool AnimeAudioMarkersEnabled { get; set; }
+
+    /// <summary>
+    /// Extends the Subbed/Dubbed pills to movies, which have no series to hang off and so
+    /// are opted in separately. Uses the same libraries and the same audio rules.
+    /// </summary>
+    public bool AnimeAudioMarkersMovies { get; set; }
+
+    /// <summary>
+    /// Reports a file holding both the Japanese audio and a dub as "Subbed/Dubbed" rather
+    /// than just "Dubbed", since the viewer can have it either way. Off by default, which
+    /// keeps the shorter label.
+    /// </summary>
+    public bool AnimeAudioSeparateDualAudio { get; set; }
+
+    /// <summary>
+    /// Treats every item in the selected libraries as anime, for libraries that hold nothing else.
+    /// </summary>
+    public bool AnimeAudioTrustSelectedLibraries { get; set; }
+
+    /// <summary>
+    /// Where a client should draw the pills on an episode row: "below" under the runtime,
+    /// "beside" on the same line as it, or "thumbnail" over the episode image. Read by the
+    /// clients; the server only passes it along.
+    /// </summary>
+    public string AnimeMarkerPlacement { get; set; } = "below";
+
+    // ---------------------------------------------------------------------
+    // Which pills a client is allowed to draw
+    // ---------------------------------------------------------------------
+
+    /// <summary>Show a pill on episodes AnimeFillerList classes as filler.</summary>
+    public bool AnimeMarkerShowFiller { get; set; } = true;
+
+    /// <summary>Show a pill on episodes that mix source material with filler.</summary>
+    public bool AnimeMarkerShowMixed { get; set; } = true;
+
+    /// <summary>Show a pill on episodes MyAnimeList marks as recaps.</summary>
+    public bool AnimeMarkerShowRecap { get; set; } = true;
+
+    /// <summary>
+    /// Show a pill on episodes adapted from the manga. Off by default: this is the ordinary
+    /// case for most anime, so it puts a pill on nearly every episode.
+    /// </summary>
+    public bool AnimeMarkerShowMangaCanon { get; set; }
+
+    /// <summary>
+    /// Show a pill on episodes that are not in the manga but are part of the anime's own
+    /// continuity. Off by default for the same reason as manga canon.
+    /// </summary>
+    public bool AnimeMarkerShowAnimeCanon { get; set; }
+
     /// <summary>
     /// Optional default server URL shown in the Moonfin web Add Server dialog.
     /// </summary>

@@ -9,6 +9,132 @@
     "imageUrl": "https://raw.githubusercontent.com/Moonfin-Client/Plugin/master/Jellyfin/backend/assets/logo.png",
     "versions": [
       {
+        "version": "2.3.5.0",
+        "changelog": "Option for dubbed/subbed to treat all as anime.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.3.5/Moonfin.Server-2.3.5.0.zip",
+        "checksum": "41D9507627E58756133D6C1C183C5A4B",
+        "timestamp": "2026-09-10T16:22:10",
+        "dependencies": []
+      },
+      {
+        "version": "2.3.4.0",
+        "changelog": "Settings look better on smal screen now.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.3.4/Moonfin.Server-2.3.4.0.zip",
+        "checksum": "05E9D038A43809959E0C8B40AF208C58",
+        "timestamp": "2026-09-10T15:30:36",
+        "dependencies": []
+      },
+      {
+        "version": "2.3.3.0",
+        "changelog": "Subbed/dubbed only mark animes now and not on mixed libraries all. New UI option plus ghosts gabs removed.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.3.3/Moonfin.Server-2.3.3.0.zip",
+        "checksum": "7084D2E29465CBA66BD3F96BF87493DC",
+        "timestamp": "2026-09-09T21:00:52",
+        "dependencies": []
+      },
+      {
+        "version": "2.3.2.0",
+        "changelog": "Movie pill fix.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.3.2/Moonfin.Server-2.3.2.0.zip",
+        "checksum": "C310E5AE7E7E98295C9E29621E005654",
+        "timestamp": "2026-09-09T19:31:39",
+        "dependencies": []
+      },
+      {
+        "version": "2.3.0.0",
+        "changelog": "Jikan api is soon gone so we are switching to Tenrai.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.3.0/Moonfin.Server-2.3.0.0.zip",
+        "checksum": "8296730327786843A83A81D19AEC8107",
+        "timestamp": "2026-09-09T18:56:46",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.9.0",
+        "changelog": "Fixed pills issues for movies.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.9/Moonfin.Server-2.2.9.0.zip",
+        "checksum": "06BA495D1BA9A0AA8B29A94F16068C7B",
+        "timestamp": "2026-09-09T18:52:28",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.8.0",
+        "changelog": "Better Pills, plus movie have dubbed/subbed toggles.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.8/Moonfin.Server-2.2.8.0.zip",
+        "checksum": "77FD3A5EDC9179B94181B2C4261A5B74",
+        "timestamp": "2026-09-09T17:11:33",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.7.0",
+        "changelog": "Subed/dubed pills render fix, plus anime id verification fix.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.7/Moonfin.Server-2.2.7.0.zip",
+        "checksum": "159386A4820A0595857DDF03EB8E66B7",
+        "timestamp": "2026-09-09T14:37:20",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.6.0",
+        "changelog": "Logs update to get evrything properly, and fixed bug where some items were not being processed correctly.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.6/Moonfin.Server-2.2.6.0.zip",
+        "checksum": "C338BC63C96BB88D7C618F0549FFE076",
+        "timestamp": "2026-09-09T14:19:41",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.5.0",
+        "changelog": "Adds optional Subbed/Dubbed pills.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.5/Moonfin.Server-2.2.5.0.zip",
+        "checksum": "E23692F73A177144145DB0919735D026",
+        "timestamp": "2026-09-09T13:35:20",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.4.0",
+        "changelog": "Fixes.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.4/Moonfin.Server-2.2.4.0.zip",
+        "checksum": "8776DBB8B37003FC329B98143FC2D234",
+        "timestamp": "2026-09-09T12:35:08",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.3.0",
+        "changelog": "Fix logging.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.3/Moonfin.Server-2.2.3.0.zip",
+        "checksum": "5984AEA0AA2FF05AC8B461D8C73F25B7",
+        "timestamp": "2026-09-09T00:17:17",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.2.0",
+        "changelog": "Adds a marker debug log for working out why a badge is not apppearing.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.2/Moonfin.Server-2.2.2.0.zip",
+        "checksum": "7038661366E4439C68783FA7430F1BFE",
+        "timestamp": "2026-09-09T00:00:46",
+        "dependencies": []
+      },
+      {
+        "version": "2.2.1.0",
+        "changelog": "Anime filler and recap markers. Episodes are classified as manga canon, anime canon, mixed or filler using AnimeFillerList, with recap flags from MyAnimeList. Enable it under Anime Filler & Recap Markers in the plugin settings, then run the Moonfin Anime Markers Sync task. The settings page has a per-series preview for checking the result.",
+        "targetAbi": "10.10.0.0",
+        "sourceUrl": "https://github.com/MasterOfKay/Moonfin-Plugin-MOK-Testing/releases/download/2.2.1/Moonfin.Server-2.2.1.0.zip",
+        "checksum": "9BCD17800C286E5CE5DED0B099E96642",
+        "timestamp": "2026-09-08T22:30:06",
+        "dependencies": []
+      },
+      {
         "version": "2.2.0.0",
         "changelog": "Moonbase 2.2.0 adds server messages, so an admin can write something once and have it show up in people's apps even when they were offline while it was sent. The admin defaults page grows a lot, with settings for another 96 options and fixes to the six controls that were writing values no client reads. Retro games find more of their artwork, and it now picks up new ROMs without a restart. A reinstalled Seerr no longer strands you logged out, and a zipped game now arrives as the ROM it actually is. The bundled web client moves up to Moonfin 2.5.1.\n\nFeatures:\n\n- A new Messages tab lets an admin write a message with a title and a Markdown body, pick a colour, choose how it shows up, pick who sees it, schedule a start and end date, add a link button, and order the list. Broadcast now saves what it sends, so a user who was offline still finds it.\n- Admin defaults picked up settings for another 96 options, covering discovery rows, Since You Watched, music rows, sort direction for the home rows, player buttons, media segments, Cinema Mode for episodes, and a lot more.\n- Six admin controls that were writing values no client reads now send the right ones, and row sorting was rebuilt to match the clients, which also adds the missing Playlist Order option.\n- Retro games now watch the configured game library folders for file changes, so a new ROM or a per-library scan runs artwork reconciliation in the background instead of waiting for a restart, and games that came out as a false miss are retried once the matching has corrected them.\n- The settings sync toggle was renamed to Moonbase Sync, and its description now says that enabling it is required for the Seerr and ratings integrations.\n- The bundled web client picks up everything web relevant from Moonfin 2.5.1, including the messages window, a Seerr poster grid with a download progress bar, remote subtitle badges, Play and Resume on the long press menu, and personal ratings writing to Emby.\n\nBug Fixes:\n\n- A reinstalled Seerr no longer strands you logged out. The plugin was reading every 403 as missing admin rights, so the stale session was never cleared. Now it checks whether Seerr still knows the session first, and a definite refusal clears the old session and signs in again.\n- A zipped game now arrives as the ROM it actually is. The detail was naming the archive, so a client saved plain ROM bytes under a .zip name and failed to unpack them. It now names the file the endpoint actually sends, along with its real size.\n- A pending artwork timer can no longer take the process down on shutdown, and the artwork delivery route rejects an unknown role instead of falling through.\n- The websocket reconnects after a server restart, a busy server no longer reads as a connection timeout, and Escape closes the dialog on top instead of the page behind it.\n",
         "targetAbi": "10.10.0.0",
