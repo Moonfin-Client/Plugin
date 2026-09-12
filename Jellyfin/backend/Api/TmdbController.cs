@@ -28,6 +28,9 @@ public class TmdbController : ControllerBase
     // Cache: key = "tmdbId:season:episode" => (response, timestamp)
     private static readonly ConcurrentDictionary<string, (TmdbEpisodeRatingResponse Response, DateTimeOffset CachedAt)> _episodeCache = new();
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
+    // Cache: key = "tmdbId" => (response, timestamp)
+    private static readonly ConcurrentDictionary<string, (TmdbNextEpisodeResponse Response, DateTimeOffset CachedAt)> _nextEpisodeCache = new();
+    private static readonly TimeSpan NextEpisodeCacheTtl = TimeSpan.FromHours(6);
 
     private static TimeSpan StudioCacheMaxAge =>
         TimeSpan.FromDays(MoonfinPlugin.Instance?.Configuration?.StudioLogosMaxAgeDays ?? 30);
@@ -264,6 +267,99 @@ public class TmdbController : ControllerBase
     }
 
     /// <summary>
+    /// Fetches the next episode to air for a TV series from TMDB.
+    /// Uses the authenticated user's TMDB API key from their settings or server default.
+    /// </summary>
+    /// <param name="tmdbId">TMDB series ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpGet("NextEpisode")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<TmdbNextEpisodeResponse>> GetNextEpisode(
+        [FromQuery] string tmdbId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tmdbId))
+        {
+            return BadRequest(new { Error = "Missing required parameter: tmdbId" });
+        }
+
+        var apiKey = await GetUserApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return Ok(new TmdbNextEpisodeResponse
+            {
+                Success = false,
+                Error = "No TMDB API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key."
+            });
+        }
+
+        var cacheKey = tmdbId.Trim();
+        if (_nextEpisodeCache.TryGetValue(cacheKey, out var cached) && DateTimeOffset.UtcNow - cached.CachedAt < NextEpisodeCacheTtl)
+        {
+            return Ok(cached.Response);
+        }
+
+        try
+        {
+            var url = $"https://api.themoviedb.org/3/tv/{Uri.EscapeDataString(cacheKey)}";
+            var client = CreateClient();
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            ApplyAuth(request, apiKey);
+
+            using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+            if ((int)response.StatusCode == 429)
+            {
+                return Ok(new TmdbNextEpisodeResponse
+                {
+                    Success = false,
+                    Error = "TMDB rate limit reached. Try again later."
+                });
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return Ok(new TmdbNextEpisodeResponse
+                {
+                    Success = false,
+                    Error = $"TMDB returned status {(int)response.StatusCode}"
+                });
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var data = JsonSerializer.Deserialize<TmdbSeriesApiResponse>(json, JsonOptions);
+            var nextEp = data?.NextEpisodeToAir;
+
+            var result = new TmdbNextEpisodeResponse
+            {
+                Success = nextEp != null,
+                AirDate = nextEp?.AirDate,
+                SeasonNumber = nextEp?.SeasonNumber,
+                EpisodeNumber = nextEp?.EpisodeNumber,
+                Name = nextEp?.Name
+            };
+
+            _nextEpisodeCache[cacheKey] = (result, DateTimeOffset.UtcNow);
+            return Ok(result);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return Ok(new TmdbNextEpisodeResponse
+            {
+                Success = false,
+                Error = $"Failed to fetch from TMDB: {ex.Message}"
+            });
+        }
+    }
+
+    /// <summary>
     /// Returns the TMDB production companies (studios) for a movie or show, serving
     /// from the server-side cache and filling it from TMDB on a miss. Each company
     /// reports whether a logo is available via <c>StudioImage/{companyId}</c>.
@@ -467,7 +563,43 @@ public class StudioCompaniesResponse
     public List<StudioCompanyInfo> Companies { get; set; } = new();
 }
 
+/// <summary>
+/// Next episode to air response returned to the client.
+/// </summary>
+public class TmdbNextEpisodeResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+
+    [JsonPropertyName("airDate")]
+    public string? AirDate { get; set; }
+
+    [JsonPropertyName("seasonNumber")]
+    public int? SeasonNumber { get; set; }
+
+    [JsonPropertyName("episodeNumber")]
+    public int? EpisodeNumber { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+}
+
 // ===== Raw TMDB API Models =====
+
+internal class TmdbSeriesApiResponse
+{
+    [JsonPropertyName("id")]
+    public int? Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("next_episode_to_air")]
+    public TmdbEpisodeApiResponse? NextEpisodeToAir { get; set; }
+}
 
 internal class TmdbEpisodeApiResponse
 {

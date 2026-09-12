@@ -1068,6 +1068,12 @@
                                 </select>
                                 <div class="fieldDescription">When on, detail screen tabs start expanded and moving focus between them reveals content without pressing select.</div>
                             </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Metadata Row</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Default Metadata Row &amp; Order</label>
+                                <div class="fieldDescription">Check which metadata items to show on detail pages and use the arrows to set their order.</div>
+                                <div id="DefaultDetailMetadataList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                            </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDetailShowTechnicalDetails">Show Technical Details?</label>
                                 <select id="DefaultDetailShowTechnicalDetails" is="emby-select">
@@ -3697,6 +3703,16 @@
                 { id: 'floatOnTop', label: 'Float on Top' }
             ];
 
+            var DETAIL_METADATA = [
+                { id: 'year', label: 'Release Year' },
+                { id: 'parentalRating', label: 'Parental Rating' },
+                { id: 'runtimeAndSeasons', label: 'Runtime & Seasons' },
+                { id: 'status', label: 'Series Status' },
+                { id: 'upcomingEpisodeDate', label: 'Upcoming Episodes' },
+                { id: 'genres', label: 'Genres' },
+                { id: 'seerrAvailability', label: 'Seerr Availability' }
+            ];
+
             function loadButtonPicker(selector, buttons, order, hidden) {
                 var container = document.querySelector(selector);
                 if (!container) return;
@@ -5598,6 +5614,9 @@
                     setSelectValue('#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
                     setNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
                     // One picker stands in for all three form factors.
+                    loadButtonPicker('#DefaultDetailMetadataList', DETAIL_METADATA,
+                        defaults.detailMetadataOrderTv || defaults.detailMetadataOrderMobile || defaults.detailMetadataOrderDesktop || null,
+                        defaults.hiddenDetailMetadataTv || defaults.hiddenDetailMetadataMobile || defaults.hiddenDetailMetadataDesktop || null);
                     loadButtonPicker('#DefaultDetailButtonsList', DETAIL_BUTTONS,
                         defaults.detailButtonOrderTv || defaults.detailButtonOrderMobile || defaults.detailButtonOrderDesktop || null,
                         defaults.hiddenDetailButtonsTv || defaults.hiddenDetailButtonsMobile || defaults.hiddenDetailButtonsDesktop || null);
@@ -6091,6 +6110,13 @@
                         config.DefaultUserSettings.recommendationSystemSource = document.querySelector('#DefaultRecommendationSystemSource').value || null;
                         config.DefaultUserSettings.recommendationsApplyParentalRatingCap = getNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap');
                         // Clients read a different key per form factor, so one arrangement covers all three.
+                        var metaVal = getButtonPickerValue('#DefaultDetailMetadataList');
+                        config.DefaultUserSettings.detailMetadataOrderTv = metaVal.order;
+                        config.DefaultUserSettings.detailMetadataOrderMobile = metaVal.order;
+                        config.DefaultUserSettings.detailMetadataOrderDesktop = metaVal.order;
+                        config.DefaultUserSettings.hiddenDetailMetadataTv = metaVal.hidden;
+                        config.DefaultUserSettings.hiddenDetailMetadataMobile = metaVal.hidden;
+                        config.DefaultUserSettings.hiddenDetailMetadataDesktop = metaVal.hidden;
                         var btnVal = getButtonPickerValue('#DefaultDetailButtonsList');
                         config.DefaultUserSettings.detailButtonOrderTv = btnVal.order;
                         config.DefaultUserSettings.detailButtonOrderMobile = btnVal.order;

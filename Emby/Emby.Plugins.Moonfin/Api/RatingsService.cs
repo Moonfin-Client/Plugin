@@ -20,6 +20,8 @@ namespace Emby.Plugins.Moonfin.Api
 
         private static readonly ConcurrentDictionary<string, (object Response, DateTimeOffset CachedAt)> _tmdbSeasonCache = new ConcurrentDictionary<string, (object, DateTimeOffset)>();
         private static readonly ConcurrentDictionary<string, (object Response, DateTimeOffset CachedAt)> _tmdbEpisodeCache = new ConcurrentDictionary<string, (object, DateTimeOffset)>();
+        private static readonly ConcurrentDictionary<string, (object Response, DateTimeOffset CachedAt)> _tmdbNextEpisodeCache = new ConcurrentDictionary<string, (object, DateTimeOffset)>();
+        private static readonly TimeSpan TmdbNextEpisodeCacheTtl = TimeSpan.FromHours(6);
 
         // Remember failed upstream lookups briefly so a burst of requests during a bad-key
         // or rate-limit spell doesn't hammer api.mdblist.com.
@@ -357,6 +359,51 @@ namespace Emby.Plugins.Moonfin.Api
             }
         }
 
+        public async Task<object?> Get(GetTmdbNextEpisodeRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.TmdbId))
+                return Json(400, new { success = false, error = "Missing required parameter: tmdbId" });
+
+            var apiKey = await GetUserTmdbApiKey().ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(apiKey))
+                return Json(new { success = false, error = "No TMDB API key configured." });
+
+            var cacheKey = request.TmdbId.Trim();
+            if (_tmdbNextEpisodeCache.TryGetValue(cacheKey, out var cached) && DateTimeOffset.UtcNow - cached.CachedAt < TmdbNextEpisodeCacheTtl)
+                return Json(cached.Response);
+
+            try
+            {
+                var url = $"https://api.themoviedb.org/3/tv/{Uri.EscapeDataString(cacheKey)}";
+                using var client = CreateTmdbClient();
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                MoonfinHttp.ApplyTmdbAuth(req, apiKey!);
+                using var response = await client.SendAsync(req).ConfigureAwait(false);
+
+                if ((int)response.StatusCode == 429) return Json(new { success = false, error = "TMDB rate limit reached." });
+                if (!response.IsSuccessStatusCode) return Json(new { success = false, error = $"TMDB returned status {(int)response.StatusCode}" });
+
+                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var data = JsonSerializer.Deserialize<TmdbSeriesApiResponse>(json, JsonOpts);
+                var nextEp = data?.NextEpisodeToAir;
+
+                var result = new
+                {
+                    success = nextEp != null,
+                    airDate = nextEp?.AirDate,
+                    seasonNumber = nextEp?.SeasonNumber,
+                    episodeNumber = nextEp?.EpisodeNumber,
+                    name = nextEp?.Name
+                };
+                _tmdbNextEpisodeCache[cacheKey] = (result, DateTimeOffset.UtcNow);
+                return Json(result);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                return Json(new { success = false, error = "Failed to fetch from TMDB: " + ex.Message });
+            }
+        }
+
         public async Task<object?> Get(GetProductionCompaniesRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.TmdbId))
@@ -445,5 +492,12 @@ namespace Emby.Plugins.Moonfin.Api
     {
         [JsonPropertyName("name")] public string? Name { get; set; }
         [JsonPropertyName("episodes")] public List<TmdbEpisodeApiResponse>? Episodes { get; set; }
+    }
+
+    internal class TmdbSeriesApiResponse
+    {
+        [JsonPropertyName("id")] public int? Id { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("next_episode_to_air")] public TmdbEpisodeApiResponse? NextEpisodeToAir { get; set; }
     }
 }
