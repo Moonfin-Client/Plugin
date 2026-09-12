@@ -1078,20 +1078,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { type: 'favoritealbums', label: 'Favorite Albums' },
         { type: 'favoritesongs', label: 'Favorite Songs' },
         { type: 'genres', label: 'Genres' },
-        { type: 'playlists', label: 'Playlists' },
-        { type: 'seerr_shortcuts', label: 'Seerr Browse' },
-        { type: 'seerr_recent_requests', label: 'Seerr Recent Requests' },
-        { type: 'seerr_recently_added', label: 'Seerr Recently Added' },
-        { type: 'seerr_popular_movies', label: 'Seerr Popular Movies' },
-        { type: 'seerr_upcoming_movies', label: 'Seerr Upcoming Movies' },
-        { type: 'seerr_popular_series', label: 'Seerr Popular Series' },
-        { type: 'seerr_upcoming_series', label: 'Seerr Upcoming Series' },
-        { type: 'seerr_trending', label: 'Seerr Trending' },
-        { type: 'seerr_movie_genres', label: 'Seerr Movie Genres' },
-        { type: 'seerr_studios', label: 'Seerr Studios' },
-        { type: 'seerr_series_genres', label: 'Seerr Series Genres' },
-        { type: 'seerr_networks', label: 'Seerr Networks' },
-        { type: 'seerr_watchlist', label: 'Seerr Watchlist' }
+        { type: 'playlists', label: 'Playlists' }
     ];
 
     var HOME_LAYOUT_TABS = [
@@ -1102,24 +1089,48 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'seerr', label: 'Seerr' }
     ];
 
-    var HOME_LAYOUT_SEERR_TYPES = {
-        seerr_shortcuts: true,
-        seerr_recent_requests: true,
-        seerr_recently_added: true,
-        seerr_popular_movies: true,
-        seerr_upcoming_movies: true,
-        seerr_popular_series: true,
-        seerr_upcoming_series: true,
-        seerr_trending: true,
-        seerr_movie_genres: true,
-        seerr_studios: true,
-        seerr_series_genres: true,
-        seerr_networks: true,
-        seerr_watchlist: true
-    };
+    function isSeerrSliderSection(section) {
+        return !!section && (section.kind === 'seerrSlider' ||
+            (section.kind === 'pluginDynamic' && section.pluginSource === 'seerr') ||
+            section.type === 'seerr_slider');
+    }
 
-    function isSeerrHomeSectionType(type) {
-        return !!HOME_LAYOUT_SEERR_TYPES[type];
+    function seerrSliderIdOf(section) {
+        if (!section) return '';
+        if (section.sliderId) return String(section.sliderId);
+        if (section.pluginAdditionalData) return String(section.pluginAdditionalData);
+        return '';
+    }
+
+    function seerrSliderTypeOf(section) {
+        if (!section || section.sliderType == null || section.sliderType === '') return null;
+        var n = Number(section.sliderType);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function seerrSliderLiveTitle(view, section) {
+        var state = getHomeLayoutState(view);
+        var sliders = state.seerrDiscoverSliders || [];
+        var id = seerrSliderIdOf(section);
+        if (id === 'shortcuts') {
+            return (section.pluginDisplayText || 'Seerr Browse').trim();
+        }
+        for (var i = 0; i < sliders.length; i++) {
+            if (String(sliders[i].id) !== id) continue;
+            return (sliders[i].title || '').trim();
+        }
+        return (section.pluginDisplayText || '').trim();
+    }
+
+    function seerrSliderLabel(slider) {
+        var title = (slider && slider.title ? String(slider.title) : '').trim();
+        return title || 'Seerr slider';
+    }
+
+    function isSeerrSliderType(type) {
+        var n = Number(type);
+        if (!Number.isFinite(n)) return false;
+        return n >= 1;
     }
 
     function getHomeLayoutState(view) {
@@ -1139,8 +1150,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return HOME_SECTION_DEFINITIONS.find(function (row) { return row.type === type; }) || null;
     }
 
-    function homeSectionLabel(section) {
+    function homeSectionLabel(view, section) {
         if (!section) return 'Unknown row';
+        if (isSeerrSliderSection(section)) {
+            return seerrSliderLiveTitle(view, section) ||
+                section.pluginDisplayText ||
+                'Seerr slider';
+        }
         if (section.kind === 'pluginDynamic') {
             return section.pluginDisplayText || section.pluginSection || 'Dynamic row';
         }
@@ -1150,8 +1166,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     function homeSectionMeta(section) {
         if (!section) return 'Basics';
+        if (isSeerrSliderSection(section)) return 'Seerr';
         if (section.kind !== 'pluginDynamic') {
-            return isSeerrHomeSectionType(section.type) ? 'Seerr' : 'Basics';
+            return 'Basics';
         }
         if (section.pluginSource === 'collections') return 'Collection';
         if (section.pluginSource === 'playlists') return 'Playlist';
@@ -1161,8 +1178,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function homeSectionBadgeClass(section) {
+        if (isSeerrSliderSection(section)) {
+            return 'homeLayoutBadge-seerr';
+        }
         if (!section || section.kind !== 'pluginDynamic') {
-            if (section && isSeerrHomeSectionType(section.type)) return 'homeLayoutBadge-seerr';
             return 'homeLayoutBadge-builtin';
         }
         if (section.pluginSource === 'collections') return 'homeLayoutBadge-collections';
@@ -1173,6 +1192,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     function homeSectionKey(section) {
         if (!section) return '';
+        if (isSeerrSliderSection(section)) {
+            var id = seerrSliderIdOf(section);
+            if (id) return 'seerrSlider:' + id;
+            var t = seerrSliderTypeOf(section);
+            if (t != null) return 'seerrSlider:type:' + t;
+            return 'seerrSlider:';
+        }
         if (section.kind === 'pluginDynamic') {
             return [
                 'pluginDynamic',
@@ -1202,7 +1228,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     function renumberHomeLayoutSections(state) {
         state.sections.forEach(function (section, index) {
-            section.enabled = true;
+            if (section.kind !== 'pluginDynamic' && section.kind !== 'seerrSlider') {
+                section.enabled = true;
+            }
             section.order = index;
         });
     }
@@ -1234,7 +1262,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }).forEach(function (section) {
             if (!section) return;
             var normalized;
-            if (section.kind === 'pluginDynamic') {
+            if (isSeerrSliderSection(section)) {
+                var sliderId = seerrSliderIdOf(section);
+                var sliderType = seerrSliderTypeOf(section);
+                if (!sliderId && sliderType == null) return;
+                normalized = {
+                    kind: 'seerrSlider',
+                    type: 'seerr_slider',
+                    enabled: section.enabled !== false,
+                    order: ordered.length
+                };
+                if (sliderId) normalized.sliderId = sliderId;
+                if (sliderType != null) normalized.sliderType = sliderType;
+                if (section.pluginDisplayText) {
+                    normalized.pluginDisplayText = section.pluginDisplayText;
+                }
+            } else if (section.kind === 'pluginDynamic') {
                 normalized = {
                     kind: 'pluginDynamic',
                     type: 'none',
@@ -1272,13 +1315,54 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             key: 'builtin:' + definition.type,
             tab: 'builtin',
             label: definition.label,
-            meta: isSeerrHomeSectionType(definition.type) ? 'Seerr' : 'Basics',
-            badgeClass: isSeerrHomeSectionType(definition.type) ? 'homeLayoutBadge-seerr' : 'homeLayoutBadge-builtin',
+            meta: 'Basics',
+            badgeClass: 'homeLayoutBadge-builtin',
             section: {
                 kind: 'builtin',
                 type: definition.type,
                 enabled: true,
                 order: 0
+            }
+        };
+    }
+
+    function createSeerrSliderCandidate(slider) {
+        var sliderId = String(slider.id);
+        var label = seerrSliderLabel(slider);
+        var candidate = {
+            key: 'seerrSlider:' + sliderId,
+            tab: 'seerr',
+            label: label,
+            meta: 'Seerr',
+            badgeClass: 'homeLayoutBadge-seerr',
+            section: {
+                kind: 'seerrSlider',
+                type: 'seerr_slider',
+                enabled: true,
+                order: 0,
+                sliderId: sliderId,
+                pluginDisplayText: label
+            }
+        };
+        var sliderType = Number(slider.type);
+        if (Number.isFinite(sliderType)) candidate.section.sliderType = sliderType;
+        return candidate;
+    }
+
+    function createSeerrShortcutsCandidate() {
+        return {
+            key: 'seerrSlider:shortcuts',
+            tab: 'seerr',
+            label: 'Seerr Browse',
+            meta: 'Seerr',
+            badgeClass: 'homeLayoutBadge-seerr',
+            section: {
+                kind: 'seerrSlider',
+                type: 'seerr_slider',
+                enabled: true,
+                order: 0,
+                sliderId: 'shortcuts',
+                pluginDisplayText: 'Seerr Browse'
             }
         };
     }
@@ -1305,12 +1389,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function initializeHomeLayoutAvailableRows(state) {
-        state.available.builtin = HOME_SECTION_DEFINITIONS
-            .filter(function (definition) { return !isSeerrHomeSectionType(definition.type); })
-            .map(createBuiltinCandidate);
-        state.available.seerr = HOME_SECTION_DEFINITIONS
-            .filter(function (definition) { return isSeerrHomeSectionType(definition.type); })
-            .map(createBuiltinCandidate);
+        state.available.builtin = HOME_SECTION_DEFINITIONS.map(createBuiltinCandidate);
+        state.available.seerr = [createSeerrShortcutsCandidate()];
     }
 
     function getHomeLayoutInsertIndex(state) {
@@ -1393,7 +1473,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             row.dataset.index = String(index);
             row.innerHTML =
                 '<div class="homeLayoutRowText">' +
-                '<div class="homeLayoutRowTitle">' + esc(homeSectionLabel(section)) + '</div>' +
+                '<div class="homeLayoutRowTitle">' + esc(homeSectionLabel(view, section)) + '</div>' +
                 '<span class="homeLayoutBadge ' + homeSectionBadgeClass(section) + '">' + esc(homeSectionMeta(section)) + '</span>' +
                 '</div>' +
                 '<button type="button" class="homeLayoutIconButton" data-action="up" title="Move up"' + (index === 0 ? ' disabled' : '') + '>&#x2191;</button>' +
@@ -1534,6 +1614,35 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         loadHomeLayoutCollections(view);
         loadHomeLayoutPlaylists(view);
         loadHomeLayoutGenres(view);
+        loadHomeLayoutSeerrSliders(view);
+    }
+
+    function seerrBuiltinCandidates() {
+        return [createSeerrShortcutsCandidate()];
+    }
+
+    function loadHomeLayoutSeerrSliders(view) {
+        var serverId = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        fetch(serverId + '/Moonfin/Seerr/Api/settings/discover', {
+            method: 'GET',
+            headers: moonfinAuthHeaders()
+        }).then(function (response) {
+            if (!response.ok) return [];
+            return response.json();
+        }).then(function (data) {
+            var sliders = Array.isArray(data) ? data : [];
+            var state = getHomeLayoutState(view);
+            state.seerrDiscoverSliders = sliders;
+            var candidates = sliders.filter(function (slider) {
+                if (!slider || slider.enabled === false || !slider.id) return false;
+                return isSeerrSliderType(slider.type);
+            }).map(createSeerrSliderCandidate);
+            setHomeLayoutAvailable(view, 'seerr', seerrBuiltinCandidates().concat(candidates));
+            renderHomeSectionsEditor(view);
+        }).catch(function () {
+            getHomeLayoutState(view).seerrDiscoverSliders = [];
+            setHomeLayoutAvailable(view, 'seerr', seerrBuiltinCandidates());
+        });
     }
 
     function setHomeLayoutAvailable(view, tab, candidates) {
@@ -1635,15 +1744,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         if (state.sections.length === 0) return null;
         renumberHomeLayoutSections(state);
         return state.sections.map(function (section) {
+            var isSlider = section.kind === 'seerrSlider';
             var isDynamic = section.kind === 'pluginDynamic';
             var result = {
-                type: isDynamic ? 'none' : section.type,
+                type: isSlider ? (section.type || 'seerr_slider') : (isDynamic ? 'none' : section.type),
                 // Dynamic rows stay in the editor when disabled, unlike builtins, so writing
                 // them all back as enabled would switch every custom row on.
-                enabled: isDynamic ? section.enabled !== false : true,
+                enabled: (isDynamic || isSlider) ? section.enabled !== false : true,
                 order: section.order
             };
-            if (isDynamic) {
+            if (isSlider) {
+                result.kind = 'seerrSlider';
+                result.type = 'seerr_slider';
+                result.sliderId = section.sliderId;
+                if (section.sliderType != null) result.sliderType = section.sliderType;
+                if (section.pluginDisplayText) result.pluginDisplayText = section.pluginDisplayText;
+            } else if (isDynamic) {
                 result.kind = 'pluginDynamic';
                 result.pluginSource = section.pluginSource || 'hss';
                 // Custom rows have no server of their own and the client keys them on this,

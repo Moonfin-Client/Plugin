@@ -3414,19 +3414,6 @@
                 { type: 'sinceyouwatched4', label: "Since You Watched 4" },
                 { type: 'sinceyouwatched5', label: "Since You Watched 5" },
                 { type: 'rewatch', label: "Rewatch" },
-                { type: 'seerr_shortcuts', label: 'Seerr Browse' },
-                { type: 'seerr_recent_requests', label: 'Seerr Recent Requests' },
-                { type: 'seerr_recently_added', label: 'Seerr Recently Added' },
-                { type: 'seerr_popular_movies', label: 'Seerr Popular Movies' },
-                { type: 'seerr_upcoming_movies', label: 'Seerr Upcoming Movies' },
-                { type: 'seerr_popular_series', label: 'Seerr Popular Series' },
-                { type: 'seerr_upcoming_series', label: 'Seerr Upcoming Series' },
-                { type: 'seerr_trending', label: 'Seerr Trending' },
-                { type: 'seerr_movie_genres', label: 'Seerr Movie Genres' },
-                { type: 'seerr_studios', label: 'Seerr Studios' },
-                { type: 'seerr_series_genres', label: 'Seerr Series Genres' },
-                { type: 'seerr_networks', label: 'Seerr Networks' },
-                { type: 'seerr_watchlist', label: 'Seerr Watchlist' },
                 { type: 'imdb_top_250_movies', label: 'IMDB Top 250 Movies' },
                 { type: 'imdb_top_250_tv_shows', label: 'IMDB Top 250 Shows' },
                 { type: 'imdb_most_popular_movies', label: 'IMDB Most Popular Movies' },
@@ -4026,24 +4013,6 @@
                 { id: 'external', label: 'External Lists' }
             ];
 
-            var HOME_LAYOUT_SEERR_TYPES = {
-                seerr_shortcuts: true,
-                seerr_recent_requests: true,
-                seerr_recently_added: true,
-                seerr_popular_movies: true,
-                seerr_upcoming_movies: true,
-                seerr_popular_series: true,
-                seerr_upcoming_series: true,
-                seerr_trending: true,
-                seerr_movie_genres: true,
-                seerr_studios: true,
-                seerr_series_genres: true,
-                seerr_networks: true,
-                seerr_watchlist: true,
-                radarr_calendar: true,
-                sonarr_calendar: true
-            };
-
             var HOME_LAYOUT_EXTERNAL_LISTS = {
                 imdb_top_250_movies: true,
                 imdb_top_250_tv_shows: true,
@@ -4066,8 +4035,47 @@
                 tmdb_trending_all_weekly: true
             };
 
-            function isSeerrHomeSectionType(type) {
-                return !!HOME_LAYOUT_SEERR_TYPES[type];
+            function isSeerrSliderSection(section) {
+                return !!section && (section.kind === 'seerrSlider' ||
+                    (section.kind === 'pluginDynamic' && section.pluginSource === 'seerr') ||
+                    section.type === 'seerr_slider');
+            }
+
+            function seerrSliderIdOf(section) {
+                if (!section) return '';
+                if (section.sliderId) return String(section.sliderId);
+                if (section.pluginAdditionalData) return String(section.pluginAdditionalData);
+                return '';
+            }
+
+            function seerrSliderTypeOf(section) {
+                if (!section || section.sliderType == null || section.sliderType === '') return null;
+                var n = Number(section.sliderType);
+                return Number.isFinite(n) ? n : null;
+            }
+
+            function seerrSliderLiveTitle(section) {
+                var sliders = HOME_LAYOUT_STATE.seerrDiscoverSliders || [];
+                var id = seerrSliderIdOf(section);
+                if (id === 'shortcuts') {
+                    return (section.pluginDisplayText || 'Seerr Browse').trim();
+                }
+                for (var i = 0; i < sliders.length; i++) {
+                    if (String(sliders[i].id) !== id) continue;
+                    return (sliders[i].title || '').trim();
+                }
+                return (section.pluginDisplayText || '').trim();
+            }
+
+            function seerrSliderLabel(slider) {
+                var title = (slider && slider.title ? String(slider.title) : '').trim();
+                return title || 'Seerr slider';
+            }
+
+            function isSeerrSliderType(type) {
+                var n = Number(type);
+                if (!Number.isFinite(n)) return false;
+                return n >= 1;
             }
 
             function isExternalHomeSectionType(type) {
@@ -4103,6 +4111,11 @@
 
             function homeSectionLabel(section) {
                 if (!section) return 'Unknown row';
+                if (isSeerrSliderSection(section)) {
+                    return seerrSliderLiveTitle(section) ||
+                        section.pluginDisplayText ||
+                        'Seerr slider';
+                }
                 if (section.kind === 'pluginDynamic') {
                     return section.pluginDisplayText || section.pluginSection || 'Dynamic row';
                 }
@@ -4112,8 +4125,9 @@
 
             function homeSectionMeta(section) {
                 if (!section) return 'Basics';
+                if (isSeerrSliderSection(section)) return 'Seerr';
                 if (section.kind !== 'pluginDynamic') {
-                    return isSeerrHomeSectionType(section.type) ? 'Seerr' : (isExternalHomeSectionType(section.type) ? 'External Lists' : 'Basics');
+                    return isExternalHomeSectionType(section.type) ? 'External Lists' : 'Basics';
                 }
                 if (section.pluginSource === 'collections') return 'Collection';
                 if (section.pluginSource === 'playlists') return 'Playlist';
@@ -4122,8 +4136,10 @@
             }
 
             function homeSectionBadgeClass(section) {
+                if (isSeerrSliderSection(section)) {
+                    return 'homeLayoutBadge-seerr';
+                }
                 if (!section || section.kind !== 'pluginDynamic') {
-                    if (section && isSeerrHomeSectionType(section.type)) return 'homeLayoutBadge-seerr';
                     if (section && isExternalHomeSectionType(section.type)) return 'homeLayoutBadge-external';
                     return 'homeLayoutBadge-builtin';
                 }
@@ -4135,6 +4151,13 @@
 
             function homeSectionKey(section) {
                 if (!section) return '';
+                if (isSeerrSliderSection(section)) {
+                    var id = seerrSliderIdOf(section);
+                    if (id) return 'seerrSlider:' + id;
+                    var t = seerrSliderTypeOf(section);
+                    if (t != null) return 'seerrSlider:type:' + t;
+                    return 'seerrSlider:';
+                }
                 if (section.kind === 'pluginDynamic') {
                     return [
                         'pluginDynamic',
@@ -4164,7 +4187,9 @@
 
             function renumberHomeLayoutSections() {
                 HOME_LAYOUT_STATE.sections.forEach(function(section, index) {
-                    section.enabled = true;
+                    if (section.kind !== 'pluginDynamic' && section.kind !== 'seerrSlider') {
+                        section.enabled = true;
+                    }
                     section.order = index;
                 });
             }
@@ -4196,7 +4221,22 @@
                 }).forEach(function(section) {
                     if (!section) return;
                     var normalized;
-                    if (section.kind === 'pluginDynamic') {
+                    if (isSeerrSliderSection(section)) {
+                        var sliderId = seerrSliderIdOf(section);
+                        var sliderType = seerrSliderTypeOf(section);
+                        if (!sliderId && sliderType == null) return;
+                        normalized = {
+                            kind: 'seerrSlider',
+                            type: 'seerr_slider',
+                            enabled: section.enabled !== false,
+                            order: ordered.length
+                        };
+                        if (sliderId) normalized.sliderId = sliderId;
+                        if (sliderType != null) normalized.sliderType = sliderType;
+                        if (section.pluginDisplayText) {
+                            normalized.pluginDisplayText = section.pluginDisplayText;
+                        }
+                    } else if (section.kind === 'pluginDynamic') {
                         normalized = {
                             kind: 'pluginDynamic',
                             type: 'none',
@@ -4234,13 +4274,54 @@
                     key: 'builtin:' + definition.type,
                     tab: 'builtin',
                     label: definition.label,
-                    meta: isSeerrHomeSectionType(definition.type) ? 'Seerr' : (isExternalHomeSectionType(definition.type) ? 'External Lists' : 'Basics'),
-                    badgeClass: isSeerrHomeSectionType(definition.type) ? 'homeLayoutBadge-seerr' : (isExternalHomeSectionType(definition.type) ? 'homeLayoutBadge-external' : 'homeLayoutBadge-builtin'),
+                    meta: isExternalHomeSectionType(definition.type) ? 'External Lists' : 'Basics',
+                    badgeClass: isExternalHomeSectionType(definition.type) ? 'homeLayoutBadge-external' : 'homeLayoutBadge-builtin',
                     section: {
                         kind: 'builtin',
                         type: definition.type,
                         enabled: true,
                         order: 0
+                    }
+                };
+            }
+
+            function createSeerrSliderCandidate(slider) {
+                var sliderId = String(slider.id);
+                var label = seerrSliderLabel(slider);
+                var candidate = {
+                    key: 'seerrSlider:' + sliderId,
+                    tab: 'seerr',
+                    label: label,
+                    meta: 'Seerr',
+                    badgeClass: 'homeLayoutBadge-seerr',
+                    section: {
+                        kind: 'seerrSlider',
+                        type: 'seerr_slider',
+                        enabled: true,
+                        order: 0,
+                        sliderId: sliderId,
+                        pluginDisplayText: label
+                    }
+                };
+                var sliderType = Number(slider.type);
+                if (Number.isFinite(sliderType)) candidate.section.sliderType = sliderType;
+                return candidate;
+            }
+
+            function createSeerrShortcutsCandidate() {
+                return {
+                    key: 'seerrSlider:shortcuts',
+                    tab: 'seerr',
+                    label: 'Seerr Browse',
+                    meta: 'Seerr',
+                    badgeClass: 'homeLayoutBadge-seerr',
+                    section: {
+                        kind: 'seerrSlider',
+                        type: 'seerr_slider',
+                        enabled: true,
+                        order: 0,
+                        sliderId: 'shortcuts',
+                        pluginDisplayText: 'Seerr Browse'
                     }
                 };
             }
@@ -4268,11 +4349,9 @@
 
             function initializeHomeLayoutAvailableRows() {
                 HOME_LAYOUT_STATE.available.builtin = HOME_SECTION_DEFINITIONS
-                    .filter(function(definition) { return (!isSeerrHomeSectionType(definition.type) && !isExternalHomeSectionType(definition.type)); })
+                    .filter(function(definition) { return !isExternalHomeSectionType(definition.type); })
                     .map(createBuiltinCandidate);
-                HOME_LAYOUT_STATE.available.seerr = HOME_SECTION_DEFINITIONS
-                    .filter(function(definition) { return isSeerrHomeSectionType(definition.type); })
-                    .map(createBuiltinCandidate);
+                HOME_LAYOUT_STATE.available.seerr = [createSeerrShortcutsCandidate()];
                 HOME_LAYOUT_STATE.available.external = HOME_SECTION_DEFINITIONS
                     .filter(function(definition) { return isExternalHomeSectionType(definition.type); })
                     .map(createBuiltinCandidate);
@@ -4499,6 +4578,34 @@
                 loadHomeLayoutCollections();
                 loadHomeLayoutPlaylists();
                 loadHomeLayoutGenres();
+                loadHomeLayoutSeerrSliders();
+            }
+
+            function seerrBuiltinCandidates() {
+                return [createSeerrShortcutsCandidate()];
+            }
+
+            function loadHomeLayoutSeerrSliders() {
+                var serverId = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                fetch(serverId + '/Moonfin/Seerr/Api/settings/discover', {
+                    method: 'GET',
+                    headers: getMoonfinAuthHeaders()
+                }).then(function(response) {
+                    if (!response.ok) return [];
+                    return response.json();
+                }).then(function(data) {
+                    var sliders = Array.isArray(data) ? data : [];
+                    HOME_LAYOUT_STATE.seerrDiscoverSliders = sliders;
+                    var candidates = sliders.filter(function(slider) {
+                        if (!slider || slider.enabled === false || !slider.id) return false;
+                        return isSeerrSliderType(slider.type);
+                    }).map(createSeerrSliderCandidate);
+                    setHomeLayoutAvailable('seerr', seerrBuiltinCandidates().concat(candidates));
+                    renderHomeSectionsEditor();
+                }).catch(function() {
+                    HOME_LAYOUT_STATE.seerrDiscoverSliders = [];
+                    setHomeLayoutAvailable('seerr', seerrBuiltinCandidates());
+                });
             }
 
             function setHomeLayoutAvailable(tab, candidates) {
@@ -4598,15 +4705,22 @@
                 if (HOME_LAYOUT_STATE.sections.length === 0) return null;
                 renumberHomeLayoutSections();
                 return HOME_LAYOUT_STATE.sections.map(function(section) {
+                    var isSlider = section.kind === 'seerrSlider';
                     var isDynamic = section.kind === 'pluginDynamic';
                     var result = {
-                        type: isDynamic ? 'none' : section.type,
+                        type: isSlider ? (section.type || 'seerr_slider') : (isDynamic ? 'none' : section.type),
                         // Dynamic rows stay in the editor when disabled, unlike builtins, so
                         // writing them all back as enabled would switch every custom row on.
-                        enabled: isDynamic ? section.enabled !== false : true,
+                        enabled: (isDynamic || isSlider) ? section.enabled !== false : true,
                         order: section.order
                     };
-                    if (isDynamic) {
+                    if (isSlider) {
+                        result.kind = 'seerrSlider';
+                        result.type = 'seerr_slider';
+                        result.sliderId = section.sliderId;
+                        if (section.sliderType != null) result.sliderType = section.sliderType;
+                        if (section.pluginDisplayText) result.pluginDisplayText = section.pluginDisplayText;
+                    } else if (isDynamic) {
                         result.kind = 'pluginDynamic';
                         result.pluginSource = section.pluginSource;
                         // Custom rows have no server of their own and the client keys them on
