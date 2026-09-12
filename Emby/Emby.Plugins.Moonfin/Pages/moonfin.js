@@ -1144,8 +1144,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     function isSeerrSliderType(type) {
         var n = Number(type);
         if (!Number.isFinite(n)) return false;
-        if (n >= 1 && n <= 12) return false;
-        if (n >= 38 && n <= 43) return false;
         return n > 12;
     }
 
