@@ -665,16 +665,48 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // ISO 639-2 codes, matching the table Core resolves track languages against.
     // The audio and subtitle pickers share the list so the two stay in sync.
     var LANGUAGE_OPTIONS = [
-        ['auto', 'Server Default'], ['eng', 'English'], ['spa', 'Spanish'],
-        ['fra', 'French'], ['deu', 'German'], ['ita', 'Italian'],
-        ['jpn', 'Japanese'], ['kor', 'Korean'], ['zho', 'Chinese'],
-        ['rus', 'Russian'], ['por', 'Portuguese'], ['ara', 'Arabic'],
-        ['hin', 'Hindi'], ['nld', 'Dutch'], ['pol', 'Polish'],
-        ['swe', 'Swedish'], ['nor', 'Norwegian'], ['dan', 'Danish'],
-        ['fin', 'Finnish'], ['tha', 'Thai'], ['tur', 'Turkish'],
-        ['heb', 'Hebrew'], ['ces', 'Czech'], ['ell', 'Greek'],
-        ['ron', 'Romanian'], ['hun', 'Hungarian'], ['ukr', 'Ukrainian'],
-        ['ind', 'Indonesian'], ['vie', 'Vietnamese']
+        ['auto', 'Server Default'],
+        ['ara', 'Arabic'], ['dan', 'Danish'], ['deu', 'German'], ['eng', 'English'],
+        ['fin', 'Finnish'], ['fra', 'French'], ['hin', 'Hindi'], ['ita', 'Italian'],
+        ['jpn', 'Japanese'], ['kor', 'Korean'], ['nld', 'Dutch'], ['nor', 'Norwegian'],
+        ['pol', 'Polish'], ['por', 'Portuguese'], ['rus', 'Russian'], ['spa', 'Spanish'],
+        ['swe', 'Swedish'], ['tha', 'Thai'], ['tur', 'Turkish'], ['zho', 'Chinese'],
+        ['afr', 'Afrikaans'], ['aka', 'Akan'], ['amh', 'Amharic'], ['asm', 'Assamese'],
+        ['aze', 'Azerbaijani'], ['bak', 'Bashkir'], ['bel', 'Belarusian'], ['bem', 'Bemba'],
+        ['ben', 'Bengali'], ['bod', 'Tibetan'], ['bos', 'Bosnian'], ['bre', 'Breton'],
+        ['bul', 'Bulgarian'], ['cat', 'Catalan'], ['ces', 'Czech'], ['cha', 'Chamorro'],
+        ['che', 'Chechen'], ['chv', 'Chuvash'], ['cos', 'Corsican'], ['cre', 'Cree'],
+        ['crh', 'Crimean Tatar'], ['cym', 'Welsh'], ['div', 'Divehi'], ['dzo', 'Dzongkha'],
+        ['ell', 'Greek'], ['est', 'Estonian'], ['eus', 'Basque'], ['ewe', 'Ewe'],
+        ['fao', 'Faroese'], ['fas', 'Persian'], ['fij', 'Fijian'], ['fil', 'Filipino'],
+        ['frc', 'French (Canada)'], ['ful', 'Fulah'], ['gla', 'Scottish Gaelic'], ['gle', 'Irish'],
+        ['glg', 'Galician'], ['grn', 'Guarani'], ['guj', 'Gujarati'], ['hat', 'Haitian Creole'],
+        ['hau', 'Hausa'], ['haw', 'Hawaiian'], ['heb', 'Hebrew'], ['hil', 'Hiligaynon'],
+        ['hmn', 'Hmong'], ['hrv', 'Croatian'], ['hun', 'Hungarian'], ['hye', 'Armenian'],
+        ['ibo', 'Igbo'], ['iii', 'Sichuan Yi'], ['iku', 'Inuktitut'], ['ind', 'Indonesian'],
+        ['isl', 'Icelandic'], ['jav', 'Javanese'], ['kal', 'Kalaallisut'], ['kan', 'Kannada'],
+        ['kas', 'Kashmiri'], ['kat', 'Georgian'], ['kau', 'Kanuri'], ['kaz', 'Kazakh'],
+        ['khm', 'Khmer'], ['kik', 'Kikuyu'], ['kin', 'Kinyarwanda'], ['kir', 'Kyrgyz'],
+        ['kok', 'Konkani'], ['kom', 'Komi'], ['kon', 'Kongo'], ['kua', 'Kuanyama'],
+        ['kur', 'Kurdish'], ['lao', 'Lao'], ['lat', 'Latin'], ['lav', 'Latvian'],
+        ['lim', 'Limburgish'], ['lin', 'Lingala'], ['lit', 'Lithuanian'], ['ltz', 'Luxembourgish'],
+        ['lug', 'Ganda'], ['luo', 'Luo'], ['mal', 'Malayalam'], ['mar', 'Marathi'],
+        ['mkd', 'Macedonian'], ['mlg', 'Malagasy'], ['mlt', 'Maltese'], ['mon', 'Mongolian'],
+        ['mri', 'Maori'], ['msa', 'Malay'], ['mya', 'Burmese'], ['nav', 'Navajo'],
+        ['nbl', 'South Ndebele'], ['nde', 'North Ndebele'], ['ndo', 'Ndonga'], ['nds', 'Low German'],
+        ['nep', 'Nepali'], ['new', 'Newari'], ['nno', 'Norwegian Nynorsk'], ['nob', 'Norwegian Bokmål'],
+        ['nya', 'Chichewa'], ['oci', 'Occitan'], ['oji', 'Ojibwa'], ['ori', 'Oriya'],
+        ['orm', 'Oromo'], ['oss', 'Ossetian'], ['pan', 'Punjabi'], ['pus', 'Pashto'],
+        ['que', 'Quechua'], ['roh', 'Romansh'], ['ron', 'Romanian'], ['run', 'Rundi'],
+        ['san', 'Sanskrit'], ['sin', 'Sinhala'], ['slk', 'Slovak'], ['slv', 'Slovenian'],
+        ['sme', 'Northern Sami'], ['sna', 'Shona'], ['snd', 'Sindhi'], ['som', 'Somali'],
+        ['sot', 'Southern Sotho'], ['sqi', 'Albanian'], ['srd', 'Sardinian'], ['srp', 'Serbian'],
+        ['ssw', 'Swati'], ['sun', 'Sundanese'], ['swa', 'Swahili'], ['syr', 'Syriac'],
+        ['tam', 'Tamil'], ['tat', 'Tatar'], ['tel', 'Telugu'], ['tgk', 'Tajik'],
+        ['tgl', 'Tagalog'], ['tir', 'Tigrinya'], ['tsn', 'Tswana'], ['tso', 'Tsonga'],
+        ['tuk', 'Turkmen'], ['uig', 'Uyghur'], ['ukr', 'Ukrainian'], ['urd', 'Urdu'],
+        ['uzb', 'Uzbek'], ['vie', 'Vietnamese'], ['wol', 'Wolof'], ['xho', 'Xhosa'],
+        ['yid', 'Yiddish'], ['yor', 'Yoruba'], ['zha', 'Zhuang'], ['zul', 'Zulu']
     ];
 
     function fillLanguageSelect(view, selector) {
@@ -1972,12 +2004,16 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             fillLanguageSelect(view, '#DefaultDefaultAudioLanguage');
             fillLanguageSelect(view, '#DefaultDefaultSubtitleLanguage');
+            fillLanguageSelect(view, '#DefaultFallbackAudioLanguage');
+            fillLanguageSelect(view, '#DefaultFallbackSubtitleLanguage');
             setSelectValue(view, '#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
+            setSelectValue(view, '#DefaultFallbackAudioLanguage', defaults.fallbackAudioLanguage, 'Configured language');
             setNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
             setNullableBoolSelect(view, '#DefaultPreferAudioDescription', defaults.preferAudioDescription);
 
             setSelectValue(view, '#DefaultSubtitleMode', defaults.subtitleMode, 'Configured mode');
             setSelectValue(view, '#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
+            setSelectValue(view, '#DefaultFallbackSubtitleLanguage', defaults.fallbackSubtitleLanguage, 'Configured language');
             setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
 
             setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
@@ -2262,11 +2298,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.skipForwardLength = getNullableIntInput(view, '#DefaultSkipForwardLength');
 
             d.defaultAudioLanguage = view.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
+            d.fallbackAudioLanguage = view.querySelector('#DefaultFallbackAudioLanguage').value.trim() || null;
             d.preferDefaultAudioTrack = getNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack');
             d.preferAudioDescription = getNullableBoolSelect(view, '#DefaultPreferAudioDescription');
 
             d.subtitleMode = view.querySelector('#DefaultSubtitleMode').value || null;
             d.defaultSubtitleLanguage = view.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
+            d.fallbackSubtitleLanguage = view.querySelector('#DefaultFallbackSubtitleLanguage').value.trim() || null;
             d.preferSdhSubtitles = getNullableBoolSelect(view, '#DefaultPreferSdhSubtitles');
 
             d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
