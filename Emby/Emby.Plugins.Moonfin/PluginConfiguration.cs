@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Emby.Plugins.Moonfin.Models;
+using Emby.Plugins.Moonfin.Services;
 using MediaBrowser.Model.Plugins;
 
 namespace Emby.Plugins.Moonfin
@@ -187,6 +188,11 @@ namespace Emby.Plugins.Moonfin
                 JellyseerrUrl = null;
                 JellyseerrEnabled = false;
                 JellyseerrDisplayName = null;
+                changed = true;
+            }
+
+            if (MoonfinSettingsService.MigrateSeerrHomeSections(DefaultUserSettings))
+            {
                 changed = true;
             }
 

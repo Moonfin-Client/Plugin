@@ -84,12 +84,18 @@ public class MoonfinSettingsService
                 return null;
             }
 
+            var persist = false;
             if (settings.NeedsMigration)
             {
                 _logger.LogInformation("Migrating v1 settings to v2 for user {UserId}", userId);
                 settings = MigrateV1ToV2(settings);
+                persist = true;
+            }
 
-                // Persist the migrated version
+            if (MigrateSeerrHomeSections(settings)) persist = true;
+
+            if (persist)
+            {
                 var migratedJson = JsonSerializer.Serialize(settings, _jsonOptions);
                 AtomicFile.WriteAllText(filePath, migratedJson);
             }
@@ -302,6 +308,8 @@ public class MoonfinSettingsService
                 finalSettings = settings;
             }
 
+            MigrateSeerrHomeSections(finalSettings);
+
             // Update metadata
             StripServerWideKeys(finalSettings);
             finalSettings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -380,6 +388,8 @@ public class MoonfinSettingsService
             }
 
             var savedProfile = existingProfile ?? profile;
+
+            MigrateSeerrHomeSections(settings);
 
             // Update metadata
             StripServerWideKeys(settings);
@@ -1352,5 +1362,103 @@ public class MoonfinSettingsService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Rewrites stored <c>seerr_trending</c> home types to sliders. Called from
+    /// the same persist-on-load path as <see cref="MigrateV1ToV2"/>.
+    /// </summary>
+    internal static bool MigrateSeerrHomeSections(MoonfinUserSettings? settings)
+    {
+        if (settings == null) return false;
+        var changed = false;
+        changed |= MigrateSeerrHomeSections(settings.Global);
+        changed |= MigrateSeerrHomeSections(settings.Desktop);
+        changed |= MigrateSeerrHomeSections(settings.Mobile);
+        changed |= MigrateSeerrHomeSections(settings.Tv);
+        return changed;
+    }
+
+    internal static bool MigrateSeerrHomeSections(MoonfinSettingsProfile? profile)
+    {
+        if (profile == null) return false;
+        var changed = false;
+        if (profile.HomeSections != null)
+        {
+            foreach (var section in profile.HomeSections)
+            {
+                if (RewriteDeletedSeerrHomeType(section)) changed = true;
+            }
+        }
+
+        if (profile.HomeRowOrder == null) return changed;
+        var filtered = profile.HomeRowOrder.FindAll(name =>
+            string.IsNullOrEmpty(name) ||
+            !name.StartsWith("seerr_", StringComparison.OrdinalIgnoreCase));
+        if (filtered.Count == profile.HomeRowOrder.Count) return changed;
+        profile.HomeRowOrder = filtered.Count > 0 ? filtered : null;
+        return true;
+    }
+
+    static bool RewriteDeletedSeerrHomeType(MoonfinHomeSectionConfig section)
+    {
+        var id = section.SliderId;
+        if (!string.IsNullOrEmpty(id) &&
+            id.StartsWith("legacy:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (int.TryParse(id.AsSpan("legacy:".Length), out var fromId))
+            {
+                section.SliderType ??= fromId;
+            }
+
+            section.SliderId = null;
+            return true;
+        }
+
+        var type = section.Type;
+        if (string.IsNullOrEmpty(type) ||
+            string.Equals(section.Kind, "seerrSlider", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(type, "seerr_slider", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (type.Equals("seerr_shortcuts", StringComparison.OrdinalIgnoreCase))
+        {
+            section.Kind = "seerrSlider";
+            section.Type = "seerr_slider";
+            section.SliderId = "shortcuts";
+            section.SliderType = null;
+            if (string.IsNullOrWhiteSpace(section.PluginDisplayText))
+            {
+                section.PluginDisplayText = "Seerr Browse";
+            }
+
+            return true;
+        }
+
+        int sliderType;
+        switch (type)
+        {
+            case "seerr_recently_added": sliderType = 1; break;
+            case "seerr_recent_requests": sliderType = 2; break;
+            case "seerr_watchlist": sliderType = 3; break;
+            case "seerr_trending": sliderType = 4; break;
+            case "seerr_popular_movies": sliderType = 5; break;
+            case "seerr_movie_genres": sliderType = 6; break;
+            case "seerr_upcoming_movies": sliderType = 7; break;
+            case "seerr_studios": sliderType = 8; break;
+            case "seerr_popular_series": sliderType = 9; break;
+            case "seerr_series_genres": sliderType = 10; break;
+            case "seerr_upcoming_series": sliderType = 11; break;
+            case "seerr_networks": sliderType = 12; break;
+            default: return false;
+        }
+
+        section.Kind = "seerrSlider";
+        section.Type = "seerr_slider";
+        section.SliderId = null;
+        section.SliderType = sliderType;
+        return true;
     }
 }

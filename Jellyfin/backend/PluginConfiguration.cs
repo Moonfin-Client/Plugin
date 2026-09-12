@@ -1,6 +1,7 @@
 using System.Reflection;
 using MediaBrowser.Model.Plugins;
 using Moonfin.Server.Models;
+using Moonfin.Server.Services;
 
 namespace Moonfin.Server;
 
@@ -314,6 +315,11 @@ public class PluginConfiguration : BasePluginConfiguration
             JellyseerrUrl = null;
             JellyseerrEnabled = false;
             JellyseerrDisplayName = null;
+            changed = true;
+        }
+
+        if (MoonfinSettingsService.MigrateSeerrHomeSections(DefaultUserSettings))
+        {
             changed = true;
         }
 

@@ -1078,20 +1078,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { type: 'favoritealbums', label: 'Favorite Albums' },
         { type: 'favoritesongs', label: 'Favorite Songs' },
         { type: 'genres', label: 'Genres' },
-        { type: 'playlists', label: 'Playlists' },
-        { type: 'seerr_shortcuts', label: 'Seerr Browse' },
-        { type: 'seerr_recent_requests', label: 'Seerr Recent Requests' },
-        { type: 'seerr_recently_added', label: 'Seerr Recently Added' },
-        { type: 'seerr_popular_movies', label: 'Seerr Popular Movies' },
-        { type: 'seerr_upcoming_movies', label: 'Seerr Upcoming Movies' },
-        { type: 'seerr_popular_series', label: 'Seerr Popular Series' },
-        { type: 'seerr_upcoming_series', label: 'Seerr Upcoming Series' },
-        { type: 'seerr_trending', label: 'Seerr Trending' },
-        { type: 'seerr_movie_genres', label: 'Seerr Movie Genres' },
-        { type: 'seerr_studios', label: 'Seerr Studios' },
-        { type: 'seerr_series_genres', label: 'Seerr Series Genres' },
-        { type: 'seerr_networks', label: 'Seerr Networks' },
-        { type: 'seerr_watchlist', label: 'Seerr Watchlist' }
+        { type: 'playlists', label: 'Playlists' }
     ];
 
     var HOME_LAYOUT_TABS = [
@@ -1101,10 +1088,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'genres', label: 'Genres' },
         { id: 'seerr', label: 'Seerr' }
     ];
-
-    function isSeerrHomeSectionType(type) {
-        return !!(type && type.indexOf('seerr_') === 0);
-    }
 
     function isSeerrSliderSection(section) {
         return !!section && (section.kind === 'seerrSlider' ||
@@ -1129,6 +1112,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var state = getHomeLayoutState(view);
         var sliders = state.seerrDiscoverSliders || [];
         var id = seerrSliderIdOf(section);
+        if (id === 'shortcuts') {
+            return (section.pluginDisplayText || 'Seerr Browse').trim();
+        }
         for (var i = 0; i < sliders.length; i++) {
             if (String(sliders[i].id) !== id) continue;
             return (sliders[i].title || '').trim();
@@ -1144,7 +1130,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     function isSeerrSliderType(type) {
         var n = Number(type);
         if (!Number.isFinite(n)) return false;
-        return n > 12;
+        if (n >= 1017 && n <= 1022) return false;
+        return n >= 1;
     }
 
     function getHomeLayoutState(view) {
@@ -1180,7 +1167,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     function homeSectionMeta(section) {
         if (!section) return 'Basics';
-        if (isSeerrSliderSection(section) || isSeerrHomeSectionType(section.type)) return 'Seerr';
+        if (isSeerrSliderSection(section)) return 'Seerr';
         if (section.kind !== 'pluginDynamic') {
             return 'Basics';
         }
@@ -1192,7 +1179,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function homeSectionBadgeClass(section) {
-        if (isSeerrSliderSection(section) || (section && isSeerrHomeSectionType(section.type))) {
+        if (isSeerrSliderSection(section)) {
             return 'homeLayoutBadge-seerr';
         }
         if (!section || section.kind !== 'pluginDynamic') {
@@ -1207,7 +1194,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     function homeSectionKey(section) {
         if (!section) return '';
         if (isSeerrSliderSection(section)) {
-            return 'seerrSlider:' + seerrSliderIdOf(section);
+            var id = seerrSliderIdOf(section);
+            if (id) return 'seerrSlider:' + id;
+            var t = seerrSliderTypeOf(section);
+            if (t != null) return 'seerrSlider:type:' + t;
+            return 'seerrSlider:';
         }
         if (section.kind === 'pluginDynamic') {
             return [
@@ -1274,15 +1265,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             var normalized;
             if (isSeerrSliderSection(section)) {
                 var sliderId = seerrSliderIdOf(section);
-                if (!sliderId) return;
                 var sliderType = seerrSliderTypeOf(section);
+                if (!sliderId && sliderType == null) return;
                 normalized = {
                     kind: 'seerrSlider',
                     type: 'seerr_slider',
                     enabled: section.enabled !== false,
-                    order: ordered.length,
-                    sliderId: sliderId
+                    order: ordered.length
                 };
+                if (sliderId) normalized.sliderId = sliderId;
                 if (sliderType != null) normalized.sliderType = sliderType;
                 if (section.pluginDisplayText) {
                     normalized.pluginDisplayText = section.pluginDisplayText;
@@ -1325,8 +1316,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             key: 'builtin:' + definition.type,
             tab: 'builtin',
             label: definition.label,
-            meta: isSeerrHomeSectionType(definition.type) ? 'Seerr' : 'Basics',
-            badgeClass: isSeerrHomeSectionType(definition.type) ? 'homeLayoutBadge-seerr' : 'homeLayoutBadge-builtin',
+            meta: 'Basics',
+            badgeClass: 'homeLayoutBadge-builtin',
             section: {
                 kind: 'builtin',
                 type: definition.type,
@@ -1359,6 +1350,24 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return candidate;
     }
 
+    function createSeerrShortcutsCandidate() {
+        return {
+            key: 'seerrSlider:shortcuts',
+            tab: 'seerr',
+            label: 'Seerr Browse',
+            meta: 'Seerr',
+            badgeClass: 'homeLayoutBadge-seerr',
+            section: {
+                kind: 'seerrSlider',
+                type: 'seerr_slider',
+                enabled: true,
+                order: 0,
+                sliderId: 'shortcuts',
+                pluginDisplayText: 'Seerr Browse'
+            }
+        };
+    }
+
     function createDynamicCandidate(tab, source, sectionName, id, label, meta, serverId) {
         return {
             key: ['pluginDynamic', source, sectionName, id || ''].join(':'),
@@ -1381,14 +1390,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function initializeHomeLayoutAvailableRows(state) {
-        state.available.builtin = HOME_SECTION_DEFINITIONS
-            .filter(function (definition) { return !isSeerrHomeSectionType(definition.type); })
-            .map(createBuiltinCandidate);
-        state.available.seerr = HOME_SECTION_DEFINITIONS
-            .filter(function (definition) {
-                return isSeerrHomeSectionType(definition.type);
-            })
-            .map(createBuiltinCandidate);
+        state.available.builtin = HOME_SECTION_DEFINITIONS.map(createBuiltinCandidate);
+        state.available.seerr = [createSeerrShortcutsCandidate()];
     }
 
     function getHomeLayoutInsertIndex(state) {
@@ -1616,11 +1619,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function seerrBuiltinCandidates() {
-        return HOME_SECTION_DEFINITIONS
-            .filter(function (definition) {
-                return isSeerrHomeSectionType(definition.type);
-            })
-            .map(createBuiltinCandidate);
+        return [createSeerrShortcutsCandidate()];
     }
 
     function loadHomeLayoutSeerrSliders(view) {
