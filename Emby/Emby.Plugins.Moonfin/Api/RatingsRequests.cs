@@ -59,4 +59,11 @@ namespace Emby.Plugins.Moonfin.Api
     {
         public int CompanyId { get; set; }
     }
+
+    [Route("/Moonfin/Tmdb/NextEpisode", "GET")]
+    [Authenticated]
+    public class GetTmdbNextEpisodeRequest : IReturn<object>
+    {
+        public string? TmdbId { get; set; }
+    }
 }

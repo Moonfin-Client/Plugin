@@ -556,6 +556,24 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("hiddenOsdButtonsDesktop")]
     public List<string>? HiddenOsdButtonsDesktop { get; set; }
 
+    [JsonPropertyName("detailMetadataOrderTv")]
+    public List<string>? DetailMetadataOrderTv { get; set; }
+
+    [JsonPropertyName("detailMetadataOrderMobile")]
+    public List<string>? DetailMetadataOrderMobile { get; set; }
+
+    [JsonPropertyName("detailMetadataOrderDesktop")]
+    public List<string>? DetailMetadataOrderDesktop { get; set; }
+
+    [JsonPropertyName("hiddenDetailMetadataTv")]
+    public List<string>? HiddenDetailMetadataTv { get; set; }
+
+    [JsonPropertyName("hiddenDetailMetadataMobile")]
+    public List<string>? HiddenDetailMetadataMobile { get; set; }
+
+    [JsonPropertyName("hiddenDetailMetadataDesktop")]
+    public List<string>? HiddenDetailMetadataDesktop { get; set; }
+
     [JsonPropertyName("videoStartDelay")]
     public int? VideoStartDelay { get; set; }
 

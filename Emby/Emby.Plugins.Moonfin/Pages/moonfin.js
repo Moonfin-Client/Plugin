@@ -735,6 +735,16 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'floatOnTop', label: 'Float on Top' }
     ];
 
+    var DETAIL_METADATA = [
+        { id: 'year', label: 'Release Year' },
+        { id: 'parentalRating', label: 'Parental Rating' },
+        { id: 'runtimeAndSeasons', label: 'Runtime & Seasons' },
+        { id: 'status', label: 'Series Status' },
+        { id: 'upcomingEpisodeDate', label: 'Upcoming Episodes' },
+        { id: 'genres', label: 'Genres' },
+        { id: 'seerrAvailability', label: 'Seerr Availability' }
+    ];
+
     function loadButtonPicker(view, selector, buttons, order, hidden) {
         var container = view.querySelector(selector);
         if (!container) return;
@@ -1906,6 +1916,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setSelectValue(view, '#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
             setNullableBoolSelect(view, '#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
             // One picker stands in for all three form factors.
+            loadButtonPicker(view, '#DefaultDetailMetadataList', DETAIL_METADATA,
+                defaults.detailMetadataOrderTv || defaults.detailMetadataOrderMobile || defaults.detailMetadataOrderDesktop || null,
+                defaults.hiddenDetailMetadataTv || defaults.hiddenDetailMetadataMobile || defaults.hiddenDetailMetadataDesktop || null);
             loadButtonPicker(view, '#DefaultDetailButtonsList', DETAIL_BUTTONS,
                 defaults.detailButtonOrderTv || defaults.detailButtonOrderMobile || defaults.detailButtonOrderDesktop || null,
                 defaults.hiddenDetailButtonsTv || defaults.hiddenDetailButtonsMobile || defaults.hiddenDetailButtonsDesktop || null);
@@ -2185,6 +2198,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.detailShowTechnicalDetails = getNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails');
             d.recommendationSystemSource = view.querySelector('#DefaultRecommendationSystemSource').value || null;
             d.recommendationsApplyParentalRatingCap = getNullableBoolSelect(view, '#DefaultRecommendationsApplyParentalRatingCap');
+            var metaVal = getButtonPickerValue(view, '#DefaultDetailMetadataList');
+            d.detailMetadataOrderTv = metaVal.order;
+            d.detailMetadataOrderMobile = metaVal.order;
+            d.detailMetadataOrderDesktop = metaVal.order;
+            d.hiddenDetailMetadataTv = metaVal.hidden;
+            d.hiddenDetailMetadataMobile = metaVal.hidden;
+            d.hiddenDetailMetadataDesktop = metaVal.hidden;
             var btnVal = getButtonPickerValue(view, '#DefaultDetailButtonsList');
             // Clients read a different key per form factor, so one arrangement covers all three.
             d.detailButtonOrderTv = btnVal.order;
