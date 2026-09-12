@@ -1030,12 +1030,62 @@ namespace Emby.Plugins.Moonfin.Services
             }
 
             if (profile.HomeRowOrder == null) return changed;
-            var filtered = profile.HomeRowOrder.FindAll(name =>
-                string.IsNullOrEmpty(name) ||
-                !name.StartsWith("seerr_", StringComparison.OrdinalIgnoreCase));
-            if (filtered.Count == profile.HomeRowOrder.Count) return changed;
-            profile.HomeRowOrder = filtered.Count > 0 ? filtered : null;
-            return true;
+            var kept = new List<string>();
+            foreach (var name in profile.HomeRowOrder)
+            {
+                if (string.IsNullOrEmpty(name) ||
+                    !name.StartsWith("seerr_", StringComparison.OrdinalIgnoreCase))
+                {
+                    kept.Add(name);
+                    continue;
+                }
+
+                profile.HomeSections ??= new List<MoonfinHomeSectionConfig>();
+                var section = new MoonfinHomeSectionConfig
+                {
+                    Type = name,
+                    Enabled = true,
+                    Order = profile.HomeSections.Count,
+                };
+                if (!RewriteDeletedSeerrHomeType(section)) continue;
+                if (HasMatchingSeerrHomeSection(profile.HomeSections, section)) continue;
+                profile.HomeSections.Add(section);
+                changed = true;
+            }
+
+            if (kept.Count != profile.HomeRowOrder.Count)
+            {
+                profile.HomeRowOrder = kept.Count > 0 ? kept : null;
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        static bool HasMatchingSeerrHomeSection(
+            List<MoonfinHomeSectionConfig> sections,
+            MoonfinHomeSectionConfig incoming)
+        {
+            foreach (var existing in sections)
+            {
+                if (!string.Equals(existing.Kind, "seerrSlider", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(incoming.SliderId) &&
+                    string.Equals(existing.SliderId, incoming.SliderId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (incoming.SliderType is int type && existing.SliderType == type)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         static bool RewriteDeletedSeerrHomeType(MoonfinHomeSectionConfig section)
