@@ -1948,6 +1948,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded', defaults.navbarAlwaysExpanded);
             setNullableBoolSelect(view, '#DefaultEnableFolderView', defaults.enableFolderView);
             setNullableBoolSelect(view, '#DefaultShowSeerrButton', defaults.showSeerrButton);
+            setNullableBoolSelect(view, '#DefaultShowLiveTvButton', defaults.showLiveTvButton);
             setNullableBoolSelect(view, '#DefaultShowDownloadsButton', defaults.showDownloadsButton);
             setNullableBoolSelect(view, '#DefaultShowServerMessagesButton', defaults.showServerMessagesButton);
 
@@ -2237,6 +2238,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.navbarAlwaysExpanded = getNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded');
             d.enableFolderView = getNullableBoolSelect(view, '#DefaultEnableFolderView');
             d.showSeerrButton = getNullableBoolSelect(view, '#DefaultShowSeerrButton');
+            d.showLiveTvButton = getNullableBoolSelect(view, '#DefaultShowLiveTvButton');
             d.showDownloadsButton = getNullableBoolSelect(view, '#DefaultShowDownloadsButton');
             d.showServerMessagesButton = getNullableBoolSelect(view, '#DefaultShowServerMessagesButton');
 
