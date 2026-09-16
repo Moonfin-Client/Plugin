@@ -123,6 +123,19 @@ public class SimilarItemsScoringTests
     }
 
     [Fact]
+    public async Task PluralizedSequelTitlesGetABonus()
+    {
+        var seed = MakeMovie("Alien", genres: ["Science Fiction"], year: 1979);
+        var sequel = MakeMovie("Aliens", genres: ["Science Fiction"], year: 1979);
+        var sibling = MakeMovie("Total Recall", genres: ["Science Fiction"], year: 1979);
+
+        var (service, _) = Build([sibling, sequel]);
+        var results = await Run(service, seed);
+
+        Assert.Equal("Aliens", results[0].Name);
+    }
+
+    [Fact]
     public async Task StopWordsAndShortWordsDoNotEarnATitleBonus()
     {
         var seed = MakeMovie("The Godfather", genres: ["Crime"], year: 1972);
@@ -186,6 +199,37 @@ public class SimilarItemsScoringTests
         var results = await Run(service, seed);
 
         Assert.Equal("WithDirector", results[0].Name);
+    }
+
+    [Fact]
+    public async Task SharedCastAndCrewUseDiminishingReturns()
+    {
+        var seed = MakeMovie("Seed", genres: ["Drama"], year: 2015);
+        var oneMatch = MakeMovie("OneMatch", genres: ["Drama"], year: 2015);
+        var twoMatches = MakeMovie("TwoMatches", genres: ["Drama"], year: 2015);
+
+        var people = new Dictionary<Guid, List<PersonInfo>>
+        {
+            [seed.Id] = [
+                new PersonInfo { Name = "Director A", Type = PersonKind.Director },
+                new PersonInfo { Name = "Director B", Type = PersonKind.Director }
+            ],
+            [oneMatch.Id] = [new PersonInfo { Name = "Director A", Type = PersonKind.Director }],
+            [twoMatches.Id] = [
+                new PersonInfo { Name = "Director A", Type = PersonKind.Director },
+                new PersonInfo { Name = "Director B", Type = PersonKind.Director }
+            ]
+        };
+
+        var (service, _) = Build(
+            [oneMatch, twoMatches],
+            item => people.TryGetValue(item.Id, out var list) ? list : []);
+
+        var results = await Run(service, seed);
+
+        // Two matches earns 25.0 pts (15 + 10) vs 15.0 pts (15) for one match
+        Assert.Equal("TwoMatches", results[0].Name);
+        Assert.Equal("OneMatch", results[1].Name);
     }
 
     [Fact]

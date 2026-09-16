@@ -31,22 +31,14 @@ public class MoonfinSimilarItemsService
     private const int DefaultLimit = 20;
     private const int MaxLimit = 200;
 
-    private const double GenrePoints = 5.0;
+    private const double GenrePoints = 7.0;
     private const double GenreCap = 35.0;
     private const double TagPoints = 4.0;
     private const double TagCap = 20.0;
-    private const double StudioPoints = 4.0;
-    private const double StudioCap = 8.0;
-    private const double ActorPoints = 6.0;
-    private const double ActorCap = 18.0;
-    private const double DirectorPoints = 8.0;
-    private const double DirectorCap = 15.0;
-    private const double WriterPoints = 4.0;
-    private const double WriterCap = 8.0;
     private const double YearMaxPoints = 10.0;
     private const int YearDecayRange = 15;
-    private const double RatingMaxPoints = 5.0;
-    private const double TitleMatchPoints = 10.0;
+    private const double RatingMaxPoints = 10.0;
+    private const double TitleMatchPoints = 25.0;
 
     private readonly ILibraryManager _libraryManager;
     private readonly ILogger<MoonfinSimilarItemsService> _logger;
@@ -301,13 +293,21 @@ public class MoonfinSimilarItemsService
         }
     }
 
+    private static double ScoreDiminishing(int count, double first, double second, double third = 0.0)
+    {
+        if (count <= 0) return 0.0;
+        if (count == 1) return first;
+        if (count == 2) return first + second;
+        return first + second + third;
+    }
+
     private static double ScoreMetadata(BaseItem candidate, SeedProfile seed)
     {
         double score = 0.0;
 
         score += Math.Min(CountOverlap(candidate.Genres, seed.Genres) * GenrePoints, GenreCap);
         score += Math.Min(CountOverlap(candidate.Tags, seed.Tags) * TagPoints, TagCap);
-        score += Math.Min(CountOverlap(candidate.Studios, seed.Studios) * StudioPoints, StudioCap);
+        score += ScoreDiminishing(CountOverlap(candidate.Studios, seed.Studios), 12.0, 8.0);
 
         if (candidate.ProductionYear.HasValue && seed.Year.HasValue)
         {
@@ -340,9 +340,9 @@ public class MoonfinSimilarItemsService
         var writers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         CollectPeople(people, actors, directors, writers);
 
-        return Math.Min(actors.Count(seed.Actors.Contains) * ActorPoints, ActorCap)
-            + Math.Min(directors.Count(seed.Directors.Contains) * DirectorPoints, DirectorCap)
-            + Math.Min(writers.Count(seed.Writers.Contains) * WriterPoints, WriterCap);
+        return ScoreDiminishing(actors.Count(seed.Actors.Contains), 10.0, 6.0, 4.0)
+            + ScoreDiminishing(directors.Count(seed.Directors.Contains), 15.0, 10.0, 5.0)
+            + ScoreDiminishing(writers.Count(seed.Writers.Contains), 15.0, 10.0, 5.0);
     }
 
     private static int CountOverlap(IReadOnlyList<string>? values, HashSet<string> seedValues)
@@ -377,7 +377,24 @@ public class MoonfinSimilarItemsService
         var candidateKeywords = ExtractKeyWords(candidateTitle);
         if (candidateKeywords.Count == 0) return false;
 
-        return seedKeywords.IsSubsetOf(candidateKeywords) || candidateKeywords.IsSubsetOf(seedKeywords);
+        if (seedKeywords.IsSubsetOf(candidateKeywords) || candidateKeywords.IsSubsetOf(seedKeywords))
+        {
+            return true;
+        }
+
+        // A single subject word that only differs by a short suffix, so pluralized
+        // sequels like "Alien" and "Aliens" or "Predator" and "Predators" still
+        // count without matching something unrelated like "Alien" and "Alienist".
+        if (seedKeywords.Count == 1 && candidateKeywords.Count == 1)
+        {
+            var a = seedKeywords.First();
+            var b = candidateKeywords.First();
+            var shortWord = a.Length <= b.Length ? a : b;
+            var longWord = a.Length <= b.Length ? b : a;
+            return longWord.StartsWith(shortWord, StringComparison.OrdinalIgnoreCase) && longWord.Length - shortWord.Length <= 2;
+        }
+
+        return false;
     }
 
     /// <summary>
