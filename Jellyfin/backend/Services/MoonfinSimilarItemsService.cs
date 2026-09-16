@@ -382,9 +382,9 @@ public class MoonfinSimilarItemsService
             return true;
         }
 
-        // A single subject word that only differs by a short suffix, so pluralized
-        // sequels like "Alien" and "Aliens" or "Predator" and "Predators" still
-        // count without matching something unrelated like "Alien" and "Alienist".
+        // A single subject word differing only by a short suffix (<= 2 chars), so pluralized
+        // sequels like "Alien" and "Aliens" match, while unrelated titles sharing a common
+        // prefix (such as matching "Alien" to "The Alienist") are excluded.
         if (seedKeywords.Count == 1 && candidateKeywords.Count == 1)
         {
             var a = seedKeywords.First();
