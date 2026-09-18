@@ -188,13 +188,14 @@
     return btn;
   }
 
+  var TOOLBAR_USER_SELECTOR =
+    'button[aria-controls="app-user-menu"], button[aria-label*="UserMenu"], button[aria-label*="User"], .MuiAvatar-root';
+
   function injectIntoToolbar(toolbar) {
     if (!toolbar || !isElementVisible(toolbar)) return false;
 
     var btn = toolbar.querySelector(".headerMoonfinButton");
-    var userBtn = toolbar.querySelector(
-      'button[aria-controls="app-user-menu"], button[aria-label*="UserMenu"], button[aria-label*="User"], .MuiAvatar-root'
-    );
+    var userBtn = toolbar.querySelector(TOOLBAR_USER_SELECTOR);
 
     if (userBtn) {
       var userBox = userBtn.closest(".MuiToolbar-root > *");
@@ -259,12 +260,38 @@
     return true;
   }
 
+  // Keep one button. A header hidden after placement leaves a stale one behind,
+  // so a visible button wins.
+  function removeExtraButtons() {
+    var all = document.querySelectorAll(".headerMoonfinButton");
+    if (all.length < 2) return;
+    var keep = null;
+    for (var k = 0; k < all.length && !keep; k++) {
+      if (isElementVisible(all[k])) keep = all[k];
+    }
+    if (!keep) keep = all[0];
+    for (var m = 0; m < all.length; m++) {
+      if (all[m] !== keep && all[m].parentNode) {
+        all[m].parentNode.removeChild(all[m]);
+      }
+    }
+  }
+
   function injectHeaderButton() {
     var injected = false;
 
+    // A toolbar holding the avatar is the right home, so it gets first refusal.
     var toolbars = document.querySelectorAll(".MuiToolbar-root");
-    for (var i = 0; i < toolbars.length; i++) {
-      if (injectIntoToolbar(toolbars[i])) {
+    for (var i = 0; i < toolbars.length && !injected; i++) {
+      if (
+        toolbars[i].querySelector(TOOLBAR_USER_SELECTOR) &&
+        injectIntoToolbar(toolbars[i])
+      ) {
+        injected = true;
+      }
+    }
+    for (var t = 0; t < toolbars.length && !injected; t++) {
+      if (injectIntoToolbar(toolbars[t])) {
         injected = true;
       }
     }
@@ -272,13 +299,13 @@
     var legacyHeaders = document.querySelectorAll(
       ".skinHeader:not(.osdHeader) .headerRight, .headerRight"
     );
-    for (var j = 0; j < legacyHeaders.length; j++) {
+    for (var j = 0; j < legacyHeaders.length && !injected; j++) {
       if (injectIntoLegacyHeader(legacyHeaders[j])) {
         injected = true;
       }
     }
 
-    if (!injected && !document.querySelector(".headerMoonfinButton:not([style*='display: none'])")) {
+    if (!injected && !document.querySelector(".headerMoonfinButton")) {
       var anyUserBtn = document.querySelector(
         ".headerUserButton, button[aria-controls='app-user-menu'], button[aria-label*='UserMenu']"
       );
@@ -289,6 +316,8 @@
         }
       }
     }
+
+    removeExtraButtons();
   }
 
   if (document.readyState === "complete") {
@@ -299,10 +328,24 @@
     });
   }
 
-  try {
-    var observer = new MutationObserver(function () {
+  // Coalesce a burst of mutations, since every pass scans the whole document.
+  var scanScheduled = false;
+  function scheduleInject() {
+    if (scanScheduled) return;
+    scanScheduled = true;
+    var run = function () {
+      scanScheduled = false;
       injectHeaderButton();
-    });
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(run);
+    } else {
+      setTimeout(run, 50);
+    }
+  }
+
+  try {
+    var observer = new MutationObserver(scheduleInject);
     observer.observe(document.body || document.documentElement, {
       childList: true,
       subtree: true,
