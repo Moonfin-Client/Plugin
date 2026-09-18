@@ -3679,13 +3679,15 @@
                 ['yid', 'Yiddish'], ['yor', 'Yoruba'], ['zha', 'Zhuang'], ['zul', 'Zulu']
             ];
 
-            function fillLanguageSelect(selector) {
+            // Fallback pickers leave auto out because an empty value already means no fallback.
+            function fillLanguageSelect(selector, excludeAuto) {
                 var select = document.querySelector(selector);
                 if (!select || select.dataset.filled) return;
                 select.dataset.filled = 'true';
                 var html = '<option value="">Not set (user decides)</option>';
                 for (var i = 0; i < LANGUAGE_OPTIONS.length; i++) {
                     var code = LANGUAGE_OPTIONS[i][0];
+                    if (code === 'auto' && excludeAuto) continue;
                     var label = LANGUAGE_OPTIONS[i][1];
                     html += '<option value="' + esc(code) + '">'
                         + esc(code === 'auto' ? label : label + ' (' + code + ')') + '</option>';
@@ -5750,8 +5752,8 @@
 
                     fillLanguageSelect('#DefaultDefaultAudioLanguage');
                     fillLanguageSelect('#DefaultDefaultSubtitleLanguage');
-                    fillLanguageSelect('#DefaultFallbackAudioLanguage');
-                    fillLanguageSelect('#DefaultFallbackSubtitleLanguage');
+                    fillLanguageSelect('#DefaultFallbackAudioLanguage', true);
+                    fillLanguageSelect('#DefaultFallbackSubtitleLanguage', true);
                     setSelectValue('#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
                     setSelectValue('#DefaultFallbackAudioLanguage', defaults.fallbackAudioLanguage, 'Configured language');
                     setNullableBoolSelect('#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);

@@ -709,13 +709,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         ['yid', 'Yiddish'], ['yor', 'Yoruba'], ['zha', 'Zhuang'], ['zul', 'Zulu']
     ];
 
-    function fillLanguageSelect(view, selector) {
+    // Fallback pickers leave auto out because an empty value already means no fallback.
+    function fillLanguageSelect(view, selector, excludeAuto) {
         var select = view.querySelector(selector);
         if (!select || select.dataset.filled) return;
         select.dataset.filled = 'true';
         var html = '<option value="">Not set (user decides)</option>';
         for (var i = 0; i < LANGUAGE_OPTIONS.length; i++) {
             var code = LANGUAGE_OPTIONS[i][0];
+            if (code === 'auto' && excludeAuto) continue;
             var label = LANGUAGE_OPTIONS[i][1];
             html += '<option value="' + esc(code) + '">'
                 + esc(code === 'auto' ? label : label + ' (' + code + ')') + '</option>';
@@ -2004,8 +2006,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             fillLanguageSelect(view, '#DefaultDefaultAudioLanguage');
             fillLanguageSelect(view, '#DefaultDefaultSubtitleLanguage');
-            fillLanguageSelect(view, '#DefaultFallbackAudioLanguage');
-            fillLanguageSelect(view, '#DefaultFallbackSubtitleLanguage');
+            fillLanguageSelect(view, '#DefaultFallbackAudioLanguage', true);
+            fillLanguageSelect(view, '#DefaultFallbackSubtitleLanguage', true);
             setSelectValue(view, '#DefaultDefaultAudioLanguage', defaults.defaultAudioLanguage, 'Configured language');
             setSelectValue(view, '#DefaultFallbackAudioLanguage', defaults.fallbackAudioLanguage, 'Configured language');
             setNullableBoolSelect(view, '#DefaultPreferDefaultAudioTrack', defaults.preferDefaultAudioTrack);
