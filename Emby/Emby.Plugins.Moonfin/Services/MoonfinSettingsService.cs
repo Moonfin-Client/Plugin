@@ -73,10 +73,18 @@ namespace Emby.Plugins.Moonfin.Services
                 var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
                 if (settings == null) return null;
 
+                var persist = false;
                 if (settings.NeedsMigration)
                 {
                     _logger.Info("Migrating v1 settings to v2 for user " + userId, 0);
                     settings = MigrateV1ToV2(settings);
+                    persist = true;
+                }
+
+                if (MigrateSeerrHomeSections(settings)) persist = true;
+
+                if (persist)
+                {
                     var migratedJson = JsonSerializer.Serialize(settings, _jsonOptions);
                     await Task.Run(() => AtomicFile.WriteAllText(filePath, migratedJson)).ConfigureAwait(false);
                 }
@@ -212,10 +220,13 @@ namespace Emby.Plugins.Moonfin.Services
             if (profile.HomeSections == null) return null;
 
             var homeRowOrder = profile.HomeSections
-                .Where(section => !string.Equals(section.Kind, "pluginDynamic", StringComparison.OrdinalIgnoreCase))
+                .Where(section =>
+                    string.IsNullOrEmpty(section.Kind) ||
+                    string.Equals(section.Kind, "builtin", StringComparison.OrdinalIgnoreCase))
                 .Where(section => section.Enabled != false)
                 .Where(section => !string.IsNullOrWhiteSpace(section.Type) &&
-                    !string.Equals(section.Type, "none", StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(section.Type, "none", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(section.Type, "seerr_slider", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(section => section.Order ?? int.MaxValue)
                 .Select(section => section.Type!)
                 .ToList();
@@ -286,6 +297,8 @@ namespace Emby.Plugins.Moonfin.Services
                     finalSettings = settings;
                 }
 
+                MigrateSeerrHomeSections(finalSettings);
+
                 StripServerWideKeys(finalSettings);
                 finalSettings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 finalSettings.LastUpdatedBy = clientId ?? "unknown";
@@ -332,6 +345,8 @@ namespace Emby.Plugins.Moonfin.Services
                     MergeProfile(existingProfile, profile);
                 else
                     settings.SetProfile(profileName, profile);
+
+                MigrateSeerrHomeSections(settings);
 
                 StripServerWideKeys(settings);
                 settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -985,6 +1000,154 @@ namespace Emby.Plugins.Moonfin.Services
             }
 
             return existing;
+        }
+
+        /// <summary>
+        /// Rewrites stored <c>seerr_trending</c> home types to sliders. Called from
+        /// the same persist-on-load path as <see cref="MigrateV1ToV2"/>.
+        /// </summary>
+        internal static bool MigrateSeerrHomeSections(MoonfinUserSettings? settings)
+        {
+            if (settings == null) return false;
+            var changed = false;
+            changed |= MigrateSeerrHomeSections(settings.Global);
+            changed |= MigrateSeerrHomeSections(settings.Desktop);
+            changed |= MigrateSeerrHomeSections(settings.Mobile);
+            changed |= MigrateSeerrHomeSections(settings.Tv);
+            return changed;
+        }
+
+        internal static bool MigrateSeerrHomeSections(MoonfinSettingsProfile? profile)
+        {
+            if (profile == null) return false;
+            var changed = false;
+            if (profile.HomeSections != null)
+            {
+                foreach (var section in profile.HomeSections)
+                {
+                    if (RewriteDeletedSeerrHomeType(section)) changed = true;
+                }
+            }
+
+            if (profile.HomeRowOrder == null) return changed;
+            var kept = new List<string>();
+            foreach (var name in profile.HomeRowOrder)
+            {
+                if (string.IsNullOrEmpty(name) ||
+                    !name.StartsWith("seerr_", StringComparison.OrdinalIgnoreCase))
+                {
+                    kept.Add(name);
+                    continue;
+                }
+
+                profile.HomeSections ??= new List<MoonfinHomeSectionConfig>();
+                var section = new MoonfinHomeSectionConfig
+                {
+                    Type = name,
+                    Enabled = true,
+                    Order = profile.HomeSections.Count,
+                };
+                if (!RewriteDeletedSeerrHomeType(section)) continue;
+                if (HasMatchingSeerrHomeSection(profile.HomeSections, section)) continue;
+                profile.HomeSections.Add(section);
+                changed = true;
+            }
+
+            if (kept.Count != profile.HomeRowOrder.Count)
+            {
+                profile.HomeRowOrder = kept.Count > 0 ? kept : null;
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        static bool HasMatchingSeerrHomeSection(
+            List<MoonfinHomeSectionConfig> sections,
+            MoonfinHomeSectionConfig incoming)
+        {
+            foreach (var existing in sections)
+            {
+                if (!string.Equals(existing.Kind, "seerrSlider", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(incoming.SliderId) &&
+                    string.Equals(existing.SliderId, incoming.SliderId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (incoming.SliderType is int type && existing.SliderType == type)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static bool RewriteDeletedSeerrHomeType(MoonfinHomeSectionConfig section)
+        {
+            var id = section.SliderId;
+            if (!string.IsNullOrEmpty(id) &&
+                id.StartsWith("legacy:", StringComparison.OrdinalIgnoreCase))
+            {
+                if (int.TryParse(id.Substring("legacy:".Length), out var fromId))
+                {
+                    section.SliderType ??= fromId;
+                }
+
+                section.SliderId = null;
+                return true;
+            }
+
+            var type = section.Type;
+            if (string.IsNullOrEmpty(type) ||
+                string.Equals(section.Kind, "seerrSlider", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(type, "seerr_slider", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (type.Equals("seerr_shortcuts", StringComparison.OrdinalIgnoreCase))
+            {
+                section.Kind = "seerrSlider";
+                section.Type = "seerr_slider";
+                section.SliderId = "shortcuts";
+                section.SliderType = null;
+                if (string.IsNullOrWhiteSpace(section.PluginDisplayText))
+                {
+                    section.PluginDisplayText = "Seerr Browse";
+                }
+
+                return true;
+            }
+
+            int sliderType;
+            switch (type)
+            {
+                case "seerr_recently_added": sliderType = 1; break;
+                case "seerr_recent_requests": sliderType = 2; break;
+                case "seerr_watchlist": sliderType = 3; break;
+                case "seerr_trending": sliderType = 4; break;
+                case "seerr_popular_movies": sliderType = 5; break;
+                case "seerr_movie_genres": sliderType = 6; break;
+                case "seerr_upcoming_movies": sliderType = 7; break;
+                case "seerr_studios": sliderType = 8; break;
+                case "seerr_popular_series": sliderType = 9; break;
+                case "seerr_series_genres": sliderType = 10; break;
+                case "seerr_upcoming_series": sliderType = 11; break;
+                case "seerr_networks": sliderType = 12; break;
+                default: return false;
+            }
+
+            section.Kind = "seerrSlider";
+            section.Type = "seerr_slider";
+            section.SliderId = null;
+            section.SliderType = sliderType;
+            return true;
         }
 
         private static bool HasAnyProfileValues(MoonfinSettingsProfile profile)
