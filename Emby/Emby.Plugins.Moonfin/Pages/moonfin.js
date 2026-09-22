@@ -1108,6 +1108,29 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return Number.isFinite(n) ? n : null;
     }
 
+    // Seerr leaves title empty on its stock sliders and localizes them in its own
+    // frontend, so without these every built-in row would just read "Seerr slider".
+    var SEERR_STOCK_SLIDER_TITLES = {
+        1: 'Recently Added',
+        2: 'Recent Requests',
+        3: 'Your Watchlist',
+        4: 'Trending',
+        5: 'Popular Movies',
+        6: 'Movie Genres',
+        7: 'Upcoming Movies',
+        8: 'Studios',
+        9: 'Popular Series',
+        10: 'Series Genres',
+        11: 'Upcoming Series',
+        12: 'Networks'
+    };
+
+    function seerrStockSliderTitle(type) {
+        var n = Number(type);
+        if (!Number.isFinite(n)) return '';
+        return SEERR_STOCK_SLIDER_TITLES[n] || '';
+    }
+
     function seerrSliderLiveTitle(view, section) {
         var state = getHomeLayoutState(view);
         var sliders = state.seerrDiscoverSliders || [];
@@ -1117,14 +1140,15 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }
         for (var i = 0; i < sliders.length; i++) {
             if (String(sliders[i].id) !== id) continue;
-            return (sliders[i].title || '').trim();
+            return seerrStockSliderTitle(sliders[i].type) || (sliders[i].title || '').trim();
         }
-        return (section.pluginDisplayText || '').trim();
+        return seerrStockSliderTitle(seerrSliderTypeOf(section)) ||
+            (section.pluginDisplayText || '').trim();
     }
 
     function seerrSliderLabel(slider) {
         var title = (slider && slider.title ? String(slider.title) : '').trim();
-        return title || 'Seerr slider';
+        return seerrStockSliderTitle(slider && slider.type) || title || 'Seerr slider';
     }
 
     function isSeerrSliderType(type) {

@@ -1030,17 +1030,34 @@ namespace Emby.Plugins.Moonfin.Services
             }
 
             if (profile.HomeRowOrder == null) return changed;
+            if (!profile.HomeRowOrder.Any(IsDeletedSeerrHomeRowName)) return changed;
+
+            // Clients prefer homeSections and treat any row missing from it as turned
+            // off, so a profile that only stored homeRowOrder has to carry its whole
+            // order across instead of just the Seerr rows.
+            var materializeOrder = profile.HomeSections is not { Count: > 0 };
+            profile.HomeSections ??= new List<MoonfinHomeSectionConfig>();
             var kept = new List<string>();
             foreach (var name in profile.HomeRowOrder)
             {
-                if (string.IsNullOrEmpty(name) ||
-                    !name.StartsWith("seerr_", StringComparison.OrdinalIgnoreCase))
+                if (!IsDeletedSeerrHomeRowName(name))
                 {
                     kept.Add(name);
+                    if (materializeOrder && !string.IsNullOrEmpty(name))
+                    {
+                        profile.HomeSections.Add(new MoonfinHomeSectionConfig
+                        {
+                            Kind = "builtin",
+                            Type = name,
+                            Enabled = true,
+                            Order = profile.HomeSections.Count,
+                        });
+                        changed = true;
+                    }
+
                     continue;
                 }
 
-                profile.HomeSections ??= new List<MoonfinHomeSectionConfig>();
                 var section = new MoonfinHomeSectionConfig
                 {
                     Type = name,
@@ -1061,6 +1078,10 @@ namespace Emby.Plugins.Moonfin.Services
 
             return changed;
         }
+
+        static bool IsDeletedSeerrHomeRowName(string? name) =>
+            !string.IsNullOrEmpty(name) &&
+            name.StartsWith("seerr_", StringComparison.OrdinalIgnoreCase);
 
         static bool HasMatchingSeerrHomeSection(
             List<MoonfinHomeSectionConfig> sections,
