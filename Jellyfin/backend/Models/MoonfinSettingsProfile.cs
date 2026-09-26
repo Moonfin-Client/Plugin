@@ -440,6 +440,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("preferSdhSubtitles")]
     public bool? PreferSdhSubtitles { get; set; }
 
+    [JsonPropertyName("preferTextSubtitles")]
+    public bool? PreferTextSubtitles { get; set; }
+
+    [JsonPropertyName("preferExternalSubtitles")]
+    public bool? PreferExternalSubtitles { get; set; }
+
     [JsonPropertyName("subtitlesUseEmbeddedStyles")]
     public bool? SubtitlesUseEmbeddedStyles { get; set; }
 
