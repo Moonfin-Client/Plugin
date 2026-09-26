@@ -1013,4 +1013,10 @@ public class MoonfinHomeSectionConfig
 
     [JsonPropertyName("pluginDisplayText")]
     public string? PluginDisplayText { get; set; }
+
+    [JsonPropertyName("sliderId")]
+    public string? SliderId { get; set; }
+
+    [JsonPropertyName("sliderType")]
+    public int? SliderType { get; set; }
 }
