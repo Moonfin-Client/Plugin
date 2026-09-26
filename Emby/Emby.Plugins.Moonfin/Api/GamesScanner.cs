@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -496,11 +497,28 @@ namespace Emby.Plugins.Moonfin.Api
             return "nes";
         }
 
+        // Accents fold out before the letter test, as RdbMatcher.NormalizeName does on the Jellyfin side.
+        // string.Normalize throws on an unpaired surrogate, which NTFS allows, so such a name stays unfolded.
+        internal static string FoldedForm(string value)
+        {
+            try
+            {
+                return value.Normalize(NormalizationForm.FormD);
+            }
+            catch (ArgumentException)
+            {
+                return value;
+            }
+        }
+
         internal static string NormalizeAlphanumericLower(string value)
         {
             var sb = new StringBuilder(value.Length);
-            foreach (var c in value)
+            foreach (var c in FoldedForm(value))
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
                 if (char.IsLetterOrDigit(c)) sb.Append(char.ToLowerInvariant(c));
+            }
             return sb.ToString();
         }
 
