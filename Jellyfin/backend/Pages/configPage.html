@@ -1476,6 +1476,25 @@
                                     <option value="false">No</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultBottomNavbarStyle">Bottom Bar Style</label>
+                                <select id="DefaultBottomNavbarStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="dock">Dock</option>
+                                    <option value="split">Split</option>
+                                    <option value="strip">Strip</option>
+                                </select>
+                                <div class="fieldDescription">Phones and tablets with the Bottom navigation style.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultBottomNavbarTab1">Bottom Bar Tabs</label>
+                                <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+                                    <select id="DefaultBottomNavbarTab1" class="bottomNavbarTabSelect" is="emby-select" style="flex: 1; min-width: 140px;"></select>
+                                    <select id="DefaultBottomNavbarTab2" class="bottomNavbarTabSelect" is="emby-select" style="flex: 1; min-width: 140px;"></select>
+                                    <select id="DefaultBottomNavbarTab3" class="bottomNavbarTabSelect" is="emby-select" style="flex: 1; min-width: 140px;"></select>
+                                </div>
+                                <div class="fieldDescription">Up to three tabs between Home and You. Left unset, each device picks them from the Nav Buttons below, and everything else shows in the You menu.</div>
+                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Nav Buttons</h4>
                             <div class="inputContainer">
@@ -3514,6 +3533,49 @@
             var MoonfinConfig = {
                 pluginUniqueId: '8c5d0e91-4f2a-4b6d-9e3f-1a7c8d9e0f2b'
             };
+
+            // Ids are the client's wire names for the pinnable tabs.
+            var BOTTOM_NAVBAR_TABS = [
+                ['search', 'Search'],
+                ['libraries', 'Libraries'],
+                ['favorites', 'Favorites'],
+                ['genres', 'Genres'],
+                ['liveTv', 'Live TV'],
+                ['discover', 'Discover (Seerr)'],
+                ['folders', 'Folders']
+            ];
+
+            function setBottomNavbarTabSelects(tabs) {
+                var selects = document.querySelectorAll('.bottomNavbarTabSelect');
+                for (var i = 0; i < selects.length; i++) {
+                    var select = selects[i];
+                    if (!select.options.length) {
+                        var unset = document.createElement('option');
+                        unset.value = '';
+                        unset.textContent = i === 0 ? 'Not set (automatic)' : 'None';
+                        select.appendChild(unset);
+                        BOTTOM_NAVBAR_TABS.forEach(function (tab) {
+                            var option = document.createElement('option');
+                            option.value = tab[0];
+                            option.textContent = tab[1];
+                            select.appendChild(option);
+                        });
+                    }
+                    setSelectValue('#' + select.id, tabs && tabs[i] ? tabs[i] : '', 'Configured tab');
+                }
+            }
+
+            // Blank slots are skipped and repeats dropped, the same way the
+            // client reads the list. Nothing picked leaves it to each device.
+            function getBottomNavbarTabSelects() {
+                var picked = [];
+                var selects = document.querySelectorAll('.bottomNavbarTabSelect');
+                for (var i = 0; i < selects.length; i++) {
+                    var value = selects[i].value;
+                    if (value && picked.indexOf(value) === -1) picked.push(value);
+                }
+                return picked.length ? picked : null;
+            }
 
             function setSelectValue(selector, value, dynamicLabelPrefix) {
                 var select = document.querySelector(selector);
@@ -6055,6 +6117,8 @@
                     bindNullableRangeInput('#DefaultNavbarOpacity', '%');
                     setNullableRangeInput('#DefaultNavbarOpacity', defaults.navbarOpacity, '%');
                     setNullableBoolSelect('#DefaultNavbarAlwaysExpanded', defaults.navbarAlwaysExpanded);
+                    setSelectValue('#DefaultBottomNavbarStyle', defaults.bottomNavbarStyle, 'Configured style');
+                    setBottomNavbarTabSelects(defaults.bottomNavbarTabs);
                     setNullableBoolSelect('#DefaultEnableFolderView', defaults.enableFolderView);
                     setNullableBoolSelect('#DefaultShowSeerrButton', defaults.showSeerrButton);
                     setNullableBoolSelect('#DefaultShowLiveTvButton', defaults.showLiveTvButton);
@@ -6856,6 +6920,8 @@
                         config.DefaultUserSettings.navbarColor = document.querySelector('#DefaultNavbarColor').value || null;
                         config.DefaultUserSettings.navbarOpacity = getNullableRangeInput('#DefaultNavbarOpacity');
                         config.DefaultUserSettings.navbarAlwaysExpanded = getNullableBoolSelect('#DefaultNavbarAlwaysExpanded');
+                        config.DefaultUserSettings.bottomNavbarStyle = document.querySelector('#DefaultBottomNavbarStyle').value || null;
+                        config.DefaultUserSettings.bottomNavbarTabs = getBottomNavbarTabSelects();
                         config.DefaultUserSettings.enableFolderView = getNullableBoolSelect('#DefaultEnableFolderView');
                         config.DefaultUserSettings.showSeerrButton = getNullableBoolSelect('#DefaultShowSeerrButton');
                         config.DefaultUserSettings.showLiveTvButton = getNullableBoolSelect('#DefaultShowLiveTvButton');

@@ -1364,6 +1364,25 @@
                                     <option value="false">No</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultBottomNavbarStyle">Bottom Bar Style</label>
+                                <select id="DefaultBottomNavbarStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="dock">Dock</option>
+                                    <option value="split">Split</option>
+                                    <option value="strip">Strip</option>
+                                </select>
+                                <div class="fieldDescription">Phones and tablets with the Bottom navigation style.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultBottomNavbarTab1">Bottom Bar Tabs</label>
+                                <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+                                    <select id="DefaultBottomNavbarTab1" class="bottomNavbarTabSelect" is="emby-select" style="flex: 1; min-width: 140px;"></select>
+                                    <select id="DefaultBottomNavbarTab2" class="bottomNavbarTabSelect" is="emby-select" style="flex: 1; min-width: 140px;"></select>
+                                    <select id="DefaultBottomNavbarTab3" class="bottomNavbarTabSelect" is="emby-select" style="flex: 1; min-width: 140px;"></select>
+                                </div>
+                                <div class="fieldDescription">Up to three tabs between Home and You. Left unset, each device picks them from the Nav Buttons below, and everything else shows in the You menu.</div>
+                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Nav Buttons</h4>
                             <div class="inputContainer">

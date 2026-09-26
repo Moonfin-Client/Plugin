@@ -115,6 +115,49 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
     }
 
+    // Ids are the client's wire names for the pinnable tabs.
+    var BOTTOM_NAVBAR_TABS = [
+        ['search', 'Search'],
+        ['libraries', 'Libraries'],
+        ['favorites', 'Favorites'],
+        ['genres', 'Genres'],
+        ['liveTv', 'Live TV'],
+        ['discover', 'Discover (Seerr)'],
+        ['folders', 'Folders']
+    ];
+
+    function setBottomNavbarTabSelects(view, tabs) {
+        var selects = view.querySelectorAll('.bottomNavbarTabSelect');
+        for (var i = 0; i < selects.length; i++) {
+            var select = selects[i];
+            if (!select.options.length) {
+                var unset = document.createElement('option');
+                unset.value = '';
+                unset.textContent = i === 0 ? 'Not set (automatic)' : 'None';
+                select.appendChild(unset);
+                BOTTOM_NAVBAR_TABS.forEach(function (tab) {
+                    var option = document.createElement('option');
+                    option.value = tab[0];
+                    option.textContent = tab[1];
+                    select.appendChild(option);
+                });
+            }
+            setSelectValue(view, '#' + select.id, tabs && tabs[i] ? tabs[i] : '', 'Configured tab');
+        }
+    }
+
+    // Blank slots are skipped and repeats dropped, the same way the client
+    // reads the list. Nothing picked leaves it to each device.
+    function getBottomNavbarTabSelects(view) {
+        var picked = [];
+        var selects = view.querySelectorAll('.bottomNavbarTabSelect');
+        for (var i = 0; i < selects.length; i++) {
+            var value = selects[i].value;
+            if (value && picked.indexOf(value) === -1) picked.push(value);
+        }
+        return picked.length ? picked : null;
+    }
+
     function setSelectValue(view, selector, value, dynamicLabelPrefix) {
         var select = view.querySelector(selector);
         if (!select) return;
@@ -1995,6 +2038,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             bindNullableRangeInput(view, '#DefaultNavbarOpacity', '%');
             setNullableRangeInput(view, '#DefaultNavbarOpacity', defaults.navbarOpacity, '%');
             setNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded', defaults.navbarAlwaysExpanded);
+            setSelectValue(view, '#DefaultBottomNavbarStyle', defaults.bottomNavbarStyle, 'Configured style');
+            setBottomNavbarTabSelects(view, defaults.bottomNavbarTabs);
             setNullableBoolSelect(view, '#DefaultEnableFolderView', defaults.enableFolderView);
             setNullableBoolSelect(view, '#DefaultShowSeerrButton', defaults.showSeerrButton);
             setNullableBoolSelect(view, '#DefaultShowLiveTvButton', defaults.showLiveTvButton);
@@ -2298,6 +2343,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.navbarColor = view.querySelector('#DefaultNavbarColor').value || null;
             d.navbarOpacity = getNullableRangeInput(view, '#DefaultNavbarOpacity');
             d.navbarAlwaysExpanded = getNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded');
+            d.bottomNavbarStyle = view.querySelector('#DefaultBottomNavbarStyle').value || null;
+            d.bottomNavbarTabs = getBottomNavbarTabSelects(view);
             d.enableFolderView = getNullableBoolSelect(view, '#DefaultEnableFolderView');
             d.showSeerrButton = getNullableBoolSelect(view, '#DefaultShowSeerrButton');
             d.showLiveTvButton = getNullableBoolSelect(view, '#DefaultShowLiveTvButton');

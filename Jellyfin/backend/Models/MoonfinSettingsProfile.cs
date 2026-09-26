@@ -86,6 +86,13 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("navbarAlwaysExpanded")]
     public bool? NavbarAlwaysExpanded { get; set; }
 
+    [JsonPropertyName("bottomNavbarStyle")]
+    public string? BottomNavbarStyle { get; set; }
+
+    // Up to three tab ids, empty lets the client pick them from the nav button toggles.
+    [JsonPropertyName("bottomNavbarTabs")]
+    public List<string>? BottomNavbarTabs { get; set; }
+
     [JsonPropertyName("mediaBarTrailerCaptions")]
     public bool? MediaBarTrailerCaptions { get; set; }
 
