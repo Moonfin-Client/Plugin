@@ -332,7 +332,7 @@ public class MdbListController : ControllerBase
         return name is "desktop" or "mobile" or "tv" ? name : "global";
     }
 
-    private static List<MdbListRating> FilterAndOrderRatings(List<MdbListRating> allRatings, List<string>? selectedSources)
+    internal static List<MdbListRating> FilterAndOrderRatings(List<MdbListRating> allRatings, List<string>? selectedSources)
     {
         var sources = (selectedSources is { Count: > 0 }) ? (IReadOnlyList<string>)selectedSources : DefaultRatingSources;
 
@@ -346,6 +346,8 @@ public class MdbListController : ControllerBase
         }
 
         var result = new List<MdbListRating>();
+        // A profile can name one source twice in different case, and the lookup ignores case. The first one wins.
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var source in sources)
         {
             // MDBList's raw source names are imdb, metacritic, metacriticuser, trakt,
@@ -356,6 +358,11 @@ public class MdbListController : ControllerBase
                 string.Equals(source, "tomatoes_audience", StringComparison.OrdinalIgnoreCase))
             {
                 lookupSource = "popcorn";
+            }
+
+            if (!emitted.Add(lookupSource))
+            {
+                continue;
             }
 
             if (ratingsBySource.TryGetValue(lookupSource, out var rating))
