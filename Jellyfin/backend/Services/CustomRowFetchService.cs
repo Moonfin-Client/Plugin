@@ -215,7 +215,9 @@ public class CustomRowFetchService
         if (!string.IsNullOrWhiteSpace(tmdbKey))
         {
             using var tmdbSemaphore = new SemaphoreSlim(15, 15);
-            var movieTasks = items.Where(i => i.Id.HasValue).Select(async rowItem =>
+            var movieTasks = items
+                .Where(i => i.Id.HasValue && (string.IsNullOrEmpty(i.PosterUrl) || (i.Rank <= 50 && string.IsNullOrEmpty(i.BackdropUrl))))
+                .Select(async rowItem =>
             {
                 await tmdbSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
