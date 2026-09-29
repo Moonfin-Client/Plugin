@@ -917,6 +917,20 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("showServerMessagesButton")]
     public bool? ShowServerMessagesButton { get; set; }
 
+    /// <summary>
+    /// Friends button for the Achievement Badges plugin. Clients only show it
+    /// when that plugin has friends turned on.
+    /// </summary>
+    [JsonPropertyName("showFriendsButton")]
+    public bool? ShowFriendsButton { get; set; }
+
+    /// <summary>
+    /// Hides chat banners from the Achievement Badges plugin while a video or
+    /// game plays. Clients default it to on.
+    /// </summary>
+    [JsonPropertyName("muteChatBannersDuringPlayback")]
+    public bool? MuteChatBannersDuringPlayback { get; set; }
+
     [JsonPropertyName("diagnosticLoggingEnabled")]
     public bool? DiagnosticLoggingEnabled { get; set; }
 
