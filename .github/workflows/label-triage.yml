@@ -92,6 +92,11 @@ jobs:
               ['API', API_ENDPOINT]
             ];
 
+            const SERVERS = [
+              ['Jellyfin', /\bJellyfin\b/i],
+              ['Emby', /\bEmby\b/i]
+            ];
+
             const wanted = new Set();
             const managed = new Set();
 
@@ -114,27 +119,17 @@ jobs:
             const areaLines = section(body, /^area\b/i);
             if (areaLines) apply(AREAS, selected(areaLines));
 
-            // Both bug forms ask for the server as free text, so the answers run
-            // from "Jellyfin 10.11.8" through "JF10.11.11 / MB 2.3.0.0" to a bare
-            // version. Only a leading version number is inferred, and only when
-            // neither name was given, since Jellyfin numbers 10.x and Emby 4.x.
-            const serverLines = section(body, /^server type and version\b/i);
+            // "Both" on the feature request form gets both labels, so filtering by
+            // either server still finds it.
+            const serverLines = section(body, /^server$/i);
             if (serverLines) {
-              managed.add('Jellyfin');
-              managed.add('Emby');
-              const answer = selected(serverLines).join(' ');
-              const jellyfin = /\bjellyfin\b/i.test(answer) || /\bJF\s*\d/i.test(answer);
-              const emby = /\bemby\b/i.test(answer);
-              if (jellyfin) wanted.add('Jellyfin');
-              if (emby) wanted.add('Emby');
-              if (!jellyfin && !emby) {
-                if (/^\s*v?10\./.test(answer)) wanted.add('Jellyfin');
-                else if (/^\s*v?4\./.test(answer)) wanted.add('Emby');
-              }
+              const items = selected(serverLines);
+              const both = items.some(i => /^both\b/i.test(i));
+              apply(SERVERS, both ? ['Jellyfin', 'Emby'] : items);
             }
 
             if (!managed.size) {
-              core.info('No Type of Change, Area or server section found, leaving labels alone.');
+              core.info('No Type of Change, Area or Server section found, leaving labels alone.');
               return;
             }
 
