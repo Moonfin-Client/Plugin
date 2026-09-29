@@ -1596,15 +1596,6 @@
                                 </select>
                                 <div class="fieldDescription">Only shows where the Achievement Badges plugin has friends turned on.</div>
                             </div>
-                            <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultMuteChatBannersDuringPlayback">Mute Chat Banners During Playback</label>
-                                <select id="DefaultMuteChatBannersDuringPlayback" is="emby-select">
-                                    <option value="">Not set (user decides)</option>
-                                    <option value="true">Yes</option>
-                                    <option value="false">No</option>
-                                </select>
-                                <div class="fieldDescription">Hides new message banners while a video or game plays. Moonfin turns this on by default.</div>
-                            </div>
                         </div>
 
                         <!-- 4. Home Screen -->
@@ -6144,7 +6135,6 @@
                     setNullableBoolSelect('#DefaultShowDownloadsButton', defaults.showDownloadsButton);
                     setNullableBoolSelect('#DefaultShowServerMessagesButton', defaults.showServerMessagesButton);
                     setNullableBoolSelect('#DefaultShowFriendsButton', defaults.showFriendsButton);
-                    setNullableBoolSelect('#DefaultMuteChatBannersDuringPlayback', defaults.muteChatBannersDuringPlayback);
 
                     setSelectValue('#DefaultMediaBarSourceType', defaults.mediaBarSourceType, 'Configured source');
                     loadAdminGenrePicker(defaults.mediaBarExcludedGenres || []);
@@ -6949,7 +6939,6 @@
                         config.DefaultUserSettings.showDownloadsButton = getNullableBoolSelect('#DefaultShowDownloadsButton');
                         config.DefaultUserSettings.showServerMessagesButton = getNullableBoolSelect('#DefaultShowServerMessagesButton');
                         config.DefaultUserSettings.showFriendsButton = getNullableBoolSelect('#DefaultShowFriendsButton');
-                        config.DefaultUserSettings.muteChatBannersDuringPlayback = getNullableBoolSelect('#DefaultMuteChatBannersDuringPlayback');
 
                         config.DefaultUserSettings.mediaBarSourceType = document.querySelector('#DefaultMediaBarSourceType').value || null;
                         var genreIds = [];
