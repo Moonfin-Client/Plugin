@@ -325,6 +325,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("showLiveTvButton")] public bool? ShowLiveTvButton { get; set; }
         [JsonPropertyName("showDownloadsButton")] public bool? ShowDownloadsButton { get; set; }
         [JsonPropertyName("showServerMessagesButton")] public bool? ShowServerMessagesButton { get; set; }
+        [JsonPropertyName("showFriendsButton")] public bool? ShowFriendsButton { get; set; }
         [JsonPropertyName("crashReportsEnabled")] public bool? CrashReportsEnabled { get; set; }
         [JsonPropertyName("diagnosticLoggingEnabled")] public bool? DiagnosticLoggingEnabled { get; set; }
         [JsonPropertyName("updateNotificationsEnabled")] public bool? UpdateNotificationsEnabled { get; set; }
