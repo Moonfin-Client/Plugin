@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Moonfin.Server.Helpers;
 using Moonfin.Server.Services;
 
 namespace Moonfin.Server.Api;
@@ -22,6 +23,12 @@ public class CustomRowController : ControllerBase
     private readonly ILogger<CustomRowController> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
+
+    // A large list can take longer to resolve than a client waits, so a resolution isn't tied
+    // to the request that started it. It still caches when that client gives up, and a retry
+    // while it's running waits on it instead of starting over. Keyed per user as well, since
+    // each user resolves with their own API keys.
+    private static readonly InFlightTasks<List<CustomRowItem>> Resolving = new();
 
     public CustomRowController(
         CustomRowCacheService cacheService,
@@ -95,22 +102,22 @@ public class CustomRowController : ControllerBase
 
         try
         {
-            var items = await _fetchService.FetchCustomRowAsync(source, type, parsedParams, userId.Value, cancellationToken);
-
-            // Don't cache empty results. An empty row cached for 24h looks like a
-            // broken list when the real cause was an upstream hiccup.
-            if (items.Count > 0)
-            {
-                _cacheService.Set(cacheKey, items);
-                _cacheService.PruneOlderThan(TimeSpan.FromDays(7));
-                await _cacheService.FlushAsync();
-            }
+            var items = await Resolving
+                .GetOrStart(
+                    $"{cacheKey}:{userId.Value}",
+                    () => FetchAndCacheAsync(cacheKey, source, type, parsedParams, userId.Value))
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
 
             return Ok(new CustomRowResponse
             {
                 Success = true,
                 Items = items
             });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new EmptyResult();
         }
         catch (NotSupportedException ex)
         {
@@ -125,6 +132,29 @@ public class CustomRowController : ControllerBase
                 Error = ex.Message
             });
         }
+    }
+
+    private async Task<List<CustomRowItem>> FetchAndCacheAsync(
+        string cacheKey,
+        string source,
+        string type,
+        Dictionary<string, string> parsedParams,
+        Guid userId)
+    {
+        var items = await _fetchService
+            .FetchCustomRowAsync(source, type, parsedParams, userId, CancellationToken.None)
+            .ConfigureAwait(false);
+
+        // Don't cache empty results. An empty row cached for 24h looks like a
+        // broken list when the real cause was an upstream hiccup.
+        if (items.Count > 0)
+        {
+            _cacheService.Set(cacheKey, items);
+            _cacheService.PruneOlderThan(TimeSpan.FromDays(7));
+            await _cacheService.FlushAsync().ConfigureAwait(false);
+        }
+
+        return items;
     }
 }
 

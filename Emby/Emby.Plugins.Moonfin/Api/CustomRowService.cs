@@ -236,9 +236,7 @@ namespace Emby.Plugins.Moonfin.Api
             if (!string.IsNullOrWhiteSpace(tmdbKey))
             {
                 using var tmdbSemaphore = new SemaphoreSlim(15, 15);
-                var tasks = items
-                    .Where(i => i.Id.HasValue && (string.IsNullOrEmpty(i.PosterUrl) || (i.Rank <= 50 && string.IsNullOrEmpty(i.BackdropUrl))))
-                    .Select(async rowItem =>
+                var tasks = items.Where(i => i.Id.HasValue).Select(async rowItem =>
                 {
                     await tmdbSemaphore.WaitAsync().ConfigureAwait(false);
                     try
