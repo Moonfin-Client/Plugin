@@ -2078,6 +2078,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setSelectValue(view, '#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
             setSelectValue(view, '#DefaultFallbackSubtitleLanguage', defaults.fallbackSubtitleLanguage, 'Configured language');
             setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
+            setNullableBoolSelect(view, '#DefaultPreferTextSubtitles', defaults.preferTextSubtitles);
+            setNullableBoolSelect(view, '#DefaultPreferExternalSubtitles', defaults.preferExternalSubtitles);
 
             setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
             setNullableBoolSelect(view, '#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
@@ -2381,6 +2383,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.defaultSubtitleLanguage = view.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
             d.fallbackSubtitleLanguage = view.querySelector('#DefaultFallbackSubtitleLanguage').value.trim() || null;
             d.preferSdhSubtitles = getNullableBoolSelect(view, '#DefaultPreferSdhSubtitles');
+            d.preferTextSubtitles = getNullableBoolSelect(view, '#DefaultPreferTextSubtitles');
+            d.preferExternalSubtitles = getNullableBoolSelect(view, '#DefaultPreferExternalSubtitles');
 
             d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
             d.autoplayNextEpisode = getNullableBoolSelect(view, '#DefaultAutoplayNextEpisode');

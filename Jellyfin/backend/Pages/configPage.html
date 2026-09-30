@@ -2324,6 +2324,22 @@
                                     <option value="false">No</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferTextSubtitles">Prefer Text Subtitles</label>
+                                <select id="DefaultPreferTextSubtitles" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPreferExternalSubtitles">Prefer External Subtitles</label>
+                                <select id="DefaultPreferExternalSubtitles" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Automation &amp; Queue</h4>
                             <div class="inputContainer">
@@ -6214,6 +6230,8 @@
                     setSelectValue('#DefaultDefaultSubtitleLanguage', defaults.defaultSubtitleLanguage, 'Configured language');
                     setSelectValue('#DefaultFallbackSubtitleLanguage', defaults.fallbackSubtitleLanguage, 'Configured language');
                     setNullableBoolSelect('#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
+                    setNullableBoolSelect('#DefaultPreferTextSubtitles', defaults.preferTextSubtitles);
+                    setNullableBoolSelect('#DefaultPreferExternalSubtitles', defaults.preferExternalSubtitles);
 
                     setNullableBoolSelect('#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
                     setNullableBoolSelect('#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
@@ -6974,6 +6992,8 @@
                         config.DefaultUserSettings.defaultSubtitleLanguage = document.querySelector('#DefaultDefaultSubtitleLanguage').value.trim() || null;
                         config.DefaultUserSettings.fallbackSubtitleLanguage = document.querySelector('#DefaultFallbackSubtitleLanguage').value.trim() || null;
                         config.DefaultUserSettings.preferSdhSubtitles = getNullableBoolSelect('#DefaultPreferSdhSubtitles');
+                        config.DefaultUserSettings.preferTextSubtitles = getNullableBoolSelect('#DefaultPreferTextSubtitles');
+                        config.DefaultUserSettings.preferExternalSubtitles = getNullableBoolSelect('#DefaultPreferExternalSubtitles');
 
                         config.DefaultUserSettings.cinemaModeEnabled = getNullableBoolSelect('#DefaultCinemaModeEnabled');
                         config.DefaultUserSettings.autoplayNextEpisode = getNullableBoolSelect('#DefaultAutoplayNextEpisode');
