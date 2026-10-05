@@ -21,8 +21,15 @@ namespace Emby.Plugins.Moonfin.Models
 
         [JsonPropertyName("userRating")] public string? UserRating { get; set; }
         [JsonPropertyName("rating")] public double? Rating { get; set; }
+
+        /// <summary>The certification for the server's country, looked up on TMDB. Null when unknown.</summary>
+        [JsonPropertyName("officialRating")] public string? OfficialRating { get; set; }
+
         [JsonPropertyName("posterUrl")] public string? PosterUrl { get; set; }
         [JsonPropertyName("backdropUrl")] public string? BackdropUrl { get; set; }
+        [JsonPropertyName("overview")] public string? Overview { get; set; }
+        [JsonPropertyName("genres")] public List<string>? Genres { get; set; }
+        [JsonPropertyName("runTimeTicks")] public long? RunTimeTicks { get; set; }
     }
 
     public class CustomRowItemProviderIds

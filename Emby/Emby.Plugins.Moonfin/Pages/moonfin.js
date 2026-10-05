@@ -194,6 +194,39 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return null;
     }
 
+    // The holidays in seasonal-holidays.json, by id.
+    var SEASONAL_HOLIDAYS = [
+        ['newYear', "New Year's"],
+        ['valentines', "Valentine's Day"],
+        ['easter', 'Easter'],
+        ['pride', 'Pride'],
+        ['halloween', 'Halloween'],
+        ['thanksgiving', 'Thanksgiving'],
+        ['christmas', 'Christmas']
+    ];
+
+    // A ticked box means the holiday shows. The stored list holds the hidden ones.
+    function renderSeasonalHolidayChecks(view, hidden) {
+        var container = view.querySelector('#DefaultSeasonalRowHolidays');
+        if (!container) return;
+        var hiddenIds = Array.isArray(hidden) ? hidden : [];
+        container.innerHTML = SEASONAL_HOLIDAYS.map(function (holiday) {
+            var checked = hiddenIds.indexOf(holiday[0]) === -1 ? ' checked' : '';
+            return '<label class="emby-checkbox-label" style="display:block;margin:4px 0;">' +
+                '<input type="checkbox" is="emby-checkbox" data-seasonal-holiday="' + holiday[0] + '"' + checked + ' />' +
+                '<span>' + esc(holiday[1]) + '</span></label>';
+        }).join('');
+    }
+
+    function readSeasonalHiddenHolidays(view) {
+        var boxes = view.querySelectorAll('#DefaultSeasonalRowHolidays input[data-seasonal-holiday]');
+        var hidden = [];
+        for (var i = 0; i < boxes.length; i++) {
+            if (!boxes[i].checked) hidden.push(boxes[i].getAttribute('data-seasonal-holiday'));
+        }
+        return hidden.length > 0 ? hidden : null;
+    }
+
     function setNullableIntInput(view, selector, value) {
         var input = view.querySelector(selector);
         if (!input) return;
@@ -2060,6 +2093,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultPreviewAudioEnabled', defaults.previewAudioEnabled);
             setSelectValue(view, '#DefaultSeasonalSurprise', defaults.seasonalSurprise, 'Configured surprise');
             setSelectValue(view, '#DefaultSeasonalDensity', defaults.seasonalDensity, 'Configured density');
+            setNullableBoolSelect(view, '#DefaultSeasonalRowEnabled', defaults.seasonalRowEnabled);
+            setSelectValue(view, '#DefaultSeasonalRowCountry', defaults.seasonalRowCountry, 'Configured country');
+            renderSeasonalHolidayChecks(view, defaults.seasonalRowHiddenHolidays);
 
             setSelectValue(view, '#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
             setSelectValue(view, '#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
@@ -2367,6 +2403,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.previewAudioEnabled = getNullableBoolSelect(view, '#DefaultPreviewAudioEnabled');
             d.seasonalSurprise = view.querySelector('#DefaultSeasonalSurprise').value || null;
             d.seasonalDensity = view.querySelector('#DefaultSeasonalDensity').value || null;
+            d.seasonalRowEnabled = getNullableBoolSelect(view, '#DefaultSeasonalRowEnabled');
+            d.seasonalRowCountry = view.querySelector('#DefaultSeasonalRowCountry').value || null;
+            d.seasonalRowHiddenHolidays = readSeasonalHiddenHolidays(view);
 
             // Clients store this one as text, unlike the millisecond fields below.
             d.resumeSubtractDuration = view.querySelector('#DefaultResumeSubtractDuration').value || null;

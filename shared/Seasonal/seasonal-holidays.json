@@ -1,0 +1,106 @@
+{
+  "holidays": [
+    {
+      "id": "newYear",
+      "minVotes": 50,
+      "windows": [
+        { "start": { "kind": "fixed", "month": 12, "day": 27 }, "end": { "kind": "fixed", "month": 1, "day": 1 } }
+      ],
+      "keywords": [
+        { "id": 613, "name": "new year's eve" },
+        { "id": 5632, "name": "new year's day" },
+        { "id": 252123, "name": "new year" }
+      ]
+    },
+    {
+      "id": "valentines",
+      "minVotes": 50,
+      "windows": [
+        { "start": { "kind": "fixed", "month": 2, "day": 1 }, "end": { "kind": "fixed", "month": 2, "day": 14 } }
+      ],
+      "keywords": [
+        { "id": 160404, "name": "valentine's day" },
+        { "id": 251912, "name": "valentine" }
+      ]
+    },
+    {
+      "id": "easter",
+      "minVotes": 50,
+      "windows": [
+        { "start": { "kind": "easter", "offsetDays": -7 }, "end": { "kind": "easter", "offsetDays": 1 } }
+      ],
+      "keywords": [
+        { "id": 9921, "name": "easter" },
+        { "id": 9923, "name": "easter bunny" },
+        { "id": 233042, "name": "easter egg hunt" }
+      ]
+    },
+    {
+      "id": "pride",
+      "minVotes": 100,
+      "windows": [
+        { "start": { "kind": "fixed", "month": 6, "day": 1 }, "end": { "kind": "fixed", "month": 6, "day": 30 } }
+      ],
+      "keywords": [
+        { "id": 158718, "name": "lgbt" },
+        { "id": 258533, "name": "gay theme" },
+        { "id": 264386, "name": "lesbian" },
+        { "id": 173662, "name": "gay pride" }
+      ]
+    },
+    {
+      "id": "halloween",
+      "minVotes": 100,
+      "windows": [
+        { "start": { "kind": "fixed", "month": 10, "day": 1 }, "end": { "kind": "fixed", "month": 10, "day": 31 } }
+      ],
+      "keywords": [
+        { "id": 3335, "name": "halloween" },
+        { "id": 9694, "name": "halloween party" },
+        { "id": 232795, "name": "halloween night" },
+        { "id": 180193, "name": "trick or treating" },
+        { "id": 182794, "name": "halloween costume" }
+      ]
+    },
+    {
+      "id": "thanksgiving",
+      "minVotes": 50,
+      "windows": [
+        {
+          "countries": ["CA"],
+          "start": { "kind": "nthWeekday", "month": 10, "weekday": "monday", "n": 2, "offsetDays": -6 },
+          "end": { "kind": "nthWeekday", "month": 10, "weekday": "monday", "n": 2 }
+        },
+        {
+          "countries": ["US"],
+          "start": { "kind": "nthWeekday", "month": 11, "weekday": "thursday", "n": 4, "offsetDays": -6 },
+          "end": { "kind": "nthWeekday", "month": 11, "weekday": "thursday", "n": 4 }
+        }
+      ],
+      "keywords": [
+        { "id": 4543, "name": "thanksgiving" },
+        { "id": 374738, "name": "thanksgiving dinner" }
+      ]
+    },
+    {
+      "id": "christmas",
+      "minVotes": 100,
+      "windows": [
+        {
+          "start": { "kind": "nthWeekday", "month": 11, "weekday": "thursday", "n": 4, "offsetDays": 1 },
+          "end": { "kind": "fixed", "month": 12, "day": 26 }
+        }
+      ],
+      "keywords": [
+        { "id": 207317, "name": "christmas" },
+        { "id": 1991, "name": "santa claus" },
+        { "id": 260365, "name": "christmas eve" },
+        { "id": 1441, "name": "christmas party" },
+        { "id": 5570, "name": "christmas tree" },
+        { "id": 193048, "name": "christmas spirit" },
+        { "id": 272698, "name": "christmas romance" },
+        { "id": 189966, "name": "holiday season" }
+      ]
+    }
+  ]
+}

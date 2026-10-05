@@ -3,7 +3,6 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Dto;
 using MediaBrowser.Controller.Dto;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities;
@@ -13,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Moonfin.Server.Helpers;
 using Moonfin.Server.Models;
 using Moonfin.Server.Services;
 
@@ -34,51 +34,14 @@ public class MoonfinController : ControllerBase
     private readonly PushDeliveryService _pushDelivery;
     private readonly ConfigBackupService _configBackup;
     private readonly MoonfinSimilarItemsService _similarItemsService;
-    private readonly IUserDataManager _userDataManager;
+    private readonly ItemCardDtoMapper _cardMapper;
     private readonly ILogger<MoonfinController> _logger;
     
     private static readonly Type? _userManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
-    private static readonly MethodInfo? _userManagerGetUserById = _userManagerType?.GetMethod("GetUserById", [typeof(Guid)]);
     private static readonly MethodInfo? _userManagerGetUsersIds = _userManagerType?.GetMethod("GetUsersIds", Type.EmptyTypes);
     private static readonly PropertyInfo? _userManagerUsersIdsProperty = _userManagerType?.GetProperty("UsersIds");
     private static readonly MethodInfo? _userManagerGetUsers = _userManagerType?.GetMethod("GetUsers", Type.EmptyTypes);
     private static readonly PropertyInfo? _userManagerUsersProperty = _userManagerType?.GetProperty("Users");
-    private static readonly MethodInfo? _internalItemsQuerySetUser = typeof(InternalItemsQuery).GetMethod("SetUser", BindingFlags.Public | BindingFlags.Instance);
-    private static readonly PropertyInfo? _internalItemsQueryUserProperty = typeof(InternalItemsQuery).GetProperty(nameof(InternalItemsQuery.User), BindingFlags.Public | BindingFlags.Instance);
-    // Takes the User these endpoints only ever hold as an object, so it's bound the same
-    // reflective way the user manager calls above are.
-    private static readonly MethodInfo? _getUserDataDto = typeof(IUserDataManager)
-        .GetMethods()
-        .FirstOrDefault(m =>
-        {
-            if (m.Name != "GetUserDataDto")
-            {
-                return false;
-            }
-
-            var parameters = m.GetParameters();
-            return parameters.Length == 2 &&
-                parameters[0].ParameterType == typeof(BaseItem) &&
-                typeof(UserItemDataDto).IsAssignableFrom(m.ReturnType);
-        });
-    // IsVisible grew a skipAllowedTagsCheck parameter in Jellyfin 10.11, so the lookup
-    // takes any overload whose extra parameters are booleans and fills them with false.
-    private static readonly MethodInfo? _baseItemIsVisible = typeof(BaseItem)
-        .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-        .Where(m =>
-        {
-            if (m.Name != "IsVisible")
-            {
-                return false;
-            }
-
-            var parameters = m.GetParameters();
-            return parameters.Length >= 1 && parameters.Skip(1).All(p => p.ParameterType == typeof(bool));
-        })
-        .OrderBy(m => m.GetParameters().Length)
-        .FirstOrDefault();
-    private static readonly Type? _baseItemIsVisibleUserType = _baseItemIsVisible?.GetParameters()[0].ParameterType;
-    private static readonly int _baseItemIsVisibleParamCount = _baseItemIsVisible?.GetParameters().Length ?? 0;
 
     public MoonfinController(
         MoonfinSettingsService settingsService,
@@ -87,7 +50,7 @@ public class MoonfinController : ControllerBase
         PushDeliveryService pushDelivery,
         ConfigBackupService configBackup,
         MoonfinSimilarItemsService similarItemsService,
-        IUserDataManager userDataManager,
+        ItemCardDtoMapper cardMapper,
         ILogger<MoonfinController> logger)
     {
         _settingsService = settingsService;
@@ -96,7 +59,7 @@ public class MoonfinController : ControllerBase
         _pushDelivery = pushDelivery;
         _configBackup = configBackup;
         _similarItemsService = similarItemsService;
-        _userDataManager = userDataManager;
+        _cardMapper = cardMapper;
         _logger = logger;
     }
 
@@ -1090,13 +1053,13 @@ public class MoonfinController : ControllerBase
             Recursive = true
         };
 
-        if (!TryApplyQueryUser(query, queryUser))
+        if (!UserReflection.ApplyUser(query, queryUser))
         {
             return Ok(new { Items = Array.Empty<object>() });
         }
 
         var genres = _libraryManager.GetItemsResult(query).Items
-            .Where(g => !string.IsNullOrWhiteSpace(g.Name) && IsItemVisibleToUser(g, queryUser))
+            .Where(g => !string.IsNullOrWhiteSpace(g.Name) && UserReflection.IsVisibleTo(g, queryUser))
             .Select(g => new { Id = g.Id.ToString("N"), Name = g.Name })
             .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -1157,7 +1120,7 @@ public class MoonfinController : ControllerBase
 
         // The query only applies parental ratings and blocked tags. Library access is a separate
         // check every other browse endpoint here makes, so make it here too.
-        var dtos = items.Where(i => IsItemVisibleToUser(i, queryUser)).Select(i => MapItemToDto(i, queryUser)).ToList();
+        var dtos = items.Where(i => UserReflection.IsVisibleTo(i, queryUser)).Select(i => _cardMapper.Map(i, queryUser)).ToList();
         return Ok(new
         {
             Items = dtos,
@@ -1217,7 +1180,7 @@ public class MoonfinController : ControllerBase
 
         var dtos = items
             .Where(HasBackdropImage)
-            .Select(i => MapItemToDto(i, queryUser))
+            .Select(i => _cardMapper.Map(i, queryUser))
             .ToList();
 
         return Ok(new
@@ -1227,100 +1190,13 @@ public class MoonfinController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Maps a BaseItem to a lightweight DTO matching Jellyfin's BaseItemDto shape.
-    /// Uses only stable BaseItem properties to avoid version-specific API issues.
-    /// </summary>
-    private object MapItemToDto(BaseItem item, object? user)
-    {
-        // Build image tags dict
-        var imageTags = new Dictionary<string, string>();
-        var imageInfo = item.GetImageInfo(ImageType.Primary, 0);
-        if (imageInfo != null)
-        {
-            imageTags["Primary"] = GetTag(imageInfo);
-        }
-        var logoInfo = item.GetImageInfo(ImageType.Logo, 0);
-        if (logoInfo != null)
-        {
-            imageTags["Logo"] = GetTag(logoInfo);
-        }
-
-        // Build backdrop tags array
-        var backdropTags = new List<string>();
-        var backdropImages = item.GetImages(ImageType.Backdrop).ToList();
-        foreach (var bd in backdropImages)
-        {
-            backdropTags.Add(GetTag(bd));
-        }
-
-        return new
-        {
-            item.Id,
-            item.Name,
-            Type = item.GetBaseItemKind().ToString(),
-            item.ProductionYear,
-            item.OfficialRating,
-            item.RunTimeTicks,
-            item.Genres,
-            item.Overview,
-            item.CommunityRating,
-            item.CriticRating,
-            ImageTags = imageTags,
-            BackdropImageTags = backdropTags,
-            UserData = BuildUserData(item, user)
-        };
-    }
-
-    /// <summary>
-    /// The calling user's played state, built by the server so it matches what a stock item
-    /// response carries. Cards read Played for the checkmark, PlaybackPositionTicks for the resume
-    /// bar and UnplayedItemCount for the series badge, so leaving it off makes everything these
-    /// endpoints return look unwatched.
-    /// </summary>
-    private UserItemDataDto? BuildUserData(BaseItem item, object? user)
-    {
-        if (user == null || _getUserDataDto == null)
-        {
-            return null;
-        }
-
-        try
-        {
-            return _getUserDataDto.Invoke(_userDataManager, [item, user]) as UserItemDataDto;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Could not read user data for {ItemId}", item.Id);
-            return null;
-        }
-    }
-
     private static bool HasBackdropImage(BaseItem item)
     {
         return item.GetImageInfo(ImageType.Backdrop, 0) != null;
     }
 
-    private object? ResolveQueryUser(Guid userId)
-    {
-        if (userId == Guid.Empty)
-        {
-            return null;
-        }
-
-        if (_userManagerType == null || _userManagerGetUserById == null)
-        {
-            return null;
-        }
-
-        var userManager = HttpContext?.RequestServices.GetService(_userManagerType);
-        if (userManager == null)
-        {
-            return null;
-        }
-
-        return _userManagerGetUserById.Invoke(userManager, [userId]);
-    }
+    private object? ResolveQueryUser(Guid userId) =>
+        HttpContext?.RequestServices is { } services ? UserReflection.ResolveUser(services, userId) : null;
 
     private List<Guid>? GetAllServerUserIds()
     {
@@ -1367,41 +1243,6 @@ public class MoonfinController : ControllerBase
         return ids;
     }
 
-    private static bool TryApplyQueryUser(InternalItemsQuery query, object queryUser)
-    {
-        if (_internalItemsQuerySetUser != null)
-        {
-            try
-            {
-                _internalItemsQuerySetUser.Invoke(query, [queryUser]);
-                return true;
-            }
-            catch
-            {
-            }
-        }
-
-        return TrySetQueryUserProperty(query, queryUser);
-    }
-
-    private static bool TrySetQueryUserProperty(InternalItemsQuery query, object queryUser)
-    {
-        if (_internalItemsQueryUserProperty?.CanWrite != true || !_internalItemsQueryUserProperty.PropertyType.IsInstanceOfType(queryUser))
-        {
-            return false;
-        }
-
-        try
-        {
-            _internalItemsQueryUserProperty.SetValue(query, queryUser);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private BaseItem? GetItemByIdForUser(Guid itemId, object queryUser)
     {
         var query = new InternalItemsQuery
@@ -1410,56 +1251,13 @@ public class MoonfinController : ControllerBase
             Limit = 1
         };
 
-        if (!TryApplyQueryUser(query, queryUser))
+        if (!UserReflection.ApplyUser(query, queryUser))
         {
             return null;
         }
 
         var item = _libraryManager.GetItemsResult(query).Items.FirstOrDefault(i => i.Id == itemId);
-        return item != null && IsItemVisibleToUser(item, queryUser) ? item : null;
-    }
-
-    /// <summary>
-    /// Invokes BaseItem.IsVisible via reflection so we stay compatible with the User type
-    /// change between Jellyfin 10.10 and 10.11 and the skipAllowedTagsCheck parameter
-    /// 10.11 added. Fails closed: if the method can't be resolved or invoked, the item
-    /// is treated as not visible.
-    /// </summary>
-    private static bool IsItemVisibleToUser(BaseItem item, object queryUser)
-    {
-        if (_baseItemIsVisible == null || _baseItemIsVisibleUserType == null) return false;
-        if (!_baseItemIsVisibleUserType.IsInstanceOfType(queryUser)) return false;
-
-        try
-        {
-            return _baseItemIsVisible.Invoke(item, BuildIsVisibleArgs(queryUser)) is true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // False for every trailing boolean (skipAllowedTagsCheck today), so no check
-    // inside IsVisible is skipped.
-    private static object?[] BuildIsVisibleArgs(object user)
-    {
-        var args = new object?[_baseItemIsVisibleParamCount];
-        args[0] = user;
-        for (var i = 1; i < args.Length; i++)
-        {
-            args[i] = false;
-        }
-
-        return args;
-    }
-
-    /// <summary>
-    /// Gets a stable tag string from an ItemImageInfo for cache-busting image URLs.
-    /// </summary>
-    private static string GetTag(ItemImageInfo info)
-    {
-        return info.DateModified.Ticks.ToString("X");
+        return item != null && UserReflection.IsVisibleTo(item, queryUser) ? item : null;
     }
 
     /// <summary>
@@ -1477,10 +1275,10 @@ public class MoonfinController : ControllerBase
             Recursive = true
         };
 
-        if (!TryApplyQueryUser(genreQuery, queryUser)) return Array.Empty<Guid>();
+        if (!UserReflection.ApplyUser(genreQuery, queryUser)) return Array.Empty<Guid>();
 
         var allGenres = _libraryManager.GetItemsResult(genreQuery).Items
-            .Where(g => IsItemVisibleToUser(g, queryUser))
+            .Where(g => UserReflection.IsVisibleTo(g, queryUser))
             .ToList();
 
         var excluded = new HashSet<Guid>();
@@ -1538,11 +1336,11 @@ public class MoonfinController : ControllerBase
 
             if (includedGenreIds != null) query.GenreIds = includedGenreIds;
 
-            if (!TryApplyQueryUser(query, queryUser)) return [];
+            if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
             SetRandomOrder(query);
             return _libraryManager.GetItemsResult(query).Items
-                .Where(item => IsItemVisibleToUser(item, queryUser))
+                .Where(item => UserReflection.IsVisibleTo(item, queryUser))
                 .ToList();
         }
 
@@ -1554,7 +1352,7 @@ public class MoonfinController : ControllerBase
         {
             if (!Guid.TryParse(libId, out var parentGuid)) continue;
             var parent = _libraryManager.GetItemById(parentGuid);
-            if (parent == null || !IsItemVisibleToUser(parent, queryUser)) continue;
+            if (parent == null || !UserReflection.IsVisibleTo(parent, queryUser)) continue;
             allowedLibraryIds.Add(parentGuid);
         }
 
@@ -1576,14 +1374,14 @@ public class MoonfinController : ControllerBase
 
             if (includedGenreIds != null) query.GenreIds = includedGenreIds;
 
-            if (!TryApplyQueryUser(query, queryUser)) return [];
+            if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
             SetRandomOrder(query);
 
             foreach (var item in _libraryManager.GetItemsResult(query).Items)
             {
                 if (!seenIds.Add(item.Id)) continue;
-                if (!IsItemVisibleToUser(item, queryUser)) continue;
+                if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
                 allItems.Add(item);
             }
         }
@@ -1656,12 +1454,12 @@ public class MoonfinController : ControllerBase
                 Limit = linkedIds.Length
             };
 
-            if (!TryApplyQueryUser(query, queryUser)) return [];
+            if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
             foreach (var item in _libraryManager.GetItemsResult(query).Items)
             {
                 if (!seenIds.Add(item.Id)) continue;
-                if (!IsItemVisibleToUser(item, queryUser)) continue;
+                if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
                 if (excludedNames != null && item.Genres.Any(g => excludedNames.Contains(g))) continue;
 
                 allItems.Add(item);

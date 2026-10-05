@@ -31,4 +31,9 @@
     <ProjectReference Include="..\..\backend\Moonfin.Server.csproj" />
   </ItemGroup>
 
+  <!-- The seasonal row's shared logic is compiled into both ports, so its tests run against each. -->
+  <ItemGroup>
+    <Compile Include="../../../shared/Seasonal.Tests/*.cs" Link="Seasonal/%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

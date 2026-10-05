@@ -27,11 +27,22 @@ namespace Emby.Plugins.Moonfin.Services
             var cache = EnsureLoaded();
             cache[chartType] = new ImdbListsCacheEntry { Items = items, CachedAt = DateTimeOffset.UtcNow };
         }
+
+        public bool RatingsFilled(string chartType)
+        {
+            return EnsureLoaded().TryGetValue(chartType, out var entry) && entry.RatingsFilled;
+        }
+
+        public void MarkRatingsFilled(string chartType)
+        {
+            if (EnsureLoaded().TryGetValue(chartType, out var entry)) entry.RatingsFilled = true;
+        }
     }
 
     public class ImdbListsCacheEntry
     {
         [JsonPropertyName("items")] public List<CustomRowItem> Items { get; set; } = new List<CustomRowItem>();
         [JsonPropertyName("cachedAt")] public DateTimeOffset CachedAt { get; set; }
+        [JsonPropertyName("ratingsFilled")] public bool RatingsFilled { get; set; }
     }
 }

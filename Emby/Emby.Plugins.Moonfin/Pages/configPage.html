@@ -747,7 +747,8 @@
                             <input type="password" id="TmdbApiKey" is="emby-input" placeholder="Enter your TMDB API key or v4 token" />
                             <div class="fieldDescription">
                                 Provide a server-wide <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB API key</a>
-                                that all users can use for episode ratings.
+                                that all users can use for episode ratings, the seasonal Home row, and the
+                                parental ratings of titles in the IMDb, TMDB and MDBList rows.
                                 Users who set their own key in their Moonfin client settings will use that instead.
                                 Supports both v3 API keys and v4 Bearer tokens.
                                 This key is also used to fetch posters for the MDBList official list home rows. Without it,
@@ -2481,6 +2482,32 @@
                                     <option value="normal">Normal</option>
                                     <option value="heavy">Heavy</option>
                                 </select>
+                            </div>
+
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Seasonal Row</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeasonalRowEnabled">Seasonal Row</label>
+                                <select id="DefaultSeasonalRowEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">On</option>
+                                    <option value="false">Off</option>
+                                </select>
+                                <div class="fieldDescription">A Home row of holiday movies from the library, with Seerr suggestions when the user is signed in to Seerr. Emby keeps no TMDB keywords of its own, so this row needs the server-wide TMDB API key.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeasonalRowCountry">Seasonal Row Country</label>
+                                <select id="DefaultSeasonalRowCountry" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="auto">Automatic</option>
+                                    <option value="US">United States</option>
+                                    <option value="CA">Canada</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Seasonal Row Holidays</label>
+                                <div id="DefaultSeasonalRowHolidays" style="border:1px solid rgba(128,128,128,0.3);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                                <div class="fieldDescription">Untick a holiday to hide its row for users who haven't chosen for themselves.</div>
                             </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Theme Music</h4>

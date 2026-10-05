@@ -7,7 +7,9 @@ using Emby.Plugins.Moonfin.Services;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Model.Drawing;
+using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
@@ -29,6 +31,13 @@ namespace Emby.Plugins.Moonfin
         public ImdbListsCacheService? ImdbListsCache { get; private set; }
         public ImdbChartFetcher? ImdbChartFetcher { get; private set; }
         public CustomRowCacheService? CustomRowCache { get; private set; }
+        public TmdbRatingCacheService? TmdbRatingCache { get; private set; }
+        public TmdbRatingService? TmdbRatings { get; private set; }
+        public ServerRatingLimitService? RatingLimits { get; private set; }
+        public SeasonalKeywordStoreService? SeasonalKeywords { get; private set; }
+        public SeasonalSuggestionsCacheService? SeasonalSuggestions { get; private set; }
+        public SeerrAvailabilityService? SeerrAvailability { get; private set; }
+        public SeasonalRowService? SeasonalRows { get; private set; }
         public StudioLogoCacheService? StudioLogoCache { get; private set; }
         public StudioLogoFetchService? StudioLogoFetch { get; private set; }
         public GameThumbService? GameThumbs { get; private set; }
@@ -155,6 +164,15 @@ namespace Emby.Plugins.Moonfin
             ImdbListsCache = new ImdbListsCacheService(mdbLogger);
             ImdbChartFetcher = new ImdbChartFetcher(mdbLogger);
             CustomRowCache = new CustomRowCacheService(mdbLogger);
+            var configManager = appHost.Resolve<IServerConfigurationManager>();
+            TmdbRatingCache = new TmdbRatingCacheService(mdbLogger);
+            TmdbRatings = new TmdbRatingService(TmdbRatingCache, configManager, mdbLogger);
+            RatingLimits = new ServerRatingLimitService(appHost.Resolve<ILocalizationManager>(), configManager);
+            var seasonalLogger = logManager.GetLogger("MoonfinSeasonal");
+            SeasonalKeywords = new SeasonalKeywordStoreService(seasonalLogger);
+            SeasonalSuggestions = new SeasonalSuggestionsCacheService(seasonalLogger);
+            SeerrAvailability = new SeerrAvailabilityService(SeerrService, SettingsService);
+            SeasonalRows = new SeasonalRowService(configManager, SettingsService, RatingLimits, TmdbRatings, SeasonalKeywords, SeasonalSuggestions, SeerrAvailability, seasonalLogger);
             StudioLogoCache = new StudioLogoCacheService(mdbLogger);
             StudioLogoFetch = new StudioLogoFetchService(StudioLogoCache, mdbLogger);
             GameThumbs = new GameThumbService(mdbLogger);

@@ -23,6 +23,7 @@ public class CustomRowFetchService
 {
     private readonly MoonfinSettingsService _settingsService;
     private readonly ImdbListsCacheService _imdbCacheService;
+    private readonly TmdbRatingService _ratingService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CustomRowFetchService> _logger;
     private readonly ILogger<ImdbListsTask> _taskLogger;
@@ -36,12 +37,14 @@ public class CustomRowFetchService
     public CustomRowFetchService(
         MoonfinSettingsService settingsService,
         ImdbListsCacheService imdbCacheService,
+        TmdbRatingService ratingService,
         IHttpClientFactory httpClientFactory,
         ILogger<CustomRowFetchService> logger,
         ILogger<ImdbListsTask> taskLogger)
     {
         _settingsService = settingsService;
         _imdbCacheService = imdbCacheService;
+        _ratingService = ratingService;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _taskLogger = taskLogger;
@@ -78,10 +81,10 @@ public class CustomRowFetchService
 
         if (source == "imdb")
         {
-            return await FetchImdbList(type, cancellationToken);
+            return await FetchImdbList(type, userId, cancellationToken);
         }
 
-        return source switch
+        var items = source switch
         {
             "mdblist" => await FetchMdbList(type, parsedParams, userId, cancellationToken),
             "tmdb" => await FetchTmdb(type, parsedParams, userId, cancellationToken),
@@ -89,6 +92,27 @@ public class CustomRowFetchService
             "letterboxd" => await FetchLetterboxd(type, parsedParams, userId, cancellationToken),
             _ => throw new NotSupportedException($"Unsupported custom row source: {source}")
         };
+
+        await _ratingService.FillRatingsAsync(items, await ResolveTmdbApiKey(userId), cancellationToken).ConfigureAwait(false);
+        return items;
+    }
+
+    /// <summary>
+    /// Whether this user's row is fetched with a key of their own. Such a row can't share the
+    /// cache entry everyone else reads, since a private list is only visible to that key.
+    /// </summary>
+    public async Task<bool> UsesPersonalKeyAsync(string source, Guid userId)
+    {
+        var resolved = await _settingsService.GetResolvedProfileAsync(userId, "global");
+        if (resolved == null)
+        {
+            return false;
+        }
+
+        var config = MoonfinPlugin.Instance?.Configuration;
+        var ownTmdbKey = !string.IsNullOrWhiteSpace(resolved.TmdbApiKey) && resolved.TmdbApiKey != config?.TmdbApiKey;
+        var ownMdblistKey = !string.IsNullOrWhiteSpace(resolved.MdblistApiKey) && resolved.MdblistApiKey != config?.MdblistApiKey;
+        return source.Trim().ToLowerInvariant() == "mdblist" ? ownMdblistKey || ownTmdbKey : ownTmdbKey;
     }
 
     private async Task<string?> ResolveTmdbApiKey(Guid? userId)
@@ -690,7 +714,27 @@ public class CustomRowFetchService
         return stars;
     }
 
-    private async Task<List<CustomRowItem>> FetchImdbList(string type, CancellationToken cancellationToken)
+    private async Task<List<CustomRowItem>> FetchImdbList(string type, Guid? userId, CancellationToken cancellationToken)
+    {
+        var items = await LoadImdbList(type, cancellationToken).ConfigureAwait(false);
+
+        // The sync task fills ratings with the admin key. This covers a chart it fetched before
+        // a key was set, or one fetched on demand here.
+        if (items.Count > 0 && !_imdbCacheService.RatingsFilled(type))
+        {
+            var apiKey = await ResolveTmdbApiKey(userId);
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                await _ratingService.FillRatingsAsync(items, apiKey, cancellationToken).ConfigureAwait(false);
+                _imdbCacheService.MarkRatingsFilled(type);
+                await _imdbCacheService.FlushAsync().ConfigureAwait(false);
+            }
+        }
+
+        return items;
+    }
+
+    private async Task<List<CustomRowItem>> LoadImdbList(string type, CancellationToken cancellationToken)
     {
         var cached = _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(1));
         if (cached != null && cached.Count > 0)
@@ -711,7 +755,7 @@ public class CustomRowFetchService
             _logger.LogInformation("IMDb chart {Type} cache miss or expired, fetching on-demand", type);
             try
             {
-                var task = new ImdbListsTask(_httpClientFactory, _imdbCacheService, _taskLogger);
+                var task = new ImdbListsTask(_httpClientFactory, _imdbCacheService, _ratingService, _taskLogger);
                 var items = await task.FetchChartAsync(type, cancellationToken);
                 if (items != null && items.Count > 0)
                 {

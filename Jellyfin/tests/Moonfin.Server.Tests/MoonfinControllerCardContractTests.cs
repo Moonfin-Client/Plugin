@@ -1,31 +1,25 @@
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using MediaBrowser.Controller.Entities.Movies;
-using Moonfin.Server.Api;
+using Moonfin.Server.Services;
 using Xunit;
 
 namespace Moonfin.Server.Tests;
 
 /// <summary>
-/// Pins the trimmed card shape the browse endpoints return, without standing up Jellyfin's
-/// service graph, the same way GamesControllerArtworkContractTests does.
+/// Pins the trimmed card shape the browse and seasonal endpoints return, without standing up
+/// Jellyfin's service graph, the same way GamesControllerArtworkContractTests does.
 /// </summary>
 public sealed class MoonfinControllerCardContractTests
 {
-    private static readonly MethodInfo MapItemToDtoMethod =
-        typeof(MoonfinController).GetMethod("MapItemToDto", BindingFlags.NonPublic | BindingFlags.Instance)
-        ?? throw new InvalidOperationException("Missing MapItemToDto.");
+    private static ItemCardDtoMapper Mapper() => new(null!, new NoOpLogger<ItemCardDtoMapper>());
 
     // Clients read UserData.Played for the watched checkmark and PlaybackPositionTicks for the
     // resume bar, so dropping the key makes every card these endpoints return look unwatched.
     [Fact]
-    public void MapItemToDto_CarriesUserDataSoCardsCanShowPlayedState()
+    public void Map_CarriesUserDataSoCardsCanShowPlayedState()
     {
-        var controller = (MoonfinController)RuntimeHelpers.GetUninitializedObject(typeof(MoonfinController));
+        var dto = Mapper().Map(new Movie { Name = "Seed" }, null);
 
-        var dto = MapItemToDtoMethod.Invoke(controller, [new Movie { Name = "Seed" }, null]);
-
-        Assert.NotNull(dto);
         var userData = dto.GetType().GetProperty("UserData");
         Assert.NotNull(userData);
 
@@ -34,12 +28,22 @@ public sealed class MoonfinControllerCardContractTests
         Assert.Null(userData.GetValue(dto));
     }
 
+    // The seasonal row's owned titles carry the rating the server holds, so a client can apply
+    // its own blocked list to them like any library card.
+    [Fact]
+    public void Map_CarriesTheOfficialRating()
+    {
+        var dto = Mapper().Map(new Movie { Name = "Seed", OfficialRating = "PG-13" }, null);
+
+        Assert.Equal("PG-13", dto.GetType().GetProperty("OfficialRating")?.GetValue(dto));
+    }
+
     // A rename on the server side would leave the lookup null and quietly send every card without
     // user data, which nothing else here would notice.
     [Fact]
     public void UserDataLookup_BindsAgainstTheReferencedServer()
     {
-        var binder = typeof(MoonfinController)
+        var binder = typeof(ItemCardDtoMapper)
             .GetField("_getUserDataDto", BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("Missing _getUserDataDto.");
 

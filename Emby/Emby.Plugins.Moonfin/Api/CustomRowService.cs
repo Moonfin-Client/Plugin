@@ -52,6 +52,12 @@ namespace Emby.Plugins.Moonfin.Api
         private ImdbListsCacheService ImdbCache => Plugin.Instance?.ImdbListsCache
             ?? throw new InvalidOperationException("ImdbListsCacheService not initialized");
 
+        private TmdbRatingService Ratings => Plugin.Instance?.TmdbRatings
+            ?? throw new InvalidOperationException("TmdbRatingService not initialized");
+
+        private ServerRatingLimitService RatingLimits => Plugin.Instance?.RatingLimits
+            ?? throw new InvalidOperationException("ServerRatingLimitService not initialized");
+
         public CustomRowService(IApplicationHost appHost)
         {
             _authContext = appHost.Resolve<IAuthorizationContext>();
@@ -73,15 +79,19 @@ namespace Emby.Plugins.Moonfin.Api
             source = source!.Trim().ToLowerInvariant();
             type = type!.Trim().ToLowerInvariant();
 
-            var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            var userId = user != null && user.Id != Guid.Empty ? user.Id : (Guid?)null;
             if (userId == null) return Json(401, new { error = "User not authenticated" });
+
+            // The caches are shared, so the user's own parental limit is applied to a copy on the way out.
+            var limit = RatingLimits.ForUser(user);
 
             if (source == "imdb")
             {
                 try
                 {
-                    var imdbItems = await FetchImdbList(type).ConfigureAwait(false);
-                    return Json(new { success = true, items = imdbItems });
+                    var imdbItems = await FetchImdbList(type, userId.Value).ConfigureAwait(false);
+                    return Json(new { success = true, items = RatingLimits.Filter(limit, imdbItems) });
                 }
                 catch (Exception ex)
                 {
@@ -113,12 +123,14 @@ namespace Emby.Plugins.Moonfin.Api
             var canonicalParams = JsonSerializer.Serialize(
                 new SortedDictionary<string, string>(parsedParams, StringComparer.Ordinal));
             var cacheKey = source + ":" + type + ":" + Sha256Hex(canonicalParams);
+            if (await UsesPersonalKeyAsync(source, userId.Value).ConfigureAwait(false))
+                cacheKey += ":" + userId.Value.ToString("N");
 
             if (!refresh)
             {
                 var cached = Cache.TryGet(cacheKey, CacheTtl);
                 if (cached != null)
-                    return Json(new { success = true, items = cached });
+                    return Json(new { success = true, items = RatingLimits.Filter(limit, cached) });
             }
 
             using var client = CreateClient();
@@ -144,6 +156,8 @@ namespace Emby.Plugins.Moonfin.Api
                         return Json(400, new { error = "Unsupported custom row source: " + source });
                 }
 
+                await Ratings.FillRatingsAsync(items, await ResolveTmdbKey(userId.Value).ConfigureAwait(false), CancellationToken.None).ConfigureAwait(false);
+
                 // Don't cache empty results. An empty row cached for 24h looks like a
                 // broken list when the real cause was an upstream hiccup.
                 if (items.Count > 0)
@@ -153,7 +167,7 @@ namespace Emby.Plugins.Moonfin.Api
                     await Cache.FlushAsync().ConfigureAwait(false);
                 }
 
-                return Json(new { success = true, items });
+                return Json(new { success = true, items = RatingLimits.Filter(limit, items) });
             }
             catch (Exception ex)
             {
@@ -613,7 +627,42 @@ namespace Emby.Plugins.Moonfin.Api
             return items;
         }
 
-        private async Task<List<CustomRowItem>> FetchImdbList(string type)
+        private async Task<List<CustomRowItem>> FetchImdbList(string type, Guid userId)
+        {
+            var items = await LoadImdbList(type).ConfigureAwait(false);
+
+            // The sync task fills ratings with the admin key. This covers a chart it fetched before
+            // a key was set, or one fetched on demand here.
+            if (items.Count > 0 && !ImdbCache.RatingsFilled(type))
+            {
+                var apiKey = await ResolveTmdbKey(userId).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                {
+                    await Ratings.FillRatingsAsync(items, apiKey, CancellationToken.None).ConfigureAwait(false);
+                    ImdbCache.MarkRatingsFilled(type);
+                    await ImdbCache.FlushAsync().ConfigureAwait(false);
+                }
+            }
+
+            return items;
+        }
+
+        /// <summary>
+        /// Whether this user's row is fetched with a key of their own. Such a row can't share the
+        /// cache entry everyone else reads, since a private list is only visible to that key.
+        /// </summary>
+        private async Task<bool> UsesPersonalKeyAsync(string source, Guid userId)
+        {
+            var resolved = await Settings.GetResolvedProfileAsync(userId, "global").ConfigureAwait(false);
+            if (resolved == null) return false;
+
+            var config = Plugin.Instance?.Configuration;
+            var ownTmdbKey = !string.IsNullOrWhiteSpace(resolved.TmdbApiKey) && resolved.TmdbApiKey != config?.TmdbApiKey;
+            var ownMdblistKey = !string.IsNullOrWhiteSpace(resolved.MdblistApiKey) && resolved.MdblistApiKey != config?.MdblistApiKey;
+            return source == "mdblist" ? ownMdblistKey || ownTmdbKey : ownTmdbKey;
+        }
+
+        private async Task<List<CustomRowItem>> LoadImdbList(string type)
         {
             var cached = ImdbCache.TryGetItems(type, TimeSpan.FromDays(1));
             if (cached != null && cached.Count > 0) return cached;

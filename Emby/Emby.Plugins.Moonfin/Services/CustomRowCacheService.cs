@@ -14,10 +14,11 @@ namespace Emby.Plugins.Moonfin.Services
     {
         public CustomRowCacheService(ILogger logger) : base(logger, "custom_rows_cache.json", "Custom rows") { }
 
+        // An entry written before rows carried ratings counts as expired, so it's fetched once more.
         public List<CustomRowItem>? TryGet(string cacheKey, TimeSpan maxAge)
         {
             var cache = EnsureLoaded();
-            if (cache.TryGetValue(cacheKey, out var entry) && DateTimeOffset.UtcNow - entry.CachedAt < maxAge)
+            if (cache.TryGetValue(cacheKey, out var entry) && entry.RatingsFilled && DateTimeOffset.UtcNow - entry.CachedAt < maxAge)
                 return entry.Items;
             return null;
         }
@@ -25,7 +26,7 @@ namespace Emby.Plugins.Moonfin.Services
         public void Set(string cacheKey, List<CustomRowItem> items)
         {
             var cache = EnsureLoaded();
-            cache[cacheKey] = new CustomRowCacheEntry { Items = items, CachedAt = DateTimeOffset.UtcNow };
+            cache[cacheKey] = new CustomRowCacheEntry { Items = items, CachedAt = DateTimeOffset.UtcNow, RatingsFilled = true };
         }
 
         /// <summary>
@@ -50,5 +51,6 @@ namespace Emby.Plugins.Moonfin.Services
     {
         [JsonPropertyName("items")] public List<CustomRowItem> Items { get; set; } = new List<CustomRowItem>();
         [JsonPropertyName("cachedAt")] public DateTimeOffset CachedAt { get; set; }
+        [JsonPropertyName("ratingsFilled")] public bool RatingsFilled { get; set; }
     }
 }

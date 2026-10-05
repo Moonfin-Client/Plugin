@@ -70,6 +70,13 @@ namespace Emby.Plugins.Moonfin.Services
                     if (items != null && items.Count > 0)
                     {
                         CacheService.SetItems(key, items);
+                        var ratings = Plugin.Instance?.TmdbRatings;
+                        if (ratings != null && !string.IsNullOrWhiteSpace(config?.TmdbApiKey))
+                        {
+                            await ratings.FillRatingsAsync(items, config!.TmdbApiKey, cancellationToken).ConfigureAwait(false);
+                            CacheService.MarkRatingsFilled(key);
+                        }
+
                         _logger.Info("Cached " + items.Count + " items for IMDb chart: " + key, 0);
                     }
                 }

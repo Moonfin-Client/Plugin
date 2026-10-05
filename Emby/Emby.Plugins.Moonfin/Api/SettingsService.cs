@@ -485,7 +485,7 @@ namespace Emby.Plugins.Moonfin.Api
             else
                 items = QueryItems(isFallback ? null : settings.MediaBarLibraryIds, limit, user, excludedNames);
 
-            var dtos = items.Where(HasBackdropImage).Select(MapItemToDto).ToList();
+            var dtos = items.Where(HasBackdropImage).Select(i => MapItemToDto(i, user)).ToList();
             return Json(new { Items = dtos, TotalRecordCount = dtos.Count });
         }
 
@@ -611,7 +611,11 @@ namespace Emby.Plugins.Moonfin.Api
 
         private static bool HasBackdropImage(BaseItem item) => item.GetImageInfo(ImageType.Backdrop, 0) != null;
 
-        private static object MapItemToDto(BaseItem item)
+        /// <summary>
+        /// A trimmed BaseItemDto for a card. With a user it carries their played state too, which
+        /// cards read for the checkmark and the resume bar.
+        /// </summary>
+        internal static object MapItemToDto(BaseItem item, User? user)
         {
             var imageTags = new Dictionary<string, string>();
             var primaryInfo = item.GetImageInfo(ImageType.Primary, 0);
@@ -622,6 +626,14 @@ namespace Emby.Plugins.Moonfin.Api
             var backdropTags = new List<string>();
             foreach (var bd in item.GetImages(ImageType.Backdrop))
                 backdropTags.Add(bd.DateModified.Ticks.ToString("X"));
+
+            object? userData = null;
+            var userDataManager = PluginServices.UserDataManager;
+            if (user != null && userDataManager != null)
+            {
+                try { userData = userDataManager.GetUserDataDto(item, user); }
+                catch { /* a card without played state beats no card */ }
+            }
 
             // PascalCase because clients read these as a BaseItemDto, the
             // shape the core item APIs return.
@@ -638,7 +650,8 @@ namespace Emby.Plugins.Moonfin.Api
                 CommunityRating = item.CommunityRating,
                 CriticRating = item.CriticRating,
                 ImageTags = imageTags,
-                BackdropImageTags = backdropTags
+                BackdropImageTags = backdropTags,
+                UserData = userData
             };
         }
 

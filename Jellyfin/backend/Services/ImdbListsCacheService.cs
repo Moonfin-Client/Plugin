@@ -34,6 +34,19 @@ public class ImdbListsCacheService : FileBackedCacheService<ImdbListsCacheEntry>
             CachedAt = DateTimeOffset.UtcNow
         };
     }
+
+    public bool RatingsFilled(string chartType)
+    {
+        return EnsureLoaded().TryGetValue(chartType, out var entry) && entry.RatingsFilled;
+    }
+
+    public void MarkRatingsFilled(string chartType)
+    {
+        if (EnsureLoaded().TryGetValue(chartType, out var entry))
+        {
+            entry.RatingsFilled = true;
+        }
+    }
 }
 
 public class ImdbListsCacheEntry
@@ -43,4 +56,7 @@ public class ImdbListsCacheEntry
 
     [JsonPropertyName("cachedAt")]
     public DateTimeOffset CachedAt { get; set; }
+
+    [JsonPropertyName("ratingsFilled")]
+    public bool RatingsFilled { get; set; }
 }

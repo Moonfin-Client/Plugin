@@ -25,6 +25,7 @@ public class ImdbListsTask : IScheduledTask
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ImdbListsCacheService _cacheService;
+    private readonly TmdbRatingService _ratingService;
     private readonly ILogger<ImdbListsTask> _logger;
 
     private static readonly Dictionary<string, string> ChartMap = new(StringComparer.OrdinalIgnoreCase)
@@ -40,10 +41,12 @@ public class ImdbListsTask : IScheduledTask
     public ImdbListsTask(
         IHttpClientFactory httpClientFactory,
         ImdbListsCacheService cacheService,
+        TmdbRatingService ratingService,
         ILogger<ImdbListsTask> logger)
     {
         _httpClientFactory = httpClientFactory;
         _cacheService = cacheService;
+        _ratingService = ratingService;
         _logger = logger;
     }
 
@@ -71,6 +74,12 @@ public class ImdbListsTask : IScheduledTask
                 if (items != null && items.Count > 0)
                 {
                     _cacheService.SetItems(key, items);
+                    if (!string.IsNullOrWhiteSpace(config?.TmdbApiKey))
+                    {
+                        await _ratingService.FillRatingsAsync(items, config.TmdbApiKey, cancellationToken).ConfigureAwait(false);
+                        _cacheService.MarkRatingsFilled(key);
+                    }
+
                     _logger.LogInformation("Successfully cached {Count} items for IMDb chart: {Key}", items.Count, key);
                 }
             }

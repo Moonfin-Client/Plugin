@@ -36,6 +36,13 @@
     <EmbeddedResource Include="assets\*.svg" />
   </ItemGroup>
 
+  <!-- The seasonal row's pure logic and rules are shared with the Jellyfin port, so both read
+       the same files from the repo's shared folder. -->
+  <ItemGroup>
+    <Compile Include="../../shared/Seasonal/*.cs" Link="Seasonal/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../shared/Seasonal/seasonal-holidays.json" LogicalName="Moonfin.Seasonal.holidays.json" />
+  </ItemGroup>
+
   <!-- Stamps the push relay key into the assembly. The build scripts read it from a
        gitignored .env, so a checkout without one still builds and simply has push off. -->
   <ItemGroup Condition="'$(MoonfinRelayAppKey)' != ''">

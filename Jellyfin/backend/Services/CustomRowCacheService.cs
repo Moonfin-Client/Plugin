@@ -14,10 +14,12 @@ public class CustomRowCacheService : FileBackedCacheService<CustomRowCacheEntry>
     {
     }
 
+    // An entry written before rows carried ratings counts as expired, so it's fetched once more.
     public List<CustomRowItem>? TryGet(string cacheKey, TimeSpan maxAge)
     {
         var cache = EnsureLoaded();
         if (cache.TryGetValue(cacheKey, out var entry) &&
+            entry.RatingsFilled &&
             DateTimeOffset.UtcNow - entry.CachedAt < maxAge)
         {
             return entry.Items;
@@ -31,7 +33,8 @@ public class CustomRowCacheService : FileBackedCacheService<CustomRowCacheEntry>
         cache[cacheKey] = new CustomRowCacheEntry
         {
             Items = items,
-            CachedAt = DateTimeOffset.UtcNow
+            CachedAt = DateTimeOffset.UtcNow,
+            RatingsFilled = true
         };
     }
 
@@ -63,6 +66,9 @@ public class CustomRowCacheEntry
 
     [JsonPropertyName("cachedAt")]
     public DateTimeOffset CachedAt { get; set; }
+
+    [JsonPropertyName("ratingsFilled")]
+    public bool RatingsFilled { get; set; }
 }
 
 public class CustomRowItem
@@ -91,11 +97,24 @@ public class CustomRowItem
     [JsonPropertyName("rating")]
     public double? Rating { get; set; }
 
+    /// <summary>The certification for the server's country, looked up on TMDB. Null when unknown.</summary>
+    [JsonPropertyName("officialRating")]
+    public string? OfficialRating { get; set; }
+
     [JsonPropertyName("posterUrl")]
     public string? PosterUrl { get; set; }
 
     [JsonPropertyName("backdropUrl")]
     public string? BackdropUrl { get; set; }
+
+    [JsonPropertyName("overview")]
+    public string? Overview { get; set; }
+
+    [JsonPropertyName("genres")]
+    public List<string>? Genres { get; set; }
+
+    [JsonPropertyName("runTimeTicks")]
+    public long? RunTimeTicks { get; set; }
 }
 
 public class CustomRowItemProviderIds

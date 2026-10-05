@@ -49,6 +49,13 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!-- The seasonal row's pure logic and rules are shared with the Emby port, so both read the
+       same files from the repo's shared folder. -->
+  <ItemGroup>
+    <Compile Include="../../shared/Seasonal/*.cs" Link="Seasonal/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../shared/Seasonal/seasonal-holidays.json" LogicalName="Moonfin.Seasonal.holidays.json" />
+  </ItemGroup>
+
   <!-- Stamps the push relay key into the assembly. The build scripts read it from a
        gitignored .env, so a checkout without one still builds and simply has push off. -->
   <ItemGroup Condition="'$(MoonfinRelayAppKey)' != ''">
@@ -64,6 +71,7 @@
     <Error Condition="!Exists('Web/inject.html')" Text="Required embedded resource Web/inject.html was not found." />
     <Error Condition="!Exists('EmulatorJS/player.html')" Text="Required embedded resource EmulatorJS/player.html was not found." />
     <Error Condition="!Exists('EmulatorJS/moonfin-bridge.js')" Text="Required embedded resource EmulatorJS/moonfin-bridge.js was not found." />
+    <Error Condition="!Exists('../../shared/Seasonal/seasonal-holidays.json')" Text="Required embedded resource shared/Seasonal/seasonal-holidays.json was not found." />
   </Target>
 
 </Project>

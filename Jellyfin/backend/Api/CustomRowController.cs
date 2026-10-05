@@ -20,6 +20,7 @@ public class CustomRowController : ControllerBase
 {
     private readonly CustomRowCacheService _cacheService;
     private readonly CustomRowFetchService _fetchService;
+    private readonly ServerRatingLimitService _ratingLimits;
     private readonly ILogger<CustomRowController> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
@@ -33,10 +34,12 @@ public class CustomRowController : ControllerBase
     public CustomRowController(
         CustomRowCacheService cacheService,
         CustomRowFetchService fetchService,
+        ServerRatingLimitService ratingLimits,
         ILogger<CustomRowController> logger)
     {
         _cacheService = cacheService;
         _fetchService = fetchService;
+        _ratingLimits = ratingLimits;
         _logger = logger;
     }
 
@@ -86,6 +89,13 @@ public class CustomRowController : ControllerBase
         }
 
         var cacheKey = CustomRowFetchService.ComputeCacheKey(source, type, parsedParams);
+        if (await _fetchService.UsesPersonalKeyAsync(source, userId.Value).ConfigureAwait(false))
+        {
+            cacheKey += ":" + userId.Value.ToString("N");
+        }
+
+        // The cache is shared, so the user's own parental limit is applied to a copy on the way out.
+        var limit = _ratingLimits.ForUser(userId.Value);
 
         if (!refresh)
         {
@@ -95,7 +105,7 @@ public class CustomRowController : ControllerBase
                 return Ok(new CustomRowResponse
                 {
                     Success = true,
-                    Items = cachedItems
+                    Items = _ratingLimits.Filter(limit, cachedItems)
                 });
             }
         }
@@ -112,7 +122,7 @@ public class CustomRowController : ControllerBase
             return Ok(new CustomRowResponse
             {
                 Success = true,
-                Items = items
+                Items = _ratingLimits.Filter(limit, items)
             });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

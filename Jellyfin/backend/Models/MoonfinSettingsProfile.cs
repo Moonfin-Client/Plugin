@@ -207,6 +207,17 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("seasonalDensity")]
     public string? SeasonalDensity { get; set; }
 
+    [JsonPropertyName("seasonalRowEnabled")]
+    public bool? SeasonalRowEnabled { get; set; }
+
+    /// <summary>"auto", an ISO alpha-2 code, or "other".</summary>
+    [JsonPropertyName("seasonalRowCountry")]
+    public string? SeasonalRowCountry { get; set; }
+
+    /// <summary>Holiday ids the user switched off.</summary>
+    [JsonPropertyName("seasonalRowHiddenHolidays")]
+    public List<string>? SeasonalRowHiddenHolidays { get; set; }
+
     [JsonPropertyName("backdropEnabled")]
     public bool? BackdropEnabled { get; set; }
 
