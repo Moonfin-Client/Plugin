@@ -487,6 +487,13 @@ public class CustomRowFetchService
         return items;
     }
 
+    /// <summary>
+    /// What a TMDB chart holds when its results don't say. Only trending marks each
+    /// result, so tv/popular, trending/tv/day and discover/tv are read from the path.
+    /// </summary>
+    internal static string ChartMediaType(string path) =>
+        path.Split('?')[0].Split('/').Contains("tv") ? "tv" : "movie";
+
     private async Task<List<CustomRowItem>> FetchTmdbChart(
         string type,
         Guid? userId,
@@ -524,7 +531,7 @@ public class CustomRowFetchService
                     : (item.TryGetProperty("name", out var nProp) ? nProp.GetString() : string.Empty);
                 var mediaType = item.TryGetProperty("media_type", out var mProp)
                     ? mProp.GetString()
-                    : (type.Contains("show") ? "tv" : "movie");
+                    : ChartMediaType(type);
                 var releaseDate = item.TryGetProperty("release_date", out var rdProp)
                     ? rdProp.GetString()
                     : (item.TryGetProperty("first_air_date", out var fadProp) ? fadProp.GetString() : null);
