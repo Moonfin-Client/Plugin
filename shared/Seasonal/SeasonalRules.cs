@@ -42,6 +42,13 @@ public sealed class SeasonalWindow
     [JsonPropertyName("end")]
     public DateRule End { get; set; } = new DateRule();
 
+    /// <summary>
+    /// The holiday's day per year as "MM-dd", for holidays that follow another calendar and
+    /// have no rule. A year the table leaves out has no window.
+    /// </summary>
+    [JsonPropertyName("dates")]
+    public Dictionary<string, string>? Dates { get; set; }
+
     public bool AppliesTo(string? country)
     {
         if (Countries == null || Countries.Count == 0)
@@ -55,8 +62,8 @@ public sealed class SeasonalWindow
 
 /// <summary>
 /// A day in some year. "fixed" is a month and day, "nthWeekday" is the nth weekday of a
-/// month (the 4th Thursday of November), and "easter" is Western Easter Sunday. Every
-/// kind can shift by offsetDays.
+/// month (the 4th Thursday of November), "easter" is Western Easter Sunday and "dates"
+/// reads the window's own table. Every kind can shift by offsetDays.
 /// </summary>
 public sealed class DateRule
 {
@@ -122,6 +129,11 @@ public static class SeasonalRules
             if (holiday.Windows.Count == 0)
             {
                 throw new InvalidOperationException("Seasonal holiday " + holiday.Id + " has no windows.");
+            }
+
+            if (holiday.Windows.Any(w => (w.Start.Kind == "dates" || w.End.Kind == "dates") && (w.Dates == null || w.Dates.Count == 0)))
+            {
+                throw new InvalidOperationException("Seasonal holiday " + holiday.Id + " uses a dates rule without a dates table.");
             }
         }
 

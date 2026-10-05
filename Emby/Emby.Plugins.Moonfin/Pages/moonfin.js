@@ -202,7 +202,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         ['pride', 'Pride'],
         ['halloween', 'Halloween'],
         ['thanksgiving', 'Thanksgiving'],
-        ['christmas', 'Christmas']
+        ['christmas', 'Christmas'],
+        ['lunarNewYear', 'Lunar New Year'],
+        ['diwali', 'Diwali']
     ];
 
     // A ticked box means the holiday shows. The stored list holds the hidden ones.

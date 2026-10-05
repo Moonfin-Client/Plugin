@@ -23,7 +23,7 @@ public sealed class SeasonalKeywordMatcherTests
         var holidays = SeasonalRules.LoadEmbedded(typeof(SeasonalRules).Assembly);
 
         Assert.Equal(
-            new[] { "newYear", "valentines", "easter", "pride", "halloween", "thanksgiving", "christmas" },
+            new[] { "newYear", "valentines", "easter", "pride", "halloween", "thanksgiving", "christmas", "lunarNewYear", "diwali" },
             holidays.Select(h => h.Id).ToArray());
         Assert.All(holidays, h => Assert.NotEmpty(h.Keywords));
         Assert.All(holidays.SelectMany(h => h.Keywords), k =>

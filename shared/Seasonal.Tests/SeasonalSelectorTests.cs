@@ -70,6 +70,16 @@ public sealed class SeasonalSelectorTests
     }
 
     [Fact]
+    public void TheLunarHolidaysFollowTheirTablesInTheCountriesThatKeepThem()
+    {
+        Assert.Equal(new[] { "diwali" }, Ids(new DateTime(2026, 11, 8), "IN"));
+        Assert.Empty(Ids(new DateTime(2026, 11, 8), "US"));
+        Assert.Equal(new[] { "lunarNewYear" }, Ids(new DateTime(2028, 1, 26), "SG"));
+        Assert.Equal(new[] { "lunarNewYear", "valentines" }, Ids(new DateTime(2027, 2, 6), "VN"));
+        Assert.Equal(new[] { "valentines" }, Ids(new DateTime(2027, 2, 6), "GB"));
+    }
+
+    [Fact]
     public void ShorterWindowsComeFirst()
     {
         var active = SeasonalSelector.Active(Holidays, new DateTime(2026, 10, 8), "CA");

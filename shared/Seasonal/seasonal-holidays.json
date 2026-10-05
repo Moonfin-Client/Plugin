@@ -101,6 +101,38 @@
         { "id": 272698, "name": "christmas romance" },
         { "id": 189966, "name": "holiday season" }
       ]
+    },
+    {
+      "id": "lunarNewYear",
+      "minVotes": 20,
+      "windows": [
+        {
+          "countries": ["CN", "TW", "HK", "MO", "SG", "MY", "VN", "KR"],
+          "dates": { "2026": "02-17", "2027": "02-06", "2028": "01-26", "2029": "02-13", "2030": "02-03", "2031": "01-23", "2032": "02-11" },
+          "start": { "kind": "dates", "offsetDays": -5 },
+          "end": { "kind": "dates", "offsetDays": 7 }
+        }
+      ],
+      "keywords": [
+        { "id": 250496, "name": "chinese new year" },
+        { "id": 356063, "name": "lunar new year" }
+      ]
+    },
+    {
+      "id": "diwali",
+      "minVotes": 20,
+      "windows": [
+        {
+          "countries": ["IN", "NP", "SG", "MY", "FJ"],
+          "dates": { "2026": "11-08", "2027": "10-29", "2028": "10-17", "2029": "11-05", "2030": "10-26", "2031": "11-14", "2032": "11-02" },
+          "start": { "kind": "dates", "offsetDays": -6 },
+          "end": { "kind": "dates", "offsetDays": 2 }
+        }
+      ],
+      "keywords": [
+        { "id": 289363, "name": "diwali" },
+        { "id": 373142, "name": "diwali festival" }
+      ]
     }
   ]
 }
