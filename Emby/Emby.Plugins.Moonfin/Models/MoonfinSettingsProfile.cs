@@ -164,6 +164,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("defaultSubtitleLanguage")] public string? DefaultSubtitleLanguage { get; set; }
         [JsonPropertyName("fallbackSubtitleLanguage")] public string? FallbackSubtitleLanguage { get; set; }
         [JsonPropertyName("preferSdhSubtitles")] public bool? PreferSdhSubtitles { get; set; }
+        [JsonPropertyName("preferTextSubtitles")] public bool? PreferTextSubtitles { get; set; }
+        [JsonPropertyName("preferExternalSubtitles")] public bool? PreferExternalSubtitles { get; set; }
         [JsonPropertyName("subtitlesUseEmbeddedStyles")] public bool? SubtitlesUseEmbeddedStyles { get; set; }
         [JsonPropertyName("subtitlesUseEmbeddedFontSizes")] public bool? SubtitlesUseEmbeddedFontSizes { get; set; }
         [JsonPropertyName("pgsDirectPlay")] public bool? PgsDirectPlay { get; set; }
