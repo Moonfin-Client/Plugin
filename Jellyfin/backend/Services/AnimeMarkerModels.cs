@@ -83,3 +83,25 @@ public class AnimeMarkerCacheEntry
     [JsonPropertyName("cachedAt")]
     public DateTimeOffset CachedAt { get; set; }
 }
+
+/// <summary>
+/// The titles AniList knows one provider id by. Lets a series whose library name is
+/// localized still be found under the English or romaji title AnimeFillerList uses.
+/// </summary>
+public class AnimeTitleAliasEntry
+{
+    /// <summary>
+    /// The MyAnimeList id behind the titles, when AniList has one.
+    /// </summary>
+    [JsonPropertyName("malId")]
+    public int? MalId { get; set; }
+
+    /// <summary>
+    /// English title, then romaji, then synonyms. Empty when AniList had no entry.
+    /// </summary>
+    [JsonPropertyName("titles")]
+    public List<string> Titles { get; set; } = new();
+
+    [JsonPropertyName("fetchedAt")]
+    public DateTimeOffset FetchedAt { get; set; }
+}

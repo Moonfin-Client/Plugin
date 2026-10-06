@@ -32,6 +32,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<AnimeIdMappingService>();
         serviceCollection.AddSingleton<AnimeFillerListClient>();
         serviceCollection.AddSingleton<AnimeMarkerCacheService>();
+        serviceCollection.AddSingleton<AnimeTitleAliasService>();
         serviceCollection.AddSingleton<AnimeRecapFetchService>();
         serviceCollection.AddSingleton<AnimeMarkerResolver>();
         serviceCollection.AddSingleton<TmdbRatingCacheService>();

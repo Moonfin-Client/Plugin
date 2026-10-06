@@ -182,6 +182,29 @@ public static class AnimeTitleMatcher
         return null;
     }
 
+    /// <summary>
+    /// The same, but trying only the titles themselves and not the names inside their
+    /// parentheses. Used for AniList's titles, where "Konpeki no Hitsugi (Jolly Roger)"
+    /// is a subtitle rather than another name for the show.
+    /// </summary>
+    public static AnimeFillerShow? MatchPrimary(
+        IReadOnlyDictionary<string, AnimeFillerShow> index,
+        IEnumerable<string> candidateTitles)
+    {
+        foreach (var title in candidateTitles)
+        {
+            foreach (var key in PrimaryVariants(title))
+            {
+                if (index.TryGetValue(key, out var show))
+                {
+                    return show;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private static string FoldDiacritics(string value)
     {
         var decomposed = value.Normalize(NormalizationForm.FormD);

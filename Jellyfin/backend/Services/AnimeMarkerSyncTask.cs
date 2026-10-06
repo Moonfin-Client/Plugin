@@ -75,7 +75,19 @@ public class AnimeMarkerSyncTask : IScheduledTask
 
         progress.Report(5);
 
-        var matches = _resolver.BuildMatches();
+        // A localized library name never matches the site's English titles, so the titles
+        // behind those series' provider ids are fetched before matching.
+        var candidates = _resolver.GetCandidateSeries();
+        try
+        {
+            await _resolver.RefreshAliasesAsync(candidates, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Anime markers sync: the provider id title lookup failed, matching on library titles only");
+        }
+
+        var matches = _resolver.BuildMatches(candidates);
         var showsBySlug = matches
             .GroupBy(match => match.Show.Slug, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First().Show, StringComparer.OrdinalIgnoreCase);
@@ -247,7 +259,11 @@ public class AnimeMarkerSyncTask : IScheduledTask
                 continue;
             }
 
-            var malId = await _recapService.TryResolveMalIdAsync(match.Series, cancellationToken).ConfigureAwait(false);
+            // A match made through a provider id's titles already knows which entry named
+            // the show. Resolving again could land on another one, such as a movie sharing
+            // the series' ids.
+            var malId = match.MalId
+                ?? await _recapService.TryResolveMalIdAsync(match.Series, cancellationToken).ConfigureAwait(false);
             if (malId == null)
             {
                 _diagnostics.Write(

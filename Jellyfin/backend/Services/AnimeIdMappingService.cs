@@ -136,6 +136,11 @@ public class AnimeIdMappingService
         }
     }
 
+    /// <summary>
+    /// Loads a table from a given file, so tests can check the parsing without a download.
+    /// </summary>
+    internal void LoadFrom(string path) => _index = Parse(path);
+
     private static MappingIndex Parse(string path)
     {
         var index = new MappingIndex();
@@ -157,7 +162,11 @@ public class AnimeIdMappingService
             Add(index.ByAniDb, ReadInt(entry, "anidb_id"), malId.Value);
             Add(index.ByAniSearch, ReadInt(entry, "anisearch_id"), malId.Value);
             Add(index.ByKitsu, ReadInt(entry, "kitsu_id"), malId.Value);
-            Add(index.ByImdb, ReadString(entry, "imdb_id"), malId.Value);
+            // The table lists IMDb ids as an array, since one entry can have several titles.
+            foreach (var imdbId in ReadStrings(entry, "imdb_id"))
+            {
+                Add(index.ByImdb, imdbId, malId.Value);
+            }
 
             // One TVDB or TMDB id covers a whole show, while MyAnimeList splits it per
             // season, so the first entry wins. That is the earliest season, and the recap
@@ -171,6 +180,43 @@ public class AnimeIdMappingService
         }
 
         return index;
+    }
+
+    /// <summary>
+    /// Resolves one provider id, given by the canonical names <see cref="AnimeTitleAliasService"/>
+    /// uses ("anidb", "tvdb", ...), to a MyAnimeList id. Returns null when it isnt in the table.
+    /// </summary>
+    public int? ResolveProvider(string provider, string value)
+    {
+        var index = _index;
+        if (index == null || string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        if (provider == "imdb")
+        {
+            return index.ByImdb.TryGetValue(trimmed, out var fromImdb) ? fromImdb : null;
+        }
+
+        if (!int.TryParse(trimmed, out var id))
+        {
+            return null;
+        }
+
+        var map = provider switch
+        {
+            "anilist" => index.ByAniList,
+            "anidb" => index.ByAniDb,
+            "anisearch" => index.ByAniSearch,
+            "kitsu" => index.ByKitsu,
+            "tvdb" => index.ByTvdb,
+            "tmdb" => index.ByTmdb,
+            _ => null
+        };
+
+        return map != null && map.TryGetValue(id, out var malId) ? malId : null;
     }
 
     /// <summary>
@@ -256,10 +302,31 @@ public class AnimeIdMappingService
             ? parsed
             : null;
 
-    private static string? ReadString(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
+    /// <summary>
+    /// Reads a property that is either one string or an array of them.
+    /// </summary>
+    private static IEnumerable<string?> ReadStrings(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out var value))
+        {
+            yield break;
+        }
+
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            yield return value.GetString();
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    yield return item.GetString();
+                }
+            }
+        }
+    }
 
     private static bool TryGetInt(BaseItem series, out int value, params string[] keys)
     {

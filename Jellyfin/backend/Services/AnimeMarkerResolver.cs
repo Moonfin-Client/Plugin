@@ -15,6 +15,7 @@ public class AnimeMarkerResolver
     private readonly IMediaSourceManager? _mediaSourceManager;
     private readonly AnimeFillerListClient _client;
     private readonly AnimeMarkerCacheService _cache;
+    private readonly AnimeTitleAliasService _aliases;
     private readonly ILogger<AnimeMarkerResolver> _logger;
 
     public AnimeMarkerResolver(
@@ -22,12 +23,14 @@ public class AnimeMarkerResolver
         IMediaSourceManager mediaSourceManager,
         AnimeFillerListClient client,
         AnimeMarkerCacheService cache,
+        AnimeTitleAliasService aliases,
         ILogger<AnimeMarkerResolver> logger)
     {
         _libraryManager = libraryManager;
         _mediaSourceManager = mediaSourceManager;
         _client = client;
         _cache = cache;
+        _aliases = aliases;
         _logger = logger;
     }
 
@@ -136,12 +139,49 @@ public class AnimeMarkerResolver
     }
 
     /// <summary>
-    /// Finds the AnimeFillerList show for a series, by its library name and its original
-    /// title. Returns null when neither matches, which is the right answer for the large
-    /// majority of a general library.
+    /// Finds the AnimeFillerList show for a series. Returns null when nothing matches, which
+    /// is the right answer for the large majority of a general library.
     /// </summary>
-    public AnimeFillerShow? MatchSeries(Series series) =>
+    public AnimeFillerShow? MatchSeries(Series series) => MatchSeriesDetailed(series).Show;
+
+    /// <summary>
+    /// The same, along with how it matched. The library name and original title are tried
+    /// first, then the English and romaji titles behind the series' provider ids, which is
+    /// what finds a show whose library name is localized. Those titles only exist once
+    /// <see cref="RefreshAliasesAsync"/> has fetched them.
+    /// </summary>
+    public SeriesMatchResult MatchSeriesDetailed(Series series)
+    {
+        var byTitle = MatchByLibraryTitle(series);
+        if (byTitle != null)
+        {
+            return new SeriesMatchResult(byTitle, null, null);
+        }
+
+        foreach (var (key, alias) in _aliases.GetAliases(series))
+        {
+            var show = AnimeTitleMatcher.MatchPrimary(_client.Index, alias.Titles);
+            if (show != null)
+            {
+                return new SeriesMatchResult(show, key, alias.MalId);
+            }
+        }
+
+        return new SeriesMatchResult(null, null, null);
+    }
+
+    private AnimeFillerShow? MatchByLibraryTitle(Series series) =>
         AnimeTitleMatcher.Match(_client.Index, WithProductionYear(series), series.Name, series.OriginalTitle);
+
+    /// <summary>
+    /// Fetches the provider-id titles for every series whose library title matches nothing.
+    /// Series that already match by title are left alone, so a library that works today
+    /// wont change.
+    /// </summary>
+    public Task<int> RefreshAliasesAsync(IEnumerable<Series> series, CancellationToken cancellationToken) =>
+        _aliases.RefreshAsync(
+            series.Where(item => MatchByLibraryTitle(item) == null).ToList(),
+            cancellationToken);
 
     /// <summary>
     /// The series' name with its production year appended, when it has one.
@@ -152,19 +192,19 @@ public class AnimeMarkerResolver
             : null;
 
     /// <summary>
-    /// Every series that matches a show on the site, paired with the show. Used both by the
-    /// sync task to decide what to fetch and by the diagnostics endpoint.
+    /// Every one of these series that matches a show on the site, paired with the show. The
+    /// sync task uses it to decide what to fetch.
     /// </summary>
-    public List<SeriesMatch> BuildMatches()
+    public List<SeriesMatch> BuildMatches(IEnumerable<Series> candidates)
     {
         var matches = new List<SeriesMatch>();
 
-        foreach (var series in GetCandidateSeries())
+        foreach (var series in candidates)
         {
-            var show = MatchSeries(series);
-            if (show != null)
+            var match = MatchSeriesDetailed(series);
+            if (match.Show != null)
             {
-                matches.Add(new SeriesMatch(series, show));
+                matches.Add(new SeriesMatch(series, match.Show, match.MalId));
             }
         }
 
@@ -572,8 +612,18 @@ public class AudioMarkerResult
     public Dictionary<string, AnimeAudioKind> Seasons { get; } = new();
 }
 
-/// <summary>One library series and the AnimeFillerList show it matched.</summary>
-public record SeriesMatch(Series Series, AnimeFillerShow Show);
+/// <summary>
+/// One library series and the AnimeFillerList show it matched. The MyAnimeList id is set
+/// when the match came from a provider id's titles, and is the entry the recap pass should
+/// use, since it is the one that actually named the show.
+/// </summary>
+public record SeriesMatch(Series Series, AnimeFillerShow Show, int? MalId = null);
+
+/// <summary>
+/// The show a series matched, if any, and the provider id key ("anidb:266") whose titles
+/// matched it. The key is null for a match on the library title.
+/// </summary>
+public record SeriesMatchResult(AnimeFillerShow? Show, string? AliasKey, int? MalId);
 
 /// <summary>One library episode and the absolute number the site would use for it.</summary>
 public record NumberedEpisode(Episode Episode, int AbsoluteNumber);

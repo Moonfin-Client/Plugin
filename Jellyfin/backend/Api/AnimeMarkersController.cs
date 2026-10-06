@@ -421,16 +421,24 @@ public class AnimeMarkersController : ControllerBase
 
         _diagnostics.Write($"preview  series=\"{series.Name}\" (from the admin page)");
 
-        var show = _resolver.MatchSeries(series);
+        await _resolver.RefreshAliasesAsync(new[] { series }, cancellationToken).ConfigureAwait(false);
+
+        var match = _resolver.MatchSeriesDetailed(series);
+        var show = match.Show;
         if (show == null)
         {
-            _diagnostics.Write("  -> matched nothing on AnimeFillerList");
+            _diagnostics.Write("  -> matched nothing on AnimeFillerList, by title or by provider id");
             return Ok(new
             {
                 series = series.Name,
                 matched = false,
-                hint = "No AnimeFillerList show has this title. Check the site's spelling for it."
+                hint = "No AnimeFillerList show has this title, and none of its provider ids lead to one. Check its AniList, AniDB or MyAnimeList id."
             });
+        }
+
+        if (match.AliasKey != null)
+        {
+            _diagnostics.Write($"  -> matched {show.Slug} through {match.AliasKey}");
         }
 
         var entry = _resolver.GetCachedEntry(series, CacheMaxAge);
@@ -515,6 +523,7 @@ public class AnimeMarkersController : ControllerBase
         }
 
         await _client.EnsureCatalogAsync(cancellationToken).ConfigureAwait(false);
+        await _resolver.RefreshAliasesAsync(new[] { series }, cancellationToken).ConfigureAwait(false);
 
         var show = _resolver.MatchSeries(series);
         if (show == null)
