@@ -98,7 +98,8 @@ On Emby, the web app is served the same way at `/Moonfin/Web/`, but there's no h
 - **Recommendations scored on the server** (Jellyfin), matching similar titles on genres, tags, people, studios, franchise, release year and rating, and only showing what each user is allowed to see. On Jellyfin 12 the same scoring reaches every client, including the stock web interface.
 - **Extra rating sources** through MDBList and TMDB, with the API keys kept on the server.
 - **Next air dates** for series, taken from the Sonarr your Seerr is connected to, or from TMDB through the server when there's no Sonarr.
-- **Anime filler and recap markers** (Jellyfin) that badge episodes as Filler, Mixed, Recap or canon using AnimeFillerList and MyAnimeList, plus Subbed and Dubbed pills read from the audio tracks in your own files. No account or API key needed.
+- **Anime filler and recap markers** (Jellyfin) that badge episodes as Filler, Mixed, Recap or canon using AnimeFillerList and MyAnimeList, plus Subbed and Dubbed pills read from the audio tracks in your own files. Shows match even when your library titles aren't in English. No account or API key needed.
+- **A seasonal home row** of holiday movies your users own, plus Seerr suggestions, around New Year's, Valentine's Day, Easter, Pride, Halloween, Thanksgiving, Christmas, Lunar New Year and Diwali, following each user's parental limit.
 - **Seerr integration** with a built-in proxy, single sign-on, and optional request and issue notifications. The step-by-step guide is [Seerr Setup](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Setup).
 - **Push notifications** that reach Moonfin apps even when they are closed, covering Seerr activity, new media added to your library, and admin broadcasts. See [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications).
 - **Admin tools** for setting server-wide defaults across every client setting, pushing them to existing users, and broadcasting a message to everyone at once.
@@ -107,7 +108,7 @@ On Emby, the web app is served the same way at `/Moonfin/Web/`, but there's no h
 - **Server messages**: an admin can write a note (title, Markdown body, color, audience, start and end dates, an optional link button) that shows up in people's apps, even if they were offline when it was sent.
 - **Custom themes** with a built-in editor, plus server-side upload and validation.
 - **Retro games** support for browsing and playing game libraries, with saves synced per user. On Jellyfin, an optional switch lets PSP games start in the web app. See [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games).
-- **Custom rows** built from Letterboxd, TMDB, MDBList and IMDb lists, cached on the server.
+- **Custom rows** built from Letterboxd, TMDB, MDBList and IMDb lists, cached on the server and filtered by each user's parental limit.
 - **An active downloads dashboard** with live transcode metrics in the admin panel, plus a per-client view so a transcoded download can show its own progress and ETA.
 - **Personal ratings served back to clients**, so a library can be sorted by your own rating and filtered by liked or disliked, which neither server can do on its own.
 - **Audiobook bookmarks and notes** stored on the server and synced between clients.
@@ -117,7 +118,7 @@ On Emby, the web app is served the same way at `/Moonfin/Web/`, but there's no h
 Open your server dashboard, go to Plugins, and select **Moonbase**. The [Admin Guide](https://github.com/Moonfin-Client/Plugin/wiki/Admin-Guide) walks through every tab. The main things to set up:
 
 - Your Seerr URL and whether Seerr is enabled
-- Shared MDBList and TMDB API keys, so individual users don't need their own
+- Shared MDBList and TMDB API keys, so individual users don't need their own. The TMDB key also feeds the seasonal row and the rating checks on custom rows
 - Whether Moonbase Sync is on (required for the Seerr and ratings integrations)
 - On Jellyfin, anime markers and whether Moonfin Recommends handles similar items
 - Default user settings that new users inherit, with a button to push them to existing users
@@ -141,7 +142,7 @@ The deeper reference material lives in the [Wiki](https://github.com/Moonfin-Cli
 |------|----------------|
 | [Installation](https://github.com/Moonfin-Client/Plugin/wiki/Installation) | The Jellyfin catalog route, the Emby zip, the first things to switch on, updating and uninstalling |
 | [Admin Guide](https://github.com/Moonfin-Client/Plugin/wiki/Admin-Guide) | The plugin page tab by tab, the scheduled tasks, and what differs on Emby |
-| [Common Problems](https://github.com/Moonfin-Client/Plugin/wiki/Common-Problems) | Plain fixes for catalog, web app, header button, sync, reset settings, Seerr, ratings, rows, anime markers and games trouble |
+| [Common Problems](https://github.com/Moonfin-Client/Plugin/wiki/Common-Problems) | Plain fixes for catalog, web app, header button, sync, reset settings, Seerr, ratings, rows, the seasonal row, anime markers and games trouble |
 | [API Reference](https://github.com/Moonfin-Client/Plugin/wiki/API-Reference) | Every plugin endpoint, with methods, auth, the Seerr config response, and the server messages endpoints |
 | [Settings Sync](https://github.com/Moonfin-Client/Plugin/wiki/Settings-Sync) | How sync works, the settings envelope, and the full list of synced settings |
 | [Data Locations](https://github.com/Moonfin-Client/Plugin/wiki/Data-Locations) | Where the plugin stores user settings, themes, saves, caches, and the settings backup on the server |
@@ -156,7 +157,7 @@ The deeper reference material lives in the [Wiki](https://github.com/Moonfin-Cli
 
 Contributions are welcome. Check the existing issues first, open an issue before starting a large change, match the existing code style, and test your changes on desktop and mobile. Features that would help all Jellyfin or Emby users are worth proposing upstream first.
 
-To submit a change, fork the repo, create a feature branch, make your changes with clear commit messages, and open a pull request with a clear description.
+To submit a change, fork the repo, create a feature branch, make your changes with clear commit messages, and open a pull request with a clear description. [CONTRIBUTING.md](CONTRIBUTING.md) has the full guidelines.
 
 ## Support and Community
 

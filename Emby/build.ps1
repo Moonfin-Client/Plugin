@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "2.3.0.0",
+    [string]$Version = "2.4.0.0",
     [string]$TargetAbi = "4.9.1.90"
 )
 
