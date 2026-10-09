@@ -441,12 +441,31 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             });
         });
 
+        Array.prototype.slice.call(view.querySelectorAll('[data-open-tab]')).forEach(function (button) {
+            button.addEventListener('click', function () {
+                selectTab(button.getAttribute('data-open-tab'));
+            });
+        });
+
+        var syncToggle = view.querySelector('#EnableSettingsSync');
+        if (syncToggle) {
+            syncToggle.addEventListener('change', function () { updateSyncStatus(view); });
+        }
+
         var saved = null;
         try { saved = window.localStorage.getItem('moonfinAdminActiveTab'); } catch (e) {}
         var validSaved = saved && panels.some(function (p) { return p.getAttribute('data-tab') === saved; });
-        selectTab(validSaved ? saved : 'general');
+        selectTab(validSaved ? saved : 'settingsSync');
 
         initializeSettingsSearch(view);
+    }
+
+    function updateSyncStatus(view) {
+        var toggle = view.querySelector('#EnableSettingsSync');
+        var card = view.querySelector('#MoonfinSyncStatusCard');
+        if (toggle && card) {
+            card.classList.toggle('is-off', !toggle.checked);
+        }
     }
 
     function initializeSettingsSearch(view) {
@@ -2000,6 +2019,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         loading.show();
         ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
             view.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
+            updateSyncStatus(view);
             view.querySelector('#SeerrEnabled').checked = config.SeerrEnabled;
             view.querySelector('#SeerrUrl').value = config.SeerrUrl || '';
             view.querySelector('#SeerrDisplayName').value = config.SeerrDisplayName || '';
