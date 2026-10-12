@@ -15,6 +15,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../../shared/CinemaMediaResolver.Shared.cs" Link="Services/CinemaMediaResolver.Shared.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Host-provided by Emby: referenced for compile, but not copied/shipped (ExcludeAssets=runtime). -->
     <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90">
       <PrivateAssets>all</PrivateAssets>

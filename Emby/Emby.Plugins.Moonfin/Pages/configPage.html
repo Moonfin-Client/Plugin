@@ -1003,6 +1003,22 @@
                     </div>
 
                     <div class="verticalSection">
+                        <h3 class="sectionTitle">Cinema Mode</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="CinemaFilenameSearchEnabled" is="emby-checkbox" />
+                                <span>Allow filename-based trailer identification (fallback)</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Moonfin automatically identifies trailers for the Seerr Request button and availability
+                                status using metadata, attached movie or series information, and IDs embedded in filenames.
+                                If these methods cannot identify a trailer, enable this optional fallback to search TMDB
+                                using its filename or display name.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
                         <h3 class="sectionTitle">MDBList Integration</h3>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="MdblistApiKey">Server-wide MDBList API Key</label>

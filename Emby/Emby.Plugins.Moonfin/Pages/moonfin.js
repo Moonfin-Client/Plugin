@@ -2021,6 +2021,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
             updateSyncStatus(view);
             view.querySelector('#SeerrEnabled').checked = config.SeerrEnabled;
+            view.querySelector('#CinemaFilenameSearchEnabled').checked = config.CinemaFilenameSearchEnabled === true;
             view.querySelector('#SeerrUrl').value = config.SeerrUrl || '';
             view.querySelector('#SeerrDisplayName').value = config.SeerrDisplayName || '';
             view.querySelector('#MdblistApiKey').value = config.MdblistApiKey || '';
@@ -2319,6 +2320,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
             config.EnableSettingsSync = view.querySelector('#EnableSettingsSync').checked;
             config.SeerrEnabled = view.querySelector('#SeerrEnabled').checked;
+            config.CinemaFilenameSearchEnabled = view.querySelector('#CinemaFilenameSearchEnabled').checked;
             config.SeerrUrl = view.querySelector('#SeerrUrl').value || null;
             config.SeerrDisplayName = view.querySelector('#SeerrDisplayName').value || null;
             config.MdblistApiKey = (view.querySelector('#MdblistApiKey').value || '').trim() || null;
