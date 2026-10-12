@@ -15,5 +15,8 @@ namespace Emby.Plugins.Moonfin.Api
 
         /// <summary>Bypass the server-side cache and refetch from the upstream source.</summary>
         public bool Refresh { get; set; }
+
+        /// <summary>Optional language/locale tag for localized titles and artwork (e.g. "fr", "fr-FR", "pt-BR").</summary>
+        public string? Language { get; set; }
     }
 }

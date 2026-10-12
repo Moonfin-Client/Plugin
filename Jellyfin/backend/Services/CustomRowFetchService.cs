@@ -52,12 +52,21 @@ public class CustomRowFetchService
 
     private HttpClient CreateClient() => _httpClientFactory.CreateClient("MoonfinHttpClient");
 
-    public static string ComputeCacheKey(string source, string type, Dictionary<string, string> parsedParams)
+    public static string? NormalizeLanguage(string? language)
+    {
+        if (string.IsNullOrWhiteSpace(language)) return null;
+        var trimmed = language.Trim().Replace('_', '-');
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
+    }
+
+    public static string ComputeCacheKey(string source, string type, Dictionary<string, string> parsedParams, string? language = null)
     {
         var canonicalParams = JsonSerializer.Serialize(
             new SortedDictionary<string, string>(parsedParams, StringComparer.Ordinal));
         var paramHash = GetStringSha256Hash(canonicalParams);
-        return $"{source.Trim().ToLowerInvariant()}:{type.Trim().ToLowerInvariant()}:{paramHash}";
+        var baseKey = $"{source.Trim().ToLowerInvariant()}:{type.Trim().ToLowerInvariant()}:{paramHash}";
+        var lang = NormalizeLanguage(language)?.ToLowerInvariant();
+        return string.IsNullOrEmpty(lang) ? baseKey : $"{baseKey}:{lang}";
     }
 
     public static string GetStringSha256Hash(string text)
@@ -69,12 +78,21 @@ public class CustomRowFetchService
         return Convert.ToHexString(hashData);
     }
 
+    public Task<List<CustomRowItem>> FetchCustomRowAsync(
+        string source,
+        string type,
+        Dictionary<string, string> parsedParams,
+        Guid? userId,
+        CancellationToken cancellationToken) =>
+        FetchCustomRowAsync(source, type, parsedParams, userId, null, cancellationToken);
+
     public async Task<List<CustomRowItem>> FetchCustomRowAsync(
         string source,
         string type,
         Dictionary<string, string> parsedParams,
         Guid? userId,
-        CancellationToken cancellationToken)
+        string? language,
+        CancellationToken cancellationToken = default)
     {
         source = source.Trim().ToLowerInvariant();
         type = type.Trim().ToLowerInvariant();
@@ -86,10 +104,10 @@ public class CustomRowFetchService
 
         var items = source switch
         {
-            "mdblist" => await FetchMdbList(type, parsedParams, userId, cancellationToken),
-            "tmdb" => await FetchTmdb(type, parsedParams, userId, cancellationToken),
-            "tmdb_chart" => await FetchTmdbChart(type, userId, cancellationToken),
-            "letterboxd" => await FetchLetterboxd(type, parsedParams, userId, cancellationToken),
+            "mdblist" => await FetchMdbList(type, parsedParams, userId, language, cancellationToken),
+            "tmdb" => await FetchTmdb(type, parsedParams, userId, language, cancellationToken),
+            "tmdb_chart" => await FetchTmdbChart(type, userId, language, cancellationToken),
+            "letterboxd" => await FetchLetterboxd(type, parsedParams, userId, language, cancellationToken),
             _ => throw new NotSupportedException($"Unsupported custom row source: {source}")
         };
 
@@ -143,10 +161,25 @@ public class CustomRowFetchService
         return MoonfinPlugin.Instance?.Configuration?.MdblistApiKey;
     }
 
+    internal static string BuildMdbListUrl(string username, string listname, string apiKey, string? language, string? cursor = null)
+    {
+        var url = $"https://api.mdblist.com/lists/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(listname)}/items?apikey={Uri.EscapeDataString(apiKey)}&limit={MdbListPageSize}&append_to_response=poster";
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            url += $"&lang={Uri.EscapeDataString(language)}";
+        }
+        if (!string.IsNullOrWhiteSpace(cursor))
+        {
+            url += $"&cursor={Uri.EscapeDataString(cursor)}";
+        }
+        return url;
+    }
+
     private async Task<List<CustomRowItem>> FetchMdbList(
         string type,
         Dictionary<string, string> paramsMap,
         Guid? userId,
+        string? language,
         CancellationToken cancellationToken)
     {
         var apiKey = await ResolveMdblistApiKey(userId);
@@ -163,15 +196,13 @@ public class CustomRowFetchService
             throw new ArgumentException("MDBList requires both username and listname parameters.");
         }
 
-        var baseUrl = $"https://api.mdblist.com/lists/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(listname)}/items?apikey={Uri.EscapeDataString(apiKey)}&limit={MdbListPageSize}&append_to_response=poster";
         var client = CreateClient();
-
         var items = new List<CustomRowItem>();
         string? cursor = null;
 
         while (items.Count < MdbListMaxItems)
         {
-            var url = cursor == null ? baseUrl : $"{baseUrl}&cursor={Uri.EscapeDataString(cursor)}";
+            var url = BuildMdbListUrl(username, listname, apiKey, language, cursor);
 
             using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
             if ((int)response.StatusCode == 429)
@@ -245,9 +276,9 @@ public class CustomRowFetchService
                 try
                 {
                     var isShow = rowItem.Type == "Series";
-                    var tmdbUrl = isShow 
-                        ? $"https://api.themoviedb.org/3/tv/{rowItem.Id}"
-                        : $"https://api.themoviedb.org/3/movie/{rowItem.Id}";
+                    var tmdbUrl = isShow
+                        ? BuildTmdbTvDetailUrl(rowItem.Id!.Value.ToString(), language)
+                        : BuildTmdbMovieDetailUrl(rowItem.Id!.Value.ToString(), language);
 
                     using var req = new HttpRequestMessage(HttpMethod.Get, tmdbUrl);
                     TmdbRequestHelper.ApplyAuth(req, tmdbKey);
@@ -364,10 +395,31 @@ public class CustomRowFetchService
         }
     }
 
+    internal static string BuildTmdbCollectionUrl(string listId, string? language)
+    {
+        var url = $"https://api.themoviedb.org/3/collection/{Uri.EscapeDataString(listId)}";
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            url += $"?language={Uri.EscapeDataString(language)}";
+        }
+        return url;
+    }
+
+    internal static string BuildTmdbListUrl(string listId, string? language)
+    {
+        var url = $"https://api.themoviedb.org/3/list/{Uri.EscapeDataString(listId)}";
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            url += $"?language={Uri.EscapeDataString(language)}";
+        }
+        return url;
+    }
+
     private async Task<List<CustomRowItem>> FetchTmdb(
         string type,
         Dictionary<string, string> paramsMap,
         Guid? userId,
+        string? language,
         CancellationToken cancellationToken)
     {
         var tmdbKey = await ResolveTmdbApiKey(userId);
@@ -387,7 +439,7 @@ public class CustomRowFetchService
 
         if (type == "movie_collection")
         {
-            var url = $"https://api.themoviedb.org/3/collection/{Uri.EscapeDataString(listId)}";
+            var url = BuildTmdbCollectionUrl(listId, language);
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             TmdbRequestHelper.ApplyAuth(req, tmdbKey);
             using var response = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
@@ -433,7 +485,7 @@ public class CustomRowFetchService
         }
         else
         {
-            var url = $"https://api.themoviedb.org/3/list/{Uri.EscapeDataString(listId)}";
+            var url = BuildTmdbListUrl(listId, language);
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             TmdbRequestHelper.ApplyAuth(req, tmdbKey);
             using var response = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
@@ -494,9 +546,20 @@ public class CustomRowFetchService
     internal static string ChartMediaType(string path) =>
         path.Split('?')[0].Split('/').Contains("tv") ? "tv" : "movie";
 
+    internal static string BuildTmdbChartUrl(string type, string? language)
+    {
+        var url = $"https://api.themoviedb.org/3/{type}";
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            url += (url.Contains('?') ? "&" : "?") + $"language={Uri.EscapeDataString(language)}";
+        }
+        return url;
+    }
+
     private async Task<List<CustomRowItem>> FetchTmdbChart(
         string type,
         Guid? userId,
+        string? language,
         CancellationToken cancellationToken)
     {
         var tmdbKey = await ResolveTmdbApiKey(userId);
@@ -506,7 +569,7 @@ public class CustomRowFetchService
         }
 
         // type is the API path the client sends, so movie/popular, trending/movie/day and the rest.
-        var url = $"https://api.themoviedb.org/3/{type}";
+        var url = BuildTmdbChartUrl(type, language);
         var client = CreateClient();
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         TmdbRequestHelper.ApplyAuth(req, tmdbKey);
@@ -564,10 +627,31 @@ public class CustomRowFetchService
         return items;
     }
 
+    internal static string BuildTmdbMovieDetailUrl(string tmdbId, string? language)
+    {
+        var url = $"https://api.themoviedb.org/3/movie/{Uri.EscapeDataString(tmdbId)}";
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            url += $"?language={Uri.EscapeDataString(language)}";
+        }
+        return url;
+    }
+
+    internal static string BuildTmdbTvDetailUrl(string tmdbId, string? language)
+    {
+        var url = $"https://api.themoviedb.org/3/tv/{Uri.EscapeDataString(tmdbId)}";
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            url += $"?language={Uri.EscapeDataString(language)}";
+        }
+        return url;
+    }
+
     private async Task<List<CustomRowItem>> FetchLetterboxd(
         string type,
         Dictionary<string, string> paramsMap,
         Guid? userId,
+        string? language,
         CancellationToken cancellationToken)
     {
         paramsMap.TryGetValue("user", out var username);
@@ -642,7 +726,7 @@ public class CustomRowFetchService
                 await tmdbSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    var tmdbUrl = $"https://api.themoviedb.org/3/movie/{pItem.TmdbId}";
+                    var tmdbUrl = BuildTmdbMovieDetailUrl(pItem.TmdbId!, language);
                     using var req = new HttpRequestMessage(HttpMethod.Get, tmdbUrl);
                     TmdbRequestHelper.ApplyAuth(req, tmdbKey);
                     using var resp = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);

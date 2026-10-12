@@ -52,6 +52,7 @@ public class CustomRowController : ControllerBase
         [FromQuery] string type,
         [FromQuery] string @params,
         [FromQuery] bool refresh,
+        [FromQuery] string? language,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(@params))
@@ -61,6 +62,7 @@ public class CustomRowController : ControllerBase
 
         source = source.Trim().ToLowerInvariant();
         type = type.Trim().ToLowerInvariant();
+        language = CustomRowFetchService.NormalizeLanguage(language);
 
         var userId = this.GetUserIdFromClaims();
         if (userId == null)
@@ -88,7 +90,7 @@ public class CustomRowController : ControllerBase
                 .ToDictionary(kv => kv.Key, kv => kv.Value);
         }
 
-        var cacheKey = CustomRowFetchService.ComputeCacheKey(source, type, parsedParams);
+        var cacheKey = CustomRowFetchService.ComputeCacheKey(source, type, parsedParams, language);
         if (await _fetchService.UsesPersonalKeyAsync(source, userId.Value).ConfigureAwait(false))
         {
             cacheKey += ":" + userId.Value.ToString("N");
@@ -117,7 +119,7 @@ public class CustomRowController : ControllerBase
             var items = await Resolving
                 .GetOrStart(
                     $"{cacheKey}:{userId.Value}",
-                    () => FetchAndCacheAsync(cacheKey, source, type, parsedParams, userId.Value))
+                    () => FetchAndCacheAsync(cacheKey, source, type, parsedParams, userId.Value, language))
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -151,10 +153,11 @@ public class CustomRowController : ControllerBase
         string source,
         string type,
         Dictionary<string, string> parsedParams,
-        Guid userId)
+        Guid userId,
+        string? language)
     {
         var items = await _fetchService
-            .FetchCustomRowAsync(source, type, parsedParams, userId, CancellationToken.None)
+            .FetchCustomRowAsync(source, type, parsedParams, userId, language, CancellationToken.None)
             .ConfigureAwait(false);
 
         // Don't cache empty results. An empty row cached for 24h looks like a
