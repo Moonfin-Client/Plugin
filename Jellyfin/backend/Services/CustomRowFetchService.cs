@@ -156,19 +156,7 @@ public class CustomRowFetchService
         return source.Trim().ToLowerInvariant() == "mdblist" ? ownMdblistKey || ownTmdbKey : ownTmdbKey;
     }
 
-    private async Task<string?> ResolveTmdbApiKey(Guid? userId)
-    {
-        if (userId.HasValue)
-        {
-            var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, "global");
-            if (!string.IsNullOrWhiteSpace(resolved?.TmdbApiKey))
-            {
-                return resolved.TmdbApiKey;
-            }
-        }
-
-        return MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
-    }
+    private Task<string?> ResolveTmdbApiKey(Guid? userId) => TmdbApiKeys.ResolveAsync(_settingsService, userId);
 
     private async Task<string?> ResolveMdblistApiKey(Guid? userId)
     {

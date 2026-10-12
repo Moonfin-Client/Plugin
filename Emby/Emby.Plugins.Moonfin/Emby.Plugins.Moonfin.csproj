@@ -40,6 +40,7 @@
        the same files from the repo's shared folder. -->
   <ItemGroup>
     <Compile Include="../../shared/Seasonal/*.cs" Link="Seasonal/%(Filename)%(Extension)" />
+    <Compile Include="../../shared/Seerr/*.cs" Link="Seerr/%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../shared/Seasonal/seasonal-holidays.json" LogicalName="Moonfin.Seasonal.holidays.json" />
   </ItemGroup>
 

@@ -1,11 +1,15 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Emby.Plugins.Moonfin.Services;
 using MediaBrowser.Common;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Services;
+using Moonfin.Seasonal;
+using Moonfin.Seerr;
 
 namespace Emby.Plugins.Moonfin.Api
 {
@@ -144,7 +148,8 @@ namespace Emby.Plugins.Moonfin.Api
             if (config?.SeerrEnabled != true || string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()))
             { Request.Response.StatusCode = 503; return new { error = "Seerr integration is not enabled" }; }
 
-            var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            var userId = (user != null && user.Id != Guid.Empty) ? user.Id : (Guid?)null;
             if (userId == null) { Request.Response.StatusCode = 401; return new { error = "User not authenticated" }; }
 
             byte[]? body = null;
@@ -157,7 +162,37 @@ namespace Emby.Plugins.Moonfin.Api
                 contentType = Request.ContentType;
             }
 
+            // A user with a parental limit gets Seerr held to it: lists lose the titles above it,
+            // a details page above it is refused, and so is a request for one. Everyone else is
+            // passed through as they were.
+            var verdict = await VerdictFor(user!).ConfigureAwait(false);
+            if (verdict != null && method == HttpMethod.Post && SeerrParentalFilter.IsRequestPath(path))
+            {
+                var target = SeerrParentalFilter.RequestTarget(body);
+                if (target == null || !await verdict(target.Value.MediaType, target.Value.TmdbId).ConfigureAwait(false))
+                { Request.Response.StatusCode = 403; return new { message = AboveLimit }; }
+            }
+
             var result = await Session.ProxyRequestAsync(userId.Value, method, path ?? string.Empty, Http.QueryString(Request), body, contentType).ConfigureAwait(false);
+
+            if (verdict != null && method == HttpMethod.Get && result.StatusCode == 200 && result.Body != null && IsJson(result.ContentType))
+            {
+                var mediaType = SeerrParentalFilter.DetailsMediaType(path);
+                if (mediaType != null)
+                {
+                    var tmdbId = SeerrParentalFilter.DetailsTmdbId(result.Body);
+                    if (tmdbId == null || !await verdict(mediaType, tmdbId.Value).ConfigureAwait(false))
+                    { Request.Response.StatusCode = 403; return new { message = AboveLimit }; }
+                }
+
+                var filtered = await SeerrParentalFilter.FilterListAsync(path, result.Body, verdict, CancellationToken.None).ConfigureAwait(false);
+                if (filtered != null)
+                {
+                    result.Body = filtered;
+                    var ratings = Plugin.Instance?.TmdbRatings;
+                    if (ratings != null) await ratings.FlushAsync().ConfigureAwait(false);
+                }
+            }
 
             Request.Response.StatusCode = result.StatusCode;
             if (result.Body == null) return null;
@@ -165,5 +200,40 @@ namespace Emby.Plugins.Moonfin.Api
             var responseContentType = string.IsNullOrWhiteSpace(result.ContentType) ? "application/octet-stream" : result.ContentType;
             return ResultFactory.GetResult(Request, new MemoryStream(result.Body), responseContentType, null);
         }
+
+        private const string AboveLimit = "This title is above the parental rating of this account";
+
+        /// <summary>
+        /// The verdict a limited user's titles are held to, or null for a user without a limit.
+        /// Without a TMDB key nothing can be judged, so nothing passes: the same rule the custom
+        /// rows follow. A lookup that fails is a title that cannot be placed, and goes the same way.
+        /// </summary>
+        private static async Task<SeerrParentalFilter.Verdict?> VerdictFor(User user)
+        {
+            var limit = Plugin.Instance?.RatingLimits?.ForUser(user) ?? RatingLimit.None;
+            if (!limit.HasLimit) return null;
+
+            var ratings = Plugin.Instance?.TmdbRatings;
+            var settings = Plugin.Instance?.SettingsService;
+            var profile = settings == null ? null : await settings.GetResolvedProfileAsync(user.Id, "global").ConfigureAwait(false);
+            var apiKey = string.IsNullOrWhiteSpace(profile?.TmdbApiKey) ? Plugin.Instance?.Configuration?.TmdbApiKey : profile!.TmdbApiKey;
+
+            return async (mediaType, tmdbId) =>
+            {
+                if (ratings == null || string.IsNullOrWhiteSpace(apiKey)) return false;
+                try
+                {
+                    var certification = await ratings.GetCertificationAsync(mediaType, tmdbId, apiKey!, CancellationToken.None).ConfigureAwait(false);
+                    return limit.IsAllowed(certification);
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+            };
+        }
+
+        private static bool IsJson(string? contentType) =>
+            contentType != null && contentType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }

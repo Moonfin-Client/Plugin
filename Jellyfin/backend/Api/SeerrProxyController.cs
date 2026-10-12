@@ -3,6 +3,7 @@ using MediaBrowser.Controller.QuickConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Moonfin.Seerr;
 using Moonfin.Server.Services;
 
 namespace Moonfin.Server.Api;
@@ -25,13 +26,26 @@ public class SeerrProxyController : ControllerBase
     // How long a status check trusts Seerr's last answer about a session before asking again.
     private static readonly TimeSpan SessionFreshness = TimeSpan.FromMinutes(5);
 
+    private const string AboveLimit = "This title is above the parental rating of this account";
+
     private readonly SeerrSessionService _sessionService;
     private readonly SeerrProvisioningService _provisioning;
+    private readonly ServerRatingLimitService _ratingLimits;
+    private readonly TmdbRatingService _ratings;
+    private readonly MoonfinSettingsService _settings;
 
-    public SeerrProxyController(SeerrSessionService sessionService, SeerrProvisioningService provisioning)
+    public SeerrProxyController(
+        SeerrSessionService sessionService,
+        SeerrProvisioningService provisioning,
+        ServerRatingLimitService ratingLimits,
+        TmdbRatingService ratings,
+        MoonfinSettingsService settings)
     {
         _sessionService = sessionService;
         _provisioning = provisioning;
+        _ratingLimits = ratingLimits;
+        _ratings = ratings;
+        _settings = settings;
     }
 
     /// <summary>
@@ -397,6 +411,19 @@ public class SeerrProxyController : ControllerBase
             contentType = Request.ContentType;
         }
 
+        // A user with a parental limit gets Seerr held to it: lists lose the titles above it,
+        // a details page above it is refused, and so is a request for one. Everyone else is
+        // passed through as they were.
+        var verdict = await VerdictFor(userId.Value).ConfigureAwait(false);
+        if (verdict != null && method == HttpMethod.Post && SeerrParentalFilter.IsRequestPath(path))
+        {
+            var target = SeerrParentalFilter.RequestTarget(body);
+            if (target == null || !await verdict(target.Value.MediaType, target.Value.TmdbId).ConfigureAwait(false))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = AboveLimit });
+            }
+        }
+
         var result = await _sessionService.ProxyRequestAsync(
             userId.Value,
             method,
@@ -410,6 +437,26 @@ public class SeerrProxyController : ControllerBase
             return StatusCode(result.StatusCode);
         }
 
+        if (verdict != null && method == HttpMethod.Get && result.StatusCode == StatusCodes.Status200OK && IsJson(result.ContentType))
+        {
+            var mediaType = SeerrParentalFilter.DetailsMediaType(path);
+            if (mediaType != null)
+            {
+                var tmdbId = SeerrParentalFilter.DetailsTmdbId(result.Body);
+                if (tmdbId == null || !await verdict(mediaType, tmdbId.Value).ConfigureAwait(false))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = AboveLimit });
+                }
+            }
+
+            var filtered = await SeerrParentalFilter.FilterListAsync(path, result.Body, verdict, HttpContext.RequestAborted).ConfigureAwait(false);
+            if (filtered != null)
+            {
+                result.Body = filtered;
+                await _ratings.FlushAsync().ConfigureAwait(false);
+            }
+        }
+
         var responseContentType = string.IsNullOrWhiteSpace(result.ContentType)
             ? MediaTypeNames.Application.Octet
             : result.ContentType;
@@ -417,6 +464,46 @@ public class SeerrProxyController : ControllerBase
         Response.StatusCode = result.StatusCode;
         return File(result.Body, responseContentType);
     }
+
+    /// <summary>
+    /// The verdict a limited user's titles are held to, or null for a user without a limit.
+    /// Without a TMDB key nothing can be judged, so nothing passes: the same rule the custom rows
+    /// follow. A lookup that fails is a title that cannot be placed, and goes the same way.
+    /// </summary>
+    private async Task<SeerrParentalFilter.Verdict?> VerdictFor(Guid userId)
+    {
+        var limit = _ratingLimits.ForUser(userId);
+        if (!limit.HasLimit)
+        {
+            return null;
+        }
+
+        var apiKey = await TmdbApiKeys.ResolveAsync(_settings, userId).ConfigureAwait(false);
+        return async (mediaType, tmdbId) =>
+        {
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                return false;
+            }
+
+            try
+            {
+                var certification = await _ratings.GetCertificationAsync(mediaType, tmdbId, apiKey!, HttpContext.RequestAborted).ConfigureAwait(false);
+                return limit.IsAllowed(certification);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        };
+    }
+
+    private static bool IsJson(string? contentType) =>
+        contentType != null && contentType.Contains("json", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>

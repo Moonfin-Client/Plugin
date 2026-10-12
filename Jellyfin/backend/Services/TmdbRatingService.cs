@@ -93,6 +93,11 @@ public class TmdbRatingService
         await _cache.FlushAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Writes what the lookups so far learned to disk, for a caller that judged titles one by one.</summary>
+
+    public Task FlushAsync() => _cache.FlushAsync();
+
+
     public async Task<string?> GetCertificationAsync(string mediaType, long tmdbId, string apiKey, CancellationToken cancellationToken)
     {
         var key = $"{mediaType}:{tmdbId}";
