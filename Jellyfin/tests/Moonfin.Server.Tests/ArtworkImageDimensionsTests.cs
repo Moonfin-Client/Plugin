@@ -84,6 +84,21 @@ public sealed class ArtworkImageDimensionsTests : IDisposable
         Assert.Equal((355L, 512L), ArtworkImageDimensions.Read(bmp));
     }
 
+    [Fact]
+    public void Bmp_MinimumIntHeight_IsRejectedNotThrown()
+    {
+        var bmp = new byte[26];
+        bmp[0] = (byte)'B';
+        bmp[1] = (byte)'M';
+        BinaryPrimitives.WriteInt32LittleEndian(bmp.AsSpan(18), 512);
+        BinaryPrimitives.WriteInt32LittleEndian(bmp.AsSpan(22), int.MinValue);
+        var path = Path.Combine(_root, "malformed.png");
+        File.WriteAllBytes(path, bmp);
+
+        Assert.Equal((512L, 2147483648L), ArtworkImageDimensions.Read(bmp));
+        Assert.Null(ArtworkImageDimensions.TryRead(path));
+    }
+
     [Theory]
     [InlineData(new byte[0])]
     [InlineData(new byte[] { 0x89, 0x50, 0x4E, 0x47 })]

@@ -1030,6 +1030,53 @@ public sealed class GameArtworkCatalogTests : IDisposable
     }
 
     [Fact]
+    public async Task BackfillDimensions_ReadsASurvivingThumbnailWhenTheOriginalIsGone()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var artifacts = Path.Combine(_root, "artifacts");
+        Directory.CreateDirectory(artifacts);
+        var original = Path.Combine(artifacts, "boxart.png");
+        var thumbnail = Path.Combine(artifacts, "boxart_thumb.png");
+        await File.WriteAllBytesAsync(original, ArtworkImageDimensionsTests.Png(1024, 714));
+        await File.WriteAllBytesAsync(thumbnail, ArtworkImageDimensionsTests.Png(512, 357));
+        var key = Key("thumbnail-only");
+        await catalog.MarkOriginalReadyAsync(key, "snes", original);
+        await catalog.MarkThumbnailReadyAsync(key, "snes", thumbnail);
+        File.Delete(original);
+
+        Assert.Equal(0, await catalog.RepairMissingArtifactsAsync("library-a"));
+        Assert.Equal(1, await catalog.BackfillDimensionsAsync("library-a"));
+
+        var entry = await catalog.GetAsync(key);
+        Assert.Equal(ArtworkCatalogState.ThumbnailReady, entry?.State);
+        Assert.Equal((512, 357), (entry?.Width, entry?.Height));
+    }
+
+    [Fact]
+    public async Task BackfillDimensions_SkipsAMalformedImageAndMeasuresTheRest()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var artifacts = Path.Combine(_root, "artifacts");
+        Directory.CreateDirectory(artifacts);
+        var malformed = Path.Combine(artifacts, "malformed.png");
+        var healthy = Path.Combine(artifacts, "healthy.png");
+        var bmp = new byte[26];
+        bmp[0] = (byte)'B';
+        bmp[1] = (byte)'M';
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bmp.AsSpan(22), int.MinValue);
+        await File.WriteAllBytesAsync(malformed, bmp);
+        await File.WriteAllBytesAsync(healthy, ArtworkImageDimensionsTests.Png(512, 374));
+        var malformedKey = ArtworkCatalogKey.Create("library-a", "SNES\\Malformed.sfc", "malformed", "boxart");
+        var healthyKey = Key("healthy");
+        await catalog.MarkOriginalReadyAsync(malformedKey, "snes", malformed);
+        await catalog.MarkOriginalReadyAsync(healthyKey, "snes", healthy);
+
+        Assert.Equal(1, await catalog.BackfillDimensionsAsync("library-a"));
+        Assert.Null((await catalog.GetAsync(malformedKey))?.Width);
+        Assert.Equal(512, (await catalog.GetAsync(healthyKey))?.Width);
+    }
+
+    [Fact]
     public async Task SchemaOneCatalogWithoutDimensions_LoadsAndBackfills()
     {
         var catalog = new GameArtworkCatalog(_root);

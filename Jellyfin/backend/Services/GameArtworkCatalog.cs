@@ -123,7 +123,7 @@ public sealed record ArtworkCatalogEntry
 
     public string? ThumbnailPath { get; init; }
 
-    /// <summary>Original's pixel width; null until known (see BackfillDimensionsAsync).</summary>
+    /// <summary>Original's pixel width (the thumbnail's if only it survives); null until known.</summary>
     public int? Width { get; init; }
 
     /// <summary>Original's pixel height; see <see cref="Width"/>.</summary>
@@ -887,7 +887,7 @@ public sealed class GameArtworkCatalog
             pending = library.Entries
                 .Where(kv => kv.Value.Width == null &&
                     kv.Value.State is ArtworkCatalogState.OriginalReady or ArtworkCatalogState.ThumbnailReady &&
-                    !string.IsNullOrWhiteSpace(kv.Value.OriginalPath))
+                    (!string.IsNullOrWhiteSpace(kv.Value.OriginalPath) || !string.IsNullOrWhiteSpace(kv.Value.ThumbnailPath)))
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList();
         }
@@ -905,7 +905,8 @@ public sealed class GameArtworkCatalog
         foreach (var (storageKey, entry) in pending)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (ArtworkImageDimensions.TryRead(entry.OriginalPath) is { } size)
+            // A thumbnail kept after its original was deleted has the same shape.
+            if ((ArtworkImageDimensions.TryRead(entry.OriginalPath) ?? ArtworkImageDimensions.TryRead(entry.ThumbnailPath)) is { } size)
             {
                 measured.Add((storageKey, entry, size.Width, size.Height));
             }

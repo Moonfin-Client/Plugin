@@ -51,7 +51,17 @@ internal static class ArtworkImageDimensions
             return null;
         }
 
-        var (width, height) = Read(buffer.AsSpan(0, length));
+        long width, height;
+        try
+        {
+            (width, height) = Read(buffer.AsSpan(0, length));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or OverflowException)
+        {
+            // A malformed header must not abort the caller's sweep.
+            return null;
+        }
+
         if (width <= 0 || height <= 0 || width > int.MaxValue || height > int.MaxValue)
         {
             return null;
@@ -89,8 +99,8 @@ internal static class ArtworkImageDimensions
         {
             // Negative height means a top-down bitmap.
             return (
-                Math.Abs(BinaryPrimitives.ReadInt32LittleEndian(data[18..22])),
-                Math.Abs(BinaryPrimitives.ReadInt32LittleEndian(data[22..26])));
+                Math.Abs((long)BinaryPrimitives.ReadInt32LittleEndian(data[18..22])),
+                Math.Abs((long)BinaryPrimitives.ReadInt32LittleEndian(data[22..26])));
         }
 
         return (0, 0);
