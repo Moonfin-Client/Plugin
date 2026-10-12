@@ -146,6 +146,18 @@ public class MoonfinUserSettingsTests
     }
 
     [Fact]
+    public void CinemaSettingsRoundTripKeepsZeroAndUnset()
+    {
+        var settings = Parse("{\"global\":{\"cinemaModeSkipCountdown\":\"progressBar\"," +
+            "\"cinemaModeSkipAutoHide\":\"s10\",\"cinemaModeSkipMinDurationSeconds\":0}}");
+        var restored = Parse(JsonSerializer.Serialize(settings));
+        Assert.Equal("progressBar", restored.Global?.CinemaModeSkipCountdown);
+        Assert.Equal("s10", restored.Global?.CinemaModeSkipAutoHide);
+        Assert.Equal(0, restored.Global?.CinemaModeSkipMinDurationSeconds);
+        Assert.Null(Parse("{\"global\":{}}").Global?.CinemaModeSkipMinDurationSeconds);
+    }
+
+    [Fact]
     public void AFreshEnvelopeDefaultsToTheCurrentSchemaWithSyncOn()
     {
         var settings = new MoonfinUserSettings();

@@ -123,16 +123,37 @@ public sealed class AdminDefaultsMergeTests : IDisposable
         Assert.Same(section, defaults.HomeSections[0]);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(15)]
+    [InlineData(60)]
+    public async Task CinemaMinimumIsNumericAndNullDefaultsLeaveItAlone(int seconds)
+    {
+        var user = await SeedUserAsync(new MoonfinSettingsProfile { CinemaModeSkipMinDurationSeconds = seconds });
+        await _service.MergeDefaultsToAllUsersAsync(new MoonfinSettingsProfile());
+        Assert.Equal(seconds, Read(user).Global?.CinemaModeSkipMinDurationSeconds);
+        await _service.MergeDefaultsToAllUsersAsync(new MoonfinSettingsProfile { CinemaModeSkipMinDurationSeconds = 0 });
+        Assert.Equal(0, Read(user).Global?.CinemaModeSkipMinDurationSeconds);
+    }
+
     [Fact]
     public async Task MergingDefaultsStillAppliesWhatTheAdminDidSet()
     {
         var alice = await SeedUserAsync(
             new MoonfinSettingsProfile { HiddenContinueWatchingItems = "{\"alice-item\":\"1\"}" });
 
-        await _service.MergeDefaultsToAllUsersAsync(new MoonfinSettingsProfile { CinemaModeEnabled = true });
+        await _service.MergeDefaultsToAllUsersAsync(
+            new MoonfinSettingsProfile
+            {
+                CinemaModeEnabled = true,
+                CinemaModeSkipCountdown = "progressBar",
+                CinemaModeSkipAutoHide = "s10",
+            });
 
         var settings = Read(alice);
         Assert.True(settings.Global?.CinemaModeEnabled);
+        Assert.Equal("progressBar", settings.Global?.CinemaModeSkipCountdown);
+        Assert.Equal("s10", settings.Global?.CinemaModeSkipAutoHide);
         Assert.Contains("alice-item", settings.Global?.HiddenContinueWatchingItems ?? string.Empty, StringComparison.Ordinal);
     }
 
