@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);MOONFIN_JELLYFIN</DefineConstants>
     <!-- One place to bump, so the three can't drift apart. The release scripts still
          override all of them with -p: switches. -->
     <MoonfinVersion>2.4.0</MoonfinVersion>
@@ -17,6 +18,10 @@
     <!-- Copy non host-provided package DLLs (SharpCompress) into the output so the plugin can ship them. -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../shared/CinemaMediaResolver.Shared.cs" Link="Services/CinemaMediaResolver.Shared.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Host-provided by Jellyfin: referenced for compile, but not copied/shipped (ExcludeAssets=runtime). -->

@@ -918,6 +918,22 @@
                     </div>
 
                     <div class="verticalSection">
+                        <h3 class="sectionTitle">Cinema Mode</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="CinemaFilenameSearchEnabled" is="emby-checkbox" />
+                                <span>Allow filename-based trailer identification (fallback)</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Moonfin automatically identifies trailers for the Seerr Request button and availability
+                                status using metadata, attached movie or series information, and IDs embedded in filenames.
+                                If these methods cannot identify a trailer, enable this optional fallback to search TMDB
+                                using its filename or display name.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
                         <h3 class="sectionTitle">MDBList Integration</h3>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="MdblistApiKey">Server-wide MDBList API Key</label>
@@ -6489,6 +6505,7 @@
                     document.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
                     updateSyncStatus();
                     document.querySelector('#SeerrEnabled').checked = config.SeerrEnabled;
+                    document.querySelector('#CinemaFilenameSearchEnabled').checked = config.CinemaFilenameSearchEnabled === true;
                     document.querySelector('#SeerrUrl').value = config.SeerrUrl || '';
                     document.querySelector('#SeerrDisplayName').value = config.SeerrDisplayName || '';
                     document.querySelector('#PublicServerUrl').value = config.PublicServerUrl || '';
@@ -7272,6 +7289,7 @@
                     return ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
                         config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
                         config.SeerrEnabled = document.querySelector('#SeerrEnabled').checked;
+                        config.CinemaFilenameSearchEnabled = document.querySelector('#CinemaFilenameSearchEnabled').checked;
                         config.SeerrUrl = document.querySelector('#SeerrUrl').value || null;
                         config.SeerrDisplayName = document.querySelector('#SeerrDisplayName').value || null;
                         config.PublicServerUrl = document.querySelector('#PublicServerUrl').value || null;

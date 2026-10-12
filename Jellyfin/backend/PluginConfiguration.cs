@@ -19,6 +19,9 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public bool SeerrEnabled { get; set; } = false;
 
+    /// <summary>Allow TMDB filename searches for trailers without an attached movie or series.</summary>
+    public bool CinemaFilenameSearchEnabled { get; set; } = false;
+
     /// <summary>
     /// Seerr server URL for server-to-server communication from Jellyfin.
     /// Example: http://seerr:5055 or http://192.168.50.20:5055
