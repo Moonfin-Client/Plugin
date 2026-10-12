@@ -2139,6 +2139,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
 
             setNullableBoolSelect(view, '#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+            setSelectValue(view, '#DefaultCinemaModeSkipCountdown', defaults.cinemaModeSkipCountdown, 'Configured countdown');
+            setSelectValue(view, '#DefaultCinemaModeSkipAutoHide', defaults.cinemaModeSkipAutoHide, 'Configured timeout');
+            setSelectValue(view, '#DefaultCinemaModeSkipMinDurationSeconds', defaults.cinemaModeSkipMinDurationSeconds, 'Configured minimum');
             setNullableBoolSelect(view, '#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
             setSelectValue(view, '#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
             setSelectValue(view, '#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
@@ -2446,6 +2449,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.preferSdhSubtitles = getNullableBoolSelect(view, '#DefaultPreferSdhSubtitles');
 
             d.cinemaModeEnabled = getNullableBoolSelect(view, '#DefaultCinemaModeEnabled');
+            d.cinemaModeSkipCountdown = view.querySelector('#DefaultCinemaModeSkipCountdown').value || null;
+            d.cinemaModeSkipAutoHide = view.querySelector('#DefaultCinemaModeSkipAutoHide').value || null;
+            var cinemaMin = view.querySelector('#DefaultCinemaModeSkipMinDurationSeconds').value;
+            d.cinemaModeSkipMinDurationSeconds = cinemaMin === '' ? null : parseInt(cinemaMin, 10);
             d.autoplayNextEpisode = getNullableBoolSelect(view, '#DefaultAutoplayNextEpisode');
             d.nextUpTimeout = getNullableIntInput(view, '#DefaultNextUpTimeout');
             d.stillWatchingBehavior = view.querySelector('#DefaultStillWatchingBehavior').value || null;

@@ -3220,6 +3220,50 @@
                                     <option value="false">No</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeSkipCountdown">Cinema Mode Skip Countdown</label>
+                                <select id="DefaultCinemaModeSkipCountdown" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="progressBar">Progress bar</option>
+                                    <option value="timer">Timer</option>
+                                    <option value="both">Both</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeSkipMinDurationSeconds">Cinema Mode — Minimum clip length to show buttons</label>
+                                <select id="DefaultCinemaModeSkipMinDurationSeconds" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">No limit</option>
+                                    <option value="5">5 seconds</option>
+                                    <option value="10">10 seconds</option>
+                                    <option value="15">15 seconds</option>
+                                    <option value="20">20 seconds</option>
+                                    <option value="25">25 seconds</option>
+                                    <option value="30">30 seconds</option>
+                                    <option value="35">35 seconds</option>
+                                    <option value="40">40 seconds</option>
+                                    <option value="45">45 seconds</option>
+                                    <option value="50">50 seconds</option>
+                                    <option value="55">55 seconds</option>
+                                    <option value="60">60 seconds</option>
+                                </select>
+                                <div class="fieldDescription">Show Skip and Request buttons only for trailers or pre-rolls at least this long. Auto-hide is a separate setting. Default: 15 seconds.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCinemaModeSkipAutoHide">Auto-hide Cinema buttons</label>
+                                <select id="DefaultCinemaModeSkipAutoHide" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="s5">5 seconds</option>
+                                    <option value="s10">10 seconds</option>
+                                    <option value="s15">15 seconds</option>
+                                    <option value="s20">20 seconds</option>
+                                    <option value="s25">25 seconds</option>
+                                    <option value="s30">30 seconds</option>
+                                    <option value="off">Off</option>
+                                </select>
+                                <div class="fieldDescription">Once visible, hide Skip and Request buttons after this many seconds of playback. Off disables automatic hiding. Default: 15 seconds.</div>
+                            </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Autoplay</h4>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultAutoplayNextEpisode">Autoplay Next Episode</label>
@@ -6631,6 +6675,9 @@
                     setNullableBoolSelect('#DefaultPreferSdhSubtitles', defaults.preferSdhSubtitles);
 
                     setNullableBoolSelect('#DefaultCinemaModeEnabled', defaults.cinemaModeEnabled);
+                    setSelectValue('#DefaultCinemaModeSkipCountdown', defaults.cinemaModeSkipCountdown, 'Configured countdown');
+                    setSelectValue('#DefaultCinemaModeSkipAutoHide', defaults.cinemaModeSkipAutoHide, 'Configured timeout');
+                    setSelectValue('#DefaultCinemaModeSkipMinDurationSeconds', defaults.cinemaModeSkipMinDurationSeconds, 'Configured minimum');
                     setNullableBoolSelect('#DefaultAutoplayNextEpisode', defaults.autoplayNextEpisode);
                     setSelectValue('#DefaultNextUpTimeout', defaults.nextUpTimeout != null ? String(defaults.nextUpTimeout) : '', 'Configured timeout');
                     setSelectValue('#DefaultStillWatchingBehavior', defaults.stillWatchingBehavior, 'Configured behavior');
@@ -7395,6 +7442,10 @@
                         config.DefaultUserSettings.preferSdhSubtitles = getNullableBoolSelect('#DefaultPreferSdhSubtitles');
 
                         config.DefaultUserSettings.cinemaModeEnabled = getNullableBoolSelect('#DefaultCinemaModeEnabled');
+                        config.DefaultUserSettings.cinemaModeSkipCountdown = document.querySelector('#DefaultCinemaModeSkipCountdown').value || null;
+                        config.DefaultUserSettings.cinemaModeSkipAutoHide = document.querySelector('#DefaultCinemaModeSkipAutoHide').value || null;
+                        var cinemaMin = document.querySelector('#DefaultCinemaModeSkipMinDurationSeconds').value;
+                        config.DefaultUserSettings.cinemaModeSkipMinDurationSeconds = cinemaMin === '' ? null : parseInt(cinemaMin, 10);
                         config.DefaultUserSettings.autoplayNextEpisode = getNullableBoolSelect('#DefaultAutoplayNextEpisode');
                         config.DefaultUserSettings.nextUpTimeout = getNullableIntInput('#DefaultNextUpTimeout');
                         config.DefaultUserSettings.stillWatchingBehavior = document.querySelector('#DefaultStillWatchingBehavior').value || null;

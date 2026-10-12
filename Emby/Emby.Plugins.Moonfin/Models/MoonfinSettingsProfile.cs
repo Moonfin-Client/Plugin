@@ -223,6 +223,10 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("maxBitrate")] public string? MaxBitrate { get; set; }
         [JsonPropertyName("maxVideoResolution")] public string? MaxVideoResolution { get; set; }
         [JsonPropertyName("cinemaModeEnabled")] public bool? CinemaModeEnabled { get; set; }
+        [JsonPropertyName("cinemaModeSkipCountdown")] public string? CinemaModeSkipCountdown { get; set; }
+        [JsonPropertyName("cinemaModeSkipAutoHide")] public string? CinemaModeSkipAutoHide { get; set; }
+
+        [JsonPropertyName("cinemaModeSkipMinDurationSeconds")] public int? CinemaModeSkipMinDurationSeconds { get; set; }
         [JsonPropertyName("mediaSegmentActions")] public string? MediaSegmentActions { get; set; }
         [JsonPropertyName("mediaSegmentCountdown")] public string? MediaSegmentCountdown { get; set; }
         [JsonPropertyName("autoplayNextEpisode")] public bool? AutoplayNextEpisode { get; set; }
