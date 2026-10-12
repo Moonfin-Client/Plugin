@@ -15,6 +15,10 @@ namespace Moonfin.Server.Tests;
 /// </summary>
 internal sealed class FakeLibraryManager : ILibraryManager
 {
+    private static readonly Emby.Naming.Common.NamingOptions NamingOptions = new();
+
+    internal Func<Guid, MediaBrowser.Controller.Entities.BaseItem?>? ItemByIdHandler { get; set; }
+
     private readonly List<VirtualFolderInfo> _folders;
     private readonly Action? _beforeGetVirtualFolders;
 
@@ -145,7 +149,8 @@ internal sealed class FakeLibraryManager : ILibraryManager
 
     MediaBrowser.Controller.Entities.BaseItem ILibraryManager.GetItemById(System.Guid id)
     {
-        throw new NotImplementedException();
+        if (ItemByIdHandler == null) throw new NotImplementedException();
+        return ItemByIdHandler(id)!;
     }
 
     T ILibraryManager.GetItemById<T>(System.Guid id)
@@ -153,7 +158,7 @@ internal sealed class FakeLibraryManager : ILibraryManager
         throw new NotImplementedException();
     }
 
-    T ILibraryManager.GetItemById<T>(System.Guid id, System.Guid userId)
+    T ILibraryManager.GetItemById<T>(System.Guid id, System.Guid userId) where T : class
     {
         throw new NotImplementedException();
     }
@@ -295,7 +300,11 @@ internal sealed class FakeLibraryManager : ILibraryManager
 
     MediaBrowser.Controller.Providers.ItemLookupInfo ILibraryManager.ParseName(System.String name)
     {
-        throw new NotImplementedException();
+        // Use Jellyfin's naming helpers so filename tests behave like the server.
+        var info = Emby.Naming.Video.VideoResolver.CleanDateTime(name, NamingOptions);
+        var title = Emby.Naming.Video.VideoResolver.TryCleanString(info.Name, NamingOptions, out var cleaned)
+            ? cleaned : info.Name;
+        return new MediaBrowser.Controller.Providers.ItemLookupInfo { Name = title, Year = info.Year };
     }
 
     System.Guid ILibraryManager.GetNewItemId(System.String key, System.Type type)
@@ -391,8 +400,7 @@ internal sealed class FakeLibraryManager : ILibraryManager
 
     MediaBrowser.Model.Querying.QueryResult<MediaBrowser.Controller.Entities.BaseItem> ILibraryManager.GetItemsResult(MediaBrowser.Controller.Entities.InternalItemsQuery query)
     {
-        if (ItemsResultHandler == null) throw new NotImplementedException();
-        var items = ItemsResultHandler(query);
+        var items = ItemsResultHandler?.Invoke(query) ?? [];
         return new MediaBrowser.Model.Querying.QueryResult<MediaBrowser.Controller.Entities.BaseItem>(items);
     }
 
