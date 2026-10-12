@@ -976,6 +976,88 @@ public sealed class GameArtworkCatalogTests : IDisposable
         Assert.NotNull(await catalog.GetAsync(newKey));
     }
 
+    [Fact]
+    public async Task Dimensions_FollowTheOriginalThroughTransitions()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var key = Key("dimensions");
+
+        var original = await catalog.MarkOriginalReadyAsync(key, "snes", "C:/catalog/game.png", (512, 357));
+        Assert.Equal((512, 357), (original.Width, original.Height));
+
+        var thumbnail = await catalog.MarkThumbnailReadyAsync(key, "snes", "C:/catalog/game-thumb.jpg");
+        Assert.Equal((512, 357), (thumbnail.Width, thumbnail.Height));
+
+        var reencode = await catalog.MarkRetryableAsync(
+            key, "snes", ArtworkCatalogWorkStage.DeriveThumbnail, DateTimeOffset.UtcNow.AddMinutes(5));
+        Assert.Equal((512, 357), (reencode.Width, reencode.Height));
+
+        var missing = await catalog.MarkMissingAsync(key, "snes", "provider-v1");
+        Assert.Null(missing.Width);
+        Assert.Null(missing.Height);
+    }
+
+    [Fact]
+    public async Task BackfillDimensions_MeasuresOnlyWhatIsMissingWithoutTouchingRevisions()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var artifacts = Path.Combine(_root, "artifacts");
+        Directory.CreateDirectory(artifacts);
+        var landscape = Path.Combine(artifacts, "n64.png");
+        var unreadable = Path.Combine(artifacts, "broken.png");
+        await File.WriteAllBytesAsync(landscape, ArtworkImageDimensionsTests.Png(512, 374));
+        await File.WriteAllTextAsync(unreadable, "not an image");
+
+        var measuredKey = Key("measured");
+        var knownKey = ArtworkCatalogKey.Create("library-a", "SNES\\Known.sfc", "known", "boxart");
+        var brokenKey = ArtworkCatalogKey.Create("library-a", "SNES\\Broken.sfc", "broken", "boxart");
+        var measured = await catalog.MarkOriginalReadyAsync(measuredKey, "snes", landscape);
+        await catalog.MarkOriginalReadyAsync(knownKey, "snes", landscape, (100, 100));
+        await catalog.MarkOriginalReadyAsync(brokenKey, "snes", unreadable);
+        var before = await catalog.GetSystemAsync("library-a", "snes");
+
+        Assert.Equal(1, await catalog.BackfillDimensionsAsync("library-a"));
+
+        var updated = await catalog.GetAsync(measuredKey);
+        Assert.Equal((512, 374), (updated?.Width, updated?.Height));
+        Assert.Equal(measured.Revision, updated?.Revision);
+        Assert.Equal((100, 100), ((await catalog.GetAsync(knownKey))?.Width, (await catalog.GetAsync(knownKey))?.Height));
+        Assert.Null((await catalog.GetAsync(brokenKey))?.Width);
+        Assert.Equal(before.Generation + 1, (await catalog.GetSystemAsync("library-a", "snes")).Generation);
+
+        Assert.Equal(0, await catalog.BackfillDimensionsAsync("library-a"));
+        Assert.Equal(before.Generation + 1, (await catalog.GetSystemAsync("library-a", "snes")).Generation);
+    }
+
+    [Fact]
+    public async Task SchemaOneCatalogWithoutDimensions_LoadsAndBackfills()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var artifacts = Path.Combine(_root, "artifacts");
+        Directory.CreateDirectory(artifacts);
+        var original = Path.Combine(artifacts, "boxart.png");
+        await File.WriteAllBytesAsync(original, ArtworkImageDimensionsTests.Png(355, 512));
+        var key = Key("legacy");
+        var ready = await catalog.MarkOriginalReadyAsync(key, "snes", original, (355, 512));
+        await catalog.FlushAsync();
+
+        // A catalog written before dimensions existed has no width/height properties at all.
+        var path = catalog.GetLibraryPath("library-a");
+        var json = await File.ReadAllTextAsync(path);
+        var stripped = System.Text.RegularExpressions.Regex.Replace(json, "\"(width|height)\":(null|\\d+),?", string.Empty);
+        Assert.DoesNotContain("\"width\"", stripped);
+        await File.WriteAllTextAsync(path, stripped);
+
+        var reloaded = new GameArtworkCatalog(_root);
+        var legacy = await reloaded.GetAsync(key);
+        Assert.Equal(ArtworkCatalogState.OriginalReady, legacy?.State);
+        Assert.Equal(ready.Revision, legacy?.Revision);
+        Assert.Null(legacy?.Width);
+
+        Assert.Equal(1, await reloaded.BackfillDimensionsAsync("library-a"));
+        Assert.Equal((355, 512), ((await reloaded.GetAsync(key))?.Width, (await reloaded.GetAsync(key))?.Height));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

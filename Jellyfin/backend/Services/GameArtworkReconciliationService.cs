@@ -952,6 +952,15 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         library.Id);
                 }
 
+                var measured = await _catalog.BackfillDimensionsAsync(library.Id, cancellationToken).ConfigureAwait(false);
+                if (measured > 0)
+                {
+                    _logger.LogInformation(
+                        "Recorded dimensions for {Count} cached game artwork entries in library {LibraryId}",
+                        measured,
+                        library.Id);
+                }
+
                 foreach (var (system, allCandidates, candidates) in reconciledSystems)
                 {
                     // Persist a complete current game/role projection. Only box art is normally
@@ -1152,7 +1161,12 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         continue;
                     }
 
-                    await _catalog.MarkOriginalReadyAsync(work.Candidate.Key, work.Candidate.SystemId, original, cancellationToken).ConfigureAwait(false);
+                    await _catalog.MarkOriginalReadyAsync(
+                        work.Candidate.Key,
+                        work.Candidate.SystemId,
+                        original,
+                        ArtworkImageDimensions.TryRead(original),
+                        cancellationToken).ConfigureAwait(false);
                     QueueThumbnail(work.Candidate with { OriginalPath = original });
                     await RefreshPreviewSelectionAsync(work.Candidate, cancellationToken).ConfigureAwait(false);
                 }

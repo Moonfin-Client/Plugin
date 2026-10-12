@@ -123,6 +123,12 @@ public sealed record ArtworkCatalogEntry
 
     public string? ThumbnailPath { get; init; }
 
+    /// <summary>Original's pixel width; null until known (see BackfillDimensionsAsync).</summary>
+    public int? Width { get; init; }
+
+    /// <summary>Original's pixel height; see <see cref="Width"/>.</summary>
+    public int? Height { get; init; }
+
     /// <summary>Monotonically increasing asset version for immutable versioned-resource URLs.</summary>
     public long Revision { get; init; }
 
@@ -348,12 +354,15 @@ public sealed class GameArtworkCatalog
         ArtworkCatalogKey key,
         string systemId,
         string originalPath,
+        (int Width, int Height)? dimensions = null,
         CancellationToken cancellationToken = default) =>
         UpdateEntryAsync(key, systemId, entry => entry with
         {
             State = ArtworkCatalogState.OriginalReady,
             OriginalPath = RequirePath(originalPath, nameof(originalPath)),
             ThumbnailPath = null,
+            Width = dimensions?.Width,
+            Height = dimensions?.Height,
             RetryAfterUtc = null,
             MissingProviderVersion = null,
             MetadataRetryStartedAtUtc = null,
@@ -397,6 +406,8 @@ public sealed class GameArtworkCatalog
             State = ArtworkCatalogState.Missing,
             OriginalPath = null,
             ThumbnailPath = null,
+            Width = null,
+            Height = null,
             RetryAfterUtc = null,
             MissingProviderVersion = providerVersion.Trim(),
             MetadataRetryStartedAtUtc = null,
@@ -427,6 +438,8 @@ public sealed class GameArtworkCatalog
                 State = ArtworkCatalogState.Retryable,
                 OriginalPath = null,
                 ThumbnailPath = null,
+                Width = null,
+                Height = null,
                 RetryAfterUtc = retryAfterUtc,
                 MissingProviderVersion = null,
                 MetadataRetryStartedAtUtc = null,
@@ -460,6 +473,8 @@ public sealed class GameArtworkCatalog
                     State = ArtworkCatalogState.MetadataDeferred,
                     OriginalPath = null,
                     ThumbnailPath = null,
+                    Width = null,
+                    Height = null,
                     RetryAfterUtc = null,
                     MissingProviderVersion = null,
                     MetadataRetryStartedAtUtc = started,
@@ -479,6 +494,8 @@ public sealed class GameArtworkCatalog
                 State = ArtworkCatalogState.Retryable,
                 OriginalPath = null,
                 ThumbnailPath = null,
+                Width = null,
+                Height = null,
                 RetryAfterUtc = retryAfter,
                 MissingProviderVersion = null,
                 MetadataRetryStartedAtUtc = started,
@@ -847,6 +864,88 @@ public sealed class GameArtworkCatalog
 
             await MarkDirtyUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
             return repaired;
+        }
+        finally
+        {
+            library.Gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Fills in missing original dimensions without touching revisions, so image caches stay valid;
+    /// bumps each touched system's generation once.
+    /// </summary>
+    public async Task<int> BackfillDimensionsAsync(
+        string libraryId,
+        CancellationToken cancellationToken = default)
+    {
+        var library = await GetLibraryAsync(NormalizeLibraryId(libraryId), cancellationToken).ConfigureAwait(false);
+        List<(string StorageKey, ArtworkCatalogEntry Entry)> pending;
+        await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            pending = library.Entries
+                .Where(kv => kv.Value.Width == null &&
+                    kv.Value.State is ArtworkCatalogState.OriginalReady or ArtworkCatalogState.ThumbnailReady &&
+                    !string.IsNullOrWhiteSpace(kv.Value.OriginalPath))
+                .Select(kv => (kv.Key, kv.Value))
+                .ToList();
+        }
+        finally
+        {
+            library.Gate.Release();
+        }
+
+        if (pending.Count == 0)
+        {
+            return 0;
+        }
+
+        var measured = new List<(string StorageKey, ArtworkCatalogEntry Entry, int Width, int Height)>(pending.Count);
+        foreach (var (storageKey, entry) in pending)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (ArtworkImageDimensions.TryRead(entry.OriginalPath) is { } size)
+            {
+                measured.Add((storageKey, entry, size.Width, size.Height));
+            }
+        }
+
+        if (measured.Count == 0)
+        {
+            return 0;
+        }
+
+        await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var updated = 0;
+            var affectedSystems = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (storageKey, before, width, height) in measured)
+            {
+                // Changed since it was read; that transition owns its dimensions.
+                if (!library.Entries.TryGetValue(storageKey, out var current) || !ReferenceEquals(current, before))
+                {
+                    continue;
+                }
+
+                library.SetEntry(storageKey, current with { Width = width, Height = height });
+                affectedSystems.Add(current.SystemId);
+                updated++;
+            }
+
+            if (updated == 0)
+            {
+                return 0;
+            }
+
+            foreach (var systemId in affectedSystems)
+            {
+                BumpSystemGeneration(library.Document, systemId);
+            }
+
+            await MarkDirtyUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
+            return updated;
         }
         finally
         {

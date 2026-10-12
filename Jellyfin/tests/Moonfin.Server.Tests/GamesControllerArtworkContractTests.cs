@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Moonfin.Server.Api;
 using Moonfin.Server.Models;
+using Moonfin.Server.Services;
 using Xunit;
 
 namespace Moonfin.Server.Tests;
@@ -16,18 +17,55 @@ namespace Moonfin.Server.Tests;
 public sealed class GamesControllerArtworkContractTests
 {
     [Fact]
-    public void ArtworkCapabilities_AdvertisesProtocolTwoAndEveryFeature()
+    public void ArtworkCapabilities_AdvertisesProtocolThreeAndEveryFeature()
     {
         var controller = (GamesController)RuntimeHelpers.GetUninitializedObject(typeof(GamesController));
 
         var response = Assert.IsType<OkObjectResult>(controller.GetArtworkCapabilities().Result);
         var capabilities = Assert.IsType<GameArtworkCapabilities>(response.Value);
 
-        Assert.Equal(2, capabilities.ProtocolVersion);
+        Assert.Equal(3, capabilities.ProtocolVersion);
         Assert.True(capabilities.Manifest);
         Assert.True(capabilities.VersionedAssets);
         Assert.True(capabilities.PriorityHints);
         Assert.True(capabilities.SystemPreviews);
+        Assert.True(capabilities.Dimensions);
+    }
+
+    [Fact]
+    public void Descriptor_CarriesDimensionsOnlyWhenRenderableAndKnown()
+    {
+        var key = ArtworkCatalogKey.Create("library-a", "N64/Hydro Thunder.z64", "fingerprint", "boxart");
+        var ready = new ArtworkCatalogEntry
+        {
+            Key = key,
+            State = ArtworkCatalogState.ThumbnailReady,
+            OriginalPath = "C:/cache/original.png",
+            ThumbnailPath = "C:/cache/thumb.jpg",
+            Revision = 7,
+            Width = 512,
+            Height = 374,
+        };
+
+        var renderable = GamesController.ToDescriptor("library-a", "game", "boxart", ready);
+        var unknown = GamesController.ToDescriptor("library-a", "game", "boxart", ready with { Width = null, Height = null });
+        var pending = GamesController.ToDescriptor("library-a", "game", "boxart", ready with { State = ArtworkCatalogState.Pending });
+
+        Assert.Equal((512, 374), (renderable.Width, renderable.Height));
+        Assert.Equal("7", renderable.Revision);
+        Assert.Null(unknown.Width);
+        Assert.Null(pending.Width);
+        Assert.Null(pending.Url);
+    }
+
+    [Fact]
+    public void Descriptor_OmitsUnknownDimensionsFromJson()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new GameArtworkDescriptor { State = "pending" });
+
+        Assert.DoesNotContain("width", json);
+        Assert.Contains("\"width\":512", System.Text.Json.JsonSerializer.Serialize(
+            new GameArtworkDescriptor { State = "thumbnailReady", Width = 512, Height = 374 }));
     }
 
     [Theory]

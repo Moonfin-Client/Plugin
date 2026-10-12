@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Model.Drawing;
@@ -33,8 +32,6 @@ internal sealed class DerivedThumbnailService
         (ImageFormat.Jpg, ".jpg", "image/jpeg"),
         (ImageFormat.Webp, ".webp", "image/webp"),
     };
-
-    private static ReadOnlySpan<byte> PngSignature => new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
 
     private static readonly TimeSpan DerivedThumbBudget = TimeSpan.FromSeconds(5);
     private readonly ILogger _logger;
@@ -184,9 +181,7 @@ internal sealed class DerivedThumbnailService
     /// </summary>
     private async Task<bool> IsDecodeBombAsync(string originalPath)
     {
-        // 8-byte signature, then the IHDR chunk: 4-byte length, 4-byte type, then width and height
-        // as big-endian uint32s.
-        const int PngHeaderBytes = 24;
+        const int PngHeaderBytes = ArtworkImageDimensions.PngHeaderBytes;
         var header = new byte[PngHeaderBytes];
         try
         {
@@ -205,7 +200,7 @@ internal sealed class DerivedThumbnailService
             return false;
         }
 
-        var (width, height) = ReadPngDimensions(header);
+        var (width, height) = ArtworkImageDimensions.ReadPng(header);
         if (width * height <= MaxDecodedPixels)
         {
             return false;
@@ -218,22 +213,6 @@ internal sealed class DerivedThumbnailService
             height,
             MaxDecodedPixels);
         return true;
-    }
-
-    /// <summary>
-    /// Reads width/height out of a 24-byte PNG header, or (0, 0) when it is not a PNG header.
-    /// Separate from <see cref="IsDecodeBombAsync"/> because spans cannot live in an async method.
-    /// </summary>
-    private static (long Width, long Height) ReadPngDimensions(ReadOnlySpan<byte> header)
-    {
-        if (!header[..8].SequenceEqual(PngSignature) || !header[12..16].SequenceEqual("IHDR"u8))
-        {
-            return (0, 0);
-        }
-
-        return (
-            BinaryPrimitives.ReadUInt32BigEndian(header[16..20]),
-            BinaryPrimitives.ReadUInt32BigEndian(header[20..24]));
     }
 
     private static void TryDelete(string path)

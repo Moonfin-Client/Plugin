@@ -48,6 +48,7 @@ public class GameArtworkCapabilities
     /// <summary>
     /// Highest artwork protocol version supported by this server. Version two
     /// adds manifests, versioned assets, system previews, and priority hints.
+    /// Version three adds descriptor dimensions.
     /// </summary>
     [JsonPropertyName("protocolVersion")]
     public int ProtocolVersion { get; set; }
@@ -63,6 +64,10 @@ public class GameArtworkCapabilities
 
     [JsonPropertyName("systemPreviews")]
     public bool SystemPreviews { get; set; }
+
+    /// <summary>Renderable descriptors carry width/height once known.</summary>
+    [JsonPropertyName("dimensions")]
+    public bool Dimensions { get; set; }
 }
 
 /// <summary>State and version of one server-owned game artwork artifact.</summary>
@@ -87,6 +92,16 @@ public class GameArtworkDescriptor
     [JsonPropertyName("refreshAfterSeconds")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? RefreshAfterSeconds { get; set; }
+
+    /// <summary>Source artwork width; the served thumbnail may be smaller but keeps the shape.</summary>
+    [JsonPropertyName("width")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Width { get; set; }
+
+    /// <summary>Source artwork height; see <see cref="Width"/>.</summary>
+    [JsonPropertyName("height")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Height { get; set; }
 }
 
 /// <summary>One game's artwork entry within a system-scoped manifest.</summary>

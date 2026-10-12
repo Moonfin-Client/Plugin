@@ -159,11 +159,12 @@ public class GamesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<GameArtworkCapabilities> GetArtworkCapabilities() => Ok(new GameArtworkCapabilities
     {
-        ProtocolVersion = 2,
+        ProtocolVersion = 3,
         Manifest = true,
         VersionedAssets = true,
         PriorityHints = true,
         SystemPreviews = true,
+        Dimensions = true,
     });
 
     /// <summary>Returns one system's locally cataloged artwork state without scheduling provider work.</summary>
@@ -735,7 +736,7 @@ public class GamesController : ControllerBase
         return NotFound();
     }
 
-    private static GameArtworkDescriptor ToDescriptor(string libraryId, string gameId, string role, ArtworkCatalogEntry entry)
+    internal static GameArtworkDescriptor ToDescriptor(string libraryId, string gameId, string role, ArtworkCatalogEntry entry)
     {
         var descriptor = new GameArtworkDescriptor { State = ArtworkState(entry.State) };
         if (IsRenderable(entry))
@@ -743,6 +744,11 @@ public class GamesController : ControllerBase
             var revision = entry.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture);
             descriptor.Revision = revision;
             descriptor.Url = $"/Moonfin/Games/{Uri.EscapeDataString(libraryId)}/Artwork/{Uri.EscapeDataString(gameId)}/{role}/{revision}";
+            if (entry.Width is > 0 && entry.Height is > 0)
+            {
+                descriptor.Width = entry.Width;
+                descriptor.Height = entry.Height;
+            }
         }
 
         if (entry.State == ArtworkCatalogState.OriginalReady)
