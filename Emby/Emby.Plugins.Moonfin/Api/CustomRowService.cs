@@ -121,7 +121,7 @@ namespace Emby.Plugins.Moonfin.Api
             }
 
             var language = NormalizeLanguage(request.Language);
-            var langKey = language?.ToLowerInvariant();
+            var langKey = language == null ? null : Uri.EscapeDataString(language.ToLowerInvariant());
             var canonicalParams = JsonSerializer.Serialize(
                 new SortedDictionary<string, string>(parsedParams, StringComparer.Ordinal));
             var cacheKey = source + ":" + type + ":" + Sha256Hex(canonicalParams);

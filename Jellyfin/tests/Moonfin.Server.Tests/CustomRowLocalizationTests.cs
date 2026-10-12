@@ -38,6 +38,9 @@ public class CustomRowLocalizationTests
         Assert.NotEqual(frenchKey, germanKey);
         Assert.Equal(frenchKey, frenchAltKey);
         Assert.EndsWith(":fr-fr", frenchKey);
+
+        var colonKey = CustomRowFetchService.ComputeCacheKey("mdblist", "user_list", parameters, "fr:user123");
+        Assert.EndsWith(":fr%3Auser123", colonKey);
     }
 
     [Fact]

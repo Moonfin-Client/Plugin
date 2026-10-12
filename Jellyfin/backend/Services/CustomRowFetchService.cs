@@ -66,7 +66,7 @@ public class CustomRowFetchService
         var paramHash = GetStringSha256Hash(canonicalParams);
         var baseKey = $"{source.Trim().ToLowerInvariant()}:{type.Trim().ToLowerInvariant()}:{paramHash}";
         var lang = NormalizeLanguage(language)?.ToLowerInvariant();
-        return string.IsNullOrEmpty(lang) ? baseKey : $"{baseKey}:{lang}";
+        return string.IsNullOrEmpty(lang) ? baseKey : $"{baseKey}:{Uri.EscapeDataString(lang)}";
     }
 
     public static string GetStringSha256Hash(string text)
