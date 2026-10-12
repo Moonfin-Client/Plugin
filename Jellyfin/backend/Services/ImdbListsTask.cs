@@ -38,6 +38,27 @@ public class ImdbListsTask : IScheduledTask
         { "imdb_top_english_movies", "TOP_RATED_ENGLISH_MOVIES" }
     };
 
+    /// <summary>
+    /// Width of the poster the charts hand to clients. IMDb's GraphQL names the original, which
+    /// runs to 1400 by 2000 pixels and up to a few megabytes per title, where every other row
+    /// hands out a 342 or 500 pixel poster; the image host sizes it on request instead.
+    /// </summary>
+    internal const int PosterWidth = 500;
+
+    /// <summary>
+    /// The poster at <see cref="PosterWidth"/>. An IMDb image URL ends in a transform block,
+    /// <c>._V1_.jpg</c> for the original, and <c>UX&lt;width&gt;</c> inside it asks the host for
+    /// that width. A URL without the block is returned as it is.
+    /// </summary>
+    internal static string? SizedPosterUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+        const string block = "._V1_.";
+        var at = url.LastIndexOf(block, StringComparison.Ordinal);
+        if (at < 0) return url;
+        return url.Substring(0, at) + "._V1_UX" + PosterWidth + "_." + url.Substring(at + block.Length);
+    }
+
     public ImdbListsTask(
         IHttpClientFactory httpClientFactory,
         ImdbListsCacheService cacheService,
@@ -181,7 +202,7 @@ public class ImdbListsTask : IScheduledTask
             string? posterUrl = null;
             if (node.TryGetProperty("primaryImage", out var imgEl) && imgEl.ValueKind == JsonValueKind.Object && imgEl.TryGetProperty("url", out var urlProp))
             {
-                posterUrl = urlProp.GetString();
+                posterUrl = SizedPosterUrl(urlProp.GetString());
             }
 
             int? year = null;
