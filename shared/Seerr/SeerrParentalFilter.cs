@@ -137,10 +137,11 @@ public static class SeerrParentalFilter
         {
             foreach (var element in array)
             {
-                var title = TitleOf(element as JsonObject, fallback);
-                if (title.HasValue)
+                var item = element as JsonObject;
+                Add(titles, TitleOf(item, fallback));
+                foreach (var known in KnownFor(item))
                 {
-                    titles.Add(title.Value);
+                    Add(titles, TitleOf(known));
                 }
             }
         }
@@ -150,9 +151,24 @@ public static class SeerrParentalFilter
         {
             for (var i = array.Count - 1; i >= 0; i--)
             {
-                if (!Keeps(array[i] as JsonObject, allowed, fallback))
+                var item = array[i] as JsonObject;
+                if (!Keeps(item, allowed, fallback))
                 {
                     array.RemoveAt(i);
+                    continue;
+                }
+
+                // A person stays, and the titles they are known for are held to the limit like
+                // any other list.
+                if (item?["knownFor"] is JsonArray knownFor)
+                {
+                    for (var j = knownFor.Count - 1; j >= 0; j--)
+                    {
+                        if (!Keeps(knownFor[j] as JsonObject, allowed, null))
+                        {
+                            knownFor.RemoveAt(j);
+                        }
+                    }
                 }
             }
         }
@@ -205,6 +221,17 @@ public static class SeerrParentalFilter
 
         return result;
     }
+
+    private static void Add(HashSet<(string, long)> titles, (string, long)? title)
+    {
+        if (title.HasValue)
+        {
+            titles.Add(title.Value);
+        }
+    }
+
+    private static IEnumerable<JsonObject> KnownFor(JsonObject? element) =>
+        (element?["knownFor"] as JsonArray)?.OfType<JsonObject>() ?? Enumerable.Empty<JsonObject>();
 
     private static (string, long)? TitleOf(JsonObject? element, string? fallback = null)
     {

@@ -133,6 +133,21 @@ public sealed class SeerrParentalFilterTests
     }
 
     [Fact]
+    public async Task APersonStaysAndTheirKnownForTitlesAreHeldToTheLimit()
+    {
+        var search = await Filtered("search?query=carrie", """
+            {"page":1,"totalPages":1,"totalResults":2,"results":[
+              {"id":4,"mediaType":"person","name":"Carrie Fisher","knownFor":[{"id":30,"mediaType":"movie"},{"id":10,"mediaType":"movie"},{"id":20,"mediaType":"tv"}]},
+              {"id":30,"mediaType":"movie","title":"Carrie"}]}
+            """);
+
+        var person = Assert.Single(search.GetProperty("results").EnumerateArray());
+        Assert.Equal("Carrie Fisher", person.GetProperty("name").GetString());
+        Assert.Equal(new[] { 10L, 20L }, person.GetProperty("knownFor").EnumerateArray().Select(k => k.GetProperty("id").GetInt64()));
+        Assert.Contains(("tv", 20L), _asked);
+    }
+
+    [Fact]
     public async Task CollectionPartsThatDeclareNoTypeAreMovies()
     {
         var collection = await Filtered("collection/10", """
