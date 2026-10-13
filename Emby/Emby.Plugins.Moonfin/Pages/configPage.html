@@ -1010,10 +1010,17 @@
                                 <span>Allow filename-based trailer identification (fallback)</span>
                             </label>
                             <div class="fieldDescription">
-                                Moonfin automatically identifies trailers for the Seerr Request button and availability
-                                status using metadata, attached movie or series information, and IDs embedded in filenames.
-                                If these methods cannot identify a trailer, enable this optional fallback to search TMDB
-                                using its filename or display name.
+                                <p>Moonfin can identify the movie or TV series advertised by a Cinema Mode trailer, allowing
+                                    viewers to check availability and request it through Seerr without leaving playback.</p>
+                                <p>Normally, Moonfin identifies trailers using metadata, attached movie or series
+                                    information, or TMDB/TVDB IDs embedded in filenames. If these methods fail, enable
+                                    this fallback to search TMDB using the trailer's filename or display name.</p>
+                                <p>Only when relying on this filename-based fallback, configure your intro provider to
+                                    play movie trailers before movies and TV series trailers before episodes. This is
+                                    necessary because Moonbase uses the upcoming movie or episode to determine which
+                                    TMDB catalog to search.</p>
+                                <p>Trailers identified through reliable metadata, ownership, or explicit filename IDs
+                                    do not require this configuration.</p>
                             </div>
                         </div>
                     </div>
