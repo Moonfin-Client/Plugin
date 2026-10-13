@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -16,17 +18,18 @@ public sealed class SeerrParentalFilterTests
 {
     private static readonly HashSet<long> Allowed = new HashSet<long> { 10, 20 };
 
-    private static readonly List<(string, long)> Asked = new List<(string, long)>();
+    // xUnit builds a new instance per test, and the verdict runs a few titles at a time.
+    private readonly ConcurrentBag<(string, long)> _asked = new ConcurrentBag<(string, long)>();
 
-    private static Task<bool> Verdict(string mediaType, long tmdbId)
+    private Task<bool> Verdict(string mediaType, long tmdbId)
     {
-        Asked.Add((mediaType, tmdbId));
+        _asked.Add((mediaType, tmdbId));
         return Task.FromResult(Allowed.Contains(tmdbId));
     }
 
     private static byte[] Bytes(string json) => Encoding.UTF8.GetBytes(json);
 
-    private static async Task<JsonElement> Filtered(string path, string json)
+    private async Task<JsonElement> Filtered(string path, string json)
     {
         var filtered = await SeerrParentalFilter.FilterListAsync(path, Bytes(json), Verdict, CancellationToken.None);
         Assert.NotNull(filtered);
@@ -119,7 +122,6 @@ public sealed class SeerrParentalFilterTests
     [Fact]
     public async Task EachTitleIsJudgedOnceAndByItsTmdbId()
     {
-        Asked.Clear();
         await Filtered("media", """
             {"pageInfo":{"pages":1},"results":[
               {"id":479,"tmdbId":10,"mediaType":"movie"},
@@ -127,7 +129,34 @@ public sealed class SeerrParentalFilterTests
               {"id":481,"tmdbId":30,"mediaType":"tv"}]}
             """);
 
-        Assert.Equal(new List<(string, long)> { ("movie", 10), ("tv", 30) }, Asked);
+        Assert.Equal(new[] { ("movie", 10L), ("tv", 30L) }.OrderBy(t => t.Item2), _asked.OrderBy(t => t.Item2));
+    }
+
+    [Fact]
+    public async Task CollectionPartsThatDeclareNoTypeAreMovies()
+    {
+        var collection = await Filtered("collection/10", """
+            {"id":10,"name":"Star Wars","parts":[{"id":10},{"id":30},{"id":20,"mediaType":"movie"}]}
+            """);
+
+        Assert.Equal(new[] { 10L, 20L }, collection.GetProperty("parts").EnumerateArray().Select(p => p.GetProperty("id").GetInt64()));
+        Assert.Contains(("movie", 30L), _asked);
+    }
+
+    [Theory]
+    [InlineData("GET", "discover/trending", true)]
+    [InlineData("GET", "movie/7340", true)]
+    [InlineData("GET", "tv/tvdb/81189", true)]
+    [InlineData("POST", "request", true)]
+    [InlineData("POST", "watchlist", true)]
+    [InlineData("GET", "settings/public", false)]
+    [InlineData("GET", "request?filter=all", false)]
+    [InlineData("POST", "auth/local", false)]
+    [InlineData("PUT", "request/5", false)]
+    [InlineData("DELETE", "request/5", false)]
+    public void OnlyListsDetailsAndRequestsAreJudged(string method, string path, bool judged)
+    {
+        Assert.Equal(judged, SeerrParentalFilter.IsJudged(method, path));
     }
 
     [Fact]

@@ -163,9 +163,9 @@ namespace Emby.Plugins.Moonfin.Api
             }
 
             // A user with a parental limit gets Seerr held to it: lists lose the titles above it,
-            // a details page above it is refused, and so is a request for one. Everyone else is
-            // passed through as they were.
-            var verdict = await VerdictFor(user!).ConfigureAwait(false);
+            // a details page above it is refused, and so is a request for one. Everyone else, and
+            // every other call, is passed through as it was.
+            var verdict = SeerrParentalFilter.IsJudged(method.Method, path) ? await VerdictFor(user!).ConfigureAwait(false) : null;
             if (verdict != null && method == HttpMethod.Post && SeerrParentalFilter.IsRequestPath(path))
             {
                 var target = SeerrParentalFilter.RequestTarget(body);

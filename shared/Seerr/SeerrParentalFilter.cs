@@ -31,6 +31,10 @@ public static class SeerrParentalFilter
 
     private static readonly Regex DetailsPath = new Regex(@"^(movie|tv)/(tvdb/)?\d+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // A collection's parts are movies by contract, and Seerr does not promise the mediaType
+    // field on each of them.
+    private static readonly Regex CollectionPath = new Regex(@"^collection/\d+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly string[] TitleArrays = { "results", "parts", "cast", "crew" };
 
     /// <summary>The path as the proxy receives it, without a leading slash or a query.</summary>
@@ -61,6 +65,22 @@ public static class SeerrParentalFilter
     {
         var p = Normalize(path).ToLowerInvariant();
         return p == "request" || p == "watchlist";
+    }
+
+    /// <summary>
+    /// Whether a call on this method and path is one the limit applies to: a GET of a list or
+    /// of a details page, or a POST that names a title. The proxy resolves a user's limit for
+    /// these calls only.
+    /// </summary>
+    public static bool IsJudged(string? method, string? path)
+    {
+        var m = (method ?? string.Empty).Trim().ToUpperInvariant();
+        if (m == "POST")
+        {
+            return IsRequestPath(path);
+        }
+
+        return m == "GET" && (IsListPath(path) || DetailsMediaType(path) != null);
     }
 
     /// <summary>
@@ -111,12 +131,13 @@ public static class SeerrParentalFilter
             return null;
         }
 
+        var fallback = CollectionPath.IsMatch(Normalize(path)) ? "movie" : null;
         var titles = new HashSet<(string, long)>();
         foreach (var array in arrays)
         {
             foreach (var element in array)
             {
-                var title = TitleOf(element as JsonObject);
+                var title = TitleOf(element as JsonObject, fallback);
                 if (title.HasValue)
                 {
                     titles.Add(title.Value);
@@ -129,7 +150,7 @@ public static class SeerrParentalFilter
         {
             for (var i = array.Count - 1; i >= 0; i--)
             {
-                if (!Keeps(array[i] as JsonObject, allowed))
+                if (!Keeps(array[i] as JsonObject, allowed, fallback))
                 {
                     array.RemoveAt(i);
                 }
@@ -141,26 +162,21 @@ public static class SeerrParentalFilter
 
     // A person, a collection or anything else that is not a title passes; a movie or show
     // passes on its verdict; one that names no id, or nothing at all, cannot be judged and goes.
-    private static bool Keeps(JsonObject? element, Dictionary<(string, long), bool> allowed)
+    // [fallback] is the type an element that declares none is taken for, when the path says.
+    private static bool Keeps(JsonObject? element, Dictionary<(string, long), bool> allowed, string? fallback)
     {
         if (element == null)
         {
             return false;
         }
 
-        var declared = (element["mediaType"] as JsonValue)?.ToString();
-        if (declared == null)
-        {
-            return false;
-        }
-
-        var mediaType = MediaTypeOf(element);
+        var mediaType = MediaTypeOf(element, fallback);
         if (mediaType == null)
         {
-            return true;
+            return element["mediaType"] is JsonValue;
         }
 
-        var title = TitleOf(element);
+        var title = TitleOf(element, fallback);
         return title.HasValue && allowed.TryGetValue(title.Value, out var ok) && ok;
     }
 
@@ -190,22 +206,27 @@ public static class SeerrParentalFilter
         return result;
     }
 
-    private static (string, long)? TitleOf(JsonObject? element)
+    private static (string, long)? TitleOf(JsonObject? element, string? fallback = null)
     {
         if (element == null)
         {
             return null;
         }
 
-        var mediaType = MediaTypeOf(element);
+        var mediaType = MediaTypeOf(element, fallback);
         // Seerr's own media rows and the watchlist carry the TMDB id as tmdbId beside a row id.
         var id = IdOf(element, "tmdbId") ?? IdOf(element, "id");
         return mediaType != null && id.HasValue ? (mediaType, id.Value) : ((string, long)?)null;
     }
 
-    private static string? MediaTypeOf(JsonObject element)
+    private static string? MediaTypeOf(JsonObject element, string? fallback = null)
     {
-        var value = (element["mediaType"] as JsonValue)?.ToString().Trim().ToLowerInvariant();
+        if (!(element["mediaType"] is JsonValue declared))
+        {
+            return fallback;
+        }
+
+        var value = declared.ToString().Trim().ToLowerInvariant();
         return value == "movie" || value == "tv" ? value : null;
     }
 
