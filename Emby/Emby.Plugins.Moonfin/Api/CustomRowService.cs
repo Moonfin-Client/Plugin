@@ -738,11 +738,34 @@ namespace Emby.Plugins.Moonfin.Api
             return client;
         }
 
+        // A plain BCP 47 tag the clients send, such as fr, pt_BR, zh-Hant-TW or es-419.
+        private static readonly Regex LanguageTagRegex =
+            new Regex(@"^([A-Za-z]{2,3})(?:-([A-Za-z]{4}))?(?:-([A-Za-z]{2}|[0-9]{3}))?$", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Turns a client language tag into the language or language-REGION form MDBList and TMDB take,
+        /// or null when it isn't a plain tag, so a made-up value can't open new cache entries.
+        /// </summary>
         public static string? NormalizeLanguage(string? language)
         {
             if (string.IsNullOrWhiteSpace(language)) return null;
-            var trimmed = language.Trim().Replace('_', '-');
-            return string.IsNullOrEmpty(trimmed) ? null : trimmed;
+            var match = LanguageTagRegex.Match(language.Trim().Replace('_', '-'));
+            if (!match.Success) return null;
+
+            var lang = match.Groups[1].Value.ToLowerInvariant();
+            var script = match.Groups[2].Value;
+            var region = match.Groups[3].Value.ToUpperInvariant();
+
+            // TMDB has no numeric regions. Its Latin American Spanish is es-MX.
+            if (region.Length == 3) region = lang == "es" && region == "419" ? "MX" : string.Empty;
+
+            // TMDB tells the Chinese scripts apart by region alone.
+            if (region.Length == 0 && lang == "zh" && script.Length > 0)
+            {
+                region = script.Equals("Hant", StringComparison.OrdinalIgnoreCase) ? "TW" : "CN";
+            }
+
+            return region.Length == 0 ? lang : $"{lang}-{region}";
         }
 
         internal static string BuildMdbListUrl(string username, string listname, string apiKey, string? language, string? cursor = null)

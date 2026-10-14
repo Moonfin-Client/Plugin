@@ -15,6 +15,15 @@ public class CustomRowLocalizationTests
     [InlineData("fr-FR", "fr-FR")]
     [InlineData(" pt-BR ", "pt-BR")]
     [InlineData("zh_CN", "zh-CN")]
+    [InlineData("fr_fr", "fr-FR")]
+    [InlineData("EN", "en")]
+    [InlineData("zh-Hant", "zh-TW")]
+    [InlineData("zh-Hant-TW", "zh-TW")]
+    [InlineData("zh-Hans", "zh-CN")]
+    [InlineData("es-419", "es-MX")]
+    [InlineData("sr-Latn", "sr")]
+    [InlineData("fr&apikey=x", null)]
+    [InlineData("abcdefghijklmnopqrstuvwxyz", null)]
     public void NormalizeLanguage_NormalizesTags(string? input, string? expected)
     {
         Assert.Equal(expected, CustomRowService.NormalizeLanguage(input));
