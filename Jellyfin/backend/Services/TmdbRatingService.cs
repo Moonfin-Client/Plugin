@@ -25,6 +25,8 @@ public class TmdbRatingService
     private readonly IServerConfigurationManager _configManager;
     private readonly ILogger<TmdbRatingService> _logger;
 
+    private int _unsaved;
+
     public TmdbRatingService(
         TmdbRatingCacheService cache,
         IHttpClientFactory httpClientFactory,
@@ -90,13 +92,15 @@ public class TmdbRatingService
             }
         })).ConfigureAwait(false);
 
-        await _cache.FlushAsync().ConfigureAwait(false);
+        await FlushAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Writes what the lookups so far learned to disk, for a caller that judged titles one by one.</summary>
-
-    public Task FlushAsync() => _cache.FlushAsync();
-
+    /// <summary>
+    /// Writes the lookups learned since the last write to disk. Nothing is written when every
+    /// title came from the cache.
+    /// </summary>
+    public Task FlushAsync() =>
+        Interlocked.Exchange(ref _unsaved, 0) == 0 ? Task.CompletedTask : _cache.FlushAsync();
 
     public async Task<string?> GetCertificationAsync(string mediaType, long tmdbId, string apiKey, CancellationToken cancellationToken)
     {
@@ -111,6 +115,7 @@ public class TmdbRatingService
             ? await FetchTvRatingAsync(tmdbId, apiKey, cancellationToken).ConfigureAwait(false)
             : await FetchMovieCertificationAsync(tmdbId, apiKey, cancellationToken).ConfigureAwait(false);
         _cache.Set(key, new TmdbRatingEntry { Certification = certification, MediaType = mediaType, TmdbId = tmdbId });
+        Interlocked.Increment(ref _unsaved);
         return certification;
     }
 
@@ -141,6 +146,7 @@ public class TmdbRatingService
             BackdropPath = found?.BackdropPath,
             BackdropChecked = true
         });
+        Interlocked.Increment(ref _unsaved);
         return found;
     }
 
