@@ -384,6 +384,39 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("hideDetailsMediaDescription")]
     public bool? HideDetailsMediaDescription { get; set; }
 
+    [JsonPropertyName("hideDetailsMediaDescriptionMovie")]
+    public bool? HideDetailsMediaDescriptionMovie { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionShow")]
+    public bool? HideDetailsMediaDescriptionShow { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionSeason")]
+    public bool? HideDetailsMediaDescriptionSeason { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionEpisode")]
+    public bool? HideDetailsMediaDescriptionEpisode { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionBoxSet")]
+    public bool? HideDetailsMediaDescriptionBoxSet { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionBook")]
+    public bool? HideDetailsMediaDescriptionBook { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionPerson")]
+    public bool? HideDetailsMediaDescriptionPerson { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionMusic")]
+    public bool? HideDetailsMediaDescriptionMusic { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionSeerrMovie")]
+    public bool? HideDetailsMediaDescriptionSeerrMovie { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionSeerrShow")]
+    public bool? HideDetailsMediaDescriptionSeerrShow { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionSeerrCollection")]
+    public bool? HideDetailsMediaDescriptionSeerrCollection { get; set; }
+
     [JsonPropertyName("detailUseSeriesThumbnails")]
     public bool? DetailUseSeriesThumbnails { get; set; }
 
