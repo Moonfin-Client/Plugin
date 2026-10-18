@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Moonfin.Server.Tests;
 
-public class RdbServiceTests : IDisposable
+public partial class RdbServiceTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"moonfin-rdb-tests-{Guid.NewGuid():N}");
 
@@ -313,8 +313,8 @@ public class RdbServiceTests : IDisposable
     // Regression test for the unbounded-cache bug: _lookupCache used to grow forever, one entry
     // per distinct ROM path ever opened, for the life of the process. It is now capped and cleared
     // on capacity, the same pattern already used by ArcadeCompatibilityService's resolution cache
-    // and GameThumbService's miss cache. This drives the real CacheLookup method (via reflection,
-    // since _lookupCache and CacheLookup are private) directly rather than TryLookup end-to-end,
+    // and GameThumbService's miss cache. This drives the real GetOrCreateState method (via reflection,
+    // since _lookupCache and GetOrCreateState are private) directly rather than TryLookup end-to-end,
     // so the test does not need a real metadata index or ROM files -- only the capacity/eviction
     // bookkeeping is under test here.
     [Fact]
@@ -326,8 +326,8 @@ public class RdbServiceTests : IDisposable
             ?? throw new InvalidOperationException("RdbService._lookupCache not found; has it been renamed?");
         var maxField = typeof(RdbService).GetField("MaxLookupCacheEntries", BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("RdbService.MaxLookupCacheEntries not found; has it been renamed?");
-        var cacheLookupMethod = typeof(RdbService).GetMethod("CacheLookup", BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new InvalidOperationException("RdbService.CacheLookup not found; has it been renamed?");
+        var getStateMethod = typeof(RdbService).GetMethod("GetOrCreateState", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("RdbService.GetOrCreateState not found; has it been renamed?");
 
         var cache = cacheField.GetValue(service)
             ?? throw new InvalidOperationException("_lookupCache was null.");
@@ -335,24 +335,17 @@ public class RdbServiceTests : IDisposable
         var countProperty = cache.GetType().GetProperty("Count")
             ?? throw new InvalidOperationException("ConcurrentDictionary.Count not found.");
 
-        var cachedLookupType = typeof(RdbService).GetNestedType("CachedLookup", BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("RdbService.CachedLookup not found; has it been renamed?");
-
         // Fill exactly to capacity with distinct keys; nothing should be evicted yet.
-        // CachedLookup's trailing Platform/Siblings fields are passed explicitly rather than
-        // relying on Activator's optional-parameter binding.
         for (var i = 0; i < max; i++)
         {
-            var lookup = Activator.CreateInstance(cachedLookupType, 0L, 0L, null, null, null);
-            cacheLookupMethod.Invoke(service, [$"rom-{i}.zip", lookup]);
+            getStateMethod.Invoke(service, [$"rom-{i}.zip", 0L, 0L]);
         }
 
         Assert.Equal(max, countProperty.GetValue(cache));
 
         // One more distinct key past capacity must clear the whole cache (the documented
         // clear-on-capacity pattern), not evict just one entry or grow past the cap.
-        var overflowLookup = Activator.CreateInstance(cachedLookupType, 0L, 0L, null, null, null);
-        cacheLookupMethod.Invoke(service, ["rom-overflow.zip", overflowLookup]);
+        getStateMethod.Invoke(service, ["rom-overflow.zip", 0L, 0L]);
 
         Assert.Equal(1, countProperty.GetValue(cache));
     }

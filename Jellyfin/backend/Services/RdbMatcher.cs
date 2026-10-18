@@ -8,9 +8,9 @@ namespace Moonfin.Server.Services;
 /// </summary>
 internal sealed class RdbMatcher
 {
-    internal RdbRecord? Match(RdbPlatformIndex index, string romPath, string? title)
+    internal RdbRecord? Match(RdbPlatformIndex index, string romPath, string? title, IReadOnlyList<uint> crcCandidates)
     {
-        foreach (var crc in ComputeCrcCandidates(romPath))
+        foreach (var crc in crcCandidates)
         {
             if (index.ByCrc.TryGetValue(crc, out var byCrc))
             {
@@ -66,21 +66,15 @@ internal sealed class RdbMatcher
         return null;
     }
 
-    internal List<RdbRecord> MatchWithSiblings(RdbPlatformIndex index, string romPath, string? title, int maxSiblings)
+    /// <summary>Other records sharing the primary's base title, closest first, capped at <paramref name="maxSiblings"/>.</summary>
+    internal List<RdbRecord> FindSiblings(RdbPlatformIndex index, RdbRecord primary, int maxSiblings)
     {
-        var primary = Match(index, romPath, title);
-        var results = new List<RdbRecord>(1 + maxSiblings);
-        if (primary == null || string.IsNullOrWhiteSpace(primary.Name))
+        var results = new List<RdbRecord>(maxSiblings);
+        if (string.IsNullOrWhiteSpace(primary.Name))
         {
-            if (primary != null)
-            {
-                results.Add(primary);
-            }
-
             return results;
         }
 
-        results.Add(primary);
         var baseTitle = NormalizeName(ExtractBaseTitle(primary.Name));
         if (baseTitle.Length < 5)
         {
@@ -115,7 +109,7 @@ internal sealed class RdbMatcher
         }
 
         candidates.Sort((a, b) => a.Diff.CompareTo(b.Diff));
-        for (var i = 0; i < candidates.Count && results.Count < 1 + maxSiblings; i++)
+        for (var i = 0; i < candidates.Count && results.Count < maxSiblings; i++)
         {
             results.Add(candidates[i].Record);
         }
@@ -136,20 +130,13 @@ internal sealed class RdbMatcher
         return null;
     }
 
+    /// <summary>Throws when the ROM cannot be read; the caller then matches by name only and retries next time.</summary>
     internal static IReadOnlyList<uint> ComputeCrcCandidates(string romPath)
     {
-        var candidates = new List<uint>(2);
-        try
+        var candidates = new List<uint>(2) { Crc32File(romPath, 0) };
+        if (HasInesHeader(romPath))
         {
-            candidates.Add(Crc32File(romPath, 0));
-            if (HasInesHeader(romPath))
-            {
-                candidates.Add(Crc32File(romPath, 16));
-            }
-        }
-        catch
-        {
-            // Preserve the optional metadata lookup behavior when a ROM cannot be read.
+            candidates.Add(Crc32File(romPath, 16));
         }
 
         return candidates;
