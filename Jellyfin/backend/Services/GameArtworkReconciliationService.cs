@@ -18,8 +18,9 @@ public sealed class GameArtworkReconciliationService : IHostedService
 {
     private static readonly TimeSpan LibraryFileSystemQuietPeriod = TimeSpan.FromSeconds(5);
 
-    // v3 repairs false terminal misses caused by RDB and thumbnail alternate-title separators.
-    private const string ProviderVersion = "libretro-thumbnails-v3";
+    // v3 repairs false terminal misses caused by RDB and thumbnail alternate-title separators;
+    // v4 reopens misses recorded while a stale RDB lookup cache withheld candidate names.
+    private const string ProviderVersion = "libretro-thumbnails-v4";
     private static readonly GameThumbService.ThumbKind[] ArtworkKinds =
     [
         GameThumbService.ThumbKind.Boxart,
