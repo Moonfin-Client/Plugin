@@ -709,6 +709,10 @@
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">notifications</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Messages</span><span class="moonfinNavSub">News for your users</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="accounts">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">family_restroom</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Accounts</span><span class="moonfinNavSub">Managed accounts</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="actions">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">campaign</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Actions</span><span class="moonfinNavSub">Apply Defaults &amp; Broadcast</span></span>
@@ -3488,6 +3492,21 @@
                     </div>
 
                     </section>
+                    <section class="moonfinTabPanel" data-tab="accounts">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Managed Accounts</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            Choose which administrators manage each account. An app that supports it then shows an
+                            administrator only the accounts they manage when picking a user, instead of everyone on
+                            the server. An account can have more than one manager, for example a child with parents in
+                            separate homes. Nothing else changes: apps that don't use this keep showing every user.
+                            Changes are saved as soon as you make them.
+                        </div>
+                        <div id="ManagedAccountsList"></div>
+                        <div id="ManagedAccountsResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+                    </div>
+
+                    </section>
                     <section class="moonfinTabPanel" data-tab="actions">
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Apply Defaults To Users</h3>
@@ -5890,6 +5909,96 @@
                 });
             }
 
+            function loadManagedAccounts() {
+                var list = document.querySelector('#ManagedAccountsList');
+                if (!list || !ApiClient.getUsers) {
+                    return Promise.resolve();
+                }
+
+                var result = document.querySelector('#ManagedAccountsResult');
+                function say(text, isError) {
+                    result.style.display = text ? '' : 'none';
+                    result.textContent = text || '';
+                    result.style.color = isError ? '#ff6b6b' : '';
+                }
+
+                function same(a, b) {
+                    return String(a || '').replace(/-/g, '').toLowerCase() === String(b || '').replace(/-/g, '').toLowerCase();
+                }
+
+                return Promise.all([
+                    ApiClient.getUsers(),
+                    ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId)
+                ]).then(function(loaded) {
+                    var users = loaded[0] || [];
+                    var records = (loaded[1] && loaded[1].ManagedAccounts) || [];
+                    var admins = users.filter(function(u) { return u.Policy && u.Policy.IsAdministrator; });
+
+                    list.innerHTML = '';
+                    if (admins.length === 0 || users.length < 2) {
+                        say('There is nobody to manage yet. Accounts appear here once the server has an administrator and another user.', false);
+                        return;
+                    }
+                    say('', false);
+
+                    users.forEach(function(user) {
+                        var record = records.filter(function(r) { return same(r.UserId, user.Id); })[0];
+                        var current = (record && record.ManagedBy) || [];
+                        var others = admins.filter(function(a) { return !same(a.Id, user.Id); });
+                        if (others.length === 0) {
+                            return;
+                        }
+
+                        var row = document.createElement('div');
+                        row.style.margin = '0 0 1.2em';
+                        var title = document.createElement('div');
+                        title.textContent = user.Name;
+                        title.style.fontWeight = '600';
+                        row.appendChild(title);
+
+                        var boxes = [];
+                        others.forEach(function(admin) {
+                            var label = document.createElement('label');
+                            label.className = 'emby-checkbox-label';
+                            label.style.display = 'block';
+                            var box = document.createElement('input');
+                            box.type = 'checkbox';
+                            box.setAttribute('is', 'emby-checkbox');
+                            box.value = admin.Id;
+                            box.checked = current.some(function(c) { return same(c, admin.Id); });
+                            var text = document.createElement('span');
+                            text.textContent = 'Managed by ' + admin.Name;
+                            label.appendChild(box);
+                            label.appendChild(text);
+                            row.appendChild(label);
+                            boxes.push(box);
+
+                            box.addEventListener('change', function() {
+                                var chosen = boxes.filter(function(b) { return b.checked; }).map(function(b) { return b.value; });
+                                boxes.forEach(function(b) { b.disabled = true; });
+                                ApiClient.ajax({
+                                    type: 'PUT',
+                                    url: ApiClient.getUrl('Moonfin/Users/' + user.Id + '/ManagedBy'),
+                                    data: JSON.stringify({ managedBy: chosen }),
+                                    contentType: 'application/json',
+                                    dataType: 'json'
+                                }).then(function() {
+                                    say('Saved ' + user.Name + '.', false);
+                                }, function() {
+                                    box.checked = !box.checked;
+                                    say('Could not save ' + user.Name + '. Check the server log.', true);
+                                }).then(function() {
+                                    boxes.forEach(function(b) { b.disabled = false; });
+                                });
+                            });
+                        });
+                        list.appendChild(row);
+                    });
+                }, function() {
+                    say('Could not load the users.', true);
+                });
+            }
+
             function resetMessageForm() {
                 moonfinEditingMessageId = null;
 
@@ -6531,6 +6640,7 @@
                     resetMessageForm();
                     loadMessagesList();
                 });
+                loadManagedAccounts();
 
                 loadConfigBackupStatus();
 

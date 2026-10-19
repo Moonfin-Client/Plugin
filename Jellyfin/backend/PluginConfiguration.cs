@@ -313,6 +313,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public List<ServerMessage> Messages { get; set; } = new();
 
+    /// <summary>
+    /// Which administrators manage which accounts, so a client can show a user picker with only
+    /// the family of whoever signed in. Managed through the Moonfin/Users/{id}/ManagedBy endpoint.
+    /// </summary>
+    public List<ManagedAccount> ManagedAccounts { get; set; } = new();
+
     // ---------------------------------------------------------------------
     // Retro games (EmulatorJS) configuration
     // ---------------------------------------------------------------------
