@@ -62,6 +62,8 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private readonly object _thumbnailQueueGate = new();
     private readonly object _lifecycleGate = new();
     private readonly Dictionary<string, QueuedRemoteWork> _queued = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (ArtworkCandidate Candidate, DateTimeOffset? NotBefore)> _deferredBulk = new(StringComparer.Ordinal);
+    private readonly Queue<string> _deferredBulkOrder = new();
     private readonly ConcurrentDictionary<string, int> _thumbnailQueued = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _reconciliationAvailable = new(0, 1);
     private CancellationTokenSource? _stop;
@@ -74,6 +76,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
     private Timer? _libraryWatcherDebounce;
     private long _lastWatcherOverflowWarningTicks = long.MinValue / 2;
     private bool _startupRecoveryDone;
+    private bool _rdbUpdateCheckDone;
     private int _reopenMetadataDeferred;
     private int _nextRemoteQueueVersion;
     private int _nextThumbnailQueueVersion;
@@ -529,6 +532,8 @@ public sealed class GameArtworkReconciliationService : IHostedService
             {
                 _queued.Clear();
                 _remote.Clear();
+                _deferredBulk.Clear();
+                _deferredBulkOrder.Clear();
             }
 
             lock (_thumbnailQueueGate)
@@ -542,6 +547,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
             }
 
             _startupRecoveryDone = false;
+            _rdbUpdateCheckDone = false;
             stop.Dispose();
             lock (_lifecycleGate)
             {
@@ -906,6 +912,8 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 }
             }
 
+            var runRdbUpdateCheck = !_rdbUpdateCheckDone;
+            var libraryCandidates = new List<(string LibraryId, List<ArtworkCandidate> Candidates)>();
             foreach (var library in _games.GetGameLibraries())
             {
                 var reconciledSystems = new List<(GameSystem System, List<ArtworkCandidate> All, List<ArtworkCandidate> Boxart)>();
@@ -920,6 +928,11 @@ public sealed class GameArtworkReconciliationService : IHostedService
                         .ToList();
                     var candidates = allCandidates.Where(candidate => candidate.Kind == GameThumbService.ThumbKind.Boxart).ToList();
                     reconciledSystems.Add((system, allCandidates, candidates));
+                }
+
+                if (runRdbUpdateCheck)
+                {
+                    libraryCandidates.Add((library.Id, reconciledSystems.SelectMany(item => item.All).ToList()));
                 }
 
                 var orphaned = await _catalog.PruneAsync(
@@ -1028,6 +1041,94 @@ public sealed class GameArtworkReconciliationService : IHostedService
             }
 
             await EnqueueRecoveryAsync(recovery, cancellationToken).ConfigureAwait(false);
+
+            if (runRdbUpdateCheck)
+            {
+                _rdbUpdateCheckDone = true;
+                await CheckRdbUpdatesAsync(libraryCandidates, cancellationToken).ConfigureAwait(false);
+            }
+    }
+
+    // Checks each platform the libraries' lookups can consult once per start, independent of
+    // artwork acquisition, and reopens that platform's Missing entries when its RDB changed. A
+    // failure here only defers the reopen: the marker stays until the catalog change is saved.
+    private async Task CheckRdbUpdatesAsync(
+        IReadOnlyList<(string LibraryId, List<ArtworkCandidate> Candidates)> libraryCandidates,
+        CancellationToken cancellationToken)
+    {
+        var platformsBySource = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var byPlatform = new Dictionary<string, List<(string LibraryId, ArtworkCandidate Candidate)>>(StringComparer.Ordinal);
+        foreach (var (libraryId, candidates) in libraryCandidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                var source = candidate.Source;
+                var sourceKey = string.Join('|', source.Cores) + "#" + source.CoreWasDefaulted + "#" + source.SystemName;
+                if (!platformsBySource.TryGetValue(sourceKey, out var platforms))
+                {
+                    platforms = GameThumbService.CandidatePlatforms(source);
+                    platformsBySource[sourceKey] = platforms;
+                }
+
+                foreach (var platform in platforms)
+                {
+                    if (!byPlatform.TryGetValue(platform, out var list))
+                    {
+                        list = new List<(string, ArtworkCandidate)>();
+                        byPlatform[platform] = list;
+                    }
+
+                    list.Add((libraryId, candidate));
+                }
+            }
+        }
+
+        foreach (var (platform, members) in byPlatform.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var check = await _thumbs.EnsureRdbUpdateCheckedAsync(platform, cancellationToken).ConfigureAwait(false);
+                if (!check.ReopenPending || check.Digest == null)
+                {
+                    continue;
+                }
+
+                var reopenedCount = 0;
+                foreach (var libraryGroup in members.GroupBy(member => member.LibraryId, StringComparer.Ordinal))
+                {
+                    var byKey = new Dictionary<string, ArtworkCandidate>(StringComparer.Ordinal);
+                    foreach (var (_, candidate) in libraryGroup)
+                    {
+                        byKey.TryAdd(candidate.Key.StorageKey, candidate);
+                    }
+
+                    var reopened = await _catalog.ReopenMissingAsync(
+                        libraryGroup.Key,
+                        byKey.Values.Select(candidate => candidate.Key).ToList(),
+                        cancellationToken).ConfigureAwait(false);
+                    foreach (var key in reopened)
+                    {
+                        if (byKey.TryGetValue(key.StorageKey, out var candidate))
+                        {
+                            QueueRemote(candidate, ArtworkLane.Bulk, null);
+                            reopenedCount++;
+                        }
+                    }
+                }
+
+                _thumbs.ClearRdbPendingReopen(platform, check.Digest);
+                _logger.LogInformation("Reopened {Count} missing game artwork entries after the {Platform} metadata update", reopenedCount, platform);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Checking {Platform} game metadata for updates failed", platform);
+            }
+        }
     }
 
     private async Task<bool> QueueCandidateAsync(
@@ -1386,6 +1487,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         {
             if (_queued.TryGetValue(work.Identity, out var existing))
             {
+                _deferredBulk.Remove(work.Identity);
                 if (existing.Started || !IsHigherPriority(lane, existing.Lane))
                 {
                     return true;
@@ -1402,10 +1504,16 @@ public sealed class GameArtworkReconciliationService : IHostedService
                     : MaxQueuedBestEffortRemoteWork;
                 if (_queued.Count >= admissionCap && !MakeRoomForRemoteUnsafe(lane))
                 {
+                    if (lane == ArtworkLane.Bulk)
+                    {
+                        DeferBulkUnsafe(work.Identity, candidate, notBefore);
+                    }
+
                     return false;
                 }
 
-                var queued = new QueuedRemoteWork(lane, NextRemoteQueueVersion(), false);
+                _deferredBulk.Remove(work.Identity);
+                var queued = new QueuedRemoteWork(lane, NextRemoteQueueVersion(), false, candidate, notBefore);
                 _queued.Add(work.Identity, queued);
                 work = work with { QueueVersion = queued.Version };
             }
@@ -1535,6 +1643,32 @@ public sealed class GameArtworkReconciliationService : IHostedService
             if (_queued.TryGetValue(work.Identity, out var queued) && queued.Version == work.QueueVersion)
             {
                 _queued.Remove(work.Identity);
+                RefillBulkUnsafe();
+            }
+        }
+    }
+
+    // Pending catalog entries survive restart; this index retains only the scheduling data needed to refill this run's queue.
+    private void DeferBulkUnsafe(string identity, ArtworkCandidate candidate, DateTimeOffset? notBefore)
+    {
+        if (_deferredBulk.TryAdd(identity, (candidate, notBefore)))
+        {
+            _deferredBulkOrder.Enqueue(identity);
+        }
+    }
+
+    private void RefillBulkUnsafe()
+    {
+        if (_stop?.IsCancellationRequested == true)
+        {
+            return;
+        }
+
+        while (_queued.Count < MaxQueuedBestEffortRemoteWork && _deferredBulkOrder.TryDequeue(out var identity))
+        {
+            if (_deferredBulk.Remove(identity, out var deferred))
+            {
+                QueueRemote(deferred.Candidate, ArtworkLane.Bulk, deferred.NotBefore);
             }
         }
     }
@@ -1553,6 +1687,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
 
         _queued.Remove(evictable.Key);
+        DeferBulkUnsafe(evictable.Key, evictable.Value.Candidate, evictable.Value.NotBefore);
         return true;
     }
 
@@ -1687,7 +1822,12 @@ public sealed class GameArtworkReconciliationService : IHostedService
         public static ArtworkWork Thumbnail(ArtworkCandidate candidate) => new(candidate, ArtworkLane.Interactive, true);
     }
 
-    private sealed record QueuedRemoteWork(ArtworkLane Lane, int Version, bool Started);
+    private sealed record QueuedRemoteWork(
+        ArtworkLane Lane,
+        int Version,
+        bool Started,
+        ArtworkCandidate Candidate,
+        DateTimeOffset? NotBefore);
 
 }
 

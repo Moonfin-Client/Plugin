@@ -6,7 +6,7 @@ namespace Moonfin.Server.Services;
 /// <summary>
 /// Owns local RDB files, asynchronous download lifecycle, and per-platform parsed indexes.
 /// </summary>
-internal sealed class RdbIndexStore
+internal sealed partial class RdbIndexStore
 {
     private static readonly TimeSpan DownloadRetryBackoff = TimeSpan.FromMinutes(5);
 
@@ -75,6 +75,9 @@ internal sealed class RdbIndexStore
         {
             return null;
         }
+
+        // No index is built from a file that the once-per-process update check may still replace.
+        await EnsureUpdateCheckedAsync(platform, config).ConfigureAwait(false);
 
         var gate = _indexBuildGates.GetOrAdd(platform, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync().ConfigureAwait(false);
@@ -207,6 +210,7 @@ internal sealed class RdbIndexStore
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
                     File.Copy(source, localPath, overwrite: true);
+                    RecordFirstDownload(platform, localPath, etag: null, lastModified: null);
                     await GetIndexAsync(platform, config).ConfigureAwait(false);
                 }
 
@@ -240,6 +244,11 @@ internal sealed class RdbIndexStore
             var temp = localPath + ".tmp";
             await File.WriteAllBytesAsync(temp, data).ConfigureAwait(false);
             File.Move(temp, localPath, overwrite: true);
+            RecordFirstDownload(
+                platform,
+                localPath,
+                response.Headers.ETag?.ToString(),
+                response.Content.Headers.NonValidated.TryGetValues("Last-Modified", out var modified) ? modified.ToString() : null);
             _downloadRetryAfterUtc.TryRemove(platform, out _);
             _logger.LogInformation("Downloaded game metadata for {Platform} ({Bytes} bytes)", platform, data.Length);
             await GetIndexAsync(platform, config).ConfigureAwait(false);
@@ -256,12 +265,12 @@ internal sealed class RdbIndexStore
     // allows. This is the real enforcement point for a download -- it bounds memory even when the
     // response understates (or omits) Content-Length, which the pre-check above alone would not
     // catch.
-    private static async Task CopyToLimitedAsync(Stream source, Stream destination, long maxBytes)
+    private static async Task CopyToLimitedAsync(Stream source, Stream destination, long maxBytes, CancellationToken cancellationToken = default)
     {
         var buffer = new byte[81920];
         long total = 0;
         int read;
-        while ((read = await source.ReadAsync(buffer).ConfigureAwait(false)) > 0)
+        while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
         {
             total += read;
             if (total > maxBytes)
@@ -269,7 +278,7 @@ internal sealed class RdbIndexStore
                 throw new RdbTooLargeException(total, maxBytes);
             }
 
-            await destination.WriteAsync(buffer.AsMemory(0, read)).ConfigureAwait(false);
+            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
         }
     }
 

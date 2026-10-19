@@ -196,6 +196,21 @@ public class RdbService
         return lookup.Resolution;
     }
 
+    /// <summary>
+    /// The shared once-per-process check of one platform's RDB for a newer upstream copy. Completes
+    /// without checking when metadata is disabled or no local copy exists yet.
+    /// </summary>
+    internal Task<RdbCheckResult> EnsureUpdateCheckedAsync(string platform, CancellationToken cancellationToken = default)
+    {
+        var config = ConfigOverrideForTests ?? MoonfinPlugin.Instance?.Configuration;
+        return config == null || !config.GamesMetadataEnabled
+            ? Task.FromResult(RdbCheckResult.None)
+            : _indexStore.EnsureUpdateCheckedAsync(platform, config).WaitAsync(cancellationToken);
+    }
+
+    internal void ClearPendingReopen(string platform, string digest) =>
+        _indexStore.ClearPendingReopen(platform, digest);
+
     internal event Action<string>? IndexAvailable
     {
         add => _indexStore.IndexAvailable += value;
