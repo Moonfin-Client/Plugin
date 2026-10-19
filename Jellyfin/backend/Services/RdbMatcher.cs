@@ -130,6 +130,10 @@ internal sealed class RdbMatcher
         return null;
     }
 
+    private const long MaxTransformLength = 64L * 1024 * 1024;
+    private const int CopierHeaderLength = 512;
+    private const int SmdBlockLength = 16384;
+
     /// <summary>Throws when the ROM cannot be read; the caller then matches by name only and retries next time.</summary>
     internal static IReadOnlyList<uint> ComputeCrcCandidates(string romPath)
     {
@@ -139,7 +143,123 @@ internal sealed class RdbMatcher
             candidates.Add(Crc32File(romPath, 16));
         }
 
+        var (length, head, isSmd) = ReadFormatProbe(romPath);
+        if (length > MaxTransformLength || length <= CopierHeaderLength)
+        {
+            return candidates;
+        }
+
+        if (isSmd)
+        {
+            AddDistinct(candidates, Crc32SmdDeinterleaved(romPath));
+        }
+
+        if (length % 4 == 0)
+        {
+            if (head.AsSpan().SequenceEqual(new byte[] { 0x37, 0x80, 0x40, 0x12 }))
+            {
+                AddDistinct(candidates, Crc32N64ToBigEndian(romPath, wordSwap: false));
+            }
+            else if (head.AsSpan().SequenceEqual(new byte[] { 0x40, 0x12, 0x37, 0x80 }))
+            {
+                AddDistinct(candidates, Crc32N64ToBigEndian(romPath, wordSwap: true));
+            }
+        }
+
+        if (length % 1024 == CopierHeaderLength)
+        {
+            AddDistinct(candidates, Crc32File(romPath, CopierHeaderLength));
+        }
+
         return candidates;
+    }
+
+    private static void AddDistinct(List<uint> candidates, uint crc)
+    {
+        if (!candidates.Contains(crc))
+        {
+            candidates.Add(crc);
+        }
+    }
+
+    private static (long Length, byte[] Head, bool IsSmd) ReadFormatProbe(string path)
+    {
+        using var fs = File.OpenRead(path);
+        var head = new byte[10];
+        var read = 0;
+        int n;
+        while (read < head.Length && (n = fs.Read(head, read, head.Length - read)) > 0)
+        {
+            read += n;
+        }
+
+        var isSmd = fs.Length % SmdBlockLength == CopierHeaderLength && read == head.Length &&
+            head[8] == 0xAA && head[9] == 0xBB;
+        return (fs.Length, head[..4], isSmd);
+    }
+
+    private static uint Crc32SmdDeinterleaved(string path)
+    {
+        var crc = 0xFFFFFFFFu;
+        using var fs = File.OpenRead(path);
+        fs.Seek(CopierHeaderLength, SeekOrigin.Begin);
+        var block = new byte[SmdBlockLength];
+        var output = new byte[SmdBlockLength];
+        var half = SmdBlockLength / 2;
+        for (var remaining = fs.Length - CopierHeaderLength; remaining > 0; remaining -= SmdBlockLength)
+        {
+            fs.ReadExactly(block, 0, SmdBlockLength);
+            for (var i = 0; i < half; i++)
+            {
+                output[i * 2] = block[half + i];
+                output[i * 2 + 1] = block[i];
+            }
+
+            crc = Crc32Update(crc, output);
+        }
+
+        return crc ^ 0xFFFFFFFFu;
+    }
+
+    /// <summary>wordSwap reverses each 32-bit word (.n64); otherwise it swaps byte pairs (.v64).</summary>
+    private static uint Crc32N64ToBigEndian(string path, bool wordSwap)
+    {
+        var crc = 0xFFFFFFFFu;
+        using var fs = File.OpenRead(path);
+        var buffer = new byte[65536];
+        for (var remaining = fs.Length; remaining > 0;)
+        {
+            var count = (int)Math.Min(remaining, buffer.Length);
+            fs.ReadExactly(buffer, 0, count);
+            for (var i = 0; i + 3 < count; i += 4)
+            {
+                if (wordSwap)
+                {
+                    (buffer[i], buffer[i + 3]) = (buffer[i + 3], buffer[i]);
+                    (buffer[i + 1], buffer[i + 2]) = (buffer[i + 2], buffer[i + 1]);
+                }
+                else
+                {
+                    (buffer[i], buffer[i + 1]) = (buffer[i + 1], buffer[i]);
+                    (buffer[i + 2], buffer[i + 3]) = (buffer[i + 3], buffer[i + 2]);
+                }
+            }
+
+            crc = Crc32Update(crc, buffer.AsSpan(0, count));
+            remaining -= count;
+        }
+
+        return crc ^ 0xFFFFFFFFu;
+    }
+
+    private static uint Crc32Update(uint crc, ReadOnlySpan<byte> data)
+    {
+        foreach (var b in data)
+        {
+            crc = CrcTable[(crc ^ b) & 0xFF] ^ (crc >> 8);
+        }
+
+        return crc;
     }
 
     internal static string ExtractBaseTitle(string name)
