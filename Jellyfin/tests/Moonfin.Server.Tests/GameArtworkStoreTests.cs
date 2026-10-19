@@ -486,6 +486,78 @@ public class GameArtworkStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task ListingStore_Invalidate_RefetchesAnAbsentFolder()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.NotFound, new ByteArrayContent([]));
+        var listings = NewListingStore(handler, _root);
+        listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(listings);
+        Assert.Equal(ListingState.Absent, listings.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml([ListedName])));
+        listings.Invalidate();
+        var during = listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(listings);
+        var after = listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+
+        Assert.Equal(ListingState.Unavailable, during.State);
+        Assert.Equal(ListingState.Available, after.State);
+        Assert.Equal(new[] { ListedName }, after.Listing!.Names);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task ListingStore_FetchStartedBeforeInvalidate_ServesItsCopyButFetchesAgain()
+    {
+        var release = new TaskCompletionSource();
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml(["Old (USA)"])));
+        handler.SetGate(ListingUrl, release.Task);
+        var listings = NewListingStore(handler, _root);
+        listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await WaitUntil(() => handler.RequestCount == 1, TimeSpan.FromSeconds(5));
+
+        listings.Invalidate();
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml(["New (USA)"])));
+        release.SetResult();
+        await InFlight(listings);
+        var stale = listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(listings);
+        var fresh = listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+
+        Assert.Equal(new[] { "Old (USA)" }, stale.Listing!.Names);
+        Assert.Equal(new[] { "New (USA)" }, fresh.Listing!.Names);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task ListingStore_FetchStartedBeforeInvalidateFails_DoesNotDelayTheRefetch(HttpStatusCode staleStatus)
+    {
+        var release = new TaskCompletionSource();
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, staleStatus, new ByteArrayContent([]));
+        handler.SetGate(ListingUrl, release.Task);
+        var listings = NewListingStore(handler, _root);
+        listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await WaitUntil(() => handler.RequestCount == 1, TimeSpan.FromSeconds(5));
+
+        listings.Invalidate();
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml([ListedName])));
+        release.SetResult();
+        await InFlight(listings);
+        listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(listings);
+        var after = listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+
+        Assert.Equal(ListingState.Available, after.State);
+        Assert.Equal(new[] { ListedName }, after.Listing!.Names);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
     public async Task ListingStore_FailedRefetch_FallsBackToTheStoredListing()
     {
         var first = new FakeHttpMessageHandler();

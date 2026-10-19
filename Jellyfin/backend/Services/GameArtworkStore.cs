@@ -51,6 +51,7 @@ internal sealed class GameArtworkStore
     private readonly string _cacheDir;
     private readonly long _maxArtworkBytes;
     private readonly ConcurrentDictionary<string, DateTime> _misses = new(StringComparer.Ordinal);
+    private int _missEpoch;
     private readonly ConcurrentDictionary<string, Lazy<Task<GameArtworkLookupResult>>> _inFlight = new(StringComparer.Ordinal);
 
     internal event Action<string>? MetadataIndexAvailable;
@@ -377,7 +378,18 @@ internal sealed class GameArtworkStore
                 .Remove(new KeyValuePair<string, Lazy<Task<GameArtworkLookupResult>>>(cacheKey, lazy)),
             TaskScheduler.Default);
 
-        return await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (lazy.Value.IsCompleted)
+            {
+                ((ICollection<KeyValuePair<string, Lazy<Task<GameArtworkLookupResult>>>>)_inFlight)
+                    .Remove(new KeyValuePair<string, Lazy<Task<GameArtworkLookupResult>>>(cacheKey, lazy));
+            }
+        }
     }
 
     private async Task<GameArtworkLookupResult> DownloadAsync(
@@ -388,6 +400,7 @@ internal sealed class GameArtworkStore
         string localPath,
         CancellationToken cancellationToken)
     {
+        var missEpoch = Volatile.Read(ref _missEpoch);
         try
         {
             // ProbeTimeout as a token, not just as HttpClient.Timeout: with ResponseHeadersRead the
@@ -406,7 +419,7 @@ internal sealed class GameArtworkStore
                 .ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                AddMiss(cacheKey);
+                AddMiss(cacheKey, missEpoch);
                 return GameArtworkLookupResult.Missing();
             }
 
@@ -553,14 +566,33 @@ internal sealed class GameArtworkStore
         return null;
     }
 
-    private void AddMiss(string cacheKey)
+    /// <summary>Forgets recorded 404s and provider listings; a probe that started before this call does not record its 404 afterwards.</summary>
+    internal void ClearMissCache()
     {
+        Interlocked.Increment(ref _missEpoch);
+        _misses.Clear();
+        _listings.Invalidate();
+    }
+
+    private void AddMiss(string cacheKey, int epoch)
+    {
+        if (Volatile.Read(ref _missEpoch) != epoch)
+        {
+            return;
+        }
+
         if (!_misses.ContainsKey(cacheKey) && _misses.Count >= MaxMissEntries)
         {
             _misses.Clear();
         }
 
         _misses[cacheKey] = DateTime.UtcNow;
+
+        // A clear that landed between the check and the write must not leave this entry behind.
+        if (Volatile.Read(ref _missEpoch) != epoch)
+        {
+            _misses.TryRemove(cacheKey, out _);
+        }
     }
 
     private const string ThumbnailHost = "https://thumbnails.libretro.com/";

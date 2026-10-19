@@ -541,7 +541,8 @@ public sealed class GameArtworkCatalog
     }
 
     /// <summary>
-    /// Reopens to Pending only those of <paramref name="keys"/> that are currently Missing, in one
+    /// Reopens to Pending only those of <paramref name="keys"/> that are currently Missing (and, when
+    /// <paramref name="includeAcquisitionRetryable"/>, Retryable without an original), in one
     /// pass under the library gate, and returns the keys it reopened. Unlike
     /// <see cref="RequestRefreshAsync"/> it leaves every other state alone. The document is written
     /// before this returns, bypassing the persist debounce, so a caller may rely on the reopen being on disk.
@@ -549,7 +550,8 @@ public sealed class GameArtworkCatalog
     public async Task<IReadOnlyList<ArtworkCatalogKey>> ReopenMissingAsync(
         string libraryId,
         IEnumerable<ArtworkCatalogKey> keys,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeAcquisitionRetryable = false)
     {
         var library = await GetLibraryAsync(NormalizeLibraryId(libraryId), cancellationToken).ConfigureAwait(false);
         await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -561,7 +563,10 @@ public sealed class GameArtworkCatalog
             {
                 var normalized = NormalizeKey(key);
                 if (!library.Entries.TryGetValue(normalized.StorageKey, out var entry) ||
-                    entry.State != ArtworkCatalogState.Missing)
+                    !(entry.State == ArtworkCatalogState.Missing ||
+                      (includeAcquisitionRetryable &&
+                       entry.State == ArtworkCatalogState.Retryable &&
+                       string.IsNullOrWhiteSpace(entry.OriginalPath))))
                 {
                     continue;
                 }

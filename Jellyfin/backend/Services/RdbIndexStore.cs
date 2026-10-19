@@ -35,6 +35,30 @@ internal sealed partial class RdbIndexStore
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _dataFolderPathOverride = dataFolderPathOverride;
+        _inheritedStaged = new Lazy<IReadOnlySet<string>>(ScanStagedPlatforms, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
+    private IReadOnlySet<string> ScanStagedPlatforms()
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            var dataFolder = DataFolderPath;
+            var directory = string.IsNullOrWhiteSpace(dataFolder) ? null : Path.Combine(dataFolder, "gamemeta");
+            if (directory != null && Directory.Exists(directory))
+            {
+                foreach (var file in Directory.EnumerateFiles(directory, "*.rdb.next"))
+                {
+                    found.Add(Path.GetFileName(file)[..^".rdb.next".Length]);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogDebug(ex, "Listing staged game metadata failed");
+        }
+
+        return found;
     }
 
     internal int BuildIndexCallCountForTests => _buildIndexCallCount;

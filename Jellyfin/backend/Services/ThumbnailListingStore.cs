@@ -114,7 +114,8 @@ internal sealed class ThumbnailListingStore
         {
             if (!entry.Succeeded && !entry.Absent && entry.InFlight == null && DateTime.UtcNow >= entry.RetryAfterUtc)
             {
-                entry.InFlight = Task.Run(() => FetchAsync(entry, kind));
+                var generation = entry.Generation;
+                entry.InFlight = Task.Run(() => FetchAsync(entry, kind, generation));
             }
 
             return entry.Absent
@@ -122,6 +123,21 @@ internal sealed class ThumbnailListingStore
                 : entry.Listing != null
                     ? new ListingSnapshot(ListingState.Available, entry.Listing)
                     : new ListingSnapshot(ListingState.Unavailable, null);
+        }
+    }
+
+    /// <summary>Makes every listing fetch again on its next read; the held copy serves until then.</summary>
+    internal void Invalidate()
+    {
+        foreach (var entry in _entries.Values)
+        {
+            lock (entry)
+            {
+                entry.Generation++;
+                entry.Succeeded = false;
+                entry.Absent = false;
+                entry.RetryAfterUtc = default;
+            }
         }
     }
 
@@ -139,7 +155,7 @@ internal sealed class ThumbnailListingStore
         }
     }
 
-    private async Task FetchAsync(Entry entry, GameThumbService.ThumbKind kind)
+    private async Task FetchAsync(Entry entry, GameThumbService.ThumbKind kind, int generation)
     {
         ThumbnailListing? fetched = null;
         var notFound = false;
@@ -154,17 +170,19 @@ internal sealed class ThumbnailListingStore
 
         lock (entry)
         {
+            // A fetch that started before Invalidate may still update the copy but never ends or delays the refetch.
+            var current = entry.Generation == generation;
             if (fetched != null)
             {
                 entry.Listing = fetched;
-                entry.Succeeded = true;
+                entry.Succeeded = current;
             }
-            else if (notFound)
+            else if (notFound && current)
             {
                 entry.Listing = null;
                 entry.Absent = true;
             }
-            else
+            else if (current)
             {
                 entry.RetryAfterUtc = DateTime.UtcNow + FetchRetryBackoff;
             }
@@ -365,5 +383,7 @@ internal sealed class ThumbnailListingStore
         internal Task? InFlight { get; set; }
 
         internal DateTime RetryAfterUtc { get; set; }
+
+        internal int Generation { get; set; }
     }
 }

@@ -927,12 +927,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 foreach (var system in _games.GetSystems(library.Id))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var games = _games.GetGames(library.Id, system.Id);
-                    var allCandidates = games
-                        .SelectMany(game => ArtworkKinds.Select(kind => TryCreateCandidate(library, game, kind)))
-                        .Where(candidate => candidate != null)
-                        .Cast<ArtworkCandidate>()
-                        .ToList();
+                    var allCandidates = CreateSystemCandidates(library, system);
                     var candidates = allCandidates.Where(candidate => candidate.Kind == GameThumbService.ThumbKind.Boxart).ToList();
                     reconciledSystems.Add((system, allCandidates, candidates));
                 }
@@ -1056,6 +1051,121 @@ public sealed class GameArtworkReconciliationService : IHostedService
             }
     }
 
+    private List<ArtworkCandidate> CreateSystemCandidates(GameLibrary library, GameSystem system) =>
+        _games.GetGames(library.Id, system.Id)
+            .SelectMany(game => ArtworkKinds.Select(kind => TryCreateCandidate(library, game, kind)))
+            .Where(candidate => candidate != null)
+            .Cast<ArtworkCandidate>()
+            .ToList();
+
+    private static IReadOnlyList<string> PlatformsOf(
+        ArtworkCandidate candidate,
+        Dictionary<string, IReadOnlyList<string>> platformsBySource)
+    {
+        var source = candidate.Source;
+        var sourceKey = string.Join('|', source.Cores) + "#" + source.CoreWasDefaulted + "#" + source.SystemName;
+        if (!platformsBySource.TryGetValue(sourceKey, out var platforms))
+        {
+            platforms = GameThumbService.CandidatePlatforms(source);
+            platformsBySource[sourceKey] = platforms;
+        }
+
+        return platforms;
+    }
+
+    private readonly ConcurrentDictionary<string, byte> _libraryRefreshes = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Admin refresh of a library's (or one system's) artwork: clears lookup caches, reopens entries
+    /// whose acquisition ended without an original, and stages newer metadata files for the next
+    /// start. Only one refresh per library runs at a time.
+    /// </summary>
+    public async Task<LibraryArtworkRefreshResult> RefreshLibraryArtworkAsync(
+        string libraryId,
+        string? systemId,
+        CancellationToken cancellationToken = default)
+    {
+        var library = _games.GetGameLibraries().FirstOrDefault(item => string.Equals(item.Id, libraryId, StringComparison.OrdinalIgnoreCase));
+        if (library == null)
+        {
+            return LibraryArtworkRefreshResult.Of(LibraryArtworkRefreshStatus.NotFound);
+        }
+
+        var systems = _games.GetSystems(library.Id);
+        if (!string.IsNullOrEmpty(systemId))
+        {
+            systems = systems.Where(item => string.Equals(item.Id, systemId, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (systems.Count == 0)
+            {
+                return LibraryArtworkRefreshResult.Of(LibraryArtworkRefreshStatus.BadSystem);
+            }
+        }
+
+        if (!_libraryRefreshes.TryAdd(library.Id, 0))
+        {
+            return LibraryArtworkRefreshResult.Of(LibraryArtworkRefreshStatus.Conflict);
+        }
+
+        try
+        {
+            _thumbs.ClearLookupCaches();
+
+            var candidates = new List<ArtworkCandidate>();
+            foreach (var system in systems)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                candidates.AddRange(CreateSystemCandidates(library, system));
+            }
+
+            var byKey = new Dictionary<string, ArtworkCandidate>(StringComparer.Ordinal);
+            foreach (var candidate in candidates)
+            {
+                byKey.TryAdd(candidate.Key.StorageKey, candidate);
+            }
+
+            var reopened = await _catalog.ReopenMissingAsync(
+                library.Id,
+                byKey.Values.Select(candidate => candidate.Key).ToList(),
+                cancellationToken,
+                includeAcquisitionRetryable: true).ConfigureAwait(false);
+            var reopenedCount = 0;
+            foreach (var key in reopened)
+            {
+                if (byKey.TryGetValue(key.StorageKey, out var candidate))
+                {
+                    QueueRemote(candidate, ArtworkLane.Bulk, null);
+                    reopenedCount++;
+                }
+            }
+
+            var platformsBySource = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            var platforms = candidates
+                .SelectMany(candidate => PlatformsOf(candidate, platformsBySource))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(platform => platform, StringComparer.Ordinal)
+                .ToList();
+            var staged = new List<string>();
+            foreach (var platform in platforms)
+            {
+                if (await _thumbs.StageRdbUpdateAsync(platform, cancellationToken).ConfigureAwait(false))
+                {
+                    staged.Add(platform);
+                }
+            }
+
+            _logger.LogInformation(
+                "Artwork refresh for library {LibraryId} reopened {Count} entries and staged {Staged} metadata updates",
+                library.Id,
+                reopenedCount,
+                staged.Count);
+            return new LibraryArtworkRefreshResult(LibraryArtworkRefreshStatus.Accepted, reopenedCount, staged);
+        }
+        finally
+        {
+            _libraryRefreshes.TryRemove(library.Id, out _);
+        }
+    }
+
     // Checks each platform the libraries' lookups can consult once per start, independent of
     // artwork acquisition, and reopens that platform's Missing entries when its RDB changed. A
     // failure here only defers the reopen: the marker stays until the catalog change is saved.
@@ -1069,15 +1179,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
         {
             foreach (var candidate in candidates)
             {
-                var source = candidate.Source;
-                var sourceKey = string.Join('|', source.Cores) + "#" + source.CoreWasDefaulted + "#" + source.SystemName;
-                if (!platformsBySource.TryGetValue(sourceKey, out var platforms))
-                {
-                    platforms = GameThumbService.CandidatePlatforms(source);
-                    platformsBySource[sourceKey] = platforms;
-                }
-
-                foreach (var platform in platforms)
+                foreach (var platform in PlatformsOf(candidate, platformsBySource))
                 {
                     if (!byPlatform.TryGetValue(platform, out var list))
                     {
@@ -1842,6 +1944,18 @@ public sealed class GameArtworkReconciliationService : IHostedService
         ArtworkCandidate Candidate,
         DateTimeOffset? NotBefore);
 
+}
+
+public enum LibraryArtworkRefreshStatus { NotFound, BadSystem, Conflict, Accepted }
+
+public sealed record LibraryArtworkRefreshResult(
+    LibraryArtworkRefreshStatus Status,
+    int Reopened,
+    IReadOnlyList<string> RdbUpdatesStaged)
+{
+    public bool RestartRequired => RdbUpdatesStaged.Count > 0;
+
+    internal static LibraryArtworkRefreshResult Of(LibraryArtworkRefreshStatus status) => new(status, 0, Array.Empty<string>());
 }
 
 /// <summary>

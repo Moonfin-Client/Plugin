@@ -73,6 +73,7 @@ public sealed class GamesControllerArtworkContractTests
     [InlineData(nameof(GamesController.PostArtworkPriority), "{libraryId}/ArtworkPriority")]
     [InlineData(nameof(GamesController.GetArtwork), "{libraryId}/Artwork/{gameId}/{role}/{revision}")]
     [InlineData(nameof(GamesController.RefreshArtwork), "{libraryId}/Artwork/{gameId}/Refresh")]
+    [InlineData(nameof(GamesController.RefreshLibraryArtwork), "{libraryId}/Artwork/Refresh")]
     public void ArtworkActions_KeepTheirAdditiveRouteTemplates(string actionName, string expectedTemplate)
     {
         var method = typeof(GamesController).GetMethod(actionName)
@@ -148,6 +149,7 @@ public sealed class GamesControllerArtworkContractTests
             [nameof(GamesController.PostArtworkPriority)] = null,
             [nameof(GamesController.GetArtwork)] = null,
             [nameof(GamesController.RefreshArtwork)] = "RequiresElevation",
+            [nameof(GamesController.RefreshLibraryArtwork)] = "RequiresElevation",
             [nameof(GamesController.GetGames)] = null,
             [nameof(GamesController.GetGame)] = null,
             [nameof(GamesController.PutCoreOverride)] = null,
