@@ -338,6 +338,59 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Equal(bestEffortCapacity + 1, QueuedRemoteIdentities(service).Count);
     }
 
+    [Fact]
+    public void RemoteQueue_DeferredBulkRefillsAtCapacityAndSurvivesInteractiveEviction()
+    {
+        var service = BuildService(_root);
+        var seed = Candidate("library", "seed");
+        var first = FillRemoteQueue(service, seed);
+        var deferred = Candidate("library", "deferred");
+        Assert.False(service.EnqueueRemoteForTest(deferred, ArtworkLane.Bulk));
+        Assert.False(service.EnqueueRemoteForTest(deferred, ArtworkLane.Bulk));
+
+        CompleteQueuedRemote(service, first);
+
+        Assert.Contains("remote:" + deferred.Key.StorageKey, QueuedRemoteIdentities(service));
+        Assert.Equal(20_000, QueuedRemoteIdentities(service).Count);
+        var before = QueuedRemoteIdentities(service).ToHashSet();
+        var interactive = Candidate("library", "interactive");
+        Assert.True(service.EnqueueRemoteForTest(interactive, ArtworkLane.Interactive));
+        var evicted = Assert.Single(before.Except(QueuedRemoteIdentities(service)));
+
+        CompleteQueuedRemote(service, interactive);
+
+        Assert.Contains(evicted, QueuedRemoteIdentities(service));
+        Assert.Equal(20_000, QueuedRemoteIdentities(service).Count);
+    }
+
+    internal static GameArtworkReconciliationService.ArtworkCandidate FillRemoteQueue(
+        GameArtworkReconciliationService service,
+        GameArtworkReconciliationService.ArtworkCandidate seed)
+    {
+        GameArtworkReconciliationService.ArtworkCandidate? first = null;
+        for (var i = 0; i < 20_000; i++)
+        {
+            var id = $"filler-{i}";
+            var candidate = seed with { GameId = id, Key = ArtworkCatalogKey.Create(seed.Key.LibraryId, id + ".sfc", "fingerprint", "boxart") };
+            Assert.True(service.EnqueueRemoteForTest(candidate, ArtworkLane.Bulk));
+            first ??= candidate;
+        }
+
+        return first!;
+    }
+
+    internal static void CompleteQueuedRemote(
+        GameArtworkReconciliationService service,
+        GameArtworkReconciliationService.ArtworkCandidate candidate)
+    {
+        var queued = (System.Collections.IDictionary)typeof(GameArtworkReconciliationService)
+            .GetField("_queued", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(service)!;
+        var identity = "remote:" + candidate.Key.StorageKey;
+        var version = (int)queued[identity]!.GetType().GetProperty("Version")!.GetValue(queued[identity])!;
+        var work = GameArtworkReconciliationService.ArtworkWork.Remote(candidate, ArtworkLane.Bulk) with { QueueVersion = version };
+        typeof(GameArtworkReconciliationService).GetMethod("CompleteRemote", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(service, [work]);
+    }
+
     private static ICollection<string> QueuedRemoteIdentities(GameArtworkReconciliationService service)
     {
         var field = typeof(GameArtworkReconciliationService)

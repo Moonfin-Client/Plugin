@@ -125,6 +125,13 @@ internal sealed class GameArtworkStore
         }
     }
 
+    /// <summary>The RDB platforms a lookup for one core tries; shared so update checks cover exactly those.</summary>
+    internal static IReadOnlyList<string> CandidatePlatformsFor(string core, bool coreWasDefaulted, string systemName) =>
+        RdbService.GetCandidatePlatforms(
+            core,
+            coreWasDefaulted,
+            GamesService.FuzzySuggestCores(systemName, MaxFuzzyDirectorySuggestions));
+
     private async Task<GameArtworkLookupResult> GetThumbPathCoreAsync(
         string core,
         bool coreWasDefaulted,
@@ -156,8 +163,7 @@ internal sealed class GameArtworkStore
         }
 
         RdbService.TryGetPlatform(core, out var primaryPlatform);
-        var fuzzyDirectoryCores = GamesService.FuzzySuggestCores(systemName, MaxFuzzyDirectorySuggestions);
-        var candidatePlatforms = RdbService.GetCandidatePlatforms(core, coreWasDefaulted, fuzzyDirectoryCores);
+        var candidatePlatforms = CandidatePlatformsFor(core, coreWasDefaulted, systemName);
 
         var romFileName = Path.GetFileNameWithoutExtension(romPath);
 
