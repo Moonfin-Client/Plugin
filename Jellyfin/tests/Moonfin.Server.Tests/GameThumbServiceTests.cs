@@ -25,10 +25,8 @@ public class GameThumbServiceTests : IDisposable
 
     private const string Platform = "Sega - Master System - Mark III";
     private const string JapanName = "Great Golf (Japan) (En)";
-    private const string WorldName = "Great Golf / Masters Golf (World)";
-
-    // Matches GameThumbService.LibretroThumbName's own escaping: '/' becomes '_'.
-    private const string WorldThumbFileName = "Great Golf _ Masters Golf (World)";
+    private const string WorldName = "Great Golf (World) (En,Fr,De)";
+    private const string WorldThumbFileName = WorldName;
 
     [Theory]
     [InlineData(0)]

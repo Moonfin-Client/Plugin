@@ -213,8 +213,8 @@ public partial class RdbServiceTests
     {
         // The ROM CRC is in neither index, so each list answers from name matching on its own first platform.
         var romPath = WriteRom("pacman.zip", YardFightBytes);
-        WriteMinimalRdb(RdbPath(FbneoPlatform), [("Pac-Man", 1u), ("Pac-Man (Fast)", 2u)]);
-        WriteMinimalRdb(RdbPath(MamePlatform), [("PacMan", 3u), ("PacMan Plus", 4u)]);
+        WriteMinimalRdb(RdbPath(FbneoPlatform), [("Pac-Man (USA)", 1u), ("Pac-Man (Europe)", 2u)]);
+        WriteMinimalRdb(RdbPath(MamePlatform), [("PacMan (USA)", 3u), ("PacMan (Europe)", 4u)]);
         var (service, _) = CreateLookupService();
 
         var fbneoFirst = await LookupArtwork(service, [FbneoPlatform, MamePlatform], romPath, "pacman");
@@ -222,10 +222,10 @@ public partial class RdbServiceTests
         var fbneoAgain = await LookupArtwork(service, [FbneoPlatform, MamePlatform], romPath, "pacman");
 
         Assert.Equal(FbneoPlatform, fbneoFirst.Resolution?.Platform);
-        Assert.Equal(new[] { "Pac-Man", "Pac-Man (Fast)" }, fbneoFirst.Resolution?.Names);
+        Assert.Equal(new[] { "Pac-Man (USA)", "Pac-Man (Europe)" }, fbneoFirst.Resolution?.Names);
         Assert.Equal(MamePlatform, mameFirst.Resolution?.Platform);
-        Assert.Equal(new[] { "PacMan", "PacMan Plus" }, mameFirst.Resolution?.Names);
-        Assert.Equal(new[] { "Pac-Man", "Pac-Man (Fast)" }, fbneoAgain.Resolution?.Names);
+        Assert.Equal(new[] { "PacMan (USA)", "PacMan (Europe)" }, mameFirst.Resolution?.Names);
+        Assert.Equal(new[] { "Pac-Man (USA)", "Pac-Man (Europe)" }, fbneoAgain.Resolution?.Names);
     }
 
     [Fact]

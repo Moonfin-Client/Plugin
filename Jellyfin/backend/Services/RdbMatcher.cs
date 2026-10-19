@@ -66,50 +66,36 @@ internal sealed class RdbMatcher
         return null;
     }
 
-    /// <summary>Other records sharing the primary's base title, closest first, capped at <paramref name="maxSiblings"/>.</summary>
+    /// <summary>Other records of the same title and edition as the primary, preferred regions first, capped at <paramref name="maxSiblings"/>.</summary>
     internal List<RdbRecord> FindSiblings(RdbPlatformIndex index, RdbRecord primary, int maxSiblings)
     {
-        var results = new List<RdbRecord>(maxSiblings);
-        if (string.IsNullOrWhiteSpace(primary.Name))
+        var results = new List<RdbRecord>();
+        if (string.IsNullOrWhiteSpace(primary.Name) || maxSiblings <= 0)
         {
             return results;
         }
 
-        var baseTitle = NormalizeName(ExtractBaseTitle(primary.Name));
-        if (baseTitle.Length < 5)
-        {
-            return results;
-        }
-
+        var primaryIdentity = RdbIdentity.Of(primary.Name);
+        var primaryRegions = RdbIdentity.RegionsOf(primary.Name);
         var seenRecords = new HashSet<RdbRecord>(ReferenceEqualityComparer.Instance) { primary };
-        var candidates = new List<(RdbRecord Record, int Diff)>();
-        foreach (var kv in index.ByName)
+        var candidates = new List<(RdbRecord Record, int Rank)>();
+        foreach (var candidate in index.ByName.Values)
         {
-            var candidate = kv.Value;
-            if (!seenRecords.Add(candidate) || string.IsNullOrWhiteSpace(candidate.Name))
+            if (!seenRecords.Add(candidate) || !RdbIdentity.Matches(primaryIdentity, candidate.Name))
             {
                 continue;
             }
 
-            var candidateBaseTitle = NormalizeName(ExtractBaseTitle(candidate.Name));
-            if (candidateBaseTitle.Length == 0)
-            {
-                continue;
-            }
-
-            if (candidateBaseTitle.StartsWith(baseTitle, StringComparison.Ordinal) ||
-                baseTitle.StartsWith(candidateBaseTitle, StringComparison.Ordinal))
-            {
-                var diff = Math.Abs(candidateBaseTitle.Length - baseTitle.Length);
-                if (diff <= 45)
-                {
-                    candidates.Add((candidate, diff));
-                }
-            }
+            candidates.Add((candidate, RdbIdentity.RegionRank(RdbIdentity.RegionsOf(candidate.Name), primaryRegions)));
         }
 
-        candidates.Sort((a, b) => a.Diff.CompareTo(b.Diff));
-        for (var i = 0; i < candidates.Count && results.Count < maxSiblings; i++)
+        candidates.Sort((a, b) =>
+        {
+            var byRank = a.Rank.CompareTo(b.Rank);
+            return byRank != 0 ? byRank : string.CompareOrdinal(a.Record.Name, b.Record.Name);
+        });
+
+        for (var i = 0; i < candidates.Count && i < maxSiblings; i++)
         {
             results.Add(candidates[i].Record);
         }

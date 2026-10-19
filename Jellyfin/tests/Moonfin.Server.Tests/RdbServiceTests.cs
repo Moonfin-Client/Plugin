@@ -418,19 +418,19 @@ public partial class RdbServiceTests : IDisposable
     [Fact]
     public void MatchWithSiblings_BestMatchHasNoArtSibling_StillListsTheGenuineSiblingEntry()
     {
-        // The primary fuzzy match (closest by length) can lack art while a sibling entry with a
-        // larger length diff has it; MatchWithSiblings must still list the sibling as a candidate.
+        // The primary fuzzy match can lack art while a same-game sibling has it;
+        // MatchWithSiblings must still list the sibling as a candidate.
         Directory.CreateDirectory(_root);
         var romPath = Path.Combine(_root, "Great Golf.sms");
         File.WriteAllBytes(romPath, [9, 9, 9, 9]); // CRC deliberately matches neither record below
 
         const string japanName = "Great Golf (Japan) (En)";
-        const string worldName = "Great Golf / Masters Golf (World)";
+        const string worldName = "Great Golf (World) (En,Fr,De)";
         var byCrc = new Dictionary<uint, RdbRecord>(); // CRC step must miss for both records
         var byName = new Dictionary<string, RdbRecord>(StringComparer.Ordinal)
         {
             ["greatgolfjapanen"] = new RdbRecord { Name = japanName },
-            ["greatgolfmastersgolfworld"] = new RdbRecord { Name = worldName },
+            ["greatgolfworldenfrde"] = new RdbRecord { Name = worldName },
         };
 
         var service = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root);
@@ -469,7 +469,7 @@ public partial class RdbServiceTests : IDisposable
     [Fact]
     public void MatchWithSiblings_MoreSiblingsThanTheCap_ReturnsExactlyTheCappedCount()
     {
-        // Writes more prefix-related entries than the cap allows; result must never exceed
+        // Writes more same-game entries than the cap allows; result must never exceed
         // 1 (primary) + MaxSiblingArtworkNamesPerRequest.
         Directory.CreateDirectory(_root);
         var romPath = Path.Combine(_root, "Great Golf.sms");
@@ -486,7 +486,7 @@ public partial class RdbServiceTests : IDisposable
         {
             var suffix = new string((char)('a' + (i % 26)), i + 1);
             var key = "greatgolf" + suffix;
-            byName[key] = new RdbRecord { Name = "Great Golf Variant " + i };
+            byName[key] = new RdbRecord { Name = "Great Golf (Rev " + i + ")" };
         }
 
         var service = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root);
@@ -500,18 +500,16 @@ public partial class RdbServiceTests : IDisposable
     [Fact]
     public void MatchWithSiblings_UnrelatedGameInTheSameIndex_IsNeverReturnedAsASibling()
     {
-        // A sibling must share a genuine base-title prefix relationship, not just live in the
-        // same index. "Great Golf" and "Great Baseball" share no prefix, so the latter must never
-        // appear in the former's sibling list.
+        // A sibling must be the same game, not just live in the same index.
         Directory.CreateDirectory(_root);
         var romPath = Path.Combine(_root, "Great Golf.sms");
         File.WriteAllBytes(romPath, [9, 9, 9, 9]);
 
-        const string worldName = "Great Golf / Masters Golf (World)";
+        const string worldName = "Great Golf (World)";
         var byCrc = new Dictionary<uint, RdbRecord>();
         var byName = new Dictionary<string, RdbRecord>(StringComparer.Ordinal)
         {
-            ["greatgolfmastersgolfworld"] = new RdbRecord { Name = worldName },
+            ["greatgolfworld"] = new RdbRecord { Name = worldName },
             ["greatbaseball"] = new RdbRecord { Name = "Great Baseball" },
         };
 
@@ -526,10 +524,8 @@ public partial class RdbServiceTests : IDisposable
     [Fact]
     public void MatchWithSiblings_RomFilenameRegionDiffersFromDatabaseRegion_StillDiscoversSiblings()
     {
-        // Sibling discovery compares base titles, not the ROM's filename: here the file names a
-        // different region ("USA, Europe") than the primary match found via CRC ("Japan"), which
-        // share no filename-prefix relationship. Base-title comparison must still find the
-        // siblings since it compares the primary match's own base title, never the filename.
+        // Siblings derive from the primary record's own name, never the ROM filename, whose
+        // region ("USA, Europe") differs from the CRC-matched record's ("Japan").
         Directory.CreateDirectory(_root);
         var romBytes = new byte[] { 3, 1, 4, 1, 5, 9 };
         var romPath = Path.Combine(_root, "Great Golf (USA, Europe).sms");
@@ -537,8 +533,9 @@ public partial class RdbServiceTests : IDisposable
         var crc = Crc32(romBytes);
 
         const string japanName = "Great Golf (Japan) (En)";
+        const string worldName = "Great Golf (World)";
+        const string usaRevName = "Great Golf (USA) (Rev A)";
         const string worldBetaName = "Great Golf (World) (Beta)";
-        const string koreaName = "Great Golf (Korea) (En) (Unl)";
         const string mastersGolfName = "Great Golf / Masters Golf (World)";
 
         // Same RdbRecord instance under both its CRC key and name key, mirroring real BuildIndex
@@ -548,8 +545,9 @@ public partial class RdbServiceTests : IDisposable
         var byName = new Dictionary<string, RdbRecord>(StringComparer.Ordinal)
         {
             ["greatgolfjapanen"] = japanRecord,
+            ["greatgolfworld"] = new RdbRecord { Name = worldName },
+            ["greatgolfusareva"] = new RdbRecord { Name = usaRevName },
             ["greatgolfworldbeta"] = new RdbRecord { Name = worldBetaName },
-            ["greatgolfkoreaenunl"] = new RdbRecord { Name = koreaName },
             ["greatgolfmastersgolfworld"] = new RdbRecord { Name = mastersGolfName },
         };
 
@@ -559,11 +557,9 @@ public partial class RdbServiceTests : IDisposable
 
         // Primary (the CRC hit) is always first, unchanged.
         Assert.Equal(japanName, results[0].Name);
-        // All three siblings must be discovered despite none sharing a filename prefix.
-        Assert.Contains(results, r => r.Name == worldBetaName);
-        Assert.Contains(results, r => r.Name == koreaName);
-        Assert.Contains(results, r => r.Name == mastersGolfName);
-        Assert.Equal(4, results.Count);
+        // Same-game variants in preference order (USA before World); the Beta and the
+        // differently titled combo release are different games.
+        Assert.Equal(new[] { japanName, usaRevName, worldName }, results.Select(r => r.Name));
     }
 
     [Fact]
