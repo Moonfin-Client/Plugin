@@ -221,10 +221,10 @@ public class GameArtworkStoreTests : IDisposable
         // RDB name: 7 asserted names + 2 distinct fallbacks is the full 9-candidate worst case.
         var romBytes = new byte[] { 4, 8, 15, 16, 23, 42 };
         var records = new List<(string Name, uint Crc)> { ("Maze Craze (USA)", Crc32(romBytes)) };
-        var siblingRegions = new[] { "USA, Europe", "Europe", "Japan", "World", "Brazil", "Korea", "Proto", "Taiwan", "France", "Germany" };
+        var siblingRegions = new[] { "USA, Europe", "Europe", "Japan", "World", "Brazil", "Korea", "Italy", "Taiwan", "France", "Germany" };
         for (var i = 0; i < siblingRegions.Length; i++)
         {
-            records.Add(($"Maze Craze ~ A Game of Cops n Robbers ({siblingRegions[i]})", (uint)(0x22222222u + i)));
+            records.Add(($"Maze Craze ({siblingRegions[i]})", (uint)(0x22222222u + i)));
         }
 
         var handler = new FakeHttpMessageHandler();
