@@ -64,6 +64,9 @@ public class RdbService
     /// <summary>Test seam: number of index builds executed by the backing store.</summary>
     internal int BuildIndexCallCountForTests => _indexStore.BuildIndexCallCountForTests;
 
+    /// <summary>The plugin data folder, or null when none is available.</summary>
+    internal string? DataFolderPath => _indexStore.DataFolderPath;
+
     /// <summary>Test seam invoked immediately before the store parses an RDB.</summary>
     internal Action? BuildIndexAboutToRunForTests
     {
@@ -281,8 +284,11 @@ public class RdbService
             var siblings = i == 0
                 ? await Task.Run(() => match.Siblings.Value, cancellationToken).ConfigureAwait(false)
                 : null;
-            return ArtworkNameLookupResult.Resolved(
-                new ArtworkNameResolution(BuildNameList(match.Record, siblings), platform));
+            var names = BuildNameList(match.Record, siblings);
+            return ArtworkNameLookupResult.Resolved(new ArtworkNameResolution(names, platform)
+            {
+                PrimaryIsCrcMatch = match.ByCrc && names.Count > 0 && names[0] == match.Record.Name,
+            });
         }
 
         // An index-pending outcome is never stored: a download may complete between this call and the next one.
@@ -396,12 +402,15 @@ public class RdbService
 
         var crcOnly = key.Mode == MatchMode.CrcOnly;
         MatchOperationForTests?.Invoke(key.Platform, crcOnly, key.NormalizedTitle);
-        var record = crcOnly ? RdbMatcher.MatchByCrc(index, crcs) : _matcher.Match(index, romPath, title, crcs);
+        var (record, byCrc) = crcOnly
+            ? (RdbMatcher.MatchByCrc(index, crcs), true)
+            : _matcher.MatchWithKind(index, romPath, title, crcs);
         return new PlatformMatch(
             record,
             new Lazy<IReadOnlyList<RdbRecord>>(() =>
                 record == null ? Array.Empty<RdbRecord>() : _matcher.FindSiblings(index, record, MaxSiblingArtworkNamesPerRequest)),
-            degraded);
+            degraded,
+            byCrc && record != null);
     }
 
     // These forwards preserve existing reflection-based tests while RdbMatcher owns the policy.
@@ -451,7 +460,7 @@ public class RdbService
     private readonly record struct MatchKey(string Platform, MatchMode Mode, string? NormalizedTitle);
 
     // Record is null for a confirmed miss on exactly one MatchKey; Degraded means the checksums failed, so it is never retained.
-    private sealed record PlatformMatch(RdbRecord? Record, Lazy<IReadOnlyList<RdbRecord>> Siblings, bool Degraded = false);
+    private sealed record PlatformMatch(RdbRecord? Record, Lazy<IReadOnlyList<RdbRecord>> Siblings, bool Degraded = false, bool ByCrc = false);
 
     /// <summary>
     /// Per-ROM lookup state, replaced as a whole only when the file stamp changes. Checksum work and
@@ -544,8 +553,14 @@ public class RdbService
     }
 }
 
-/// <summary>The ordered artwork names and the libretro platform that matched the ROM.</summary>
-public sealed record ArtworkNameResolution(IReadOnlyList<string> Names, string Platform);
+/// <summary>
+/// The ordered artwork names and the libretro platform that matched the ROM. PrimaryIsCrcMatch says
+/// the first name came from a checksum hit rather than a file or title name.
+/// </summary>
+public sealed record ArtworkNameResolution(IReadOnlyList<string> Names, string Platform)
+{
+    public bool PrimaryIsCrcMatch { get; init; }
+}
 
 /// <summary>Canonical-name lookup result, including the distinct cold-index state.</summary>
 internal sealed record ArtworkNameLookupResult(ArtworkNameResolution? Resolution, bool IsIndexPending)

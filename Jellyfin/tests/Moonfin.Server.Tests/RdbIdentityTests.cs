@@ -112,4 +112,17 @@ public class RdbIdentityTests
         var index = new RdbPlatformIndex(new Dictionary<uint, RdbRecord>(), new Dictionary<string, RdbRecord>());
         Assert.Empty(new RdbMatcher().FindSiblings(index, new RdbRecord { Name = null }, 6));
     }
+
+    [Theory]
+    [InlineData("Ariel - The Little Mermaid (USA, Europe)", "(usa, europe)")]
+    [InlineData("Game  (USA)   (Rev A)", "(usa) (rev a)")]
+    [InlineData("Game (USA) [b]  ", "(usa) [b]")]
+    [InlineData("Plain Title", "")]
+    [InlineData("", "")]
+    [InlineData(null, "")]
+    [InlineData("(USA)", "(usa)")]
+    public void TrailingGroupText_IsLowerCasedWithCollapsedWhitespace(string? name, string expected)
+    {
+        Assert.Equal(expected, RdbIdentity.TrailingGroupText(name));
+    }
 }

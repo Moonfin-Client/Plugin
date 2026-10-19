@@ -273,9 +273,11 @@ internal sealed class RdbIndexStore
         }
     }
 
+    internal string? DataFolderPath => _dataFolderPathOverride ?? MoonfinPlugin.Instance?.DataFolderPath;
+
     private string? LocalPath(string platform)
     {
-        var dataFolder = _dataFolderPathOverride ?? MoonfinPlugin.Instance?.DataFolderPath;
+        var dataFolder = DataFolderPath;
         return string.IsNullOrWhiteSpace(dataFolder)
             ? null
             : Path.Combine(dataFolder, "gamemeta", platform + ".rdb");

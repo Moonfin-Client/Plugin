@@ -200,6 +200,335 @@ public class GameArtworkStoreTests : IDisposable
         Assert.Equal(GameArtworkLookupOutcome.Found, result.Outcome);
     }
 
+    // ---- Provider listing: spelling discovery for checksum-identified games -------------------
+
+    private const string DriftedRdbName = "Ariel - The Little Mermaid (USA, Europe)";
+    private const string ListedName = "Ariel the Little Mermaid (USA, Europe)";
+    private static readonly byte[] CrcRomBytes = [4, 8, 15, 16, 23, 42];
+
+    [Fact]
+    public async Task Listing_DriftedSpelling_FindsArtThroughTheListedAlias()
+    {
+        var handler = ListingHandler(ListedName, "Another Game (USA)");
+        handler.SetResponse(ThumbUrl(Platform, DriftedRdbName), HttpStatusCode.NotFound, new ByteArrayContent([]));
+        handler.SetResponse(ThumbUrl(Platform, "Unmatched Dump 01"), HttpStatusCode.NotFound, new ByteArrayContent([]));
+        handler.SetResponse(ThumbUrl(Platform, ListedName), HttpStatusCode.OK, new ByteArrayContent(new byte[64]));
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+        await PrimeListingAsync(store);
+
+        var result = await LookupRdbAsync(store);
+
+        Assert.Equal(GameArtworkLookupOutcome.Found, result.Outcome);
+        Assert.Equal(
+            new[] { DriftedRdbName, "Unmatched Dump 01", ListedName },
+            ProbedNames(handler));
+    }
+
+    [Fact]
+    public async Task Listing_NameAbsentFromAStaleListing_IsStillProbedDirectly()
+    {
+        var handler = ListingHandler("Another Game (USA)");
+        handler.SetResponse(ThumbUrl(Platform, "Fresh Game (USA)"), HttpStatusCode.OK, new ByteArrayContent(new byte[64]));
+        var store = CreateRdbBackedStore(handler, [("Fresh Game (USA)", Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+        await PrimeListingAsync(store);
+
+        var result = await LookupRdbAsync(store);
+
+        Assert.Equal(GameArtworkLookupOutcome.Found, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Listing_AmbiguousKey_AddsNoAlias()
+    {
+        var handler = ListingHandler(ListedName, "Ariel the  Little Mermaid (USA, Europe)");
+        RegisterMisses(handler, DriftedRdbName, "Unmatched Dump 01");
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+        await PrimeListingAsync(store);
+
+        var result = await LookupRdbAsync(store);
+
+        Assert.Equal(GameArtworkLookupOutcome.Missing, result.Outcome);
+        Assert.Equal(new[] { DriftedRdbName, "Unmatched Dump 01" }, ProbedNames(handler));
+    }
+
+    [Fact]
+    public async Task Listing_NonCrcPrimary_GetsNoAliasAndNeverFetchesTheListing()
+    {
+        // The ROM is found by file name, not checksum, so a differently spelled listed name is not provably the same game.
+        var handler = ListingHandler(ListedName);
+        RegisterMisses(handler, DriftedRdbName);
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, 0x1234u)], DriftedRdbName + ".sms", CrcRomBytes);
+
+        var result = await LookupRdbAsync(store, DriftedRdbName + ".sms");
+
+        Assert.Equal(GameArtworkLookupOutcome.Missing, result.Outcome);
+        Assert.Equal(new[] { DriftedRdbName }, ProbedNames(handler));
+        Assert.DoesNotContain(handler.Requested, u => u.EndsWith("/Named_Boxarts/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Listing_FilenameAndTitleFallbacks_GetNoAlias()
+    {
+        // No RDB record: the candidates are only the ROM file name and the title, each with a
+        // same-key spelling in the listing that must not be probed.
+        var handler = ListingHandler("Great  Golf", "Golf  Great");
+        RegisterMisses(handler, "Great Golf", "Golf Great");
+        var store = CreateStore(handler);
+        await PrimeListingAsync(store);
+
+        var result = await store.LookupThumbAsync(
+            core: "segaMS",
+            coreWasDefaulted: false,
+            systemName: "Sega Master System",
+            romPath: Path.Combine(_root, RomFileName),
+            title: "Golf Great",
+            kind: GameThumbService.ThumbKind.Boxart,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal(GameArtworkLookupOutcome.Missing, result.Outcome);
+        Assert.Equal(new[] { "Great Golf", "Golf Great" }, ProbedNames(handler));
+    }
+
+    [Fact]
+    public async Task Listing_Absent_AllowsMissing()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.NotFound, new ByteArrayContent([]));
+        RegisterMisses(handler, DriftedRdbName, "Unmatched Dump 01");
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+        await PrimeListingAsync(store);
+
+        Assert.Equal(ListingState.Absent, store.ListingsForTests.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+        var result = await LookupRdbAsync(store);
+
+        Assert.Equal(GameArtworkLookupOutcome.Missing, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Listing_NotYetAvailable_DefersMissingToTheMetadataRetry()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.InternalServerError, new ByteArrayContent([]));
+        RegisterMisses(handler, DriftedRdbName, "Unmatched Dump 01");
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+
+        var result = await LookupRdbAsync(store);
+
+        Assert.Equal(GameArtworkLookupOutcome.MetadataPending, result.Outcome);
+    }
+
+    [Fact]
+    public async Task Listing_SlowFetch_IsNeverAwaitedByTheLookup()
+    {
+        var release = new TaskCompletionSource();
+        var handler = ListingHandler(ListedName);
+        handler.SetGate(ListingUrl, release.Task);
+        RegisterMisses(handler, DriftedRdbName, "Unmatched Dump 01");
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+
+        var elapsed = Stopwatch.StartNew();
+        var result = await LookupRdbAsync(store);
+        elapsed.Stop();
+
+        Assert.Equal(GameArtworkLookupOutcome.MetadataPending, result.Outcome);
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(2), $"Lookup took {elapsed.Elapsed}");
+
+        release.SetResult();
+        await PrimeListingAsync(store);
+        Assert.Equal(ListingState.Available, store.ListingsForTests.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+    }
+
+    [Fact]
+    public async Task Listing_SevenAssertedNamesAndAliasAll404_StillFindsTheTitleFallback()
+    {
+        // 7 RDB names + the filename fallback leave the title fallback as the ninth probe; the alias
+        // is only reachable after every original, so it never displaces the title.
+        const string primary = "Maze - Craze (USA)";
+        var records = new List<(string Name, uint Crc)> { (primary, Crc32(CrcRomBytes)) };
+        var regions = new[] { "Europe", "Japan", "World", "Brazil", "Korea", "Italy" };
+        for (var i = 0; i < regions.Length; i++)
+        {
+            records.Add(($"Maze - Craze ({regions[i]})", 0x22222222u + (uint)i));
+        }
+
+        var handler = ListingHandler("Maze Craze (USA)");
+        RegisterMisses(handler, records.Select(r => r.Name).Append("Unmatched Dump 01").Append("Maze Craze (USA)").ToArray());
+        handler.SetResponse(ThumbUrl(Platform, "Unmatched Dump Title"), HttpStatusCode.OK, new ByteArrayContent(new byte[64]));
+        var store = CreateRdbBackedStore(handler, records, "Unmatched Dump 01.sms", CrcRomBytes);
+        await PrimeListingAsync(store);
+
+        var result = await LookupRdbAsync(store, title: "Unmatched Dump Title");
+
+        Assert.Equal(GameArtworkLookupOutcome.Found, result.Outcome);
+        var probed = ProbedNames(handler);
+        Assert.Equal(9, probed.Length);
+        Assert.Equal("Unmatched Dump Title", probed[^1]);
+        Assert.DoesNotContain("Maze Craze (USA)", probed);
+    }
+
+    [Fact]
+    public async Task ListingStore_IncompleteFirstFetch_IsNotUsedOrStored()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml(["A (USA)", "B (USA)"], complete: false)));
+        var listings = NewListingStore(handler, _root);
+
+        Assert.Equal(ListingState.Unavailable, listings.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+        await InFlight(listings);
+
+        Assert.Equal(ListingState.Unavailable, listings.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+        Assert.False(Directory.Exists(Path.Combine(_root, "gamemeta", "listings")));
+        // A failed fetch backs off instead of retrying on every lookup.
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task ListingStore_Digest_IsStableWhenTheHtmlOrderChanges()
+    {
+        var names = new[] { "Zeta (USA)", "Alpha (USA)", "Mid (USA)" };
+        var firstDir = Path.Combine(_root, "a");
+        var secondDir = Path.Combine(_root, "b");
+        foreach (var (dir, order) in new[] { (firstDir, names), (secondDir, names.Reverse().ToArray()) })
+        {
+            var handler = new FakeHttpMessageHandler();
+            handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml(order)));
+            var listings = NewListingStore(handler, dir);
+            listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+            await InFlight(listings);
+        }
+
+        string Stored(string dir, string extension) => File.ReadAllText(Path.Combine(
+            dir, "gamemeta", "listings", Uri.EscapeDataString(Platform) + "__Named_Boxarts" + extension));
+
+        string Sha(string json) => System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("sha256").GetString()!;
+
+        Assert.Equal(Sha(Stored(firstDir, ".json")), Sha(Stored(secondDir, ".json")));
+        Assert.Equal(Stored(firstDir, ".txt"), Stored(secondDir, ".txt"));
+        Assert.Equal("Alpha (USA)\nMid (USA)\nZeta (USA)", Stored(firstDir, ".txt"));
+        Assert.Contains("\"count\":3", Stored(firstDir, ".json"));
+    }
+
+    [Fact]
+    public async Task ListingStore_ConcurrentLookups_ShareOneFetchAndNeverRefetchAfterSuccess()
+    {
+        var release = new TaskCompletionSource();
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml(["A (USA)"])));
+        handler.SetGate(ListingUrl, release.Task);
+        var listings = NewListingStore(handler, _root);
+
+        Parallel.For(0, 20, _ => listings.Get(Platform, GameThumbService.ThumbKind.Boxart));
+        await WaitUntil(() => handler.RequestCount == 1, TimeSpan.FromSeconds(5));
+        await Task.Delay(50);
+        Assert.Equal(1, handler.RequestCount);
+
+        release.SetResult();
+        await InFlight(listings);
+        Assert.Equal(ListingState.Available, listings.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+        listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(listings);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task ListingStore_FailedRefetch_FallsBackToTheStoredListing()
+    {
+        var first = new FakeHttpMessageHandler();
+        first.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml([ListedName])));
+        var firstStore = NewListingStore(first, _root);
+        firstStore.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(firstStore);
+
+        var second = new FakeHttpMessageHandler();
+        second.SetResponse(ListingUrl, HttpStatusCode.InternalServerError, new ByteArrayContent([]));
+        var secondStore = NewListingStore(second, _root);
+
+        var immediate = secondStore.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(secondStore);
+        var after = secondStore.Get(Platform, GameThumbService.ThumbKind.Boxart);
+
+        Assert.Equal(ListingState.Available, immediate.State);
+        Assert.Equal(ListingState.Available, after.State);
+        Assert.Equal(new[] { ListedName }, after.Listing!.Names);
+        Assert.Equal(1, second.RequestCount);
+    }
+
+    [Fact]
+    public void ListingStore_Parse_DecodesNamesAndSkipsEverythingButPngHrefs()
+    {
+        var html = "<html><a href=\"../\">up</a><a href=\"?C=N;O=D\">sort</a>"
+            + "<a href=\"Mario%20%26%20Luigi%20%28USA%29.PNG\">x</a><a href='Single_Quoted.png'>y</a>"
+            + "<a href=\"readme.txt\">z</a><a href=\"sub/Deep.png\">w</a></html>";
+
+        var names = ThumbnailListingStore.ParseComplete(html);
+
+        Assert.Equal(new[] { "Mario & Luigi (USA)", "Single_Quoted" }, names);
+        Assert.Null(ThumbnailListingStore.ParseComplete("<html><a href=\"A.png\">"));
+        Assert.Null(ThumbnailListingStore.ParseComplete("<html></html>"));
+    }
+
+    private static string ListingUrl =>
+        new Uri("https://thumbnails.libretro.com/" + Uri.EscapeDataString(Platform) + "/Named_Boxarts/").ToString();
+
+    private static string ListingHtml(IEnumerable<string> names, bool complete = true) =>
+        "<html><head><title>Index</title></head><body><a href=\"../\">../</a>\n"
+        + string.Join("\n", names.Select(n => $"<a href=\"{Uri.EscapeDataString(n)}.png\">{n}.png</a>"))
+        + (complete ? "\n</body></html>" : string.Empty);
+
+    private static StringContent Html(string html) => new(html, Encoding.UTF8, "text/html");
+
+    private static FakeHttpMessageHandler ListingHandler(params string[] names)
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml(names)));
+        return handler;
+    }
+
+    private static void RegisterMisses(FakeHttpMessageHandler handler, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            handler.SetResponse(ThumbUrl(Platform, name), HttpStatusCode.NotFound, new ByteArrayContent([]));
+        }
+    }
+
+    private static ThumbnailListingStore NewListingStore(FakeHttpMessageHandler handler, string dataFolder) =>
+        new(new FakeHttpClientFactory(handler), new NoOpLogger<GameArtworkStore>(), () => dataFolder);
+
+    private static Task InFlight(ThumbnailListingStore listings) =>
+        listings.InFlightForTests(Platform, GameThumbService.ThumbKind.Boxart) ?? Task.CompletedTask;
+
+    private static Task PrimeListingAsync(GameArtworkStore store)
+    {
+        store.ListingsForTests.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        return InFlight(store.ListingsForTests);
+    }
+
+    // Artwork names probed so far, in request order (listing fetches excluded).
+    private static string[] ProbedNames(FakeHttpMessageHandler handler)
+    {
+        lock (handler.Requested)
+        {
+            return handler.Requested
+                .Where(u => u.EndsWith(".png", StringComparison.Ordinal))
+                .Select(u => Uri.UnescapeDataString(u[(u.LastIndexOf('/') + 1)..^4]))
+                .ToArray();
+        }
+    }
+
+    private Task<GameArtworkLookupResult> LookupRdbAsync(
+        GameArtworkStore store,
+        string romFileName = "Unmatched Dump 01.sms",
+        string? title = null) =>
+        store.LookupThumbAsync(
+            core: "segaMS",
+            coreWasDefaulted: false,
+            systemName: "Sega Master System",
+            romPath: Path.Combine(_root, romFileName),
+            title: title,
+            kind: GameThumbService.ThumbKind.Boxart,
+            cancellationToken: CancellationToken.None);
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
@@ -368,7 +697,12 @@ public class GameArtworkStoreTests : IDisposable
         public void SetResponse(string url, HttpStatusCode status, HttpContent content) =>
             _responses[url] = (status, content);
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        // A request to this URL waits for the task before it is answered.
+        public void SetGate(string url, Task gate) => _gates[url] = gate;
+
+        private readonly Dictionary<string, Task> _gates = new(StringComparer.Ordinal);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var url = request.RequestUri!.ToString();
             Interlocked.Increment(ref _requestCount);
@@ -382,7 +716,12 @@ public class GameArtworkStoreTests : IDisposable
                 throw new InvalidOperationException($"Unexpected thumbnail request to unregistered URL: {url}");
             }
 
-            return Task.FromResult(new HttpResponseMessage(response.Status) { Content = response.Content });
+            if (_gates.TryGetValue(url, out var gate))
+            {
+                await gate.ConfigureAwait(false);
+            }
+
+            return new HttpResponseMessage(response.Status) { Content = response.Content };
         }
     }
 

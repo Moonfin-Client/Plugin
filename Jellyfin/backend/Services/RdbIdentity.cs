@@ -32,6 +32,24 @@ internal static class RdbIdentity
     /// <summary>Key for a name already sanitised for the CDN; `_` is an ordinary character in both forms.</summary>
     internal static string CdnTitleKey(string? sanitizedName) => TitleKey(sanitizedName);
 
+    /// <summary>The trailing `(...)`/`[...]` groups, lower-cased with whitespace collapsed; empty when there are none.</summary>
+    internal static string TrailingGroupText(string? name)
+    {
+        var text = name ?? string.Empty;
+        var suffix = text.TrimEnd()[Parse(text).Title.Length..];
+        string folded;
+        try
+        {
+            folded = suffix.Normalize(NormalizationForm.FormC).ToLowerInvariant();
+        }
+        catch (ArgumentException)
+        {
+            folded = suffix.ToLowerInvariant();
+        }
+
+        return string.Join(' ', folded.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
     internal static ISet<string> EditionTags(string? name)
     {
         var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
