@@ -23,8 +23,19 @@ internal sealed partial class RdbIndexStore
 
     private readonly ConcurrentDictionary<string, Lazy<Task<RdbCheckResult>>> _checks = new(StringComparer.Ordinal);
     private readonly object _sidecarLock = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _stageGates = new(StringComparer.Ordinal);
+
+    // Platforms whose staged file already existed when this process first looked. It is read before
+    // this process can write one, so a file staged in this run is never applied in this run.
+    private readonly Lazy<IReadOnlySet<string>> _inheritedStaged;
 
     internal TimeSpan UpdateTimeoutForTests { get; set; } = TimeSpan.FromSeconds(30);
+
+    private enum FetchKind { NotModified, NoSource, Fetched }
+
+    private readonly record struct FetchOutcome(FetchKind Kind, string? Etag = null, string? LastModified = null);
+
+    private enum Verdict { Rejected, Identical, Changed }
 
     internal sealed class RdbSidecar
     {
@@ -83,17 +94,22 @@ internal sealed partial class RdbIndexStore
         var sidecarPath = SidecarPath(platform)!;
         try
         {
+            if (_inheritedStaged.Value.Contains(platform))
+            {
+                ApplyInheritedStaged(platform, localPath, sidecarPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex, "Applying staged {Platform} game metadata failed; using the cached copy", platform);
+        }
+
+        try
+        {
             var baseLocation = config.GamesMetadataDbUrlBase;
             if (!string.IsNullOrWhiteSpace(baseLocation))
             {
-                if (baseLocation.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                {
-                    await CheckHttpAsync(platform, baseLocation, localPath, sidecarPath).ConfigureAwait(false);
-                }
-                else
-                {
-                    CheckLocalFolder(platform, baseLocation, localPath, sidecarPath);
-                }
+                await CheckSourceAsync(platform, baseLocation, localPath, sidecarPath).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -129,10 +145,60 @@ internal sealed partial class RdbIndexStore
         }
     }
 
-    private async Task CheckHttpAsync(string platform, string baseLocation, string localPath, string sidecarPath)
+    private async Task CheckSourceAsync(string platform, string baseLocation, string localPath, string sidecarPath)
     {
-        using var deadline = new CancellationTokenSource(UpdateTimeoutForTests);
         var sidecar = ReadSidecar(sidecarPath) ?? new RdbSidecar();
+        var candidate = localPath + ".update";
+        try
+        {
+            var outcome = await FetchCandidateAsync(platform, baseLocation, candidate, sidecar, CancellationToken.None).ConfigureAwait(false);
+            if (outcome.Kind == FetchKind.NotModified)
+            {
+                sidecar.CheckedUtc = DateTime.UtcNow;
+                lock (_sidecarLock)
+                {
+                    WriteSidecar(sidecarPath, sidecar);
+                }
+            }
+            else if (outcome.Kind == FetchKind.Fetched)
+            {
+                ValidateAndApply(platform, candidate, localPath, sidecarPath, sidecar, outcome.Etag, outcome.LastModified);
+            }
+        }
+        finally
+        {
+            TryDelete(candidate);
+        }
+    }
+
+    // Fetches the configured source into candidatePath, sending the sidecar's validators for HTTP.
+    private async Task<FetchOutcome> FetchCandidateAsync(
+        string platform,
+        string baseLocation,
+        string candidatePath,
+        RdbSidecar sidecar,
+        CancellationToken cancellationToken)
+    {
+        if (!baseLocation.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            var source = Path.Combine(baseLocation, platform + ".rdb");
+            if (!File.Exists(source))
+            {
+                return new FetchOutcome(FetchKind.NoSource);
+            }
+
+            if (new FileInfo(source).Length > RdbReader.MaxRdbFileBytes)
+            {
+                throw new RdbTooLargeException(new FileInfo(source).Length, RdbReader.MaxRdbFileBytes);
+            }
+
+            File.Copy(source, candidatePath, overwrite: true);
+            return new FetchOutcome(FetchKind.Fetched);
+        }
+
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(UpdateTimeoutForTests);
+        var downloadToken = deadline.Token;
         var url = baseLocation.TrimEnd('/') + "/" + Uri.EscapeDataString(platform) + ".rdb";
         var client = _httpClientFactory.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(30);
@@ -149,16 +215,10 @@ internal sealed partial class RdbIndexStore
             request.Headers.TryAddWithoutValidation("If-Modified-Since", sidecar.LastModified);
         }
 
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, downloadToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
         {
-            sidecar.CheckedUtc = DateTime.UtcNow;
-            lock (_sidecarLock)
-            {
-                WriteSidecar(sidecarPath, sidecar);
-            }
-
-            return;
+            return new FetchOutcome(FetchKind.NotModified);
         }
 
         response.EnsureSuccessStatusCode();
@@ -167,96 +227,47 @@ internal sealed partial class RdbIndexStore
             throw new RdbTooLargeException(contentLength, RdbReader.MaxRdbFileBytes);
         }
 
-        var candidate = localPath + ".update";
-        try
+        await using (var responseStream = await response.Content.ReadAsStreamAsync(downloadToken).ConfigureAwait(false))
+        await using (var file = File.Create(candidatePath))
         {
-            await using (var responseStream = await response.Content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false))
-            await using (var file = File.Create(candidate))
-            {
-                await CopyToLimitedAsync(responseStream, file, RdbReader.MaxRdbFileBytes, deadline.Token).ConfigureAwait(false);
-            }
+            await CopyToLimitedAsync(responseStream, file, RdbReader.MaxRdbFileBytes, downloadToken).ConfigureAwait(false);
+        }
 
-            ValidateAndApply(
-                platform,
-                candidate,
-                localPath,
-                sidecarPath,
-                sidecar,
-                response.Headers.ETag?.ToString(),
-                response.Content.Headers.NonValidated.TryGetValues("Last-Modified", out var modified) ? modified.ToString() : null);
-        }
-        finally
-        {
-            TryDelete(candidate);
-        }
+        return new FetchOutcome(
+            FetchKind.Fetched,
+            response.Headers.ETag?.ToString(),
+            response.Content.Headers.NonValidated.TryGetValues("Last-Modified", out var modified) ? modified.ToString() : null);
     }
 
-    private void CheckLocalFolder(string platform, string baseLocation, string localPath, string sidecarPath)
-    {
-        var source = Path.Combine(baseLocation, platform + ".rdb");
-        if (!File.Exists(source))
-        {
-            return;
-        }
-
-        var sidecar = ReadSidecar(sidecarPath) ?? new RdbSidecar();
-        if (new FileInfo(source).Length > RdbReader.MaxRdbFileBytes)
-        {
-            throw new RdbTooLargeException(new FileInfo(source).Length, RdbReader.MaxRdbFileBytes);
-        }
-
-        var candidate = localPath + ".update";
-        try
-        {
-            File.Copy(source, candidate, overwrite: true);
-            ValidateAndApply(platform, candidate, localPath, sidecarPath, sidecar, etag: null, lastModified: null);
-        }
-        finally
-        {
-            TryDelete(candidate);
-        }
-    }
-
-    // Accepts a fetched RDB only if it parses completely and is not drastically smaller than the
-    // current one. The reopen marker is written before the replace so an interruption between the
-    // two is recoverable at the next start.
-    private void ValidateAndApply(
+    // A replacement is usable only if it parses completely and is not drastically smaller than the
+    // current file.
+    private Verdict Judge(
         string platform,
         string candidate,
         string localPath,
-        string sidecarPath,
         RdbSidecar sidecar,
-        string? etag,
-        string? lastModified)
+        out int newCount,
+        out string newSha,
+        out string currentSha)
     {
-        int newCount;
+        newSha = string.Empty;
+        currentSha = string.Empty;
         try
         {
             newCount = RdbReader.ReadAllComplete(candidate).Count;
         }
         catch (Exception ex) when (ex is FormatException or RdbTooLargeException or IOException)
         {
+            newCount = 0;
             _logger.LogInformation(ex, "Rejected downloaded {Platform} game metadata; keeping the cached copy", platform);
-            return;
+            return Verdict.Rejected;
         }
 
-        var newSha = Sha256Of(candidate);
-        var currentSha = Sha256Of(localPath);
-        var now = DateTime.UtcNow;
-
+        newSha = Sha256Of(candidate);
+        currentSha = Sha256Of(localPath);
         if (string.Equals(newSha, currentSha, StringComparison.Ordinal))
         {
-            sidecar.Etag = etag ?? sidecar.Etag;
-            sidecar.LastModified = lastModified ?? sidecar.LastModified;
-            sidecar.Sha256 = currentSha;
-            sidecar.RecordCount = newCount;
-            sidecar.CheckedUtc = now;
-            lock (_sidecarLock)
-            {
-                WriteSidecar(sidecarPath, sidecar);
-            }
-
-            return;
+            return Verdict.Identical;
         }
 
         var currentCount = string.Equals(sidecar.Sha256, currentSha, StringComparison.Ordinal) && sidecar.RecordCount is { } known
@@ -269,6 +280,42 @@ internal sealed partial class RdbIndexStore
                 platform,
                 newCount,
                 currentCount);
+            return Verdict.Rejected;
+        }
+
+        return Verdict.Changed;
+    }
+
+    // The reopen marker is written before the replace so an interruption between the two is
+    // recoverable at the next start.
+    private void ValidateAndApply(
+        string platform,
+        string candidate,
+        string localPath,
+        string sidecarPath,
+        RdbSidecar sidecar,
+        string? etag,
+        string? lastModified)
+    {
+        var verdict = Judge(platform, candidate, localPath, sidecar, out var newCount, out var newSha, out var currentSha);
+        if (verdict == Verdict.Rejected)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (verdict == Verdict.Identical)
+        {
+            sidecar.Etag = etag ?? sidecar.Etag;
+            sidecar.LastModified = lastModified ?? sidecar.LastModified;
+            sidecar.Sha256 = currentSha;
+            sidecar.RecordCount = newCount;
+            sidecar.CheckedUtc = now;
+            lock (_sidecarLock)
+            {
+                WriteSidecar(sidecarPath, sidecar);
+            }
+
             return;
         }
 
@@ -286,6 +333,141 @@ internal sealed partial class RdbIndexStore
         }
 
         _logger.LogInformation("Updated game metadata for {Platform} ({Records} records)", platform, newCount);
+    }
+
+    // Applies a file staged by an earlier run with the same replace-and-mark sequence as a download,
+    // or deletes it if it no longer validates.
+    private void ApplyInheritedStaged(string platform, string localPath, string sidecarPath)
+    {
+        var next = localPath + ".next";
+        var nextMeta = next + ".json";
+        if (!File.Exists(next))
+        {
+            return;
+        }
+
+        var sidecar = ReadSidecar(sidecarPath) ?? new RdbSidecar();
+        if (Judge(platform, next, localPath, sidecar, out var newCount, out var newSha, out _) != Verdict.Changed)
+        {
+            TryDelete(next);
+            TryDelete(nextMeta);
+            return;
+        }
+
+        var meta = ReadSidecar(nextMeta);
+        lock (_sidecarLock)
+        {
+            sidecar.PendingReopenDigest = newSha;
+            WriteSidecar(sidecarPath, sidecar);
+            File.Replace(next, localPath, localPath + ".prev");
+            sidecar.Etag = meta?.Etag;
+            sidecar.LastModified = meta?.LastModified;
+            sidecar.Sha256 = newSha;
+            sidecar.RecordCount = newCount;
+            sidecar.CheckedUtc = DateTime.UtcNow;
+            WriteSidecar(sidecarPath, sidecar);
+        }
+
+        TryDelete(nextMeta);
+        _logger.LogInformation("Applied staged game metadata for {Platform} ({Records} records)", platform, newCount);
+    }
+
+    /// <summary>
+    /// Fetches a newer RDB and stages it as <c>.rdb.next</c> beside the live file. The live file, index
+    /// and sidecar are untouched; the next start's update check applies it. True only when a changed,
+    /// valid file was staged. Never throws except on cancellation.
+    /// </summary>
+    internal async Task<bool> StageUpdateAsync(string platform, PluginConfiguration config, CancellationToken cancellationToken)
+    {
+        // Captured before anything here can write a staged file.
+        _ = _inheritedStaged.Value;
+        try
+        {
+            await EnsureUpdateCheckedAsync(platform, config).WaitAsync(cancellationToken).ConfigureAwait(false);
+            var localPath = LocalPath(platform);
+            var baseLocation = config.GamesMetadataDbUrlBase;
+            if (localPath == null || !File.Exists(localPath) || string.IsNullOrWhiteSpace(baseLocation))
+            {
+                return false;
+            }
+
+            var gate = _stageGates.GetOrAdd(platform, static _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await StageLockedAsync(platform, baseLocation, localPath, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex, "Staging {Platform} game metadata failed; nothing was staged", platform);
+            return false;
+        }
+    }
+
+    private async Task<bool> StageLockedAsync(string platform, string baseLocation, string localPath, CancellationToken cancellationToken)
+    {
+        var sidecarPath = SidecarPath(platform)!;
+        var next = localPath + ".next";
+        var candidate = next + ".tmp";
+        var metaTemp = next + ".json.tmp";
+        try
+        {
+            var sidecar = ReadSidecar(sidecarPath) ?? new RdbSidecar();
+            var outcome = await FetchCandidateAsync(platform, baseLocation, candidate, sidecar, cancellationToken).ConfigureAwait(false);
+            if (outcome.Kind == FetchKind.NoSource)
+            {
+                return false;
+            }
+
+            var verdict = outcome.Kind == FetchKind.NotModified
+                ? Verdict.Identical
+                : Judge(platform, candidate, localPath, sidecar, out _, out _, out _);
+            if (verdict == Verdict.Rejected)
+            {
+                return false;
+            }
+
+            if (verdict == Verdict.Identical)
+            {
+                // Upstream matches the live file, so an earlier staged copy is out of date.
+                TryDelete(next);
+                TryDelete(next + ".json");
+                return false;
+            }
+
+            var stagedSha = Sha256Of(candidate);
+            var stagedCount = TryCountRecords(candidate);
+            File.Move(candidate, next, overwrite: true);
+            File.WriteAllText(
+                metaTemp,
+                JsonSerializer.Serialize(
+                    new RdbSidecar
+                    {
+                        Etag = outcome.Etag,
+                        LastModified = outcome.LastModified,
+                        Sha256 = stagedSha,
+                        RecordCount = stagedCount,
+                        CheckedUtc = DateTime.UtcNow,
+                    },
+                    SidecarJson));
+            File.Move(metaTemp, next + ".json", overwrite: true);
+            _logger.LogInformation("Staged game metadata for {Platform} ({Records} records); it applies at the next start", platform, stagedCount);
+            return true;
+        }
+        finally
+        {
+            TryDelete(candidate);
+            TryDelete(metaTemp);
+        }
     }
 
     private void RecordFirstDownload(string platform, string localPath, string? etag, string? lastModified)

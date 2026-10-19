@@ -208,6 +208,21 @@ public class RdbService
             : _indexStore.EnsureUpdateCheckedAsync(platform, config).WaitAsync(cancellationToken);
     }
 
+    /// <summary>Drops the per-ROM match cache; requests already running keep their own state.</summary>
+    internal void ClearLookupCache() => _lookupCache.Clear();
+
+    /// <summary>
+    /// Fetches a newer RDB for <paramref name="platform"/> and stages it beside the live file for the
+    /// next start. Returns true only when a changed, valid file was staged; never throws.
+    /// </summary>
+    internal Task<bool> StageUpdateAsync(string platform, CancellationToken cancellationToken = default)
+    {
+        var config = ConfigOverrideForTests ?? MoonfinPlugin.Instance?.Configuration;
+        return config == null || !config.GamesMetadataEnabled
+            ? Task.FromResult(false)
+            : _indexStore.StageUpdateAsync(platform, config, cancellationToken);
+    }
+
     internal void ClearPendingReopen(string platform, string digest) =>
         _indexStore.ClearPendingReopen(platform, digest);
 

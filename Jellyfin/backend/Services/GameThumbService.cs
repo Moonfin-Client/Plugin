@@ -125,6 +125,16 @@ public class GameThumbService
     internal Task<RdbCheckResult> EnsureRdbUpdateCheckedAsync(string platform, CancellationToken cancellationToken) =>
         _rdbService.EnsureUpdateCheckedAsync(platform, cancellationToken);
 
+    /// <summary>Forgets cached RDB matches and recent artwork 404s so the next lookups probe afresh.</summary>
+    internal void ClearLookupCaches()
+    {
+        _rdbService.ClearLookupCache();
+        _artworkStore.ClearMissCache();
+    }
+
+    internal Task<bool> StageRdbUpdateAsync(string platform, CancellationToken cancellationToken) =>
+        _rdbService.StageUpdateAsync(platform, cancellationToken);
+
     internal void ClearRdbPendingReopen(string platform, string digest) =>
         _rdbService.ClearPendingReopen(platform, digest);
 
