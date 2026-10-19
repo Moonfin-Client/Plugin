@@ -12,14 +12,13 @@ internal sealed class GameArtworkStore
 {
     private const int MaxMissEntries = 6096;
     private const int MaxFuzzyDirectorySuggestions = 3;
-    // Nine probes: exactly enough that every name the RDB asserts, plus both fallbacks, is always
-    // reachable. MatchWithSiblings returns the primary plus up to MaxSiblingArtworkNamesPerRequest
-    // siblings (see RdbMatcher: `results.Count < 1 + maxSiblings`), so the worst case is
-    // 7 asserted names + 2 fallbacks = 9: the budget and the candidate list meet exactly, and
-    // nothing is ever truncated. Anything added to GetThumbPathCoreAsync's candidate list needs a
-    // matching rise here, or it silently starves the fallbacks and turns artwork that does exist
-    // into a terminal Missing.
+    // Nine probes for the original candidates: the primary plus up to MaxSiblingArtworkNamesPerRequest
+    // siblings (7 asserted names) and both fallbacks, so nothing is ever truncated. Anything added to
+    // that list needs a matching rise here, or it starves the fallbacks and turns artwork that does
+    // exist into a terminal Missing. Listing aliases are probed after every original from their own
+    // MaxAliasProbesPerRequest allowance, so they never spend those nine.
     private const int MaxTotalProbesPerRequest = RdbService.MaxSiblingArtworkNamesPerRequest + 3;
+    private const int MaxAliasProbesPerRequest = 1 + RdbService.MaxSiblingArtworkNamesPerRequest;
     private static readonly TimeSpan MissTtl = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(6);
 
@@ -48,12 +47,15 @@ internal sealed class GameArtworkStore
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger _logger;
     private readonly RdbService _rdbService;
+    private readonly ThumbnailListingStore _listings;
     private readonly string _cacheDir;
     private readonly long _maxArtworkBytes;
     private readonly ConcurrentDictionary<string, DateTime> _misses = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Lazy<Task<GameArtworkLookupResult>>> _inFlight = new(StringComparer.Ordinal);
 
     internal event Action<string>? MetadataIndexAvailable;
+
+    internal ThumbnailListingStore ListingsForTests => _listings;
 
     // maxArtworkBytes defaults to MaxArtworkBytes; the parameter exists so a focused test can drive
     // the cap with a few kilobytes instead of pushing a real 16 MB body through a fake handler
@@ -68,6 +70,7 @@ internal sealed class GameArtworkStore
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _rdbService = rdbService;
+        _listings = new ThumbnailListingStore(httpClientFactory, logger, () => rdbService.DataFolderPath);
         _rdbService.IndexAvailable += platform => MetadataIndexAvailable?.Invoke(platform);
         _cacheDir = cacheDir;
         _maxArtworkBytes = maxArtworkBytes;
@@ -232,9 +235,23 @@ internal sealed class GameArtworkStore
             return GameArtworkLookupResult.TransientFailure(retryDelay);
         }
 
+        var listingPending = false;
+        if (nameLookup.Resolution is { PrimaryIsCrcMatch: true, Names.Count: > 0 } crcMatch)
+        {
+            var (aliasResult, pending) = await ProbeListingAliasAsync(crcMatch, kind, candidates, cancellationToken)
+                .ConfigureAwait(false);
+            if (aliasResult != null)
+            {
+                return aliasResult;
+            }
+
+            listingPending = pending;
+        }
+
         // A raw filename 404 is not authoritative while the RDB that translates a shortname
-        // (for example FBNeo's gauntlet2p) into its canonical thumbnail name is still loading.
-        if (nameLookup.IsIndexPending)
+        // (for example FBNeo's gauntlet2p) into its canonical thumbnail name is still loading;
+        // likewise while the provider listing that could reveal a differently spelled name is.
+        if (nameLookup.IsIndexPending || listingPending)
         {
             _logger.LogDebug(
                 "Deferring {Kind} artwork for {RomPath}: metadata index is pending; scheduling metadata retry instead of recording Missing",
@@ -244,6 +261,64 @@ internal sealed class GameArtworkStore
         }
 
         return GameArtworkLookupResult.Missing();
+    }
+
+    /// <summary>
+    /// Probes the listed spelling of a checksum-matched primary name that the provider spells
+    /// differently. Returns a result to stop on (Found or transient), and whether the listing is
+    /// still unavailable, in which case a 404 everywhere proves nothing.
+    /// </summary>
+    private async Task<(GameArtworkLookupResult? Result, bool ListingPending)> ProbeListingAliasAsync(
+        ArtworkNameResolution match,
+        GameThumbService.ThumbKind kind,
+        List<(string Name, string Platform)> originals,
+        CancellationToken cancellationToken)
+    {
+        var primary = LibretroThumbName(match.Names[0]);
+        if (primary.Length == 0)
+        {
+            return (null, false);
+        }
+
+        var snapshot = _listings.Get(match.Platform, kind);
+        if (snapshot.State == ListingState.Unavailable)
+        {
+            return (null, true);
+        }
+
+        var aliases = new List<string>(1);
+        if (snapshot.Listing?.FindAlias(primary) is { } alias)
+        {
+            aliases.Add(alias);
+        }
+
+        var probesRemaining = MaxAliasProbesPerRequest;
+        foreach (var aliasName in aliases)
+        {
+            if (probesRemaining <= 0)
+            {
+                break;
+            }
+
+            if (originals.Contains((aliasName, match.Platform)))
+            {
+                continue;
+            }
+
+            probesRemaining--;
+            var lookup = await GetThumbPathForNameAsync(match.Platform, aliasName, kind, cancellationToken).ConfigureAwait(false);
+            if (lookup.Outcome == GameArtworkLookupOutcome.Found)
+            {
+                return (lookup, false);
+            }
+
+            if (lookup.Outcome == GameArtworkLookupOutcome.TransientFailure)
+            {
+                return (GameArtworkLookupResult.TransientFailure(lookup.RetryDelay), false);
+            }
+        }
+
+        return (null, false);
     }
 
     private Task<GameArtworkLookupResult> GetThumbPathForNameAsync(
@@ -482,12 +557,15 @@ internal sealed class GameArtworkStore
         _misses[cacheKey] = DateTime.UtcNow;
     }
 
-    private static string BuildUrl(string platform, GameThumbService.ThumbKind kind, string name) =>
-        "https://thumbnails.libretro.com/"
-        + Uri.EscapeDataString(platform) + "/" + FolderFor(kind) + "/"
-        + Uri.EscapeDataString(name) + ".png";
+    private const string ThumbnailHost = "https://thumbnails.libretro.com/";
 
-    private static string FolderFor(GameThumbService.ThumbKind kind) => kind switch
+    private static string BuildUrl(string platform, GameThumbService.ThumbKind kind, string name) =>
+        BuildListingUrl(platform, kind) + Uri.EscapeDataString(name) + ".png";
+
+    internal static string BuildListingUrl(string platform, GameThumbService.ThumbKind kind) =>
+        ThumbnailHost + Uri.EscapeDataString(platform) + "/" + FolderFor(kind) + "/";
+
+    internal static string FolderFor(GameThumbService.ThumbKind kind) => kind switch
     {
         GameThumbService.ThumbKind.Snap => "Named_Snaps",
         GameThumbService.ThumbKind.Title => "Named_Titles",

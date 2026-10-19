@@ -8,16 +8,25 @@ namespace Moonfin.Server.Services;
 /// </summary>
 internal sealed class RdbMatcher
 {
-    internal RdbRecord? Match(RdbPlatformIndex index, string romPath, string? title, IReadOnlyList<uint> crcCandidates)
+    internal RdbRecord? Match(RdbPlatformIndex index, string romPath, string? title, IReadOnlyList<uint> crcCandidates) =>
+        MatchWithKind(index, romPath, title, crcCandidates).Record;
+
+    /// <summary>Same as <see cref="Match"/>, also reporting whether the record was found by checksum.</summary>
+    internal (RdbRecord? Record, bool ByCrc) MatchWithKind(RdbPlatformIndex index, string romPath, string? title, IReadOnlyList<uint> crcCandidates)
     {
         foreach (var crc in crcCandidates)
         {
             if (index.ByCrc.TryGetValue(crc, out var byCrc))
             {
-                return byCrc;
+                return (byCrc, true);
             }
         }
 
+        return (MatchByName(index, romPath, title), false);
+    }
+
+    private static RdbRecord? MatchByName(RdbPlatformIndex index, string romPath, string? title)
+    {
         var fileName = NormalizeName(Path.GetFileNameWithoutExtension(romPath));
         if (fileName.Length > 0 && index.ByName.TryGetValue(fileName, out var byFile))
         {
