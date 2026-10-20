@@ -261,6 +261,46 @@ public class GameArtworkStoreTests : IDisposable
     private const string ListedName = "Ariel the Little Mermaid (USA, Europe)";
     private static readonly byte[] CrcRomBytes = [4, 8, 15, 16, 23, 42];
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Listing_StaleCopy_UsesHitsButDefersMissesUntilRefreshCompletes(bool persistedCopy, bool staleAliasExists)
+    {
+        var handler = ListingHandler(staleAliasExists ? ListedName : "Other Game (USA)");
+        RegisterMisses(handler, DriftedRdbName, "Unmatched Dump 01");
+        handler.SetResponse(ThumbUrl(Platform, ListedName), HttpStatusCode.OK, new ByteArrayContent(new byte[64]));
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+        await PrimeListingAsync(store);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml([ListedName])));
+        handler.SetGate(ListingUrl, release.Task);
+        if (persistedCopy)
+        {
+            store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+        }
+        else
+        {
+            store.ClearMissCache();
+        }
+
+        GameArtworkLookupResult first;
+        try
+        {
+            first = await LookupRdbAsync(store);
+        }
+        finally
+        {
+            release.SetResult();
+            await PrimeListingAsync(store);
+        }
+
+        var second = await LookupRdbAsync(store);
+        Assert.Equal(GameArtworkLookupOutcome.Found, second.Outcome);
+        Assert.Equal(staleAliasExists ? GameArtworkLookupOutcome.Found : GameArtworkLookupOutcome.MetadataPending, first.Outcome);
+    }
+
     [Fact]
     public async Task Listing_DriftedSpelling_FindsArtThroughTheListedAlias()
     {
@@ -576,6 +616,8 @@ public class GameArtworkStoreTests : IDisposable
 
         Assert.Equal(ListingState.Available, immediate.State);
         Assert.Equal(ListingState.Available, after.State);
+        Assert.True(immediate.IsRefreshPending);
+        Assert.True(after.IsRefreshPending);
         Assert.Equal(new[] { ListedName }, after.Listing!.Names);
         Assert.Equal(1, second.RequestCount);
     }
