@@ -240,7 +240,7 @@ internal sealed class ThumbnailListingStore
         return (names == null ? null : new ThumbnailListing(names), false);
     }
 
-    /// <summary>The listed names, or null when the page is cut short or lists nothing.</summary>
+    /// <summary>The listed names, or null when the page is cut short or is not a directory listing.</summary>
     internal static List<string>? ParseComplete(string html)
     {
         if (html.IndexOf("</html>", StringComparison.OrdinalIgnoreCase) < 0)
@@ -249,11 +249,13 @@ internal sealed class ThumbnailListingStore
         }
 
         var names = new List<string>();
+        var hasParentDirectory = false;
         try
         {
             foreach (Match match in HrefPattern.Matches(html))
             {
                 var href = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+                hasParentDirectory |= href == "../";
                 if (href.Contains('/') || !href.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -271,7 +273,9 @@ internal sealed class ThumbnailListingStore
             return null;
         }
 
-        return names.Count > 0 ? names : null;
+        // An empty autoindex still has its parent-directory link. Without that marker or any
+        // image links, a complete HTML response could just be an error page served with HTTP 200.
+        return names.Count > 0 || hasParentDirectory ? names : null;
     }
 
     private ThumbnailListing? LoadStored(string platform, string folder)
@@ -285,13 +289,8 @@ internal sealed class ThumbnailListingStore
             }
 
             var text = File.ReadAllText(namesPath, Encoding.UTF8);
-            if (text.Length == 0)
-            {
-                return null;
-            }
-
             using var sidecar = JsonDocument.Parse(File.ReadAllBytes(sidecarPath));
-            var listing = new ThumbnailListing(text.Split('\n'));
+            var listing = new ThumbnailListing(text.Length == 0 ? Array.Empty<string>() : text.Split('\n'));
             var root = sidecar.RootElement;
             return root.TryGetProperty("sha256", out var sha) && string.Equals(sha.GetString(), listing.Digest, StringComparison.Ordinal)
                 && root.TryGetProperty("count", out var count) && count.TryGetInt32(out var n) && n == listing.Names.Count
