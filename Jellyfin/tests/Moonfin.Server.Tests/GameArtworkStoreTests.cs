@@ -206,6 +206,19 @@ public class GameArtworkStoreTests : IDisposable
     private const string ListedName = "Ariel the Little Mermaid (USA, Europe)";
     private static readonly byte[] CrcRomBytes = [4, 8, 15, 16, 23, 42];
 
+    [Fact]
+    public async Task Listing_EmptyCompleteDirectory_AllowsAConfirmedMiss()
+    {
+        var handler = ListingHandler();
+        RegisterMisses(handler, DriftedRdbName, "Unmatched Dump 01");
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+        await PrimeListingAsync(store);
+
+        var result = await LookupRdbAsync(store);
+
+        Assert.Equal(GameArtworkLookupOutcome.Missing, result.Outcome);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
@@ -565,6 +578,37 @@ public class GameArtworkStoreTests : IDisposable
         Assert.True(after.IsRefreshPending);
         Assert.Equal(new[] { ListedName }, after.Listing!.Names);
         Assert.Equal(1, second.RequestCount);
+    }
+
+    [Fact]
+    public async Task ListingStore_EmptyDirectory_IsPersistedAndReopenedForRefresh()
+    {
+        var handler = ListingHandler();
+        var listings = NewListingStore(handler, _root);
+        listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(listings);
+        var fresh = listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        Assert.Equal(ListingState.Available, fresh.State);
+        Assert.Empty(fresh.Listing!.Names);
+        Assert.False(fresh.IsRefreshPending);
+
+        var failed = new FakeHttpMessageHandler();
+        failed.SetResponse(ListingUrl, HttpStatusCode.InternalServerError, new ByteArrayContent([]));
+        var reopened = NewListingStore(failed, _root);
+        var stored = reopened.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(reopened);
+        Assert.Equal(ListingState.Available, stored.State);
+        Assert.Empty(stored.Listing!.Names);
+        Assert.True(stored.IsRefreshPending);
+    }
+
+    [Theory]
+    [InlineData("<html><body>Service unavailable</body></html>")]
+    [InlineData("<html><a href=\"A.png\">A.png</a>")]
+    [InlineData("<html><a href=\"../\">../</a>")]
+    public void ListingStore_Parse_ErrorOrTruncatedPage_IsNotAnEmptyDirectory(string html)
+    {
+        Assert.Null(ThumbnailListingStore.ParseComplete(html));
     }
 
     [Fact]
