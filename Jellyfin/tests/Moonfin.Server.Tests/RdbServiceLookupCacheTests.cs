@@ -399,7 +399,11 @@ public partial class RdbServiceTests
         var third = await service.TryLookupAsync("nes", romPath, "Foo Quest");
 
         Assert.Equal("Foo Quest", first.Resolution?.Names[0]);
+        Assert.True(first.IsIndexPending);
+        Assert.False(first.Resolution!.PrimaryIsCrcMatch);
         Assert.Equal("Foo Quest", second.Resolution?.Names[0]);
+        Assert.False(second.IsIndexPending);
+        Assert.True(second.Resolution!.PrimaryIsCrcMatch);
         Assert.Equal("Foo Quest", third?.Name);
         Assert.Equal(2, probe.CrcComputations);
     }
