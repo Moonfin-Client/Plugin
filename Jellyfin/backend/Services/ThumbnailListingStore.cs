@@ -17,7 +17,7 @@ internal enum ListingState
     Absent,
 }
 
-internal readonly record struct ListingSnapshot(ListingState State, ThumbnailListing? Listing);
+internal readonly record struct ListingSnapshot(ListingState State, ThumbnailListing? Listing, bool IsRefreshPending = false);
 
 /// <summary>The sorted, de-duplicated art names of one provider folder.</summary>
 internal sealed class ThumbnailListing
@@ -121,7 +121,7 @@ internal sealed class ThumbnailListingStore
             return entry.Absent
                 ? new ListingSnapshot(ListingState.Absent, null)
                 : entry.Listing != null
-                    ? new ListingSnapshot(ListingState.Available, entry.Listing)
+                    ? new ListingSnapshot(ListingState.Available, entry.Listing, !entry.Succeeded)
                     : new ListingSnapshot(ListingState.Unavailable, null);
         }
     }

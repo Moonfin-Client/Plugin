@@ -253,7 +253,7 @@ internal sealed class GameArtworkStore
     /// <summary>
     /// Probes the listed spelling of a checksum-matched primary name that the provider spells
     /// differently. Returns a result to stop on (Found or transient), and whether the listing is
-    /// still unavailable, in which case a 404 everywhere proves nothing.
+    /// still unavailable or awaiting refresh, in which case a 404 everywhere proves nothing.
     /// </summary>
     private async Task<(GameArtworkLookupResult? Result, bool ListingPending)> ProbeListingAliasAsync(
         ArtworkNameResolution match,
@@ -305,7 +305,7 @@ internal sealed class GameArtworkStore
             }
         }
 
-        return (null, false);
+        return (null, snapshot.IsRefreshPending);
     }
 
     private async Task<GameArtworkLookupResult> GetThumbPathForNameAsync(
