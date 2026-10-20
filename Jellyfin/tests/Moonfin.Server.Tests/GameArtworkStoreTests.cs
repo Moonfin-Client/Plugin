@@ -206,6 +206,36 @@ public class GameArtworkStoreTests : IDisposable
     private const string ListedName = "Ariel the Little Mermaid (USA, Europe)";
     private static readonly byte[] CrcRomBytes = [4, 8, 15, 16, 23, 42];
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Lookup_ChecksumFailureWithANameMatch_UsesDirectHitsAndRetriesMisses(bool directHit)
+    {
+        var handler = ListingHandler(ListedName);
+        handler.SetResponse(ThumbUrl(Platform, DriftedRdbName),
+            directHit ? HttpStatusCode.OK : HttpStatusCode.NotFound, new ByteArrayContent(new byte[64]));
+        handler.SetResponse(ThumbUrl(Platform, ListedName), HttpStatusCode.OK, new ByteArrayContent(new byte[64]));
+        var fileName = DriftedRdbName + ".sms";
+        var calls = 0;
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], fileName, CrcRomBytes,
+            configureRdb: rdb => rdb.CrcOverrideForTests = path => Interlocked.Increment(ref calls) == 1
+                ? throw new IOException("Transient ROM read failure")
+                : RdbMatcher.ComputeCrcCandidates(path));
+        await PrimeListingAsync(store);
+
+        var first = await LookupRdbAsync(store, fileName);
+        Assert.Equal(directHit ? GameArtworkLookupOutcome.Found : GameArtworkLookupOutcome.MetadataPending, first.Outcome);
+        Assert.DoesNotContain(ListedName, ProbedNames(handler));
+
+        var second = await LookupRdbAsync(store, fileName);
+        Assert.Equal(GameArtworkLookupOutcome.Found, second.Outcome);
+        Assert.Equal(2, calls);
+        if (!directHit)
+        {
+            Assert.Contains(ListedName, ProbedNames(handler));
+        }
+    }
+
     [Fact]
     public async Task Listing_EmptyCompleteDirectory_AllowsAConfirmedMiss()
     {
@@ -891,7 +921,8 @@ public class GameArtworkStoreTests : IDisposable
         FakeHttpMessageHandler handler,
         IReadOnlyList<(string Name, uint Crc)> records,
         string romFileName,
-        byte[]? romBytes = null)
+        byte[]? romBytes = null,
+        Action<RdbService>? configureRdb = null)
     {
         Directory.CreateDirectory(_root);
         File.WriteAllBytes(Path.Combine(_root, romFileName), romBytes ?? [9, 9, 9, 9]);
@@ -905,6 +936,7 @@ public class GameArtworkStoreTests : IDisposable
             },
         };
 
+        configureRdb?.Invoke(rdb);
         return new GameArtworkStore(
             new FakeHttpClientFactory(handler),
             new NoOpLogger<GameArtworkStore>(),

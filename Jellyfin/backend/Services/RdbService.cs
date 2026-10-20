@@ -315,10 +315,12 @@ public class RdbService
                 ? await Task.Run(() => match.Siblings.Value, cancellationToken).ConfigureAwait(false)
                 : null;
             var names = BuildNameList(match.Record, siblings);
+            // A name fallback can serve art now, but failed checksum work must remain retryable
+            // if those names miss; it may later identify a different name or enable listing aliases.
             return ArtworkNameLookupResult.Resolved(new ArtworkNameResolution(names, platform)
             {
                 PrimaryIsCrcMatch = match.ByCrc && names.Count > 0 && names[0] == match.Record.Name,
-            });
+            }, isIndexPending: match.Degraded);
         }
 
         // An index-pending outcome is never stored: a download may complete between this call and the next one.
@@ -592,10 +594,10 @@ public sealed record ArtworkNameResolution(IReadOnlyList<string> Names, string P
     public bool PrimaryIsCrcMatch { get; init; }
 }
 
-/// <summary>Canonical-name lookup result, including the distinct cold-index state.</summary>
+/// <summary>Canonical-name lookup result, including pending index or checksum work.</summary>
 internal sealed record ArtworkNameLookupResult(ArtworkNameResolution? Resolution, bool IsIndexPending)
 {
-    internal static ArtworkNameLookupResult Resolved(ArtworkNameResolution resolution) => new(resolution, false);
+    internal static ArtworkNameLookupResult Resolved(ArtworkNameResolution resolution, bool isIndexPending = false) => new(resolution, isIndexPending);
 
     internal static ArtworkNameLookupResult NoMatch() => new(null, false);
 
