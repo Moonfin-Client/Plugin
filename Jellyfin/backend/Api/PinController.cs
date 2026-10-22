@@ -165,8 +165,14 @@ public class PinController : ControllerBase
     [HttpDelete("Users/{userId}/Pin")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public ActionResult<PinStatusResponse> RemovePinFor([FromRoute] Guid userId)
     {
+        if (_directory.Users().All(u => u.Id != userId))
+        {
+            return NotFound(new { error = "That user does not exist" });
+        }
+
         _pins.Remove(userId);
         return Ok(new PinStatusResponse { Enabled = false });
     }
