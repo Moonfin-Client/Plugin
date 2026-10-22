@@ -134,6 +134,7 @@ public class MoonfinController : ControllerBase
             TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
             TmdbThumbsSupported = true,
             MessagesSupported = true,
+            ManagedAccountsSupported = true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             DefaultSettings = config?.DefaultUserSettings
         });
@@ -1555,6 +1556,13 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("messagesSupported")]
     public bool? MessagesSupported { get; set; }
+
+    /// <summary>
+    /// True when this plugin has the managed accounts endpoints. Older plugins leave it out, so
+    /// the app reads a missing value as false and keeps showing every user.
+    /// </summary>
+    [JsonPropertyName("managedAccountsSupported")]
+    public bool? ManagedAccountsSupported { get; set; }
 
     /// <summary>
     /// True when this plugin supports server-side recommendations scoring.
