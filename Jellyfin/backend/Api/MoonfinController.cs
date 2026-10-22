@@ -134,6 +134,7 @@ public class MoonfinController : ControllerBase
             TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
             TmdbThumbsSupported = true,
             MessagesSupported = true,
+            IncompleteRecordingsSupported = true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             DefaultSettings = config?.DefaultUserSettings
         });
@@ -1555,6 +1556,13 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("messagesSupported")]
     public bool? MessagesSupported { get; set; }
+
+    /// <summary>
+    /// True when this plugin has the incomplete Live TV recordings endpoints. Older plugins and
+    /// the Emby port leave it out, so the app hides the badge, the Record prompt and the setting.
+    /// </summary>
+    [JsonPropertyName("incompleteRecordingsSupported")]
+    public bool? IncompleteRecordingsSupported { get; set; }
 
     /// <summary>
     /// True when this plugin supports server-side recommendations scoring.
