@@ -1392,7 +1392,16 @@
                                 <span>Re-record incomplete episodes</span>
                             </label>
                             <div class="fieldDescription">
-                                Schedules the next showing of an episode that recorded short. Nothing is deleted.
+                                Schedules the next showing of an episode that recorded short.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="LiveTvDeleteIncompleteCopies" is="emby-checkbox" />
+                                <span>Delete incomplete copies</span>
+                            </label>
+                            <div class="fieldDescription">
+                                When an episode records complete, deletes the copies of it marked Incomplete, the same as deleting them yourself. Copies kept as complete stay.
                             </div>
                         </div>
                         <div class="inputContainer">
@@ -7001,6 +7010,7 @@
                     document.querySelector('#StudioLogosMaxAgeDays').value = config.StudioLogosMaxAgeDays || 30;
                     document.querySelector('#LiveTvAutoRecordCompleteShowing').checked = config.LiveTvAutoRecordCompleteShowing === true;
                     document.querySelector('#LiveTvIncompleteThresholdPercent').value = config.LiveTvIncompleteThresholdPercent || 90;
+                    document.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
                     document.querySelector('#AnimeMarkersEnabled').checked = config.AnimeMarkersEnabled === true;
                     document.querySelector('#AnimeMarkerRecapLookup').checked = config.AnimeMarkerRecapLookup !== false;
                     document.querySelector('#AnimeAudioMarkersEnabled').checked = config.AnimeAudioMarkersEnabled === true;
@@ -7851,6 +7861,7 @@
                         config.StudioLogosMaxAgeDays = parseInt(document.querySelector('#StudioLogosMaxAgeDays').value, 10) || 30;
                         config.LiveTvAutoRecordCompleteShowing = document.querySelector('#LiveTvAutoRecordCompleteShowing').checked;
                         config.LiveTvIncompleteThresholdPercent = Math.min(100, Math.max(50, parseInt(document.querySelector('#LiveTvIncompleteThresholdPercent').value, 10) || 90));
+                        config.LiveTvDeleteIncompleteCopies = document.querySelector('#LiveTvDeleteIncompleteCopies').checked;
                         config.AnimeMarkersEnabled = document.querySelector('#AnimeMarkersEnabled').checked;
                         config.AnimeMarkerRecapLookup = document.querySelector('#AnimeMarkerRecapLookup').checked;
                         config.AnimeAudioMarkersEnabled = document.querySelector('#AnimeAudioMarkersEnabled').checked;

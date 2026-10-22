@@ -110,6 +110,11 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public int LiveTvIncompleteThresholdPercent { get; set; } = 90;
 
+    /// <summary>
+    /// When a complete copy of an episode records, delete the copies of it tagged incomplete.
+    /// </summary>
+    public bool LiveTvDeleteIncompleteCopies { get; set; }
+
     // ---------------------------------------------------------------------
     // Anime filler, canon and recap markers
     // ---------------------------------------------------------------------

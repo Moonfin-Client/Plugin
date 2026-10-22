@@ -140,6 +140,7 @@ public class LiveTvRecordingsController : ControllerBase
 
         plugin.Configuration.LiveTvAutoRecordCompleteShowing = settings.AutoRecordComplete;
         plugin.Configuration.LiveTvIncompleteThresholdPercent = IncompleteRecordingRules.ClampThreshold(settings.ThresholdPercent);
+        plugin.Configuration.LiveTvDeleteIncompleteCopies = settings.DeleteIncompleteCopies;
         plugin.SaveConfiguration();
         return Ok(IncompleteRecordingService.ReadPluginSettings());
     }

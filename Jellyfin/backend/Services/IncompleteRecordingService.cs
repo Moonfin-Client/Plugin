@@ -9,7 +9,8 @@ namespace Moonfin.Server.Services;
 /// the same episode. Detection is schedule-based: it estimates how much of each file's padded
 /// schedule was being written, so it can't vouch for the content itself, and it measures while the
 /// recording runs so a post-processing script that moves, cuts or transcodes the file afterwards
-/// can't affect the verdict. It never deletes anything.
+/// can't affect the verdict. It deletes nothing unless the delete-incomplete-copies setting is on,
+/// and then only tagged copies of an episode once a complete one has recorded.
 ///
 /// All state lives in one JSON file and every read and write goes through one lock. Before asking
 /// the server for a timer the chosen showing is saved, so a crash between the two is reconciled
@@ -100,6 +101,7 @@ public sealed class IncompleteRecordingService : IDisposable
             AutoRecordComplete = config?.LiveTvAutoRecordCompleteShowing ?? false,
             ThresholdPercent = IncompleteRecordingRules.ClampThreshold(
                 config?.LiveTvIncompleteThresholdPercent ?? IncompleteRecordingRules.DefaultThresholdPercent),
+            DeleteIncompleteCopies = config?.LiveTvDeleteIncompleteCopies ?? false,
         };
     }
 
@@ -721,6 +723,7 @@ public sealed class IncompleteRecordingService : IDisposable
             {
                 case RecordingVerdict.Complete:
                     OnCompleteRecording(data, snapshot, now);
+                    DeleteIncompleteCopies(data, snapshot, now);
                     break;
                 case RecordingVerdict.Incomplete:
                     await OnIncompleteRecordingAsync(data, snapshot, now, cancellationToken).ConfigureAwait(false);
@@ -748,6 +751,44 @@ public sealed class IncompleteRecordingService : IDisposable
             request.PendingProgramId = null;
             request.RecordedAt = now;
             request.ClosedAt = now;
+        }
+    }
+
+    /// <summary>
+    /// With the setting on, a complete recording deletes the earlier copies of its episode that
+    /// carry the incomplete tag, through Jellyfin's own delete. Copies kept as complete are dismissed
+    /// and untagged, so they stay.
+    /// </summary>
+    private void DeleteIncompleteCopies(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, DateTime now)
+    {
+        if (!_settings().DeleteIncompleteCopies || snapshot.Episode == null)
+        {
+            return;
+        }
+
+        foreach (var record in data.Records.Where(r => !r.Dismissed && r.Episode != null
+            && r.Episode.Matches(snapshot.Episode) && r.JudgedAt < snapshot.WindowStart))
+        {
+            var kept = 0;
+            foreach (var itemId in record.TaggedItemIds.ToList())
+            {
+                try
+                {
+                    _host.DeleteItem(itemId);
+                    _logger.LogInformation("Deleted incomplete recording {ItemId} of {Series}, a complete copy recorded", itemId, snapshot.Episode.SeriesName);
+                }
+                catch (Exception ex)
+                {
+                    kept++;
+                    _logger.LogWarning(ex, "Could not delete incomplete recording {ItemId}", itemId);
+                }
+            }
+
+            if (kept == 0)
+            {
+                record.Dismissed = true;
+                record.DismissedAt = now;
+            }
         }
     }
 
