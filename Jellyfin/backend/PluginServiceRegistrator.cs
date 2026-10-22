@@ -108,6 +108,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddHostedService<NewMediaNotifier>();
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<GameArtworkReconciliationService>());
 
+        // Incomplete Live TV recordings
+        serviceCollection.AddSingleton<ILiveTvRecordingHost, JellyfinLiveTvRecordingHost>();
+        serviceCollection.AddSingleton<IncompleteRecordingService>();
+        serviceCollection.AddHostedService<IncompleteRecordingWatcher>();
+
         // Recommendations / Similar Items
         serviceCollection.AddSingleton<MoonfinSimilarItemsService>();
         serviceCollection.AddHostedService<MoonfinSimilarItemsProviderManager>();
