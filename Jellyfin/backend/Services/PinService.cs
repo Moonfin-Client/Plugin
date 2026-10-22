@@ -76,6 +76,11 @@ public class PinService
     private const int SaltBytes = 16;
     private const int HashBytes = 32;
 
+    /// <summary>Bounds on a stored count, so a damaged record can't throw or stall every check.</summary>
+    private const int MinIterations = 10_000;
+
+    private const int MaxIterations = 2_000_000;
+
     private readonly IPinStore _store;
     private readonly Func<DateTime> _utcNow;
     private readonly object _gate = new();
@@ -172,14 +177,24 @@ public class PinService
 
     private static bool Matches(PinRecord record, string guess)
     {
+        if (record.Iterations is < MinIterations or > MaxIterations)
+        {
+            return false;
+        }
+
         try
         {
             var salt = Convert.FromBase64String(record.Salt);
             var expected = Convert.FromBase64String(record.Hash);
+            if (salt.Length == 0 || expected.Length != HashBytes)
+            {
+                return false;
+            }
+
             var actual = Derive(guess, salt, record.Iterations);
             return CryptographicOperations.FixedTimeEquals(actual, expected);
         }
-        catch (FormatException)
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
         {
             return false;
         }

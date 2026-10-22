@@ -238,4 +238,20 @@ public class PinServiceTests
 
         Assert.Equal(PinCheck.Wrong, Service().Verify(User, "4821").Check);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(int.MaxValue)]
+    public void ARecordWithAnOutOfRangeIterationCountNeverVerifies(int iterations)
+    {
+        _store.Records[User] = new PinRecord
+        {
+            Salt = Convert.ToBase64String(new byte[16]),
+            Hash = Convert.ToBase64String(new byte[32]),
+            Iterations = iterations,
+        };
+
+        Assert.Equal(PinCheck.Wrong, Service().Verify(User, "4821").Check);
+    }
 }
