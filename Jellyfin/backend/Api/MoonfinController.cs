@@ -134,6 +134,7 @@ public class MoonfinController : ControllerBase
             TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
             TmdbThumbsSupported = true,
             MessagesSupported = true,
+            TimeSupported = true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             DefaultSettings = config?.DefaultUserSettings
         });
@@ -1555,6 +1556,13 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("messagesSupported")]
     public bool? MessagesSupported { get; set; }
+
+    /// <summary>
+    /// True when this plugin reports the server's clock and time zone at Moonfin/Time. Older
+    /// plugins leave it out, so the app falls back to the device clock.
+    /// </summary>
+    [JsonPropertyName("timeSupported")]
+    public bool? TimeSupported { get; set; }
 
     /// <summary>
     /// True when this plugin supports server-side recommendations scoring.
