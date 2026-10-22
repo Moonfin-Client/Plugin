@@ -74,6 +74,9 @@ public interface ILiveTvRecordingHost
     IReadOnlyList<string>? GetTags(Guid itemId);
 
     Task SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken);
+
+    /// <summary>Deletes a library item and its file the way Jellyfin's own Delete does.</summary>
+    void DeleteItem(Guid itemId);
 }
 
 /// <summary>The Jellyfin implementation of <see cref="ILiveTvRecordingHost"/>.</summary>
@@ -345,6 +348,15 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
             ? tags.Append(tag).ToArray()
             : tags.Where(t => !string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)).ToArray();
         await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+    }
+
+    public void DeleteItem(Guid itemId)
+    {
+        var item = _libraryManager.GetItemById(itemId);
+        if (item != null)
+        {
+            _libraryManager.DeleteItem(item, new DeleteOptions { DeleteFileLocation = true });
+        }
     }
 
     private bool IsVisibleTo(Guid itemId, object user)

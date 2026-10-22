@@ -366,6 +366,9 @@ public sealed class IncompleteRecordingSettings
 
     [JsonPropertyName("thresholdPercent")]
     public int ThresholdPercent { get; set; } = IncompleteRecordingRules.DefaultThresholdPercent;
+
+    [JsonPropertyName("deleteIncompleteCopies")]
+    public bool DeleteIncompleteCopies { get; set; }
 }
 
 /// <summary>What a client shows for one incomplete item.</summary>
