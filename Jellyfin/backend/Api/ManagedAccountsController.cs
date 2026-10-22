@@ -40,7 +40,12 @@ public class ManagedAccountsController : ControllerBase
             return Unauthorized(new { error = "A valid user token is required" });
         }
 
-        var records = MoonfinPlugin.Instance?.Configuration.ManagedAccounts ?? [];
+        List<ManagedAccount> records;
+        lock (ManagedAccounts.Gate)
+        {
+            records = (MoonfinPlugin.Instance?.Configuration.ManagedAccounts ?? []).ToList();
+        }
+
         var managed = ManagedAccounts.ManagedBy(records, _directory.Users(), userId.Value);
         return Ok(managed.Select(u => new ManagedAccountResponse { Id = u.Id.ToString("N"), Name = u.Name, ImageTag = u.ImageTag }));
     }
@@ -79,13 +84,15 @@ public class ManagedAccountsController : ControllerBase
             return directory.All(u => u.Id != userId) ? NotFound(new { error = problem }) : BadRequest(new { error = problem });
         }
 
-        ManagedAccounts.Set(plugin.Configuration.ManagedAccounts, userId, managers);
-        plugin.SaveConfiguration();
-
-        return Ok(new ManagedByResponse
+        IReadOnlyList<Guid> managedBy;
+        lock (ManagedAccounts.Gate)
         {
-            ManagedBy = ManagedAccounts.ManagersOf(plugin.Configuration.ManagedAccounts, userId).Select(g => g.ToString("N")).ToList()
-        });
+            ManagedAccounts.Set(plugin.Configuration.ManagedAccounts, userId, managers);
+            plugin.SaveConfiguration();
+            managedBy = ManagedAccounts.ManagersOf(plugin.Configuration.ManagedAccounts, userId);
+        }
+
+        return Ok(new ManagedByResponse { ManagedBy = managedBy.Select(g => g.ToString("N")).ToList() });
     }
 }
 

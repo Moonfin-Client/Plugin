@@ -8,6 +8,9 @@ namespace Moonfin.Server.Services;
 /// </summary>
 public static class ManagedAccounts
 {
+    /// <summary>Guards the shared config list. Take it around Set, SaveConfiguration and reads.</summary>
+    public static readonly object Gate = new();
+
     /// <summary>The most administrators one account can have.</summary>
     public const int MaxManagers = 20;
 
