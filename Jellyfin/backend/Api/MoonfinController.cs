@@ -143,6 +143,7 @@ public class MoonfinController : ControllerBase
             PinSupported = true,
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             ExtendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
+            TimeSupported = true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             DefaultSettings = config?.DefaultUserSettings
         });
@@ -1604,6 +1605,13 @@ public class MoonfinPingResponse
     /// <summary>Movie recovery and user-confirmed current-guide suggestions.</summary>
     [JsonPropertyName("extendedCompleteShowingsSupported")]
     public bool? ExtendedCompleteShowingsSupported { get; set; }
+
+    /// <summary>
+    /// True when this plugin reports the server's clock and time zone at Moonfin/Time. Older
+    /// plugins leave it out, so the app falls back to the device clock.
+    /// </summary>
+    [JsonPropertyName("timeSupported")]
+    public bool? TimeSupported { get; set; }
 
     /// <summary>
     /// True when this plugin supports server-side recommendations scoring.
