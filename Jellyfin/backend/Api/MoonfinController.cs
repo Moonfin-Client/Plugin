@@ -134,6 +134,7 @@ public class MoonfinController : ControllerBase
             TmdbAvailable = !string.IsNullOrWhiteSpace(config?.TmdbApiKey),
             TmdbThumbsSupported = true,
             MessagesSupported = true,
+            PinSupported = true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             DefaultSettings = config?.DefaultUserSettings
         });
@@ -1555,6 +1556,14 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("messagesSupported")]
     public bool? MessagesSupported { get; set; }
+
+    /// <summary>
+    /// <summary>
+    /// True when this plugin keeps PINs on the server. Older plugins leave it out, so the app
+    /// keeps using the PIN stored on the device.
+    /// </summary>
+    [JsonPropertyName("pinSupported")]
+    public bool? PinSupported { get; set; }
 
     /// <summary>
     /// True when this plugin supports server-side recommendations scoring.
