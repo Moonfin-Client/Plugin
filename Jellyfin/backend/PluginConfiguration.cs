@@ -99,6 +99,17 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public int StudioLogosMaxAgeDays { get; set; } = 30;
 
+    /// <summary>
+    /// When a Live TV recording comes out incomplete, schedule the earliest later showing of the
+    /// same episode. Off by default; incomplete recordings are tagged either way.
+    /// </summary>
+    public bool LiveTvAutoRecordCompleteShowing { get; set; } = false;
+
+    /// <summary>
+    /// A recording written for less than this percentage of its padded schedule is incomplete.
+    /// </summary>
+    public int LiveTvIncompleteThresholdPercent { get; set; } = 90;
+
     // ---------------------------------------------------------------------
     // Anime filler, canon and recap markers
     // ---------------------------------------------------------------------
