@@ -153,6 +153,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mergeContinueWatchingNextUp")]
     public bool? MergeContinueWatchingNextUp { get; set; }
 
+    [JsonPropertyName("continueWatchingDefaultAction")]
+    public string? ContinueWatchingDefaultAction { get; set; }
+
     [JsonPropertyName("nextUpMaxDays")]
     public int? NextUpMaxDays { get; set; }
 
