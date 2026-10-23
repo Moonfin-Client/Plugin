@@ -2432,6 +2432,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultDisplaySinceYouWatchedRows', defaults.displaySinceYouWatchedRows);
             loadHomeSectionsEditor(view, defaults.homeSections || null, defaults.homeRowOrder || null);
             setNullableBoolSelect(view, '#DefaultMergeContinueWatchingNextUp', defaults.mergeContinueWatchingNextUp);
+            setSelectValue(view, '#DefaultContinueWatchingDefaultAction', defaults.continueWatchingDefaultAction, 'Configured default action');
             setSelectValue(view, '#DefaultNextUpMaxDays', defaults.nextUpMaxDays, 'Configured max days');
 
             setNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
@@ -2762,6 +2763,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.homeSections = homeSections;
             d.homeRowOrder = getHomeRowOrderValue(view, homeSections);
             d.mergeContinueWatchingNextUp = getNullableBoolSelect(view, '#DefaultMergeContinueWatchingNextUp');
+            d.continueWatchingDefaultAction = view.querySelector('#DefaultContinueWatchingDefaultAction').value || null;
             d.nextUpMaxDays = getNullableIntInput(view, '#DefaultNextUpMaxDays');
 
             d.enableMultiServerLibraries = getNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries');

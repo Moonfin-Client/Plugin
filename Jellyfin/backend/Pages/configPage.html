@@ -1901,6 +1901,15 @@
                                 <div class="fieldDescription">Combine Continue Watching and Next Up into a single home row by default.</div>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultContinueWatchingDefaultAction">Default Action</label>
+                                <select id="DefaultContinueWatchingDefaultAction" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="details">Go to Details screen</option>
+                                    <option value="play">Play immediately</option>
+                                </select>
+                                <div class="fieldDescription">Change what single clicking on a CW&amp;NU item does</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultNextUpMaxDays">Max days in Next Up</label>
                                 <select id="DefaultNextUpMaxDays" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -6942,6 +6951,7 @@
                     setNullableBoolSelect('#DefaultDisplaySinceYouWatchedRows', defaults.displaySinceYouWatchedRows);
                     loadHomeSectionsEditor(defaults.homeSections || null, defaults.homeRowOrder || null);
                     setNullableBoolSelect('#DefaultMergeContinueWatchingNextUp', defaults.mergeContinueWatchingNextUp);
+                    setSelectValue('#DefaultContinueWatchingDefaultAction', defaults.continueWatchingDefaultAction, 'Configured default action');
                     setSelectValue('#DefaultNextUpMaxDays', defaults.nextUpMaxDays, 'Configured max days');
 
                     setNullableBoolSelect('#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
@@ -7821,6 +7831,7 @@
                         config.DefaultUserSettings.homeSections = homeSections;
                         config.DefaultUserSettings.homeRowOrder = getHomeRowOrderValue(homeSections);
                         config.DefaultUserSettings.mergeContinueWatchingNextUp = getNullableBoolSelect('#DefaultMergeContinueWatchingNextUp');
+                        config.DefaultUserSettings.continueWatchingDefaultAction = document.querySelector('#DefaultContinueWatchingDefaultAction').value || null;
                         config.DefaultUserSettings.nextUpMaxDays = getNullableIntInput('#DefaultNextUpMaxDays');
 
                         config.DefaultUserSettings.enableMultiServerLibraries = getNullableBoolSelect('#DefaultEnableMultiServerLibraries');
