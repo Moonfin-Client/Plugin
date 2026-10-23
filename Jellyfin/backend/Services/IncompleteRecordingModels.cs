@@ -258,6 +258,9 @@ public sealed class IncompleteRecordingStoreData
     public List<CompleteShowingRequest> Requests { get; set; } = new();
 
     public DateTime? LastRequestSearchAt { get; set; }
+
+    /// <summary>Complete copies whose incomplete tag couldn't be removed yet; each run tries again.</summary>
+    public List<Guid> PendingUntags { get; set; } = new();
 }
 
 /// <summary>A timer as the schedule cache holds it.</summary>
