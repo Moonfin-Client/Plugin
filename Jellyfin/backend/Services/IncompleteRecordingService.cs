@@ -222,6 +222,7 @@ public sealed class IncompleteRecordingService : IDisposable
             var changed = StartSnapshots(data, now);
             changed |= Sample(data, now);
             changed |= TrackScheduledRequests(data, now, previousTimers);
+            changed |= await RetryUntagsAsync(data, cancellationToken).ConfigureAwait(false);
             changed |= await JudgeClosedAsync(data, now, cancellationToken).ConfigureAwait(false);
             changed |= ApplySettings(data);
 
@@ -759,6 +760,8 @@ public sealed class IncompleteRecordingService : IDisposable
     /// Jellyfin derives an item's id from its path, so a complete recording written where an
     /// incomplete one was, before the library dropped the old item, is the same item. It is the
     /// complete copy now, so it leaves the old record and loses the tag before anything is deleted.
+    /// A removal that fails is retried on later runs; having left the record, the item can't be
+    /// deleted meanwhile.
     /// </summary>
     private async Task ReleaseCompleteCopiesAsync(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, CancellationToken cancellationToken)
     {
@@ -777,12 +780,33 @@ public sealed class IncompleteRecordingService : IDisposable
                     fragment.ItemIds.Remove(item.Id);
                 }
 
-                if (record.TaggedItemIds.Remove(item.Id))
+                if (record.TaggedItemIds.Remove(item.Id)
+                    && !await SetTagSafeAsync(item.Id, false, cancellationToken).ConfigureAwait(false)
+                    && !data.PendingUntags.Contains(item.Id))
                 {
-                    await SetTagSafeAsync(item.Id, false, cancellationToken).ConfigureAwait(false);
+                    data.PendingUntags.Add(item.Id);
                 }
             }
         }
+    }
+
+    // An item tagged again by a newer incomplete record keeps its tag, and one that's gone has
+    // nothing left to remove.
+    private async Task<bool> RetryUntagsAsync(IncompleteRecordingStoreData data, CancellationToken cancellationToken)
+    {
+        var changed = false;
+        foreach (var itemId in data.PendingUntags.ToList())
+        {
+            if (data.Records.Any(r => r.TaggedItemIds.Contains(itemId))
+                || _host.GetTags(itemId) == null
+                || await SetTagSafeAsync(itemId, false, cancellationToken).ConfigureAwait(false))
+            {
+                data.PendingUntags.Remove(itemId);
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     /// <summary>

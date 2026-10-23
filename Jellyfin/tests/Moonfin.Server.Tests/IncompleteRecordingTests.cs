@@ -50,6 +50,8 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public bool TimersUnavailable { get; set; }
 
+    public bool TagWritesFail { get; set; }
+
     public Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken) =>
         TimersUnavailable
             ? Task.FromException<IReadOnlyList<ScheduledTimer>>(new InvalidOperationException("Live TV is not ready"))
@@ -107,6 +109,11 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public Task SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken)
     {
+        if (TagWritesFail)
+        {
+            throw new IOException("The item could not be saved");
+        }
+
         var item = Items.First(i => i.Id == itemId);
         var tags = item.Tags.Where(t => t != tag).ToList();
         if (present)
@@ -454,6 +461,38 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Empty(_host.Deleted);
         Assert.Empty(item.Tags);
         Assert.Empty(await service.GetStatesAsync(new[] { item.Id }, User, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AFailedTagRemovalOnTheCompleteCopyIsRetried()
+    {
+        _settings.DeleteIncompleteCopies = true;
+        AddAiring("p2", Start.AddDays(1));
+        var item = _host.AddItem("/rec/a.ts");
+        var service = await RecordShow(writtenMinutes: 10);
+
+        var timer = _host.Timers.Single(t => t.ProgramId == "p2");
+        _clock.UtcNow = timer.StartDate;
+        _host.StartRecording(timer, item.Path!, 3, 7);
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.StopRecording(timer);
+        _host.TagWritesFail = true;
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Empty(_host.Deleted);
+        Assert.Contains(IncompleteRecordingRules.Tag, item.Tags);
+
+        _host.TagWritesFail = false;
+        await NewService().RunAsync(CancellationToken.None);
+
+        Assert.Empty(_host.Deleted);
+        Assert.Empty(item.Tags);
     }
 
     [Fact]
