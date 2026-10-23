@@ -428,6 +428,34 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Equal(turnedOn && !keptAsComplete ? new[] { incomplete.Id } : Array.Empty<Guid>(), _host.Deleted);
     }
 
+    // Jellyfin derives an item's id from its path, so a showing recorded where the incomplete
+    // file was, before the library dropped the old item, is the same item.
+    [Fact]
+    public async Task ACompleteShowingRecordedAtTheIncompletePathIsKeptAndUntagged()
+    {
+        _settings.DeleteIncompleteCopies = true;
+        AddAiring("p2", Start.AddDays(1));
+        var item = _host.AddItem("/rec/a.ts");
+        var service = await RecordShow(writtenMinutes: 10);
+
+        var timer = _host.Timers.Single(t => t.ProgramId == "p2");
+        _clock.UtcNow = timer.StartDate;
+        _host.StartRecording(timer, item.Path!, 3, 7);
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.StopRecording(timer);
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Empty(_host.Deleted);
+        Assert.Empty(item.Tags);
+        Assert.Empty(await service.GetStatesAsync(new[] { item.Id }, User, CancellationToken.None));
+    }
+
     [Fact]
     public async Task AProgramWithoutEpisodeNumbersGetsNoRequest()
     {

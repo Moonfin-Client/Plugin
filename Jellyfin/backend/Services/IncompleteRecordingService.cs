@@ -723,6 +723,7 @@ public sealed class IncompleteRecordingService : IDisposable
             {
                 case RecordingVerdict.Complete:
                     OnCompleteRecording(data, snapshot, now);
+                    await ReleaseCompleteCopiesAsync(data, snapshot, cancellationToken).ConfigureAwait(false);
                     DeleteIncompleteCopies(data, snapshot, now);
                     break;
                 case RecordingVerdict.Incomplete:
@@ -751,6 +752,36 @@ public sealed class IncompleteRecordingService : IDisposable
             request.PendingProgramId = null;
             request.RecordedAt = now;
             request.ClosedAt = now;
+        }
+    }
+
+    /// <summary>
+    /// Jellyfin derives an item's id from its path, so a complete recording written where an
+    /// incomplete one was, before the library dropped the old item, is the same item. It is the
+    /// complete copy now, so it leaves the old record and loses the tag before anything is deleted.
+    /// </summary>
+    private async Task ReleaseCompleteCopiesAsync(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        foreach (var path in snapshot.Fragments.Select(f => f.Path).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var item = _host.FindItemByPath(path);
+            if (item == null)
+            {
+                continue;
+            }
+
+            foreach (var record in data.Records.Where(r => r.ItemIds.Contains(item.Id)))
+            {
+                foreach (var fragment in record.Fragments)
+                {
+                    fragment.ItemIds.Remove(item.Id);
+                }
+
+                if (record.TaggedItemIds.Remove(item.Id))
+                {
+                    await SetTagSafeAsync(item.Id, false, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
     }
 
