@@ -1,0 +1,168 @@
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace Moonfin.Server.Services;
+
+/// <summary>
+/// Runs <see cref="IncompleteRecordingService"/> on the schedule it asks for: once a minute while a
+/// recording window is open, otherwise asleep until the next window, the safety-net check or a
+/// server event wakes it.
+/// </summary>
+public sealed class IncompleteRecordingWatcher : BackgroundService
+{
+    private readonly IncompleteRecordingService _service;
+    private readonly ILiveTvRecordingHost _host;
+    private readonly ILogger<IncompleteRecordingWatcher> _logger;
+    private readonly SemaphoreSlim _wake = new(0, 1);
+    private CancellationToken _stopping;
+
+    public IncompleteRecordingWatcher(
+        IncompleteRecordingService service,
+        ILiveTvRecordingHost host,
+        ILogger<IncompleteRecordingWatcher> logger)
+    {
+        _service = service;
+        _host = host;
+        _logger = logger;
+    }
+
+    public override void Dispose()
+    {
+        _wake.Dispose();
+        base.Dispose();
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _stopping = stoppingToken;
+        _host.ScheduleChanged += OnScheduleChanged;
+        _host.TimerCreated += OnTimerCreated;
+        _host.TimerCancelled += OnTimerCancelled;
+        _host.GuideRefreshed += OnGuideRefreshed;
+        _host.ItemAdded += OnItemAdded;
+        _host.ItemUpdated += OnItemUpdated;
+        _host.ItemRemoved += OnItemRemoved;
+
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                // Anything that escapes here would end the loop, and with it every check until a restart.
+                var delay = IncompleteRecordingRules.SampleInterval;
+                try
+                {
+                    await _service.RunAsync(stoppingToken).ConfigureAwait(false);
+                    delay = _service.NextRunAt() - DateTime.UtcNow;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Incomplete recordings check failed");
+                }
+
+                if (delay < TimeSpan.FromSeconds(1))
+                {
+                    delay = TimeSpan.FromSeconds(1);
+                }
+
+                await _wake.WaitAsync(delay, stoppingToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Server shutting down.
+        }
+        finally
+        {
+            _host.ScheduleChanged -= OnScheduleChanged;
+            _host.TimerCreated -= OnTimerCreated;
+            _host.TimerCancelled -= OnTimerCancelled;
+            _host.GuideRefreshed -= OnGuideRefreshed;
+            _host.ItemAdded -= OnItemAdded;
+            _host.ItemUpdated -= OnItemUpdated;
+            _host.ItemRemoved -= OnItemRemoved;
+        }
+    }
+
+    private void Wake()
+    {
+        try
+        {
+            _wake.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // Already due to wake.
+        }
+    }
+
+    private void OnScheduleChanged(object? sender, EventArgs e) => Mark(_service.MarkScheduleChanged);
+
+    private void OnTimerCancelled(object? sender, string timerId) => Mark(() => _service.MarkTimerCancelled(timerId));
+
+    private void OnTimerCreated(object? sender, ScheduledTimer timer) => Mark(() => _service.MarkTimerCreated(timer));
+
+    private void OnGuideRefreshed(object? sender, EventArgs e) => Mark(_service.MarkGuideRefreshed);
+
+    // Timer events are raised inside the server's own CreateTimer and CancelTimer, so a failure
+    // here must not reach the user's Record or Cancel.
+    private void Mark(Action mark)
+    {
+        try
+        {
+            mark();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Incomplete recordings schedule event failed");
+        }
+
+        Wake();
+    }
+
+    // The service raises library events itself when it saves a tag, possibly on the thread that
+    // holds its lock, so each event is handled on its own task instead of the raising thread.
+    // Events for items no record can concern are dropped first, so a library scan doesn't queue
+    // a task per item.
+    private void OnItemAdded(object? sender, LibraryItem item)
+    {
+        if (_service.MayConcernAddedItem(item))
+        {
+            Handle(() => _service.OnItemAddedAsync(item, _stopping));
+        }
+    }
+
+    private void OnItemUpdated(object? sender, LibraryItem item)
+    {
+        if (_service.MayConcernItem(item.Id))
+        {
+            Handle(() => _service.OnItemUpdatedAsync(item, _stopping));
+        }
+    }
+
+    private void OnItemRemoved(object? sender, Guid itemId)
+    {
+        if (_service.MayConcernItem(itemId))
+        {
+            Handle(() => _service.OnItemRemovedAsync(itemId, _stopping));
+        }
+    }
+
+    private void Handle(Func<Task> work)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await work().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Server shutting down.
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Incomplete recordings library event failed");
+            }
+        });
+    }
+}

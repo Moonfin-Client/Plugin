@@ -14,6 +14,7 @@ internal static class UserReflection
     private static readonly MethodInfo? GetUserById = UserManagerType?.GetMethod("GetUserById", [typeof(Guid)]);
     private static readonly MethodInfo? SetUser = typeof(InternalItemsQuery).GetMethod("SetUser", BindingFlags.Public | BindingFlags.Instance);
     private static readonly PropertyInfo? UserProperty = typeof(InternalItemsQuery).GetProperty(nameof(InternalItemsQuery.User), BindingFlags.Public | BindingFlags.Instance);
+    private static readonly MethodInfo? IsVisibleStandalone = typeof(BaseItem).GetMethod(nameof(BaseItem.IsVisibleStandalone), BindingFlags.Public | BindingFlags.Instance);
 
     // IsVisible grew a skipAllowedTagsCheck parameter in 10.11, so any overload whose extra
     // parameters are booleans is taken and those are passed as false.
@@ -79,6 +80,24 @@ internal static class UserReflection
         try
         {
             return IsVisible.Invoke(item, args) is true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Includes parent and library access checks. Fails closed across server versions.</summary>
+    public static bool IsVisibleStandaloneTo(BaseItem item, object user)
+    {
+        if (IsVisibleStandalone == null || !IsVisibleStandalone.GetParameters()[0].ParameterType.IsInstanceOfType(user))
+        {
+            return false;
+        }
+
+        try
+        {
+            return IsVisibleStandalone.Invoke(item, [user]) is true;
         }
         catch
         {
