@@ -36,6 +36,10 @@ public sealed class IncompleteRecordingService : IDisposable
     private readonly Func<IncompleteRecordingSettings> _settings;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    // Copies this service deleted, so their removal isn't logged as happening outside Moonfin.
+    // Guarded by _lock.
+    private readonly HashSet<Guid> _deletedByService = new();
+
     // Requests opened or reopened since the last run, searched without waiting for a guide refresh.
     private readonly HashSet<string> _searchNow = new(StringComparer.Ordinal);
 
@@ -303,6 +307,9 @@ public sealed class IncompleteRecordingService : IDisposable
                 record.Dismissed = true;
                 record.DismissedAt = now;
                 changed = true;
+                _logger.Info(
+                    "The incomplete tag was removed from {ItemId} ({Recording}) outside Moonfin; it is treated as complete and won't be deleted",
+                    item.Id, Describe(record));
             }
 
             if (changed)
@@ -332,6 +339,14 @@ public sealed class IncompleteRecordingService : IDisposable
             var changed = false;
             foreach (var record in data.Records.Where(r => r.ItemIds.Contains(itemId)).ToList())
             {
+                // A copy this service deleted was logged when deleted.
+                if (!record.Dismissed && !_deletedByService.Remove(itemId))
+                {
+                    _logger.Info(
+                        "Incomplete copy {ItemId} of {Recording} left the library, deleted or moved outside Moonfin",
+                        itemId, Describe(record));
+                }
+
                 foreach (var fragment in record.Fragments)
                 {
                     fragment.ItemIds.Remove(itemId);
@@ -430,6 +445,13 @@ public sealed class IncompleteRecordingService : IDisposable
                 request.State = CompleteShowingState.Dismissed;
                 request.PendingProgramId = null;
                 request.ClosedAt = now;
+                _logger.Info(
+                    "{Recording} ({ItemId}) was marked Keep as Complete; it won't be deleted, and the search for a later showing stopped",
+                    Describe(record), itemId);
+            }
+            else
+            {
+                _logger.Info("{Recording} ({ItemId}) was marked Keep as Complete; it won't be deleted", Describe(record), itemId);
             }
 
             foreach (var id in record.TaggedItemIds)
@@ -466,6 +488,9 @@ public sealed class IncompleteRecordingService : IDisposable
         var key = program.Key;
         if (key == null)
         {
+            _logger.Info(
+                "Can't look for a later showing of {Program}: the guide program has no season and episode numbers (or, for a movie, no description)",
+                program.SeriesName);
             return (null, CompleteShowingRefusal.NoEpisodeNumbers);
         }
 
@@ -481,6 +506,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 request = new CompleteShowingRequest { Episode = key, OpenedAt = now, RequestedByUserId = userId };
                 data.Requests.Add(request);
                 _searchNow.Add(request.Id);
+                _logger.Info("A user asked for a later showing of {Recording}", Describe(key));
             }
 
             request.Explicit = true;
@@ -582,11 +608,13 @@ public sealed class IncompleteRecordingService : IDisposable
             await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
             if (!_timersCurrent)
             {
+                _logger.Warn(null, "Could not record the confirmed showing of {Program}: the Live TV timers could not be loaded", showing.Name);
                 return false;
             }
 
             var source = VisibleProgram(programId, userId);
             if (source == null) return false;
+            var name = source.Key is { } sourceKey ? Describe(sourceKey) : source.SeriesName;
             var request = source.Key == null ? null : FindOpenRequest(data, source.Key);
             var bookedId = request?.State == CompleteShowingState.Scheduled ? request.ScheduledProgramId : request?.PendingProgramId;
             if (bookedId != null && string.Equals(bookedId, showing.ProgramId, StringComparison.OrdinalIgnoreCase)
@@ -596,11 +624,16 @@ public sealed class IncompleteRecordingService : IDisposable
                 SetScheduled(request, booked);
                 Save(data);
                 ScheduleNextRun(data, Now);
+                _logger.Info("A user confirmed the showing of {Recording} already booked at {Start} on {Channel}", name, booked.StartDate, booked.ChannelName);
                 return true;
             }
 
             if (!string.Equals(showing.CancellationVersion ?? string.Empty, CancellationVersion(data, showing.ProgramId), StringComparison.Ordinal)
-                && LiveTimerFor(showing.ProgramId) == null) return false;
+                && LiveTimerFor(showing.ProgramId) == null)
+            {
+                _logger.Info("Did not record the confirmed showing of {Recording} at {Start}: its recording was cancelled after it was offered", name, showing.StartDate);
+                return false;
+            }
 
             var candidate = VisibleProgram(showing.ProgramId, userId);
             if (candidate == null
@@ -610,12 +643,14 @@ public sealed class IncompleteRecordingService : IDisposable
                     : !source.HasMatchingMetadata(candidate))
                 || candidate.SeriesName != showing.Name || (candidate.Overview ?? string.Empty) != showing.Description)
             {
+                _logger.Info("Did not record the confirmed showing of {Recording} at {Start}: the guide changed since it was offered", name, showing.StartDate);
                 return false;
             }
 
             if (request != null && ((request.State == CompleteShowingState.Scheduled && request.ScheduledProgramId != candidate.Id)
                 || (request.PendingProgramId != null && request.PendingProgramId != candidate.Id && LiveTimerFor(request.PendingProgramId) != null)))
             {
+                _logger.Info("Did not record the confirmed showing of {Recording} at {Start}: a different showing is already booked", name, showing.StartDate);
                 return false;
             }
 
@@ -650,6 +685,7 @@ public sealed class IncompleteRecordingService : IDisposable
                         ScheduleNextRun(data, Now);
                     }
 
+                    _logger.Warn(null, "Could not schedule the confirmed showing of {Recording} at {Start} on {Channel}", name, candidate.StartDate, candidate.ChannelName);
                     return false;
                 }
             }
@@ -659,6 +695,13 @@ public sealed class IncompleteRecordingService : IDisposable
                 SetScheduled(request, candidate);
                 Save(data);
                 ScheduleNextRun(data, Now);
+                _logger.Info("Recording the confirmed showing of {Recording} at {Start} on {Channel}", name, candidate.StartDate, candidate.ChannelName);
+            }
+            else
+            {
+                _logger.Info(
+                    "Recording the confirmed showing of {Recording} at {Start} on {Channel}, a possible future airing that isn't followed for recovery or deletion",
+                    name, candidate.StartDate, candidate.ChannelName);
             }
 
             return true;
@@ -780,6 +823,7 @@ public sealed class IncompleteRecordingService : IDisposable
             ProgramId = timer.ProgramId,
             ApiId = timer.ApiId,
             ChannelName = timer.ChannelName,
+            Title = details.Name ?? guideProgram?.SeriesName,
             WindowEnd = details.EndDate.AddSeconds(details.PostPaddingSeconds),
             Episode = EpisodeKey.Create(details.SeriesId, details.Name, details.SeasonNumber, details.EpisodeNumber, details.EpisodeTitle)
                 ?? guideProgram?.Key,
@@ -949,7 +993,8 @@ public sealed class IncompleteRecordingService : IDisposable
             changed = true;
 
             _logger.Info(
-                "Live TV recording {TimerId}: best file covered an estimated {Covered:0.#} of {Expected:0.#} scheduled minutes in {Files} file(s), {Verdict}",
+                "Live TV recording of {Recording} (timer {TimerId}): best file covered an estimated {Covered:0.#} of {Expected:0.#} scheduled minutes in {Files} file(s), {Verdict}",
+                Describe(snapshot),
                 snapshot.TimerId,
                 snapshot.BestCoveredMinutes,
                 snapshot.ExpectedMinutes,
@@ -1021,11 +1066,16 @@ public sealed class IncompleteRecordingService : IDisposable
                     fragment.ItemIds.Remove(item.Id);
                 }
 
-                if (record.TaggedItemIds.Remove(item.Id)
-                    && !await SetTagSafeAsync(item.Id, false, cancellationToken).ConfigureAwait(false)
-                    && !data.PendingUntags.Contains(item.Id))
+                if (record.TaggedItemIds.Remove(item.Id))
                 {
-                    data.PendingUntags.Add(item.Id);
+                    _logger.Info(
+                        "Kept {Path} for {Recording}: the complete recording was written over the incomplete copy's file, so it was untagged instead of deleted",
+                        path, Describe(snapshot));
+                    if (!await SetTagSafeAsync(item.Id, false, cancellationToken).ConfigureAwait(false)
+                        && !data.PendingUntags.Contains(item.Id))
+                    {
+                        data.PendingUntags.Add(item.Id);
+                    }
                 }
             }
         }
@@ -1058,13 +1108,41 @@ public sealed class IncompleteRecordingService : IDisposable
     /// </summary>
     private async Task DeleteIncompleteCopiesAsync(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, DateTime now, CancellationToken cancellationToken)
     {
-        if (!_settings().DeleteIncompleteCopies || snapshot.Episode == null || snapshot.Episode.IsMovie)
+        if (snapshot.Episode == null)
         {
             return;
         }
 
-        foreach (var record in data.Records.Where(r => !r.Dismissed && r.Episode != null
-            && r.Episode.Matches(snapshot.Episode) && r.JudgedAt < snapshot.WindowStart))
+        var earlier = data.Records
+            .Where(r => r.Episode != null && r.Episode.Matches(snapshot.Episode) && r.JudgedAt < snapshot.WindowStart)
+            .ToList();
+        var keptAsComplete = earlier.Where(r => r.Dismissed).Sum(r => r.ItemIds.Count());
+        if (keptAsComplete > 0)
+        {
+            _logger.Info("Kept {Count} copy(ies) of {Recording} treated as complete", keptAsComplete, Describe(snapshot));
+        }
+
+        if (!_settings().DeleteIncompleteCopies)
+        {
+            if (earlier.Any(r => !r.Dismissed && r.TaggedItemIds.Count > 0))
+            {
+                _logger.Info("Kept the incomplete copies of {Recording}: deleting incomplete copies is turned off", Describe(snapshot));
+            }
+
+            return;
+        }
+
+        if (snapshot.Episode.IsMovie)
+        {
+            if (earlier.Any(r => !r.Dismissed && r.TaggedItemIds.Count > 0))
+            {
+                _logger.Info("Kept the incomplete copies of {Recording}: movie copies are never deleted", Describe(snapshot));
+            }
+
+            return;
+        }
+
+        foreach (var record in earlier.Where(r => !r.Dismissed))
         {
             var kept = 0;
             foreach (var itemId in record.TaggedItemIds.ToList())
@@ -1082,7 +1160,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 if (writtenAt == null || writtenAt >= snapshot.WindowStart)
                 {
                     kept++;
-                    _logger.Info("Kept {ItemId}: its file changed after the complete copy of {Series} started recording", itemId, snapshot.Episode.SeriesName);
+                    _logger.Info("Kept {ItemId} of {Recording}: its file changed after the complete copy started recording", itemId, Describe(snapshot));
                     continue;
                 }
 
@@ -1090,18 +1168,19 @@ public sealed class IncompleteRecordingService : IDisposable
                 {
                     if (_host.DeleteItem(itemId))
                     {
-                        _logger.Info("Deleted incomplete recording {ItemId} of {Series}, a complete copy recorded", itemId, snapshot.Episode.SeriesName);
+                        _deletedByService.Add(itemId);
+                        _logger.Info("Deleted incomplete copy {ItemId} of {Recording}: a complete copy recorded", itemId, Describe(snapshot));
                     }
                     else
                     {
                         kept++;
-                        _logger.Info("Kept {ItemId}: only episodes are deleted", itemId);
+                        _logger.Info("Kept {ItemId} of {Recording}: only episodes are deleted", itemId, Describe(snapshot));
                     }
                 }
                 catch (Exception ex)
                 {
                     kept++;
-                    _logger.Warn(ex, "Could not delete incomplete recording {ItemId}", itemId);
+                    _logger.Error(ex, "Could not delete incomplete copy {ItemId} of {Recording}; it stays tagged", itemId, Describe(snapshot));
                 }
             }
 
@@ -1134,14 +1213,18 @@ public sealed class IncompleteRecordingService : IDisposable
 
     // Too little was observed to judge. If this was the scheduled showing, the request ends
     // without a verdict rather than retrying on a guess.
-    private static void OnUnknownRecording(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, DateTime now)
+    private void OnUnknownRecording(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, DateTime now)
     {
+        _logger.Warn(null, 
+            "Too little of the recording of {Recording} was observed to judge it, so it is neither tagged nor deleted",
+            Describe(snapshot));
         var request = data.Requests.FirstOrDefault(r => r.State == CompleteShowingState.Scheduled
             && string.Equals(r.ScheduledProgramId, snapshot.ProgramId, StringComparison.OrdinalIgnoreCase));
         if (request != null)
         {
             request.State = CompleteShowingState.Unverified;
             request.ClosedAt = now;
+            _logger.Warn(null, "Stopped following {Recording}: its later showing couldn't be verified", Describe(request.Episode));
         }
     }
 
@@ -1153,6 +1236,7 @@ public sealed class IncompleteRecordingService : IDisposable
             RecordedMinutes = snapshot.BestCoveredMinutes,
             ExpectedMinutes = snapshot.ExpectedMinutes,
             Episode = snapshot.Episode,
+            Title = snapshot.Title,
             Fragments = snapshot.Fragments
                 .Select(f => new RecordingFragment
                 {
@@ -1175,6 +1259,12 @@ public sealed class IncompleteRecordingService : IDisposable
         {
             record.RequestId = LinkRequest(data, snapshot, now)?.Id;
         }
+        else
+        {
+            _logger.Info(
+                "Not looking for a later showing of {Recording}: it has no season and episode numbers (or, for a movie, no description) to match another airing by",
+                Describe(snapshot));
+        }
 
         // The server queues a library refresh when a recording starts and again when it stops,
         // so the items may already be there. Reconcile with them now, and later arrivals come
@@ -1196,7 +1286,7 @@ public sealed class IncompleteRecordingService : IDisposable
             && string.Equals(r.ScheduledProgramId, snapshot.ProgramId, StringComparison.OrdinalIgnoreCase));
         if (scheduled != null)
         {
-            RecordFailedAttempt(scheduled, now);
+            RecordFailedAttempt(scheduled, now, "recorded incomplete");
             return scheduled;
         }
 
@@ -1213,33 +1303,49 @@ public sealed class IncompleteRecordingService : IDisposable
             .LastOrDefault(r => r.Episode.Matches(episode));
         if (ended != null)
         {
+            _logger.Info(
+                "Not looking again for a later showing of {Recording}: an earlier request {Outcome}",
+                Describe(episode),
+                ended.State == CompleteShowingState.GaveUp ? "gave up after failed attempts" : "was cancelled");
             return ended;
         }
 
         if (!_settings().AutoRecordComplete)
         {
+            _logger.Info(
+                "Not looking for a later showing of {Recording}: automatically recording a complete showing is turned off",
+                Describe(episode));
             return null;
         }
 
         var request = new CompleteShowingRequest { Episode = episode, OpenedAt = now };
         data.Requests.Add(request);
         _searchNow.Add(request.Id);
+        _logger.Info("Looking for a later showing of {Recording}", Describe(episode));
         return request;
     }
 
-    private void RecordFailedAttempt(CompleteShowingRequest request, DateTime now)
+    private void RecordFailedAttempt(CompleteShowingRequest request, DateTime now, string outcome)
     {
+        var start = request.ScheduledStart;
+        var channel = request.ScheduledChannelName;
         request.FailedAttempts++;
         ClearScheduled(request);
         if (request.FailedAttempts >= IncompleteRecordingRules.MaxFailedAttempts)
         {
             request.State = CompleteShowingState.GaveUp;
             request.ClosedAt = now;
+            _logger.Warn(null, 
+                "Gave up on {Recording}: the later showing at {Start} on {Channel} {Outcome}, failed attempt {Attempts} of {Max}",
+                Describe(request.Episode), start, channel, outcome, request.FailedAttempts, IncompleteRecordingRules.MaxFailedAttempts);
         }
         else
         {
             request.State = CompleteShowingState.Waiting;
             _searchNow.Add(request.Id);
+            _logger.Warn(null, 
+                "The later showing of {Recording} at {Start} on {Channel} {Outcome}, failed attempt {Attempts} of {Max}; looking for another",
+                Describe(request.Episode), start, channel, outcome, request.FailedAttempts, IncompleteRecordingRules.MaxFailedAttempts);
         }
     }
 
@@ -1313,6 +1419,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 request.State = CompleteShowingState.CancelledByUser;
                 request.ClosedAt = now;
                 changed = true;
+                _logger.Info("Stopped following {Recording}: the timer for its later showing was cancelled", Describe(request.Episode));
             }
         }
 
@@ -1333,9 +1440,15 @@ public sealed class IncompleteRecordingService : IDisposable
                 if (moved != null)
                 {
                     SetScheduled(request, moved);
+                    _logger.Info(
+                        "Following {Recording} to {Start} on {Channel}: the series rule moved its recording there",
+                        Describe(request.Episode), moved.StartDate, moved.ChannelName);
                 }
                 else
                 {
+                    _logger.Info(
+                        "Stopped following {Recording}: the timer for its later showing at {Start} on {Channel} was cancelled",
+                        Describe(request.Episode), request.ScheduledStart, request.ScheduledChannelName);
                     request.State = CompleteShowingState.CancelledByUser;
                     request.ClosedAt = now;
                 }
@@ -1344,6 +1457,9 @@ public sealed class IncompleteRecordingService : IDisposable
             }
             else if ((timer == null || timer.Status == "Cancelled") && request.ScheduledStart > now)
             {
+                _logger.Info(
+                    "The later showing of {Recording} at {Start} on {Channel} is no longer scheduled; looking for another",
+                    Describe(request.Episode), request.ScheduledStart, request.ScheduledChannelName);
                 ClearScheduled(request);
                 request.State = CompleteShowingState.Waiting;
                 _searchNow.Add(request.Id);
@@ -1353,7 +1469,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 && !data.Snapshots.Any(s => s.JudgedAt == null
                     && string.Equals(s.ProgramId, request.ScheduledProgramId, StringComparison.OrdinalIgnoreCase)))
             {
-                RecordFailedAttempt(request, now);
+                RecordFailedAttempt(request, now, "never recorded");
                 changed = true;
             }
         }
@@ -1370,13 +1486,20 @@ public sealed class IncompleteRecordingService : IDisposable
             return false;
         }
 
-        var dropped = data.Requests
+        var droppedRequests = data.Requests
             .Where(r => r.State == CompleteShowingState.Waiting && !r.Explicit && r.PendingProgramId == null)
-            .Select(r => r.Id)
-            .ToHashSet();
-        if (dropped.Count == 0)
+            .ToList();
+        if (droppedRequests.Count == 0)
         {
             return false;
+        }
+
+        var dropped = droppedRequests.Select(r => r.Id).ToHashSet();
+        foreach (var request in droppedRequests)
+        {
+            _logger.Info(
+                "Stopped looking for a later showing of {Recording}: automatically recording a complete showing was turned off",
+                Describe(request.Episode));
         }
 
         data.Requests.RemoveAll(r => dropped.Contains(r.Id));
@@ -1417,11 +1540,13 @@ public sealed class IncompleteRecordingService : IDisposable
                 continue;
             }
 
-            _searchNow.Remove(request.Id);
+            // Only the first search after a request opens or reopens is logged, not the daily repeats.
+            var firstSearch = _searchNow.Remove(request.Id);
 
             // A showing chosen before a crash or a failed call: if the server made its timer,
             // adopt it, otherwise ask again for the same showing while it is still ahead.
             GuideProgram? showing = null;
+            var retrying = request.PendingProgramId;
             if (request.PendingProgramId != null)
             {
                 var pending = _host.GetProgram(request.PendingProgramId);
@@ -1435,6 +1560,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 {
                     request.PendingProgramId = null;
                     changed = true;
+                    _logger.Info("The showing chosen for {Recording} is no longer available; looking for another", Describe(request.Episode));
                 }
             }
 
@@ -1443,6 +1569,9 @@ public sealed class IncompleteRecordingService : IDisposable
                 request.State = CompleteShowingState.NotFound;
                 request.ClosedAt = now;
                 changed = true;
+                _logger.Info(
+                    "Stopped looking for a later showing of {Recording}: none was found in {Days} days",
+                    Describe(request.Episode), IncompleteRecordingRules.RequestLifetime.TotalDays);
                 continue;
             }
 
@@ -1460,6 +1589,13 @@ public sealed class IncompleteRecordingService : IDisposable
 
             if (showing == null)
             {
+                if (firstSearch)
+                {
+                    _logger.Info(
+                        "No later showing of {Recording} in the guide yet; looking again after each guide refresh until {Deadline:d}",
+                        Describe(request.Episode), request.OpenedAt + IncompleteRecordingRules.RequestLifetime);
+                }
+
                 continue;
             }
 
@@ -1475,6 +1611,14 @@ public sealed class IncompleteRecordingService : IDisposable
                 if (result == ScheduleResult.Failed)
                 {
                     changed = true;
+                    if (retrying != showing.Id)
+                    {
+                        _logger.Warn(
+                            null,
+                            "Could not schedule the later showing of {Recording} at {Start} on {Channel}; trying again on the next pass",
+                            Describe(request.Episode), showing.StartDate, showing.ChannelName);
+                    }
+
                     continue;
                 }
             }
@@ -1483,10 +1627,8 @@ public sealed class IncompleteRecordingService : IDisposable
             changed = true;
 
             _logger.Info(
-                "Following a later showing of {Series} S{Season}E{Episode} at {Start} on {Channel}",
-                request.Episode.SeriesName,
-                request.Episode.Season,
-                request.Episode.Episode,
+                "Following a later showing of {Recording} at {Start} on {Channel}",
+                Describe(request.Episode),
                 showing.StartDate,
                 showing.ChannelName);
         }
@@ -1663,9 +1805,21 @@ public sealed class IncompleteRecordingService : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.Warn(ex, "Could not save incomplete recordings to {Path}", _storePath);
+            _logger.Error(ex, "Could not save incomplete recordings to {Path}; changes since the last save are lost on restart", _storePath);
         }
     }
+
+    // How the log names a recording: series, season and episode, or a movie's title.
+    private static string Describe(EpisodeKey episode) =>
+        episode.IsMovie
+            ? episode.ProductionYear is { } year ? $"{episode.SeriesName} ({year})" : episode.SeriesName
+            : $"{episode.SeriesName} S{episode.Season}E{episode.Episode}";
+
+    private static string Describe(RecordingSnapshot snapshot) =>
+        snapshot.Episode is { } episode ? Describe(episode) : snapshot.Title ?? $"timer {snapshot.TimerId}";
+
+    private static string Describe(IncompleteRecord record) =>
+        record.Episode is { } episode ? Describe(episode) : record.Title ?? $"timer {record.TimerId}";
 
     // A library scan raises an event per item, so the watcher drops the ones no record can concern
     // before queuing work behind the lock. Renamed copies share their original's directory and

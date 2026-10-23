@@ -215,6 +215,9 @@ public sealed class RecordingSnapshot
 
     public string? ChannelName { get; set; }
 
+    /// <summary>The program's title, so the log can name a recording without episode numbers.</summary>
+    public string? Title { get; set; }
+
     public DateTime WindowStart { get; set; }
 
     public DateTime WindowEnd { get; set; }
@@ -252,6 +255,9 @@ public sealed class IncompleteRecord
     public double ExpectedMinutes { get; set; }
 
     public EpisodeKey? Episode { get; set; }
+
+    /// <summary>The program's title, so the log can name a recording without episode numbers.</summary>
+    public string? Title { get; set; }
 
     public List<RecordingFragment> Fragments { get; set; } = new();
 

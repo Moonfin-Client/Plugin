@@ -19,6 +19,25 @@ internal sealed class PlainStateFile : IStateFile
     public void Write(string path, string contents) => File.WriteAllText(path, contents);
 }
 
+internal enum LogKind
+{
+    Info,
+    Warn,
+    Error,
+}
+
+/// <summary>Keeps every message, for tests that check a decision is explained in the log.</summary>
+internal sealed class ListRecordingLog : IRecordingLog
+{
+    public List<(LogKind Kind, string Message)> Entries { get; } = new();
+
+    public void Info(string template, params object?[] args) => Entries.Add((LogKind.Info, RecordingLogText.Format(template, args)));
+
+    public void Warn(Exception? exception, string template, params object?[] args) => Entries.Add((LogKind.Warn, RecordingLogText.Format(template, args)));
+
+    public void Error(Exception? exception, string template, params object?[] args) => Entries.Add((LogKind.Error, RecordingLogText.Format(template, args)));
+}
+
 internal sealed class NoRecordingLog : IRecordingLog
 {
     public static readonly NoRecordingLog Instance = new();
@@ -93,6 +112,8 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     public TaskCompletionSource? GuideReadAttempted { get; set; }
 
     public bool TagWritesFail { get; set; }
+
+    public bool DeletesFail { get; set; }
 
     public bool SchedulingFails { get; set; }
 
@@ -206,6 +227,11 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public bool DeleteItem(Guid itemId)
     {
+        if (DeletesFail)
+        {
+            throw new IOException("The file is in use");
+        }
+
         Items.RemoveAll(i => i.Id == itemId);
         Deleted.Add(itemId);
         return true;
@@ -263,6 +289,7 @@ public sealed class IncompleteRecordingTests : IDisposable
     private readonly ManualTimeProvider _clock = new(Start.AddHours(-1));
     private readonly FakeRecordingHost _host = new();
     private readonly IncompleteRecordingSettings _settings = new() { AutoRecordComplete = true };
+    private readonly ListRecordingLog _log = new();
 
     public IncompleteRecordingTests() => _host.Clock = () => _clock.UtcNow;
 
@@ -278,7 +305,13 @@ public sealed class IncompleteRecordingTests : IDisposable
 
     // A new instance is a new server process.
     private IncompleteRecordingService NewService() =>
-        new(_host, NoRecordingLog.Instance, PlainStateFile.Instance, () => _clock.UtcNow, StorePath, () => _settings);
+        new(_host, _log, PlainStateFile.Instance, () => _clock.UtcNow, StorePath, () => _settings);
+
+    private void AssertLogged(LogKind kind, string text) =>
+        Assert.Contains(_log.Entries, e => e.Kind == kind && e.Message.Contains(text, StringComparison.Ordinal));
+
+    private int CountLogged(LogKind kind, string text) =>
+        _log.Entries.Count(e => e.Kind == kind && e.Message.Contains(text, StringComparison.Ordinal));
 
     private void ListenForTimerEvents(IncompleteRecordingService service)
     {
@@ -441,6 +474,9 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Empty(_host.Deleted);
         Assert.Contains(original, _host.Items);
         Assert.Contains(IncompleteRecordingRules.Tag, original.Tags);
+        AssertLogged(LogKind.Info, delete
+            ? "Kept the incomplete copies of The Movie: movie copies are never deleted"
+            : "Kept the incomplete copies of The Movie: deleting incomplete copies is turned off");
         Assert.Contains(replacement, _host.Items);
         Assert.Empty(replacement.Tags);
         Assert.Equal(CompleteShowingState.Done, ReadStore().Requests.Single().State);
@@ -1238,6 +1274,7 @@ public sealed class IncompleteRecordingTests : IDisposable
 
         Assert.Contains(IncompleteRecordingRules.Tag, item.Tags);
         Assert.Empty(_host.Scheduled);
+        AssertLogged(LogKind.Info, "Not looking for a later showing of Storage Wars S3E7: automatically recording a complete showing is turned off");
     }
 
     [Fact]
@@ -1325,6 +1362,63 @@ public sealed class IncompleteRecordingTests : IDisposable
         await service.RunAsync(CancellationToken.None);
 
         Assert.Equal(turnedOn && !keptAsComplete ? new[] { incomplete.Id } : Array.Empty<Guid>(), _host.Deleted);
+        AssertLogged(LogKind.Info, keptAsComplete
+            ? "Kept 1 copy(ies) of Storage Wars S3E7 treated as complete"
+            : turnedOn
+            ? $"Deleted incomplete copy {incomplete.Id} of Storage Wars S3E7: a complete copy recorded"
+            : "Kept the incomplete copies of Storage Wars S3E7: deleting incomplete copies is turned off");
+    }
+
+    [Fact]
+    public async Task ACopyThisServiceDeletedIsNotLoggedAsRemovedOutsideMoonfin()
+    {
+        _settings.DeleteIncompleteCopies = true;
+        AddAiring("p2", Start.AddDays(1));
+        var incomplete = _host.AddItem("/rec/a.ts");
+        var service = await RecordShow(writtenMinutes: 10);
+
+        var timer = _host.Timers.Single(t => t.ProgramId == "p2");
+        _clock.UtcNow = timer.StartDate;
+        _host.StartRecording(timer, "/rec/b.ts", 3, 7);
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.StopRecording(timer);
+        await service.RunAsync(CancellationToken.None);
+        await service.OnItemRemovedAsync(incomplete.Id, CancellationToken.None);
+
+        Assert.Equal(new[] { incomplete.Id }, _host.Deleted);
+        Assert.Equal(0, CountLogged(LogKind.Info, "outside Moonfin"));
+    }
+
+    [Fact]
+    public async Task AFailedDeleteIsLoggedAsAnErrorAndTheCopyStaysTagged()
+    {
+        _settings.DeleteIncompleteCopies = true;
+        AddAiring("p2", Start.AddDays(1));
+        var incomplete = _host.AddItem("/rec/a.ts");
+        var service = await RecordShow(writtenMinutes: 10);
+
+        var timer = _host.Timers.Single(t => t.ProgramId == "p2");
+        _clock.UtcNow = timer.StartDate;
+        _host.StartRecording(timer, "/rec/b.ts", 3, 7);
+        _host.DeletesFail = true;
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.StopRecording(timer);
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Contains(IncompleteRecordingRules.Tag, incomplete.Tags);
+        AssertLogged(LogKind.Error, $"Could not delete incomplete copy {incomplete.Id} of Storage Wars S3E7");
     }
 
     // Jellyfin derives an item's id from its path, so a showing recorded where the incomplete
@@ -1353,6 +1447,7 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Empty(_host.Deleted);
         Assert.Empty(item.Tags);
         Assert.Empty(await service.GetStatesAsync(new[] { item.Id }, User, CancellationToken.None));
+        AssertLogged(LogKind.Info, "Kept /rec/a.ts for Storage Wars S3E7: the complete recording was written over the incomplete copy's file");
     }
 
     [Fact]
@@ -1557,6 +1652,49 @@ public sealed class IncompleteRecordingTests : IDisposable
         await Record(service, rule, "/rec/c.ts", writtenMinutes: 10);
 
         Assert.Equal(new[] { "p2" }, _host.Scheduled);
+    }
+
+    [Fact]
+    public async Task ARecordingWithoutEpisodeNumbersExplainsWhyNoShowingIsFollowed()
+    {
+        AddAiring("p2", Start.AddDays(1), season: null, episode: null);
+
+        await RecordShow(writtenMinutes: 10, season: null, episode: null);
+
+        Assert.Empty(_host.Scheduled);
+        AssertLogged(LogKind.Info, "Not looking for a later showing of Storage Wars: it has no season and episode numbers");
+    }
+
+    [Fact]
+    public async Task AMissingLaterShowingIsLoggedOnlyOnce()
+    {
+        var service = await RecordShow(writtenMinutes: 10);
+        _clock.Advance(IncompleteRecordingRules.RequestSearchFallback);
+        await service.RunAsync(CancellationToken.None);
+        _clock.Advance(IncompleteRecordingRules.RequestSearchFallback);
+        await service.RunAsync(CancellationToken.None);
+
+        const string message = "No later showing of Storage Wars S3E7 in the guide yet";
+        Assert.Equal(1, CountLogged(LogKind.Info, message));
+        Assert.Equal(0, CountLogged(LogKind.Warn, message));
+    }
+
+    [Fact]
+    public async Task GivingUpAfterShowingsThatNeverRecordIsAWarning()
+    {
+        var first = AddAiring("p2", Start.AddDays(1));
+        var second = AddAiring("p3", Start.AddDays(2));
+        var service = await RecordShow(writtenMinutes: 10);
+        Assert.Equal(new[] { "p2" }, _host.Scheduled);
+
+        _clock.UtcNow = first.EndDate.AddHours(2);
+        await service.RunAsync(CancellationToken.None);
+        AssertLogged(LogKind.Warn, "The later showing of Storage Wars S3E7 at");
+        Assert.Equal(new[] { "p2", "p3" }, _host.Scheduled);
+
+        _clock.UtcNow = second.EndDate.AddHours(2);
+        await service.RunAsync(CancellationToken.None);
+        AssertLogged(LogKind.Warn, "Gave up on Storage Wars S3E7");
     }
 
     [Fact]
