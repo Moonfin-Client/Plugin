@@ -43,6 +43,12 @@ public static class RdbReader
     // the cap with a small file instead of needing to write a multi-megabyte fixture just to
     // exercise this comparison (mirroring ArcadeArchiveHasher.Read's maxEntryBytes seam).
     public static IReadOnlyList<RdbRecord> ReadAll(string path, long maxFileBytes = MaxRdbFileBytes)
+        => ReadAllCore(path, maxFileBytes, requireComplete: false);
+
+    internal static IReadOnlyList<RdbRecord> ReadAllComplete(string path)
+        => ReadAllCore(path, MaxRdbFileBytes, requireComplete: true);
+
+    private static IReadOnlyList<RdbRecord> ReadAllCore(string path, long maxFileBytes, bool requireComplete)
     {
         // FileInfo.Length is OS-reported truth (unlike a zip entry's attacker-controlled header),
         // so checking it before reading is both the fast pre-check and the real enforcement here.
@@ -57,6 +63,11 @@ public static class RdbReader
 
         if (bytes.Length < 16)
         {
+            if (requireComplete)
+            {
+                throw new FormatException("Truncated .rdb header.");
+            }
+
             return records;
         }
 
@@ -64,17 +75,32 @@ public static class RdbReader
         {
             if (bytes[i] != Magic[i])
             {
+                if (requireComplete)
+                {
+                    throw new FormatException("Invalid .rdb header.");
+                }
+
                 return records;
             }
         }
 
         var metadataOffset = BinaryPrimitives.ReadUInt64BigEndian(bytes.AsSpan(8, 8));
+        if (requireComplete && metadataOffset != 0 && (metadataOffset < 16 || metadataOffset >= (ulong)bytes.Length))
+        {
+            throw new FormatException("The .rdb metadata offset is outside the file.");
+        }
+
         var end = (int)Math.Min(metadataOffset == 0 ? (ulong)bytes.Length : metadataOffset, (ulong)bytes.Length);
 
         var pos = 16;
         while (pos < end)
         {
             var value = ReadValue(bytes, ref pos);
+            if (requireComplete && pos > end)
+            {
+                throw new FormatException("An .rdb record extends into the metadata block.");
+            }
+
             if (value is Dictionary<string, object?> map)
             {
                 records.Add(ToRecord(map));
@@ -82,6 +108,19 @@ public static class RdbReader
             else if (value == null && pos >= end)
             {
                 break;
+            }
+            else if (requireComplete)
+            {
+                throw new FormatException("Invalid .rdb record.");
+            }
+        }
+
+        if (requireComplete && metadataOffset != 0)
+        {
+            var metadata = ReadValue(bytes, ref pos) as Dictionary<string, object?>;
+            if (metadata == null || !metadata.TryGetValue("count", out var count) || count is not long expected || expected != records.Count)
+            {
+                throw new FormatException("The .rdb metadata record count does not match the data.");
             }
         }
 

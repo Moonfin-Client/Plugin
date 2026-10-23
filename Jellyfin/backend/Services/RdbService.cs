@@ -45,17 +45,27 @@ public class RdbService
     internal const int MaxCandidatePlatformsPerRequest = 4;
     internal const int MaxSiblingArtworkNamesPerRequest = 6;
     private const int MaxLookupCacheEntries = 4096;
+    private const int MaxCompletedMatchesPerRom = 16;
 
     private readonly ILogger<RdbService> _logger;
     private readonly RdbIndexStore _indexStore;
     private readonly RdbMatcher _matcher = new();
-    private readonly ConcurrentDictionary<string, LookupCacheResult> _lookupCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, RomMatchState> _lookupCache = new(StringComparer.Ordinal);
 
     /// <summary>Test seam: overrides the configuration used by artwork resolution.</summary>
     internal PluginConfiguration? ConfigOverrideForTests;
 
+    /// <summary>Test seam: replaces the ROM checksum computation.</summary>
+    internal Func<string, IReadOnlyList<uint>>? CrcOverrideForTests;
+
+    /// <summary>Test seam invoked as a match operation starts, with (platform, crcOnly, normalized title).</summary>
+    internal Action<string, bool, string?>? MatchOperationForTests;
+
     /// <summary>Test seam: number of index builds executed by the backing store.</summary>
     internal int BuildIndexCallCountForTests => _indexStore.BuildIndexCallCountForTests;
+
+    /// <summary>The plugin data folder, or null when none is available.</summary>
+    internal string? DataFolderPath => _indexStore.DataFolderPath;
 
     /// <summary>Test seam invoked immediately before the store parses an RDB.</summary>
     internal Action? BuildIndexAboutToRunForTests
@@ -100,7 +110,7 @@ public class RdbService
     {
         try
         {
-            var config = MoonfinPlugin.Instance?.Configuration;
+            var config = ConfigOverrideForTests ?? MoonfinPlugin.Instance?.Configuration;
             if (config == null || !config.GamesMetadataEnabled || !CoreToPlatform.TryGetValue(core, out var platform))
             {
                 return null;
@@ -111,26 +121,12 @@ public class RdbService
                 return null;
             }
 
-            if (_lookupCache.TryGetValue(romPath, out var cached) && cached.Matches(size, mtime))
-            {
-                return cached switch
-                {
-                    DetailLookupCacheResult detail => detail.Record,
-                    ArtworkLookupCacheResult artwork => artwork.Primary,
-                    CachedLookup legacy => legacy.Record,
-                    _ => null,
-                };
-            }
-
-            var index = GetIndexOrStartBuild(platform, config);
-            if (index == null)
-            {
-                return null;
-            }
-
-            var record = await Task.Run(() => _matcher.Match(index, romPath, title), cancellationToken).ConfigureAwait(false);
-            CacheLookup(romPath, new DetailLookupCacheResult(size, mtime, record));
-            return record;
+            var state = GetOrCreateState(romPath, size, mtime);
+            var key = new MatchKey(platform, MatchMode.CrcThenName, NormalizeTitle(title));
+            var match = await GetMatchAsync(
+                state, romPath, title, key, () => Task.FromResult(GetIndexOrStartBuild(platform, config)), cancellationToken)
+                .ConfigureAwait(false);
+            return match?.Record;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -200,6 +196,36 @@ public class RdbService
         return lookup.Resolution;
     }
 
+    /// <summary>
+    /// The shared once-per-process check of one platform's RDB for a newer upstream copy. Completes
+    /// without checking when metadata is disabled or no local copy exists yet.
+    /// </summary>
+    internal Task<RdbCheckResult> EnsureUpdateCheckedAsync(string platform, CancellationToken cancellationToken = default)
+    {
+        var config = ConfigOverrideForTests ?? MoonfinPlugin.Instance?.Configuration;
+        return config == null || !config.GamesMetadataEnabled
+            ? Task.FromResult(RdbCheckResult.None)
+            : _indexStore.EnsureUpdateCheckedAsync(platform, config).WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Drops the per-ROM match cache; requests already running keep their own state.</summary>
+    internal void ClearLookupCache() => _lookupCache.Clear();
+
+    /// <summary>
+    /// Fetches a newer RDB for <paramref name="platform"/> and stages it beside the live file for the
+    /// next start. Returns true only when a changed, valid file was staged; never throws.
+    /// </summary>
+    internal Task<bool> StageUpdateAsync(string platform, CancellationToken cancellationToken = default)
+    {
+        var config = ConfigOverrideForTests ?? MoonfinPlugin.Instance?.Configuration;
+        return config == null || !config.GamesMetadataEnabled
+            ? Task.FromResult(false)
+            : _indexStore.StageUpdateAsync(platform, config, cancellationToken);
+    }
+
+    internal void ClearPendingReopen(string platform, string digest) =>
+        _indexStore.ClearPendingReopen(platform, digest);
+
     internal event Action<string>? IndexAvailable
     {
         add => _indexStore.IndexAvailable += value;
@@ -223,6 +249,10 @@ public class RdbService
             return config == null
                 ? ArtworkNameLookupResult.NoMatch()
                 : await LookupArtworkNameCoreAsync(candidatePlatforms, romPath, title, config, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -256,61 +286,45 @@ public class RdbService
             return ArtworkNameLookupResult.NoMatch();
         }
 
-        if (_lookupCache.TryGetValue(romPath, out var cached) && cached.Matches(size, mtime))
-        {
-            return cached is ArtworkLookupCacheResult artwork
-                ? ArtworkNameLookupResult.Resolved(new ArtworkNameResolution(BuildNameList(artwork.Primary, artwork.Siblings), artwork.Platform))
-                : ArtworkNameLookupResult.NoMatch();
-        }
-
         cancellationToken.ThrowIfCancellationRequested();
-        IReadOnlyList<uint>? crcCandidates = null;
+        var state = GetOrCreateState(romPath, size, mtime);
+        var normalizedTitle = NormalizeTitle(title);
         var indexPending = false;
         for (var i = 0; i < candidatePlatforms.Count; i++)
         {
             var platform = candidatePlatforms[i];
-            var index = await GetIndexAsync(platform, config).ConfigureAwait(false);
-            if (index == null)
+            var key = i == 0
+                ? new MatchKey(platform, MatchMode.CrcThenName, normalizedTitle)
+                : new MatchKey(platform, MatchMode.CrcOnly, null);
+            var match = await GetMatchAsync(state, romPath, title, key, () => GetIndexAsync(platform, config), cancellationToken)
+                .ConfigureAwait(false);
+            if (match == null)
             {
                 indexPending = true;
                 continue;
             }
 
-            if (i == 0)
+            if (match.Record == null)
             {
-                var matches = await Task.Run(() => _matcher.MatchWithSiblings(index, romPath, title, MaxSiblingArtworkNamesPerRequest), cancellationToken)
-                    .ConfigureAwait(false);
-                if (matches.Count > 0)
-                {
-                    var primary = matches[0];
-                    var siblings = matches.Count > 1 ? matches.GetRange(1, matches.Count - 1) : null;
-                    CacheLookup(romPath, new ArtworkLookupCacheResult(size, mtime, primary, platform, siblings));
-                    return ArtworkNameLookupResult.Resolved(
-                        new ArtworkNameResolution(BuildNameList(primary, siblings), platform));
-                }
+                // An unreadable ROM is not a confirmed miss; defer it rather than record Missing.
+                indexPending |= match.Degraded;
+                continue;
             }
-            else
+
+            var siblings = i == 0
+                ? await Task.Run(() => match.Siblings.Value, cancellationToken).ConfigureAwait(false)
+                : null;
+            var names = BuildNameList(match.Record, siblings);
+            // A name fallback can serve art now, but failed checksum work must remain retryable
+            // if those names miss; it may later identify a different name or enable listing aliases.
+            return ArtworkNameLookupResult.Resolved(new ArtworkNameResolution(names, platform)
             {
-                crcCandidates ??= await Task.Run(() => RdbMatcher.ComputeCrcCandidates(romPath), cancellationToken).ConfigureAwait(false);
-                var record = RdbMatcher.MatchByCrc(index, crcCandidates);
-                if (record != null)
-                {
-                    CacheLookup(romPath, new ArtworkLookupCacheResult(size, mtime, record, platform, null));
-                    return ArtworkNameLookupResult.Resolved(
-                        new ArtworkNameResolution(BuildNameList(record, null), platform));
-                }
-            }
+                PrimaryIsCrcMatch = match.ByCrc && names.Count > 0 && names[0] == match.Record.Name,
+            }, isIndexPending: match.Degraded);
         }
 
-        // Do not cache this outcome: a download may complete between this call and the next one.
-        // Caching it would turn a cold RDB index into a process-lifetime false artwork miss.
-        if (indexPending)
-        {
-            return ArtworkNameLookupResult.IndexPending();
-        }
-
-        CacheLookup(romPath, new DetailLookupCacheResult(size, mtime, null));
-        return ArtworkNameLookupResult.NoMatch();
+        // An index-pending outcome is never stored: a download may complete between this call and the next one.
+        return indexPending ? ArtworkNameLookupResult.IndexPending() : ArtworkNameLookupResult.NoMatch();
     }
 
     private static bool TryGetFileStamp(string romPath, out long size, out long mtime)
@@ -352,20 +366,102 @@ public class RdbService
         return names;
     }
 
-    private void CacheLookup(string romPath, LookupCacheResult lookup)
+    private static string NormalizeTitle(string? title) => title == null ? string.Empty : RdbMatcher.NormalizeName(title);
+
+    private RomMatchState GetOrCreateState(string romPath, long size, long mtime)
     {
+        if (_lookupCache.TryGetValue(romPath, out var existing) && existing.HasStamp(size, mtime))
+        {
+            return existing;
+        }
+
         if (!_lookupCache.ContainsKey(romPath) && _lookupCache.Count >= MaxLookupCacheEntries)
         {
             _lookupCache.Clear();
         }
 
-        _lookupCache[romPath] = lookup;
+        RomMatchState Create() => new(romPath, size, mtime, ComputeCrcs);
+        return _lookupCache.AddOrUpdate(
+            romPath,
+            _ => Create(),
+            (_, current) => current.HasStamp(size, mtime) ? current : Create());
+    }
+
+    private IReadOnlyList<uint> ComputeCrcs(string romPath) =>
+        (CrcOverrideForTests ?? RdbMatcher.ComputeCrcCandidates)(romPath);
+
+    // Null means the platform index is not ready; that outcome is never stored.
+    private async Task<PlatformMatch?> GetMatchAsync(
+        RomMatchState state,
+        string romPath,
+        string? title,
+        MatchKey key,
+        Func<Task<RdbPlatformIndex?>> getIndex,
+        CancellationToken cancellationToken)
+    {
+        if (!state.Results.TryGetValue(key, out var entry))
+        {
+            var index = await getIndex().WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (index == null)
+            {
+                return null;
+            }
+
+            entry = state.GetOrAddMatch(key, () => Task.Run(() => ComputeMatchAsync(state, romPath, title, key, index)));
+        }
+
+        return await entry.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<PlatformMatch> ComputeMatchAsync(
+        RomMatchState state,
+        string romPath,
+        string? title,
+        MatchKey key,
+        RdbPlatformIndex index)
+    {
+        IReadOnlyList<uint> crcs;
+        var degraded = false;
+        try
+        {
+            crcs = await state.CurrentCrcs.Value.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            crcs = Array.Empty<uint>();
+            degraded = true;
+        }
+
+        var crcOnly = key.Mode == MatchMode.CrcOnly;
+        MatchOperationForTests?.Invoke(key.Platform, crcOnly, key.NormalizedTitle);
+        var (record, byCrc) = crcOnly
+            ? (RdbMatcher.MatchByCrc(index, crcs), true)
+            : _matcher.MatchWithKind(index, romPath, title, crcs);
+        return new PlatformMatch(
+            record,
+            new Lazy<IReadOnlyList<RdbRecord>>(() =>
+                record == null ? Array.Empty<RdbRecord>() : _matcher.FindSiblings(index, record, MaxSiblingArtworkNamesPerRequest)),
+            degraded,
+            byCrc && record != null);
     }
 
     // These forwards preserve existing reflection-based tests while RdbMatcher owns the policy.
-    private RdbRecord? Match(PlatformIndex index, string romPath, string? title) => _matcher.Match(index.ToStoreIndex(), romPath, title);
-    private List<RdbRecord> MatchWithSiblings(PlatformIndex index, string romPath, string? title) =>
-        _matcher.MatchWithSiblings(index.ToStoreIndex(), romPath, title, MaxSiblingArtworkNamesPerRequest);
+    private RdbRecord? Match(PlatformIndex index, string romPath, string? title) =>
+        _matcher.Match(index.ToStoreIndex(), romPath, title, RdbMatcher.ComputeCrcCandidates(romPath));
+
+    private List<RdbRecord> MatchWithSiblings(PlatformIndex index, string romPath, string? title)
+    {
+        var results = new List<RdbRecord>();
+        var primary = Match(index, romPath, title);
+        if (primary != null)
+        {
+            results.Add(primary);
+            results.AddRange(_matcher.FindSiblings(index.ToStoreIndex(), primary, MaxSiblingArtworkNamesPerRequest));
+        }
+
+        return results;
+    }
+
     private static string ExtractBaseTitle(string name) => RdbMatcher.ExtractBaseTitle(name);
 
     private RdbPlatformIndex? GetIndexOrStartBuild(string platform, PluginConfiguration config) =>
@@ -386,37 +482,122 @@ public class RdbService
         internal RdbPlatformIndex ToStoreIndex() => new(ByCrc, ByName);
     }
 
-    private abstract record LookupCacheResult(long Size, long Mtime)
+    private enum MatchMode
     {
-        internal bool Matches(long size, long mtime) => Size == size && Mtime == mtime;
+        CrcThenName,
+        CrcOnly,
     }
 
-    private sealed record DetailLookupCacheResult(long Size, long Mtime, RdbRecord? Record) : LookupCacheResult(Size, Mtime);
+    // NormalizedTitle is null for CrcOnly, whose result does not depend on the title.
+    private readonly record struct MatchKey(string Platform, MatchMode Mode, string? NormalizedTitle);
 
-    private sealed record ArtworkLookupCacheResult(
-        long Size,
-        long Mtime,
-        RdbRecord Primary,
-        string Platform,
-        IReadOnlyList<RdbRecord>? Siblings) : LookupCacheResult(Size, Mtime);
+    // Record is null for a confirmed miss on exactly one MatchKey; Degraded means the checksums failed, so it is never retained.
+    private sealed record PlatformMatch(RdbRecord? Record, Lazy<IReadOnlyList<RdbRecord>> Siblings, bool Degraded = false, bool ByCrc = false);
 
-    // Compatibility type for the historical reflection-based cache-cap test. Production entries
-    // use the two explicit variants above, so detail and artwork results cannot be confused.
-    private sealed record CachedLookup(
-        long Size,
-        long Mtime,
-        RdbRecord? Record,
-        string? Platform,
-        IReadOnlyList<RdbRecord>? Siblings = null) : LookupCacheResult(Size, Mtime);
+    /// <summary>
+    /// Per-ROM lookup state, replaced as a whole only when the file stamp changes. Checksum work and
+    /// per-scope match results are shared by every caller and run under no caller's token.
+    /// </summary>
+    private sealed class RomMatchState
+    {
+        private readonly string _romPath;
+        private readonly Func<string, IReadOnlyList<uint>> _computeCrcs;
+        private readonly long _size;
+        private readonly long _mtime;
+        private readonly ConcurrentQueue<KeyValuePair<MatchKey, Lazy<Task<PlatformMatch>>>> _completed = new();
+        private Lazy<Task<IReadOnlyList<uint>>> _crcs;
+
+        internal RomMatchState(string romPath, long size, long mtime, Func<string, IReadOnlyList<uint>> computeCrcs)
+        {
+            _romPath = romPath;
+            _size = size;
+            _mtime = mtime;
+            _computeCrcs = computeCrcs;
+            _crcs = NewCrcs();
+        }
+
+        internal ConcurrentDictionary<MatchKey, Lazy<Task<PlatformMatch>>> Results { get; } = new();
+
+        internal Lazy<Task<IReadOnlyList<uint>>> CurrentCrcs => Volatile.Read(ref _crcs);
+
+        internal bool HasStamp(long size, long mtime) => _size == size && _mtime == mtime;
+
+        internal Lazy<Task<PlatformMatch>> GetOrAddMatch(MatchKey key, Func<Task<PlatformMatch>> start) =>
+            Results.GetOrAdd(key, k => NewMatch(k, start));
+
+        private Lazy<Task<PlatformMatch>> NewMatch(MatchKey key, Func<Task<PlatformMatch>> start)
+        {
+            Lazy<Task<PlatformMatch>>? self = null;
+            self = new Lazy<Task<PlatformMatch>>(
+                () =>
+                {
+                    var task = start();
+                    task.ContinueWith(
+                        t => OnMatchCompleted(new KeyValuePair<MatchKey, Lazy<Task<PlatformMatch>>>(key, self!), t),
+                        CancellationToken.None,
+                        TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+                    return task;
+                },
+                LazyThreadSafetyMode.ExecutionAndPublication);
+            return self;
+        }
+
+        // Runs when the shared task finishes, even if every waiter has already cancelled.
+        private void OnMatchCompleted(KeyValuePair<MatchKey, Lazy<Task<PlatformMatch>>> entry, Task<PlatformMatch> task)
+        {
+            if (!task.IsCompletedSuccessfully || task.Result.Degraded)
+            {
+                _ = task.Exception;
+                Results.TryRemove(entry);
+                return;
+            }
+
+            // Only completed entries are queued, so in-flight work is never evicted.
+            _completed.Enqueue(entry);
+            while (_completed.Count > MaxCompletedMatchesPerRom && _completed.TryDequeue(out var oldest))
+            {
+                Results.TryRemove(oldest);
+            }
+        }
+
+        private Lazy<Task<IReadOnlyList<uint>>> NewCrcs()
+        {
+            Lazy<Task<IReadOnlyList<uint>>>? self = null;
+            self = new Lazy<Task<IReadOnlyList<uint>>>(
+                () =>
+                {
+                    var task = Task.Run(() => _computeCrcs(_romPath));
+                    task.ContinueWith(
+                        t =>
+                        {
+                            _ = t.Exception;
+                            Interlocked.CompareExchange(ref _crcs, NewCrcs(), self!);
+                        },
+                        CancellationToken.None,
+                        TaskContinuationOptions.NotOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+                    return task;
+                },
+                LazyThreadSafetyMode.ExecutionAndPublication);
+            return self;
+        }
+    }
 }
 
-/// <summary>The ordered artwork names and the libretro platform that matched the ROM.</summary>
-public sealed record ArtworkNameResolution(IReadOnlyList<string> Names, string Platform);
+/// <summary>
+/// The ordered artwork names and the libretro platform that matched the ROM. PrimaryIsCrcMatch says
+/// the first name came from a checksum hit rather than a file or title name.
+/// </summary>
+public sealed record ArtworkNameResolution(IReadOnlyList<string> Names, string Platform)
+{
+    public bool PrimaryIsCrcMatch { get; init; }
+}
 
-/// <summary>Canonical-name lookup result, including the distinct cold-index state.</summary>
+/// <summary>Canonical-name lookup result, including pending index or checksum work.</summary>
 internal sealed record ArtworkNameLookupResult(ArtworkNameResolution? Resolution, bool IsIndexPending)
 {
-    internal static ArtworkNameLookupResult Resolved(ArtworkNameResolution resolution) => new(resolution, false);
+    internal static ArtworkNameLookupResult Resolved(ArtworkNameResolution resolution, bool isIndexPending = false) => new(resolution, isIndexPending);
 
     internal static ArtworkNameLookupResult NoMatch() => new(null, false);
 

@@ -17,6 +17,7 @@ public class GameThumbService
     }
 
     private readonly GameArtworkStore _artworkStore;
+    private readonly RdbService _rdbService;
     private readonly DerivedThumbnailService _derivedThumbnailService;
 
     internal event Action<string>? MetadataIndexAvailable
@@ -113,6 +114,30 @@ public class GameThumbService
         CancellationToken cancellationToken = default) =>
         _artworkStore.LookupThumbAsync(core, coreWasDefaulted, systemName, romPath, title, kind, cancellationToken, GameArtworkStore.PrewarmRequestBudget);
 
+    /// <summary>Every RDB platform a lookup for this game may consult, across all of its cores.</summary>
+    internal static IReadOnlyList<string> CandidatePlatforms(GameThumbSource source) =>
+        source.Cores
+            .SelectMany(core => GameArtworkStore.CandidatePlatformsFor(core, source.CoreWasDefaulted, source.SystemName))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>Waits for the once-per-process update check of a platform's RDB; completes empty when metadata is disabled.</summary>
+    internal Task<RdbCheckResult> EnsureRdbUpdateCheckedAsync(string platform, CancellationToken cancellationToken) =>
+        _rdbService.EnsureUpdateCheckedAsync(platform, cancellationToken);
+
+    /// <summary>Forgets cached RDB matches and recent artwork 404s so the next lookups probe afresh.</summary>
+    internal void ClearLookupCaches()
+    {
+        _rdbService.ClearLookupCache();
+        _artworkStore.ClearMissCache();
+    }
+
+    internal Task<bool> StageRdbUpdateAsync(string platform, CancellationToken cancellationToken) =>
+        _rdbService.StageUpdateAsync(platform, cancellationToken);
+
+    internal void ClearRdbPendingReopen(string platform, string digest) =>
+        _rdbService.ClearPendingReopen(platform, digest);
+
     /// <summary>
     /// Gets the cached size/format-optimized thumbnail derived from an already-acquired original.
     /// Falls back to the original when encoding is unsupported or unavailable.
@@ -129,6 +154,7 @@ public class GameThumbService
         TimeSpan? derivedThumbBudgetForTests,
         string cacheDirectory)
     {
+        _rdbService = rdbService;
         _artworkStore = new GameArtworkStore(httpClientFactory, logger, rdbService, cacheDirectory);
         _derivedThumbnailService = new DerivedThumbnailService(
             logger,

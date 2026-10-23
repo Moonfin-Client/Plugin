@@ -540,6 +540,63 @@ public sealed class GameArtworkCatalog
             cancellationToken);
     }
 
+    /// <summary>
+    /// Reopens to Pending only those of <paramref name="keys"/> that are currently Missing (and, when
+    /// <paramref name="includeAcquisitionRetryable"/>, Retryable without an original), in one
+    /// pass under the library gate, and returns the keys it reopened. Unlike
+    /// <see cref="RequestRefreshAsync"/> it leaves every other state alone. The document is written
+    /// before this returns, bypassing the persist debounce, so a caller may rely on the reopen being on disk.
+    /// </summary>
+    public async Task<IReadOnlyList<ArtworkCatalogKey>> ReopenMissingAsync(
+        string libraryId,
+        IEnumerable<ArtworkCatalogKey> keys,
+        CancellationToken cancellationToken = default,
+        bool includeAcquisitionRetryable = false)
+    {
+        var library = await GetLibraryAsync(NormalizeLibraryId(libraryId), cancellationToken).ConfigureAwait(false);
+        await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var reopened = new List<ArtworkCatalogKey>();
+            var affectedSystems = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var key in keys)
+            {
+                var normalized = NormalizeKey(key);
+                if (!library.Entries.TryGetValue(normalized.StorageKey, out var entry) ||
+                    !(entry.State == ArtworkCatalogState.Missing ||
+                      (includeAcquisitionRetryable &&
+                       entry.State == ArtworkCatalogState.Retryable &&
+                       string.IsNullOrWhiteSpace(entry.OriginalPath))))
+                {
+                    continue;
+                }
+
+                var updated = NewPending(entry.Key, entry.SystemId, entry.Revision, entry.GameId);
+                library.SetEntry(normalized.StorageKey, updated);
+                InvalidatePreviewScanIfReopened(library.Document, entry.SystemId, entry, updated);
+                affectedSystems.Add(entry.SystemId);
+                reopened.Add(entry.Key);
+            }
+
+            if (reopened.Count == 0)
+            {
+                return reopened;
+            }
+
+            foreach (var systemId in affectedSystems)
+            {
+                BumpSystemGeneration(library.Document, systemId);
+            }
+
+            await WriteUnsafeAsync(library, cancellationToken).ConfigureAwait(false);
+            return reopened;
+        }
+        finally
+        {
+            library.Gate.Release();
+        }
+    }
+
     /// <summary>Removes a ROM identity so a later reappearance starts a fresh catalog lifecycle.</summary>
     public async Task<bool> RemoveAsync(ArtworkCatalogKey key, string systemId, CancellationToken cancellationToken = default)
     {

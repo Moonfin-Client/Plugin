@@ -8,16 +8,25 @@ namespace Moonfin.Server.Services;
 /// </summary>
 internal sealed class RdbMatcher
 {
-    internal RdbRecord? Match(RdbPlatformIndex index, string romPath, string? title)
+    internal RdbRecord? Match(RdbPlatformIndex index, string romPath, string? title, IReadOnlyList<uint> crcCandidates) =>
+        MatchWithKind(index, romPath, title, crcCandidates).Record;
+
+    /// <summary>Same as <see cref="Match"/>, also reporting whether the record was found by checksum.</summary>
+    internal (RdbRecord? Record, bool ByCrc) MatchWithKind(RdbPlatformIndex index, string romPath, string? title, IReadOnlyList<uint> crcCandidates)
     {
-        foreach (var crc in ComputeCrcCandidates(romPath))
+        foreach (var crc in crcCandidates)
         {
             if (index.ByCrc.TryGetValue(crc, out var byCrc))
             {
-                return byCrc;
+                return (byCrc, true);
             }
         }
 
+        return (MatchByName(index, romPath, title), false);
+    }
+
+    private static RdbRecord? MatchByName(RdbPlatformIndex index, string romPath, string? title)
+    {
         var fileName = NormalizeName(Path.GetFileNameWithoutExtension(romPath));
         if (fileName.Length > 0 && index.ByName.TryGetValue(fileName, out var byFile))
         {
@@ -66,56 +75,36 @@ internal sealed class RdbMatcher
         return null;
     }
 
-    internal List<RdbRecord> MatchWithSiblings(RdbPlatformIndex index, string romPath, string? title, int maxSiblings)
+    /// <summary>Other records of the same title and edition as the primary, preferred regions first, capped at <paramref name="maxSiblings"/>.</summary>
+    internal List<RdbRecord> FindSiblings(RdbPlatformIndex index, RdbRecord primary, int maxSiblings)
     {
-        var primary = Match(index, romPath, title);
-        var results = new List<RdbRecord>(1 + maxSiblings);
-        if (primary == null || string.IsNullOrWhiteSpace(primary.Name))
-        {
-            if (primary != null)
-            {
-                results.Add(primary);
-            }
-
-            return results;
-        }
-
-        results.Add(primary);
-        var baseTitle = NormalizeName(ExtractBaseTitle(primary.Name));
-        if (baseTitle.Length < 5)
+        var results = new List<RdbRecord>();
+        if (string.IsNullOrWhiteSpace(primary.Name) || maxSiblings <= 0)
         {
             return results;
         }
 
+        var primaryIdentity = RdbIdentity.Of(primary.Name);
+        var primaryRegions = RdbIdentity.RegionsOf(primary.Name);
         var seenRecords = new HashSet<RdbRecord>(ReferenceEqualityComparer.Instance) { primary };
-        var candidates = new List<(RdbRecord Record, int Diff)>();
-        foreach (var kv in index.ByName)
+        var candidates = new List<(RdbRecord Record, int Rank)>();
+        foreach (var candidate in index.ByName.Values)
         {
-            var candidate = kv.Value;
-            if (!seenRecords.Add(candidate) || string.IsNullOrWhiteSpace(candidate.Name))
+            if (!seenRecords.Add(candidate) || !RdbIdentity.Matches(primaryIdentity, candidate.Name))
             {
                 continue;
             }
 
-            var candidateBaseTitle = NormalizeName(ExtractBaseTitle(candidate.Name));
-            if (candidateBaseTitle.Length == 0)
-            {
-                continue;
-            }
-
-            if (candidateBaseTitle.StartsWith(baseTitle, StringComparison.Ordinal) ||
-                baseTitle.StartsWith(candidateBaseTitle, StringComparison.Ordinal))
-            {
-                var diff = Math.Abs(candidateBaseTitle.Length - baseTitle.Length);
-                if (diff <= 45)
-                {
-                    candidates.Add((candidate, diff));
-                }
-            }
+            candidates.Add((candidate, RdbIdentity.RegionRank(RdbIdentity.RegionsOf(candidate.Name), primaryRegions)));
         }
 
-        candidates.Sort((a, b) => a.Diff.CompareTo(b.Diff));
-        for (var i = 0; i < candidates.Count && results.Count < 1 + maxSiblings; i++)
+        candidates.Sort((a, b) =>
+        {
+            var byRank = a.Rank.CompareTo(b.Rank);
+            return byRank != 0 ? byRank : string.CompareOrdinal(a.Record.Name, b.Record.Name);
+        });
+
+        for (var i = 0; i < candidates.Count && i < maxSiblings; i++)
         {
             results.Add(candidates[i].Record);
         }
@@ -136,23 +125,136 @@ internal sealed class RdbMatcher
         return null;
     }
 
+    private const long MaxTransformLength = 64L * 1024 * 1024;
+    private const int CopierHeaderLength = 512;
+    private const int SmdBlockLength = 16384;
+
+    /// <summary>Throws when the ROM cannot be read; the caller then matches by name only and retries next time.</summary>
     internal static IReadOnlyList<uint> ComputeCrcCandidates(string romPath)
     {
-        var candidates = new List<uint>(2);
-        try
+        var candidates = new List<uint>(2) { Crc32File(romPath, 0) };
+        if (HasInesHeader(romPath))
         {
-            candidates.Add(Crc32File(romPath, 0));
-            if (HasInesHeader(romPath))
+            candidates.Add(Crc32File(romPath, 16));
+        }
+
+        var (length, head, isSmd) = ReadFormatProbe(romPath);
+        if (length > MaxTransformLength || length <= CopierHeaderLength)
+        {
+            return candidates;
+        }
+
+        if (isSmd)
+        {
+            AddDistinct(candidates, Crc32SmdDeinterleaved(romPath));
+        }
+
+        if (length % 4 == 0)
+        {
+            if (head.AsSpan().SequenceEqual(new byte[] { 0x37, 0x80, 0x40, 0x12 }))
             {
-                candidates.Add(Crc32File(romPath, 16));
+                AddDistinct(candidates, Crc32N64ToBigEndian(romPath, wordSwap: false));
+            }
+            else if (head.AsSpan().SequenceEqual(new byte[] { 0x40, 0x12, 0x37, 0x80 }))
+            {
+                AddDistinct(candidates, Crc32N64ToBigEndian(romPath, wordSwap: true));
             }
         }
-        catch
+
+        if (length % 1024 == CopierHeaderLength)
         {
-            // Preserve the optional metadata lookup behavior when a ROM cannot be read.
+            AddDistinct(candidates, Crc32File(romPath, CopierHeaderLength));
         }
 
         return candidates;
+    }
+
+    private static void AddDistinct(List<uint> candidates, uint crc)
+    {
+        if (!candidates.Contains(crc))
+        {
+            candidates.Add(crc);
+        }
+    }
+
+    private static (long Length, byte[] Head, bool IsSmd) ReadFormatProbe(string path)
+    {
+        using var fs = File.OpenRead(path);
+        var head = new byte[10];
+        var read = 0;
+        int n;
+        while (read < head.Length && (n = fs.Read(head, read, head.Length - read)) > 0)
+        {
+            read += n;
+        }
+
+        var isSmd = fs.Length % SmdBlockLength == CopierHeaderLength && read == head.Length &&
+            head[8] == 0xAA && head[9] == 0xBB;
+        return (fs.Length, head[..4], isSmd);
+    }
+
+    private static uint Crc32SmdDeinterleaved(string path)
+    {
+        var crc = 0xFFFFFFFFu;
+        using var fs = File.OpenRead(path);
+        fs.Seek(CopierHeaderLength, SeekOrigin.Begin);
+        var block = new byte[SmdBlockLength];
+        var output = new byte[SmdBlockLength];
+        var half = SmdBlockLength / 2;
+        for (var remaining = fs.Length - CopierHeaderLength; remaining > 0; remaining -= SmdBlockLength)
+        {
+            fs.ReadExactly(block, 0, SmdBlockLength);
+            for (var i = 0; i < half; i++)
+            {
+                output[i * 2] = block[half + i];
+                output[i * 2 + 1] = block[i];
+            }
+
+            crc = Crc32Update(crc, output);
+        }
+
+        return crc ^ 0xFFFFFFFFu;
+    }
+
+    /// <summary>wordSwap reverses each 32-bit word (.n64); otherwise it swaps byte pairs (.v64).</summary>
+    private static uint Crc32N64ToBigEndian(string path, bool wordSwap)
+    {
+        var crc = 0xFFFFFFFFu;
+        using var fs = File.OpenRead(path);
+        var buffer = new byte[65536];
+        for (var remaining = fs.Length; remaining > 0;)
+        {
+            var count = (int)Math.Min(remaining, buffer.Length);
+            fs.ReadExactly(buffer, 0, count);
+            for (var i = 0; i + 3 < count; i += 4)
+            {
+                if (wordSwap)
+                {
+                    (buffer[i], buffer[i + 3]) = (buffer[i + 3], buffer[i]);
+                    (buffer[i + 1], buffer[i + 2]) = (buffer[i + 2], buffer[i + 1]);
+                }
+                else
+                {
+                    (buffer[i], buffer[i + 1]) = (buffer[i + 1], buffer[i]);
+                    (buffer[i + 2], buffer[i + 3]) = (buffer[i + 3], buffer[i + 2]);
+                }
+            }
+
+            crc = Crc32Update(crc, buffer.AsSpan(0, count));
+            remaining -= count;
+        }
+
+        return crc ^ 0xFFFFFFFFu;
+    }
+
+    private static uint Crc32Update(uint crc, ReadOnlySpan<byte> data)
+    {
+        foreach (var b in data)
+        {
+            crc = CrcTable[(crc ^ b) & 0xFF] ^ (crc >> 8);
+        }
+
+        return crc;
     }
 
     internal static string ExtractBaseTitle(string name)

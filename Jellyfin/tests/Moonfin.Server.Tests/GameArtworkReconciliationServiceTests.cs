@@ -338,6 +338,59 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Equal(bestEffortCapacity + 1, QueuedRemoteIdentities(service).Count);
     }
 
+    [Fact]
+    public void RemoteQueue_DeferredBulkRefillsAtCapacityAndSurvivesInteractiveEviction()
+    {
+        var service = BuildService(_root);
+        var seed = Candidate("library", "seed");
+        var first = FillRemoteQueue(service, seed);
+        var deferred = Candidate("library", "deferred");
+        Assert.False(service.EnqueueRemoteForTest(deferred, ArtworkLane.Bulk));
+        Assert.False(service.EnqueueRemoteForTest(deferred, ArtworkLane.Bulk));
+
+        CompleteQueuedRemote(service, first);
+
+        Assert.Contains("remote:" + deferred.Key.StorageKey, QueuedRemoteIdentities(service));
+        Assert.Equal(20_000, QueuedRemoteIdentities(service).Count);
+        var before = QueuedRemoteIdentities(service).ToHashSet();
+        var interactive = Candidate("library", "interactive");
+        Assert.True(service.EnqueueRemoteForTest(interactive, ArtworkLane.Interactive));
+        var evicted = Assert.Single(before.Except(QueuedRemoteIdentities(service)));
+
+        CompleteQueuedRemote(service, interactive);
+
+        Assert.Contains(evicted, QueuedRemoteIdentities(service));
+        Assert.Equal(20_000, QueuedRemoteIdentities(service).Count);
+    }
+
+    internal static GameArtworkReconciliationService.ArtworkCandidate FillRemoteQueue(
+        GameArtworkReconciliationService service,
+        GameArtworkReconciliationService.ArtworkCandidate seed)
+    {
+        GameArtworkReconciliationService.ArtworkCandidate? first = null;
+        for (var i = 0; i < 20_000; i++)
+        {
+            var id = $"filler-{i}";
+            var candidate = seed with { GameId = id, Key = ArtworkCatalogKey.Create(seed.Key.LibraryId, id + ".sfc", "fingerprint", "boxart") };
+            Assert.True(service.EnqueueRemoteForTest(candidate, ArtworkLane.Bulk));
+            first ??= candidate;
+        }
+
+        return first!;
+    }
+
+    internal static void CompleteQueuedRemote(
+        GameArtworkReconciliationService service,
+        GameArtworkReconciliationService.ArtworkCandidate candidate)
+    {
+        var queued = (System.Collections.IDictionary)typeof(GameArtworkReconciliationService)
+            .GetField("_queued", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(service)!;
+        var identity = "remote:" + candidate.Key.StorageKey;
+        var version = (int)queued[identity]!.GetType().GetProperty("Version")!.GetValue(queued[identity])!;
+        var work = GameArtworkReconciliationService.ArtworkWork.Remote(candidate, ArtworkLane.Bulk) with { QueueVersion = version };
+        typeof(GameArtworkReconciliationService).GetMethod("CompleteRemote", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(service, [work]);
+    }
+
     private static ICollection<string> QueuedRemoteIdentities(GameArtworkReconciliationService service)
     {
         var field = typeof(GameArtworkReconciliationService)
@@ -370,7 +423,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
             .ToDictionary(candidate => candidate.GameId, StringComparer.Ordinal);
         foreach (var candidate in candidates.Values)
         {
-            await catalog.GetOrCreateAsync(candidate.Key, candidate.SystemId, "libretro-thumbnails-v3", candidate.GameId);
+            await catalog.GetOrCreateAsync(candidate.Key, candidate.SystemId, CurrentProviderVersion, candidate.GameId);
         }
 
         var discovery = await catalog.GetOrCreatePreviewDiscoveryAsync(
@@ -388,7 +441,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.True(service.EnqueueRemoteForTest(first, ArtworkLane.Preview));
         Assert.False(service.EnqueueRemoteForTest(second, ArtworkLane.Bulk));
 
-        await catalog.MarkMissingAsync(first.Key, first.SystemId, "libretro-thumbnails-v3");
+        await catalog.MarkMissingAsync(first.Key, first.SystemId, CurrentProviderVersion);
         await RefreshPreviewSelectionAsync(service, first);
 
         Assert.Contains("remote:" + second.Key.StorageKey, QueuedRemoteIdentities(service));
@@ -433,7 +486,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         await catalog.MarkMetadataPendingAsync(
             reopened.Key,
             reopened.SystemId,
-            "libretro-thumbnails-v3",
+            CurrentProviderVersion,
             started,
             TimeSpan.FromMinutes(5),
             TimeSpan.FromHours(3),
@@ -441,7 +494,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         await catalog.MarkMetadataPendingAsync(
             reopened.Key,
             reopened.SystemId,
-            "libretro-thumbnails-v3",
+            CurrentProviderVersion,
             DateTimeOffset.UtcNow,
             TimeSpan.FromMinutes(5),
             TimeSpan.FromHours(3),
@@ -459,6 +512,131 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Equal(completed.PreviewGameIds, after.PreviewGameIds);
         Assert.Equal(completed.PreviewSelectionGeneration, after.PreviewSelectionGeneration);
         Assert.Equal(ArtworkCatalogState.Pending, (await catalog.GetAsync(reopened.Key))?.State);
+    }
+
+    private const string PreviousProviderVersion = "libretro-thumbnails-v3";
+
+    // The service's own constant, so tests that mean "the current version" cannot drift from it.
+    private static readonly string CurrentProviderVersion = (string)typeof(GameArtworkReconciliationService)
+        .GetField("ProviderVersion", BindingFlags.Static | BindingFlags.NonPublic)!
+        .GetRawConstantValue()!;
+
+    [Fact]
+    public async Task MissingUnderThePreviousProviderVersion_IsReopenedRequeuedAndEndsThumbnailReady()
+    {
+        var handler = new CountingArtHandler();
+        var (service, catalog, missing, _) = await CreateMissingFixtureAsync(handler, PreviousProviderVersion);
+
+        Assert.NotEqual(PreviousProviderVersion, CurrentProviderVersion);
+        Assert.Equal(ArtworkCatalogState.Missing, (await catalog.GetAsync(missing.Key))?.State);
+
+        // Workers are not running yet, so the pass's effect on the catalog and queue is observable.
+        await ReconcileAsync(service);
+
+        Assert.Equal(ArtworkCatalogState.Pending, (await catalog.GetAsync(missing.Key))?.State);
+        Assert.Contains("remote:" + missing.Key.StorageKey, QueuedRemoteIdentities(service));
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitForStateAsync(catalog, missing.Key, ArtworkCatalogState.ThumbnailReady);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Contains(handler.Urls, url => url.Contains("Named_Boxarts", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task MissingUnderTheCurrentProviderVersion_StaysTerminalAndIsNotRequeued()
+    {
+        var handler = new CountingArtHandler();
+        var (service, catalog, missing, control) = await CreateMissingFixtureAsync(handler, CurrentProviderVersion);
+
+        await ReconcileAsync(service);
+
+        // The control proves the pass reached this system's candidates; only the Missing one is skipped.
+        Assert.Contains("remote:" + control.Key.StorageKey, QueuedRemoteIdentities(service));
+        Assert.DoesNotContain("remote:" + missing.Key.StorageKey, QueuedRemoteIdentities(service));
+        Assert.Equal(ArtworkCatalogState.Missing, (await catalog.GetAsync(missing.Key))?.State);
+        Assert.Empty(handler.Urls);
+    }
+
+    private static Task ReconcileAsync(GameArtworkReconciliationService service)
+    {
+        var method = typeof(GameArtworkReconciliationService)
+            .GetMethod("ReconcileAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (Task)method.Invoke(
+            service,
+            BindingFlags.DoNotWrapExceptions,
+            binder: null,
+            parameters: [CancellationToken.None, false],
+            culture: null)!;
+    }
+
+    // Two SNES ROMs. The first boxart entry is persisted Missing under the given version; the second
+    // is left for the pass to discover. The fake CDN serves a PNG for any URL.
+    private async Task<(GameArtworkReconciliationService Service, GameArtworkCatalog Catalog,
+        GameArtworkReconciliationService.ArtworkCandidate Missing,
+        GameArtworkReconciliationService.ArtworkCandidate Control)> CreateMissingFixtureAsync(
+        CountingArtHandler handler,
+        string missingVersion)
+    {
+        var libraryRoot = Path.Combine(_root, "Games-missing-" + Guid.NewGuid().ToString("N"));
+        var systemRoot = Path.Combine(libraryRoot, "SNES");
+        Directory.CreateDirectory(systemRoot);
+        await File.WriteAllBytesAsync(Path.Combine(systemRoot, "Chrono Trigger.sfc"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(systemRoot, "Super Mario World.sfc"), [4, 5, 6]);
+
+        var libraryId = Guid.NewGuid().ToString();
+        var catalog = new GameArtworkCatalog(Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N")));
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration(),
+        };
+        var thumbs = new GameThumbService(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameThumbService>(),
+            rdb,
+            Path.Combine(_root, "thumb-data-" + Guid.NewGuid().ToString("N")));
+        var service = new GameArtworkReconciliationService(
+            new GamesService(new FakeLibraryManager(
+            [
+                new VirtualFolderInfo { Name = "Games", ItemId = libraryId, Locations = [libraryRoot] },
+            ])),
+            thumbs,
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null,
+            watchLibraryFileSystem: false);
+
+        var gamesField = typeof(GameArtworkReconciliationService)
+            .GetField("_games", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var games = ((GamesService)gamesField.GetValue(service)!).GetGames(libraryId, null);
+        var missing = ResolveCandidate(service, libraryId, games[0].Id);
+        var control = ResolveCandidate(service, libraryId, games[1].Id);
+
+        await catalog.GetOrCreateAsync(missing.Key, missing.SystemId, missingVersion, missing.GameId);
+        await catalog.MarkMissingAsync(missing.Key, missing.SystemId, missingVersion);
+        return (service, catalog, missing, control);
+    }
+
+    private sealed class CountingArtHandler : HttpMessageHandler
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _urls = new();
+
+        public IReadOnlyCollection<string> Urls => _urls.ToArray();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            _urls.Enqueue(request.RequestUri!.ToString());
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47]),
+            });
+        }
     }
 
     private async Task<(GameArtworkReconciliationService Service, GameArtworkCatalog Catalog, string LibraryId,
@@ -486,7 +664,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
             .ToDictionary(candidate => candidate.GameId, StringComparer.Ordinal);
         foreach (var candidate in candidates.Values)
         {
-            await catalog.GetOrCreateAsync(candidate.Key, candidate.SystemId, "libretro-thumbnails-v3", candidate.GameId);
+            await catalog.GetOrCreateAsync(candidate.Key, candidate.SystemId, CurrentProviderVersion, candidate.GameId);
         }
 
         return (service, catalog, libraryId, candidates);
