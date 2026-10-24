@@ -44,7 +44,7 @@ public sealed class RdbUpdateCheckTests : IDisposable
     }
 
     [Fact]
-    public async Task Restart_WithUnchangedSource_SendsOneConditionalRequestAndRecordsTheCheckOnly()
+    public async Task RestartAfterTheCheckInterval_WithUnchangedSource_SendsOneConditionalRequestAndRecordsTheCheckOnly()
     {
         var bytes = RdbBytes("Alpha");
         await Store(ScriptedHandler.Sync(_ => Ok(bytes, "W/\"v1\"", ModifiedA))).EnsureDownloadedAsync(Platform, Config(BaseUrl));
@@ -53,6 +53,7 @@ public sealed class RdbUpdateCheckTests : IDisposable
 
         var handler = ScriptedHandler.Sync(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
         var restarted = Store(handler);
+        restarted.UpdateCheckIntervalForTests = TimeSpan.Zero;
         var result = await restarted.EnsureUpdateCheckedAsync(Platform, Config(BaseUrl));
         await restarted.GetIndexAsync(Platform, Config(BaseUrl));
 
@@ -63,6 +64,33 @@ public sealed class RdbUpdateCheckTests : IDisposable
         Assert.Equal(bytes, File.ReadAllBytes(RdbPath));
         Assert.False(File.Exists(RdbPath + ".prev"));
         Assert.True(ReadSidecar().GetProperty("checkedUtc").GetDateTime() > checkedBefore);
+    }
+
+    [Fact]
+    public async Task RestartWithinTheCheckInterval_SendsNoRequest()
+    {
+        var bytes = RdbBytes("Alpha");
+        await Store(ScriptedHandler.Sync(_ => Ok(bytes, "\"v1\"", ModifiedA))).EnsureDownloadedAsync(Platform, Config(BaseUrl));
+        var handler = ScriptedHandler.Sync(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
+
+        var result = await Store(handler).EnsureUpdateCheckedAsync(Platform, Config(BaseUrl));
+
+        Assert.False(result.ReopenPending);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task CheckingNow_IgnoresTheInterval()
+    {
+        var bytes = RdbBytes("Alpha");
+        await Store(ScriptedHandler.Sync(_ => Ok(bytes, "\"v1\"", ModifiedA))).EnsureDownloadedAsync(Platform, Config(BaseUrl));
+        var handler = ScriptedHandler.Sync(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
+        var store = Store(handler);
+        await store.EnsureUpdateCheckedAsync(Platform, Config(BaseUrl));
+
+        await store.CheckForUpdateNowAsync(Platform, Config(BaseUrl));
+
+        Assert.Equal("\"v1\"", Assert.Single(handler.Requests).IfNoneMatch);
     }
 
     [Fact]
@@ -84,7 +112,7 @@ public sealed class RdbUpdateCheckTests : IDisposable
     }
 
     [Fact]
-    public async Task ChangedValidRdb_IsReplacedWithPreviousKeptAndAMarkerLeft()
+    public async Task ChangedValidRdb_IsReplacedWithNoBackupAndAMarkerLeft()
     {
         var oldBytes = RdbBytes("Alpha", "Beta");
         var newBytes = RdbBytes("Alpha", "Beta", "Gamma");
@@ -97,7 +125,7 @@ public sealed class RdbUpdateCheckTests : IDisposable
         Assert.True(result.ReopenPending);
         Assert.Equal(Sha(newBytes), result.Digest);
         Assert.Equal(newBytes, File.ReadAllBytes(RdbPath));
-        Assert.Equal(oldBytes, File.ReadAllBytes(RdbPath + ".prev"));
+        Assert.False(File.Exists(RdbPath + ".prev"));
         var sidecar = ReadSidecar();
         Assert.Equal(Sha(newBytes), sidecar.GetProperty("pendingReopenDigest").GetString());
         Assert.Equal("\"v2\"", sidecar.GetProperty("etag").GetString());
@@ -106,6 +134,55 @@ public sealed class RdbUpdateCheckTests : IDisposable
 
         var index = await store.GetIndexAsync(Platform, Config(BaseUrl));
         Assert.Contains(RdbMatcher.NormalizeName("Gamma"), index!.ByName.Keys);
+    }
+
+    [Fact]
+    public async Task MetadataOnlyChange_IsAppliedWithoutReopeningArtwork()
+    {
+        WriteRdb(RdbBytesWithGenre("Action", "Alpha", "Beta"));
+        var newBytes = RdbBytesWithGenre("Role-Playing", "Alpha", "Beta");
+        var store = Store(ScriptedHandler.Sync(_ => Ok(newBytes, "\"v2\"", ModifiedA)));
+
+        var result = await store.EnsureUpdateCheckedAsync(Platform, Config(BaseUrl));
+
+        Assert.False(result.ReopenPending);
+        Assert.Equal(newBytes, File.ReadAllBytes(RdbPath));
+        Assert.Equal(JsonValueKind.Null, ReadSidecar().GetProperty("pendingReopenDigest").ValueKind);
+    }
+
+    [Fact]
+    public async Task AReopenStillOwed_CarriesOverToANewerFileEvenWhenOnlyMetadataChanged()
+    {
+        var oldBytes = RdbBytesWithGenre("Action", "Alpha");
+        WriteRdb(oldBytes);
+        WriteSidecarJson(new { etag = "\"v1\"", sha256 = Sha(oldBytes), recordCount = 1, pendingReopenDigest = Sha(oldBytes) });
+        var newBytes = RdbBytesWithGenre("Role-Playing", "Alpha");
+        var store = Store(ScriptedHandler.Sync(_ => Ok(newBytes, "\"v2\"", ModifiedA)));
+
+        var result = await store.EnsureUpdateCheckedAsync(Platform, Config(BaseUrl));
+
+        Assert.True(result.ReopenPending);
+        Assert.Equal(Sha(newBytes), result.Digest);
+    }
+
+    [Fact]
+    public async Task RejectedReplacement_KeepsItsValidatorsSoTheNextCheckIsConditional()
+    {
+        var live = RdbBytes(Enumerable.Range(0, 10).Select(i => "Game " + i).ToArray());
+        WriteRdb(live);
+        await Store(ScriptedHandler.Sync(_ => Ok(RdbBytes("Game 0", "Game 1"), "\"v2\"", ModifiedA)))
+            .EnsureUpdateCheckedAsync(Platform, Config(BaseUrl));
+        Assert.Equal(live, File.ReadAllBytes(RdbPath));
+        var handler = ScriptedHandler.Sync(request => request.Headers.IfNoneMatch.ToString() == "\"v2\""
+            ? new HttpResponseMessage(HttpStatusCode.NotModified)
+            : Ok(RdbBytes("Game 0", "Game 1"), "\"v2\"", ModifiedA));
+        var restarted = Store(handler);
+        restarted.UpdateCheckIntervalForTests = TimeSpan.Zero;
+
+        await restarted.EnsureUpdateCheckedAsync(Platform, Config(BaseUrl));
+
+        Assert.Equal("\"v2\"", Assert.Single(handler.Requests).IfNoneMatch);
+        Assert.Equal(live, File.ReadAllBytes(RdbPath));
     }
 
     [Fact]
@@ -185,7 +262,7 @@ public sealed class RdbUpdateCheckTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateWithAStalledResponseBody_TimesOutAndBuildsFromTheCachedFile()
+    public async Task UpdateWithAStalledResponseBody_DoesNotHoldBackTheIndexAndTimesOut()
     {
         var current = RdbBytes("Alpha");
         WriteRdb(current);
@@ -194,9 +271,9 @@ public sealed class RdbUpdateCheckTests : IDisposable
         var store = Store(handler);
         store.UpdateTimeoutForTests = TimeSpan.FromSeconds(1);
 
-        var build = store.GetIndexAsync(Platform, Config(BaseUrl));
+        var index = await store.GetIndexAsync(Platform, Config(BaseUrl)).WaitAsync(TimeSpan.FromSeconds(10));
         await body.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var index = await build.WaitAsync(TimeSpan.FromSeconds(10));
+        await store.EnsureUpdateCheckedAsync(Platform, Config(BaseUrl)).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.True(body.ReadToken.CanBeCanceled);
         Assert.True(body.ReadToken.IsCancellationRequested);
@@ -253,7 +330,7 @@ public sealed class RdbUpdateCheckTests : IDisposable
     }
 
     [Fact]
-    public async Task GetIndexAsync_WaitsForAnInFlightCheckAndBuildsFromTheNewFile()
+    public async Task GetIndexAsync_BuildsFromTheCurrentFileWhileACheckRuns_AndRebuildsAfterTheSwap()
     {
         WriteRdb(RdbBytes("Alpha"));
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -263,16 +340,19 @@ public sealed class RdbUpdateCheckTests : IDisposable
             return Ok(RdbBytes("Alpha", "Gamma"), "\"v2\"", ModifiedA);
         });
         var store = Store(handler);
+        var replaced = new List<string>();
+        store.IndexReplaced += replaced.Add;
 
-        var pending = store.GetIndexAsync(Platform, Config(BaseUrl));
-        await Task.Delay(150);
-        Assert.False(pending.IsCompleted);
-        Assert.Null(store.GetIndexOrStartBuild(Platform, Config(BaseUrl)));
+        var first = await store.GetIndexAsync(Platform, Config(BaseUrl)).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.DoesNotContain(RdbMatcher.NormalizeName("Gamma"), first!.ByName.Keys);
+        Assert.Same(first, store.GetIndexOrStartBuild(Platform, Config(BaseUrl)));
 
         release.SetResult();
-        var index = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+        await store.EnsureUpdateCheckedAsync(Platform, Config(BaseUrl)).WaitAsync(TimeSpan.FromSeconds(10));
+        var rebuilt = await store.GetIndexAsync(Platform, Config(BaseUrl));
 
-        Assert.Contains(RdbMatcher.NormalizeName("Gamma"), index!.ByName.Keys);
+        Assert.Equal([Platform], replaced);
+        Assert.Contains(RdbMatcher.NormalizeName("Gamma"), rebuilt!.ByName.Keys);
         Assert.Single(handler.Requests);
     }
 
@@ -339,7 +419,7 @@ public sealed class RdbUpdateCheckTests : IDisposable
         Assert.True(changed.ReopenPending);
         Assert.Equal(Sha(newBytes), changed.Digest);
         Assert.Equal(newBytes, File.ReadAllBytes(RdbPath));
-        Assert.Equal(oldBytes, File.ReadAllBytes(RdbPath + ".prev"));
+        Assert.False(File.Exists(RdbPath + ".prev"));
         Assert.Empty(handler.Requests);
     }
 
@@ -386,6 +466,24 @@ public sealed class RdbUpdateCheckTests : IDisposable
             ms.WriteByte(0x81);
             WriteString(ms, "name");
             WriteString(ms, name);
+        }
+
+        return ms.ToArray();
+    }
+
+    private static byte[] RdbBytesWithGenre(string genre, params string[] names)
+    {
+        using var ms = new MemoryStream();
+        ms.Write("RARCHDB"u8.ToArray());
+        ms.WriteByte(0);
+        ms.Write(new byte[8]);
+        foreach (var name in names)
+        {
+            ms.WriteByte(0x82);
+            WriteString(ms, "name");
+            WriteString(ms, name);
+            WriteString(ms, "genre");
+            WriteString(ms, genre);
         }
 
         return ms.ToArray();

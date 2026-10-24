@@ -133,8 +133,9 @@ public class GameThumbService
         _artworkStore.ClearMissCache();
     }
 
-    internal Task<bool> StageRdbUpdateAsync(string platform, CancellationToken cancellationToken) =>
-        _rdbService.StageUpdateAsync(platform, cancellationToken);
+    /// <summary>Checks a platform's RDB now, ignoring the check interval, and swaps in a newer file.</summary>
+    internal Task<RdbCheckResult> CheckRdbUpdateNowAsync(string platform, CancellationToken cancellationToken) =>
+        _rdbService.CheckUpdateNowAsync(platform, cancellationToken);
 
     internal void ClearRdbPendingReopen(string platform, string digest) =>
         _rdbService.ClearPendingReopen(platform, digest);

@@ -15,10 +15,8 @@ internal sealed class GameArtworkStore
     // Nine probes for the original candidates: the primary plus up to MaxSiblingArtworkNamesPerRequest
     // siblings (7 asserted names) and both fallbacks, so nothing is ever truncated. Anything added to
     // that list needs a matching rise here, or it starves the fallbacks and turns artwork that does
-    // exist into a terminal Missing. Listing aliases are probed after every original from their own
-    // MaxAliasProbesPerRequest allowance, so they never spend those nine.
+    // exist into a terminal Missing. A listing alias is probed after every original, outside those nine.
     private const int MaxTotalProbesPerRequest = RdbService.MaxSiblingArtworkNamesPerRequest + 3;
-    private const int MaxAliasProbesPerRequest = 1 + RdbService.MaxSiblingArtworkNamesPerRequest;
     private static readonly TimeSpan MissTtl = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(6);
 
@@ -293,27 +291,9 @@ internal sealed class GameArtworkStore
             return (null, true);
         }
 
-        var aliases = new List<string>(1);
-        if (snapshot.Listing?.FindAlias(primary) is { } alias)
+        if (snapshot.Listing?.FindAlias(primary) is { } alias && !originals.Contains((alias, match.Platform)))
         {
-            aliases.Add(alias);
-        }
-
-        var probesRemaining = MaxAliasProbesPerRequest;
-        foreach (var aliasName in aliases)
-        {
-            if (probesRemaining <= 0)
-            {
-                break;
-            }
-
-            if (originals.Contains((aliasName, match.Platform)))
-            {
-                continue;
-            }
-
-            probesRemaining--;
-            var lookup = await GetThumbPathForNameAsync(match.Platform, aliasName, kind, cancellationToken).ConfigureAwait(false);
+            var lookup = await GetThumbPathForNameAsync(match.Platform, alias, kind, cancellationToken).ConfigureAwait(false);
             if (lookup.Outcome == GameArtworkLookupOutcome.Found)
             {
                 return (lookup, false);

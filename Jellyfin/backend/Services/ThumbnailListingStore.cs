@@ -13,7 +13,7 @@ internal enum ListingState
     /// <summary>No listing is held yet (fetch pending or failed, nothing stored).</summary>
     Unavailable,
     Available,
-    /// <summary>The provider has no listing for this folder (HTTP 404).</summary>
+    /// <summary>The provider has no listing for this folder (HTTP 404), or it kept failing to load.</summary>
     Absent,
 }
 
@@ -69,7 +69,7 @@ internal sealed class ThumbnailListing
     {
         try
         {
-            var title = RdbIdentity.CdnTitleKey(name);
+            var title = RdbIdentity.TitleKey(name);
             key = title + "|" + RdbIdentity.TrailingGroupText(name);
             return title.Length > 0;
         }
@@ -88,7 +88,10 @@ internal sealed class ThumbnailListing
 internal sealed class ThumbnailListingStore
 {
     private const long MaxListingBytes = 32L * 1024 * 1024;
-    private static readonly TimeSpan FetchRetryBackoff = TimeSpan.FromMinutes(5);
+
+    // After this many failed fetches in a row a listing stops holding games back from Missing.
+    // Fetching still retries on the backoff, so a provider that recovers is picked up later.
+    private const int MaxPendingFetchFailures = 3;
     private static readonly Regex HrefPattern = new(
         "href\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
@@ -98,6 +101,8 @@ internal sealed class ThumbnailListingStore
     private readonly ILogger _logger;
     private readonly Func<string?> _dataFolder;
     private readonly ConcurrentDictionary<(string Platform, string Folder), Entry> _entries = new();
+
+    internal TimeSpan FetchRetryBackoffForTests { get; set; } = TimeSpan.FromMinutes(5);
 
     internal ThumbnailListingStore(IHttpClientFactory httpClientFactory, ILogger logger, Func<string?> dataFolder)
     {
@@ -118,10 +123,11 @@ internal sealed class ThumbnailListingStore
                 entry.InFlight = Task.Run(() => FetchAsync(entry, kind, generation));
             }
 
-            return entry.Absent
+            var gaveUp = entry.FailedFetches >= MaxPendingFetchFailures;
+            return entry.Absent || (entry.Listing == null && gaveUp)
                 ? new ListingSnapshot(ListingState.Absent, null)
                 : entry.Listing != null
-                    ? new ListingSnapshot(ListingState.Available, entry.Listing, !entry.Succeeded)
+                    ? new ListingSnapshot(ListingState.Available, entry.Listing, !entry.Succeeded && !gaveUp)
                     : new ListingSnapshot(ListingState.Unavailable, null);
         }
     }
@@ -136,6 +142,7 @@ internal sealed class ThumbnailListingStore
                 entry.Generation++;
                 entry.Succeeded = false;
                 entry.Absent = false;
+                entry.FailedFetches = 0;
                 entry.RetryAfterUtc = default;
             }
         }
@@ -176,6 +183,7 @@ internal sealed class ThumbnailListingStore
             {
                 entry.Listing = fetched;
                 entry.Succeeded = current;
+                entry.FailedFetches = 0;
             }
             else if (notFound && current)
             {
@@ -184,7 +192,8 @@ internal sealed class ThumbnailListingStore
             }
             else if (current)
             {
-                entry.RetryAfterUtc = DateTime.UtcNow + FetchRetryBackoff;
+                entry.RetryAfterUtc = DateTime.UtcNow + FetchRetryBackoffForTests;
+                entry.FailedFetches++;
             }
         }
 
@@ -382,6 +391,8 @@ internal sealed class ThumbnailListingStore
         internal Task? InFlight { get; set; }
 
         internal DateTime RetryAfterUtc { get; set; }
+
+        internal int FailedFetches { get; set; }
 
         internal int Generation { get; set; }
     }

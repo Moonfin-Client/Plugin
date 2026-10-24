@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Mime;
 using System.Text.Json;
-using MediaBrowser.Controller;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -38,7 +37,6 @@ public class GamesController : ControllerBase
     private readonly GameArtworkDeliveryLimiter _artworkDeliveryLimiter;
     private readonly ArcadeCompatibilityService _arcadeCompatibility;
     private readonly RommSource _romm;
-    private readonly IServerApplicationHost _appHost;
 
     public GamesController(
         GamesService gamesService,
@@ -46,10 +44,8 @@ public class GamesController : ControllerBase
         GameArtworkReconciliationService artwork,
         GameArtworkDeliveryLimiter artworkDeliveryLimiter,
         ArcadeCompatibilityService arcadeCompatibility,
-        RommSource romm,
-        IServerApplicationHost appHost)
+        RommSource romm)
     {
-        _appHost = appHost;
         _gamesService = gamesService;
         _coresService = coresService;
         _artwork = artwork;
@@ -374,8 +370,8 @@ public class GamesController : ControllerBase
     }
 
     /// <summary>
-    /// Administrator-only library-wide repair: reopens artwork that never found an original and stages
-    /// newer game metadata, which takes effect at the next server restart.
+    /// Administrator-only library-wide repair, run in the background: checks the library's game
+    /// metadata for updates, then reopens artwork that never found an original.
     /// </summary>
     [HttpPost("{libraryId}/Artwork/Refresh")]
     [Authorize(Policy = "RequiresElevation")]
@@ -384,38 +380,20 @@ public class GamesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> RefreshLibraryArtwork(
-        [FromRoute] string libraryId,
-        [FromQuery] string? system,
-        CancellationToken cancellationToken)
+    public IActionResult RefreshLibraryArtwork([FromRoute] string libraryId, [FromQuery] string? system)
     {
         if (!GamesEnabled())
         {
             return NotFound();
         }
 
-        var result = await _artwork.RefreshLibraryArtworkAsync(libraryId, system, cancellationToken).ConfigureAwait(false);
-        switch (result.Status)
+        return _artwork.StartLibraryArtworkRefresh(libraryId, system) switch
         {
-            case LibraryArtworkRefreshStatus.NotFound:
-                return NotFound();
-            case LibraryArtworkRefreshStatus.BadSystem:
-                return BadRequest(new { error = "Unknown system." });
-            case LibraryArtworkRefreshStatus.Conflict:
-                return Conflict(new { error = "An artwork refresh for this library is already running." });
-        }
-
-        if (result.RestartRequired)
-        {
-            _appHost.NotifyPendingRestart();
-        }
-
-        return Accepted(new GameArtworkRefreshResponse
-        {
-            Reopened = result.Reopened,
-            RdbUpdatesStaged = result.RdbUpdatesStaged.ToList(),
-            RestartRequired = result.RestartRequired,
-        });
+            LibraryArtworkRefreshStatus.NotFound => NotFound(),
+            LibraryArtworkRefreshStatus.BadSystem => BadRequest(new { error = "Unknown system." }),
+            LibraryArtworkRefreshStatus.Conflict => Conflict(new { error = "An artwork refresh for this library is already running." }),
+            _ => Accepted(),
+        };
     }
 
     /// <summary>Lists the games inside a library, optionally filtered to one system.</summary>

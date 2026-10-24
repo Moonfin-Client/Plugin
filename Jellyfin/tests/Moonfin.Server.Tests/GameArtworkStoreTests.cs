@@ -456,6 +456,48 @@ public class GameArtworkStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Listing_ThatKeepsFailing_StopsHoldingTheGameBackFromMissing()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.InternalServerError, new ByteArrayContent([]));
+        RegisterMisses(handler, DriftedRdbName, "Unmatched Dump 01");
+        var store = CreateRdbBackedStore(handler, [(DriftedRdbName, Crc32(CrcRomBytes))], "Unmatched Dump 01.sms", CrcRomBytes);
+        store.ListingsForTests.FetchRetryBackoffForTests = TimeSpan.Zero;
+
+        for (var i = 0; i < 3; i++)
+        {
+            await PrimeListingAsync(store);
+        }
+
+        Assert.Equal(GameArtworkLookupOutcome.Missing, (await LookupRdbAsync(store)).Outcome);
+    }
+
+    [Fact]
+    public async Task ListingStore_GivesUpAfterThreeFailedFetches_ButKeepsRetrying()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.SetResponse(ListingUrl, HttpStatusCode.InternalServerError, new ByteArrayContent([]));
+        var listings = NewListingStore(handler, _root);
+        listings.FetchRetryBackoffForTests = TimeSpan.Zero;
+
+        var states = new List<ListingState>();
+        for (var i = 0; i < 3; i++)
+        {
+            states.Add(listings.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+            await InFlight(listings);
+        }
+
+        Assert.All(states, state => Assert.Equal(ListingState.Unavailable, state));
+        Assert.Equal(ListingState.Absent, listings.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+
+        await InFlight(listings);
+        handler.SetResponse(ListingUrl, HttpStatusCode.OK, Html(ListingHtml([ListedName])));
+        listings.Get(Platform, GameThumbService.ThumbKind.Boxart);
+        await InFlight(listings);
+        Assert.Equal(ListingState.Available, listings.Get(Platform, GameThumbService.ThumbKind.Boxart).State);
+    }
+
+    [Fact]
     public async Task Listing_SlowFetch_IsNeverAwaitedByTheLookup()
     {
         var release = new TaskCompletionSource();

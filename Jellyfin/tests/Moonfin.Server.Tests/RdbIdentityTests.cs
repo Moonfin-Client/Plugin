@@ -28,8 +28,8 @@ public class RdbIdentityTests
     [InlineData("(USA)", "(USA)", false)]
     public void SameGame(string a, string b, bool expected)
     {
-        Assert.Equal(expected, RdbIdentity.SameGame(a, b));
-        Assert.Equal(expected, RdbIdentity.SameGame(b, a));
+        Assert.Equal(expected, RdbIdentity.Matches(RdbIdentity.Of(a), b));
+        Assert.Equal(expected, RdbIdentity.Matches(RdbIdentity.Of(b), a));
     }
 
     [Theory]
@@ -48,16 +48,15 @@ public class RdbIdentityTests
         _ = RdbIdentity.TitleKey(name);
         _ = RdbIdentity.EditionTags(name);
         _ = RdbIdentity.RegionsOf(name);
-        _ = RdbIdentity.SameGame(name, "Game (USA)");
-        Assert.False(RdbIdentity.SameGame(null, name));
+        _ = RdbIdentity.Matches(RdbIdentity.Of(name), "Game (USA)");
+        Assert.False(RdbIdentity.Matches(RdbIdentity.Of(name), null));
     }
 
     [Fact]
-    public void CdnTitleKey_TreatsUnderscoreAsOrdinaryAndMatchesTheOriginalForm()
+    public void TitleKey_TreatsUnderscoreAsOrdinary()
     {
-        Assert.Equal(RdbIdentity.TitleKey("Title: Sub (USA)"), RdbIdentity.CdnTitleKey("Title: Sub (USA)"));
-        Assert.Equal("title _ sub", RdbIdentity.CdnTitleKey("Title _ Sub (USA)"));
-        Assert.NotEqual(RdbIdentity.CdnTitleKey("Title _ Sub"), RdbIdentity.CdnTitleKey("Title Sub"));
+        Assert.Equal("title _ sub", RdbIdentity.TitleKey("Title _ Sub (USA)"));
+        Assert.NotEqual(RdbIdentity.TitleKey("Title _ Sub"), RdbIdentity.TitleKey("Title Sub"));
     }
 
     private static List<string?> Siblings(string primary, int max, params string[] others)

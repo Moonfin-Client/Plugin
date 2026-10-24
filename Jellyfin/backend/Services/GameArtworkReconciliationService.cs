@@ -1047,7 +1047,11 @@ public sealed class GameArtworkReconciliationService : IHostedService
             if (runRdbUpdateCheck)
             {
                 _rdbUpdateCheckDone = true;
-                await CheckRdbUpdatesAsync(libraryCandidates, cancellationToken).ConfigureAwait(false);
+                await CheckRdbUpdatesAsync(
+                    libraryCandidates,
+                    platform => _thumbs.EnsureRdbUpdateCheckedAsync(platform, cancellationToken),
+                    null,
+                    cancellationToken).ConfigureAwait(false);
             }
     }
 
@@ -1074,21 +1078,21 @@ public sealed class GameArtworkReconciliationService : IHostedService
     }
 
     private readonly ConcurrentDictionary<string, byte> _libraryRefreshes = new(StringComparer.OrdinalIgnoreCase);
+    private Task _lastLibraryRefresh = Task.CompletedTask;
+
+    internal Task LastLibraryRefreshForTests => _lastLibraryRefresh;
 
     /// <summary>
-    /// Admin refresh of a library's (or one system's) artwork: clears lookup caches, reopens entries
-    /// whose acquisition ended without an original, and stages newer metadata files for the next
-    /// start. Only one refresh per library runs at a time.
+    /// Starts an admin refresh of a library's (or one system's) artwork in the background: checks its
+    /// platforms' metadata files now, then clears lookup caches and reopens entries whose acquisition
+    /// ended without an original. Only one refresh per library runs at a time.
     /// </summary>
-    public async Task<LibraryArtworkRefreshResult> RefreshLibraryArtworkAsync(
-        string libraryId,
-        string? systemId,
-        CancellationToken cancellationToken = default)
+    public LibraryArtworkRefreshStatus StartLibraryArtworkRefresh(string libraryId, string? systemId)
     {
         var library = _games.GetGameLibraries().FirstOrDefault(item => string.Equals(item.Id, libraryId, StringComparison.OrdinalIgnoreCase));
         if (library == null)
         {
-            return LibraryArtworkRefreshResult.Of(LibraryArtworkRefreshStatus.NotFound);
+            return LibraryArtworkRefreshStatus.NotFound;
         }
 
         var systems = _games.GetSystems(library.Id);
@@ -1097,19 +1101,24 @@ public sealed class GameArtworkReconciliationService : IHostedService
             systems = systems.Where(item => string.Equals(item.Id, systemId, StringComparison.OrdinalIgnoreCase)).ToList();
             if (systems.Count == 0)
             {
-                return LibraryArtworkRefreshResult.Of(LibraryArtworkRefreshStatus.BadSystem);
+                return LibraryArtworkRefreshStatus.BadSystem;
             }
         }
 
         if (!_libraryRefreshes.TryAdd(library.Id, 0))
         {
-            return LibraryArtworkRefreshResult.Of(LibraryArtworkRefreshStatus.Conflict);
+            return LibraryArtworkRefreshStatus.Conflict;
         }
 
+        var token = _stop?.Token ?? CancellationToken.None;
+        _lastLibraryRefresh = Task.Run(() => RunLibraryRefreshAsync(library, systems, token));
+        return LibraryArtworkRefreshStatus.Accepted;
+    }
+
+    private async Task RunLibraryRefreshAsync(GameLibrary library, IReadOnlyList<GameSystem> systems, CancellationToken cancellationToken)
+    {
         try
         {
-            _thumbs.ClearLookupCaches();
-
             var candidates = new List<ArtworkCandidate>();
             foreach (var system in systems)
             {
@@ -1117,6 +1126,23 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 candidates.AddRange(CreateSystemCandidates(library, system));
             }
 
+            // The files are checked before anything is reopened so the reopened work matches against
+            // the newest metadata. A changed file reopens Missing art in every library that uses it.
+            var platformsBySource = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            var platforms = candidates
+                .SelectMany(candidate => PlatformsOf(candidate, platformsBySource))
+                .ToHashSet(StringComparer.Ordinal);
+            var everyLibrary = _games.GetGameLibraries()
+                .Where(item => _games.IsLibraryInventoryReady(item.Id))
+                .Select(item => (item.Id, _games.GetSystems(item.Id).SelectMany(system => CreateSystemCandidates(item, system)).ToList()))
+                .ToList();
+            await CheckRdbUpdatesAsync(
+                everyLibrary,
+                platform => _thumbs.CheckRdbUpdateNowAsync(platform, cancellationToken),
+                platforms,
+                cancellationToken).ConfigureAwait(false);
+
+            _thumbs.ClearLookupCaches();
             var byKey = new Dictionary<string, ArtworkCandidate>(StringComparer.Ordinal);
             foreach (var candidate in candidates)
             {
@@ -1138,27 +1164,14 @@ public sealed class GameArtworkReconciliationService : IHostedService
                 }
             }
 
-            var platformsBySource = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
-            var platforms = candidates
-                .SelectMany(candidate => PlatformsOf(candidate, platformsBySource))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(platform => platform, StringComparer.Ordinal)
-                .ToList();
-            var staged = new List<string>();
-            foreach (var platform in platforms)
-            {
-                if (await _thumbs.StageRdbUpdateAsync(platform, cancellationToken).ConfigureAwait(false))
-                {
-                    staged.Add(platform);
-                }
-            }
-
-            _logger.LogInformation(
-                "Artwork refresh for library {LibraryId} reopened {Count} entries and staged {Staged} metadata updates",
-                library.Id,
-                reopenedCount,
-                staged.Count);
-            return new LibraryArtworkRefreshResult(LibraryArtworkRefreshStatus.Accepted, reopenedCount, staged);
+            _logger.LogInformation("Artwork refresh for library {LibraryId} reopened {Count} entries", library.Id, reopenedCount);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Artwork refresh for library {LibraryId} failed", library.Id);
         }
         finally
         {
@@ -1166,11 +1179,13 @@ public sealed class GameArtworkReconciliationService : IHostedService
         }
     }
 
-    // Checks each platform the libraries' lookups can consult once per start, independent of
-    // artwork acquisition, and reopens that platform's Missing entries when its RDB changed. A
-    // failure here only defers the reopen: the marker stays until the catalog change is saved.
+    // Checks each platform the libraries' lookups can consult, independent of artwork acquisition,
+    // and reopens that platform's Missing entries when its RDB changed how games match. A failure
+    // here only defers the reopen: the marker stays until the catalog change is saved.
     private async Task CheckRdbUpdatesAsync(
         IReadOnlyList<(string LibraryId, List<ArtworkCandidate> Candidates)> libraryCandidates,
+        Func<string, Task<RdbCheckResult>> checkPlatform,
+        IReadOnlySet<string>? onlyPlatforms,
         CancellationToken cancellationToken)
     {
         var platformsBySource = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
@@ -1181,6 +1196,11 @@ public sealed class GameArtworkReconciliationService : IHostedService
             {
                 foreach (var platform in PlatformsOf(candidate, platformsBySource))
                 {
+                    if (onlyPlatforms?.Contains(platform) == false)
+                    {
+                        continue;
+                    }
+
                     if (!byPlatform.TryGetValue(platform, out var list))
                     {
                         list = new List<(string, ArtworkCandidate)>();
@@ -1197,7 +1217,7 @@ public sealed class GameArtworkReconciliationService : IHostedService
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                var check = await _thumbs.EnsureRdbUpdateCheckedAsync(platform, cancellationToken).ConfigureAwait(false);
+                var check = await checkPlatform(platform).ConfigureAwait(false);
                 if (!check.ReopenPending || check.Digest == null)
                 {
                     continue;
@@ -1947,16 +1967,6 @@ public sealed class GameArtworkReconciliationService : IHostedService
 }
 
 public enum LibraryArtworkRefreshStatus { NotFound, BadSystem, Conflict, Accepted }
-
-public sealed record LibraryArtworkRefreshResult(
-    LibraryArtworkRefreshStatus Status,
-    int Reopened,
-    IReadOnlyList<string> RdbUpdatesStaged)
-{
-    public bool RestartRequired => RdbUpdatesStaged.Count > 0;
-
-    internal static LibraryArtworkRefreshResult Of(LibraryArtworkRefreshStatus status) => new(status, 0, Array.Empty<string>());
-}
 
 /// <summary>
 /// One library's game inventory resolved once, so a batched mutation request (notably

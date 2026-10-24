@@ -42,19 +42,6 @@ public class GameSystem
     public GameSystemPreviewArtwork? PreviewArtwork { get; set; }
 }
 
-/// <summary>Outcome of an admin library artwork refresh.</summary>
-public class GameArtworkRefreshResponse
-{
-    [JsonPropertyName("reopened")]
-    public int Reopened { get; set; }
-
-    [JsonPropertyName("rdbUpdatesStaged")]
-    public List<string> RdbUpdatesStaged { get; set; } = new();
-
-    [JsonPropertyName("restartRequired")]
-    public bool RestartRequired { get; set; }
-}
-
 /// <summary>Advertises the additive retro-game artwork protocol supported by the server.</summary>
 public class GameArtworkCapabilities
 {

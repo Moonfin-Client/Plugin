@@ -78,6 +78,7 @@ public class RdbService
     {
         _logger = logger;
         _indexStore = new RdbIndexStore(httpClientFactory, logger, dataFolderPathOverride: null);
+        _indexStore.IndexReplaced += _ => ClearLookupCache();
     }
 
     internal RdbService(IHttpClientFactory httpClientFactory, ILogger<RdbService> logger, string dataFolderPath)
@@ -85,6 +86,7 @@ public class RdbService
         ArgumentNullException.ThrowIfNull(dataFolderPath);
         _logger = logger;
         _indexStore = new RdbIndexStore(httpClientFactory, logger, dataFolderPath);
+        _indexStore.IndexReplaced += _ => ClearLookupCache();
     }
 
     /// <summary>The libretro platform a core maps to, or false when the core has none.</summary>
@@ -212,15 +214,15 @@ public class RdbService
     internal void ClearLookupCache() => _lookupCache.Clear();
 
     /// <summary>
-    /// Fetches a newer RDB for <paramref name="platform"/> and stages it beside the live file for the
-    /// next start. Returns true only when a changed, valid file was staged; never throws.
+    /// Checks <paramref name="platform"/>'s RDB now, ignoring the check interval, and swaps in a newer
+    /// file. Completes empty when metadata is disabled, and never throws except on cancellation.
     /// </summary>
-    internal Task<bool> StageUpdateAsync(string platform, CancellationToken cancellationToken = default)
+    internal Task<RdbCheckResult> CheckUpdateNowAsync(string platform, CancellationToken cancellationToken = default)
     {
         var config = ConfigOverrideForTests ?? MoonfinPlugin.Instance?.Configuration;
         return config == null || !config.GamesMetadataEnabled
-            ? Task.FromResult(false)
-            : _indexStore.StageUpdateAsync(platform, config, cancellationToken);
+            ? Task.FromResult(RdbCheckResult.None)
+            : _indexStore.CheckForUpdateNowAsync(platform, config).WaitAsync(cancellationToken);
     }
 
     internal void ClearPendingReopen(string platform, string digest) =>

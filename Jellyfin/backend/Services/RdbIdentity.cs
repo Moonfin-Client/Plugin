@@ -24,13 +24,7 @@ internal static class RdbIdentity
 
     private static readonly string[] RegionPreference = { "USA", "World", "Europe", "Japan" };
 
-    // Exact name -> exact name pairs known to be the same game despite differing spellings.
-    private static readonly Dictionary<string, string> Equivalents = new(StringComparer.Ordinal);
-
     internal static string TitleKey(string? name) => KeyOf(Parse(name).Title);
-
-    /// <summary>Key for a name already sanitised for the CDN; `_` is an ordinary character in both forms.</summary>
-    internal static string CdnTitleKey(string? sanitizedName) => TitleKey(sanitizedName);
 
     /// <summary>The trailing `(...)`/`[...]` groups, lower-cased with whitespace collapsed; empty when there are none.</summary>
     internal static string TrailingGroupText(string? name)
@@ -98,26 +92,11 @@ internal static class RdbIdentity
         return RegionPreference.Length + 1;
     }
 
-    internal static bool SameGame(string? a, string? b) => a != null && Matches(Of(a), b);
-
     /// <summary>Parses <paramref name="name"/> once so a scan can compare it against many names.</summary>
     internal static Identity Of(string name) => new(name, TitleKey(name), EditionTags(name));
 
-    internal static bool Matches(Identity a, string? b)
-    {
-        if (b == null)
-        {
-            return false;
-        }
-
-        if ((Equivalents.TryGetValue(a.Name, out var ea) && string.Equals(ea, b, StringComparison.Ordinal)) ||
-            (Equivalents.TryGetValue(b, out var eb) && string.Equals(eb, a.Name, StringComparison.Ordinal)))
-        {
-            return true;
-        }
-
-        return a.TitleKey.Length > 0 && a.TitleKey == TitleKey(b) && a.EditionTags.SetEquals(EditionTags(b));
-    }
+    internal static bool Matches(Identity a, string? b) =>
+        b != null && a.TitleKey.Length > 0 && a.TitleKey == TitleKey(b) && a.EditionTags.SetEquals(EditionTags(b));
 
     internal sealed record Identity(string Name, string TitleKey, ISet<string> EditionTags);
 

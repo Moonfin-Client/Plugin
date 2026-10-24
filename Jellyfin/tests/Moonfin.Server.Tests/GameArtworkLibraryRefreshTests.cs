@@ -28,7 +28,6 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
     private readonly string _libraryId = Guid.NewGuid().ToString();
     private byte[]? _upstreamSnes;
     private Task? _gate;
-    private Stream? _stagingBody;
 
     private sealed record Fixture(
         GameArtworkReconciliationService Service,
@@ -47,11 +46,11 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
     }
 
     [Fact]
-    public async Task Endpoint_WithGamesDisabled_IsNotFound()
+    public void Endpoint_WithGamesDisabled_IsNotFound()
     {
         var controller = (GamesController)RuntimeHelpers.GetUninitializedObject(typeof(GamesController));
 
-        Assert.IsType<NotFoundResult>(await controller.RefreshLibraryArtwork("any", null, CancellationToken.None));
+        Assert.IsType<NotFoundResult>(controller.RefreshLibraryArtwork("any", null));
     }
 
     [Fact]
@@ -59,14 +58,14 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
     {
         var fixture = await CreateAsync();
 
-        Assert.Equal(LibraryArtworkRefreshStatus.NotFound, (await fixture.Service.RefreshLibraryArtworkAsync("nope", null)).Status);
-        Assert.Equal(LibraryArtworkRefreshStatus.BadSystem, (await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, "Atari")).Status);
+        Assert.Equal(LibraryArtworkRefreshStatus.NotFound, fixture.Service.StartLibraryArtworkRefresh("nope", null));
+        Assert.Equal(LibraryArtworkRefreshStatus.BadSystem, fixture.Service.StartLibraryArtworkRefresh(_libraryId, "Atari"));
         Assert.Equal(ArtworkCatalogState.Missing, (await fixture.Catalog.GetAsync(fixture.Games["Chrono"].Key))?.State);
         Assert.Empty(QueuedRemote(fixture.Service));
     }
 
     [Fact]
-    public async Task ConcurrentRefreshOfTheSameLibrary_IsAConflictAndTheGuardIsReleasedAfterwards()
+    public async Task Refresh_ReturnsBeforeTheMetadataCheck_AndAConcurrentOneIsAConflictUntilItFinishes()
     {
         var fixture = await CreateAsync();
         var gate = new TaskCompletionSource();
@@ -74,16 +73,14 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
         _upstreamSnes = RdbUpdateCheckTests.RdbBytes("Alpha", "Beta");
         var requestsBefore = fixture.RdbHandler.Requests.Count;
 
-        var first = fixture.Service.RefreshLibraryArtworkAsync(_libraryId, null);
+        Assert.Equal(LibraryArtworkRefreshStatus.Accepted, fixture.Service.StartLibraryArtworkRefresh(_libraryId, null));
         await WaitUntilAsync(() => fixture.RdbHandler.Requests.Count > requestsBefore);
-        var second = await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, null);
+        Assert.Equal(LibraryArtworkRefreshStatus.Conflict, fixture.Service.StartLibraryArtworkRefresh(_libraryId, null));
         gate.SetResult();
-        var firstResult = await first;
-        var third = await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, null);
+        await fixture.Service.LastLibraryRefreshForTests;
 
-        Assert.Equal(LibraryArtworkRefreshStatus.Conflict, second.Status);
-        Assert.Equal(LibraryArtworkRefreshStatus.Accepted, firstResult.Status);
-        Assert.Equal(LibraryArtworkRefreshStatus.Accepted, third.Status);
+        Assert.Equal(LibraryArtworkRefreshStatus.Accepted, fixture.Service.StartLibraryArtworkRefresh(_libraryId, null));
+        await fixture.Service.LastLibraryRefreshForTests;
     }
 
     [Fact]
@@ -92,10 +89,9 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
         var fixture = await CreateAsync();
         var zelda = await fixture.Catalog.GetAsync(fixture.Games["Zelda"].Key);
 
-        var result = await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, null);
+        Assert.Equal(LibraryArtworkRefreshStatus.Accepted, fixture.Service.StartLibraryArtworkRefresh(_libraryId, null));
+        await fixture.Service.LastLibraryRefreshForTests;
 
-        Assert.Equal(LibraryArtworkRefreshStatus.Accepted, result.Status);
-        Assert.Equal(3, result.Reopened);
         var queued = QueuedRemote(fixture.Service);
         foreach (var name in new[] { "Chrono", "Mario", "Sonic" })
         {
@@ -124,9 +120,9 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
         var fixture = await CreateAsync();
         var first = GameArtworkReconciliationServiceTests.FillRemoteQueue(fixture.Service, fixture.Games["Chrono"]);
 
-        var result = await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, null);
+        fixture.Service.StartLibraryArtworkRefresh(_libraryId, null);
+        await fixture.Service.LastLibraryRefreshForTests;
 
-        Assert.Equal(3, result.Reopened);
         Assert.Equal(20_000, QueuedRemote(fixture.Service).Count);
         GameArtworkReconciliationServiceTests.CompleteQueuedRemote(fixture.Service, first);
         var seen = new HashSet<string>();
@@ -150,102 +146,56 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
     }
 
     [Fact]
-    public async Task Refresh_CancelledDuringRdbBody_StopsStagingAndReleasesTheLibraryGuard()
-    {
-        var fixture = await CreateAsync();
-        var original = File.ReadAllBytes(RdbPath(SnesName));
-        using var body = new RdbUpdateCheckTests.StalledResponseBody();
-        _stagingBody = body;
-        using var cancellation = new CancellationTokenSource();
-        var refresh = fixture.Service.RefreshLibraryArtworkAsync(_libraryId, "snes", cancellation.Token);
-        await body.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-
-        cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh.WaitAsync(TimeSpan.FromSeconds(10)));
-
-        Assert.Equal(original, File.ReadAllBytes(RdbPath(SnesName)));
-        Assert.False(File.Exists(RdbPath(SnesName) + ".next"));
-        Assert.False(File.Exists(RdbPath(SnesName) + ".next.tmp"));
-        _stagingBody = null;
-        var retried = await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, "snes");
-        Assert.Equal(LibraryArtworkRefreshStatus.Accepted, retried.Status);
-    }
-
-    [Fact]
-    public async Task SystemFilter_LimitsBothTheReopenAndTheStaging()
+    public async Task SystemFilter_LimitsBothTheReopenAndTheMetadataCheck()
     {
         var fixture = await CreateAsync();
         _upstreamSnes = RdbUpdateCheckTests.RdbBytes("Alpha", "Beta");
         var requestsBefore = fixture.RdbHandler.Requests.Count;
 
-        var result = await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, "snes");
+        fixture.Service.StartLibraryArtworkRefresh(_libraryId, "snes");
+        await fixture.Service.LastLibraryRefreshForTests;
 
-        Assert.Equal(2, result.Reopened);
         Assert.Equal(ArtworkCatalogState.Missing, (await fixture.Catalog.GetAsync(fixture.Games["Sonic"].Key))?.State);
         Assert.DoesNotContain("remote:" + fixture.Games["Sonic"].Key.StorageKey, QueuedRemote(fixture.Service).Keys);
-        Assert.Equal([SnesName], result.RdbUpdatesStaged);
+        Assert.Equal(_upstreamSnes, File.ReadAllBytes(RdbPath(SnesName)));
         Assert.DoesNotContain(
             fixture.RdbHandler.Requests.Skip(requestsBefore),
             request => request.Url.Contains(Uri.EscapeDataString(GenesisName), StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task ChangedRdb_IsStagedBesideTheLiveFileWhichStaysUntouched()
+    public async Task ChangedRdb_IsAppliedRightAwayAndLeavesNoOtherCopyBehind()
     {
         var fixture = await CreateAsync();
-        var liveBytes = File.ReadAllBytes(RdbPath(SnesName));
-        var liveSidecar = File.ReadAllText(RdbPath(SnesName) + ".json");
         var newBytes = RdbUpdateCheckTests.RdbBytes("Alpha", "Beta");
         _upstreamSnes = newBytes;
 
-        var result = await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, null);
+        fixture.Service.StartLibraryArtworkRefresh(_libraryId, null);
+        await fixture.Service.LastLibraryRefreshForTests;
 
-        Assert.True(result.RestartRequired);
-        Assert.Equal([SnesName], result.RdbUpdatesStaged);
-        Assert.Equal(newBytes, File.ReadAllBytes(RdbPath(SnesName) + ".next"));
-        var meta = JsonDocument.Parse(File.ReadAllText(RdbPath(SnesName) + ".next.json")).RootElement;
-        Assert.Equal("\"v2\"", meta.GetProperty("etag").GetString());
-        Assert.Equal(Sha(newBytes), meta.GetProperty("sha256").GetString());
-        Assert.Equal(2, meta.GetProperty("recordCount").GetInt32());
-        Assert.Equal(liveBytes, File.ReadAllBytes(RdbPath(SnesName)));
-        Assert.Equal(liveSidecar, File.ReadAllText(RdbPath(SnesName) + ".json"));
-        Assert.False(File.Exists(RdbPath(SnesName) + ".prev"));
+        Assert.Equal(newBytes, File.ReadAllBytes(RdbPath(SnesName)));
+        var sidecar = JsonDocument.Parse(File.ReadAllText(RdbPath(SnesName) + ".json")).RootElement;
+        Assert.Equal("\"v2\"", sidecar.GetProperty("etag").GetString());
+        Assert.Equal(Sha(newBytes), sidecar.GetProperty("sha256").GetString());
+        Assert.Equal(2, sidecar.GetProperty("recordCount").GetInt32());
+        Assert.Equal(JsonValueKind.Null, sidecar.GetProperty("pendingReopenDigest").ValueKind);
+        Assert.Equal(
+            [RdbPath(SnesName), RdbPath(GenesisName)],
+            Directory.GetFiles(Path.Combine(_root, "gamemeta"), "*.rdb*")
+                .Where(path => !path.EndsWith(".json", StringComparison.Ordinal))
+                .OrderBy(path => path, StringComparer.Ordinal));
     }
 
     [Fact]
-    public async Task UnchangedRdb_StagesNothing()
+    public async Task UnchangedRdb_LeavesTheLiveFileAlone()
     {
         var fixture = await CreateAsync();
+        var liveBytes = File.ReadAllBytes(RdbPath(SnesName));
 
-        var result = await fixture.Service.RefreshLibraryArtworkAsync(_libraryId, null);
+        fixture.Service.StartLibraryArtworkRefresh(_libraryId, null);
+        await fixture.Service.LastLibraryRefreshForTests;
 
-        Assert.Empty(result.RdbUpdatesStaged);
-        Assert.False(result.RestartRequired);
-        Assert.False(File.Exists(RdbPath(SnesName) + ".next"));
-    }
-
-    [Fact]
-    public async Task AfterARestart_TheStagedRdbIsAppliedAndThatPlatformsMissingEntriesAreReopened()
-    {
-        var first = await CreateAsync();
-        _upstreamSnes = RdbUpdateCheckTests.RdbBytes("Alpha", "Beta");
-        await first.Service.RefreshLibraryArtworkAsync(_libraryId, null);
-        var oldBytes = File.ReadAllBytes(RdbPath(SnesName));
-        // The reopened entries failed again after the refresh.
-        await first.Catalog.MarkMissingAsync(first.Games["Chrono"].Key, first.Games["Chrono"].SystemId, CurrentProviderVersion);
-        await first.Catalog.MarkMissingAsync(first.Games["Sonic"].Key, first.Games["Sonic"].SystemId, CurrentProviderVersion);
-
-        var restartedCatalog = first.Catalog;
-        var restarted = BuildService(restartedCatalog);
-        await ReconcileAsync(restarted.Service);
-
-        Assert.Equal(_upstreamSnes, File.ReadAllBytes(RdbPath(SnesName)));
-        Assert.Equal(oldBytes, File.ReadAllBytes(RdbPath(SnesName) + ".prev"));
-        Assert.False(File.Exists(RdbPath(SnesName) + ".next"));
-        Assert.False(File.Exists(RdbPath(SnesName) + ".next.json"));
-        Assert.Equal(ArtworkCatalogState.Pending, (await restartedCatalog.GetAsync(first.Games["Chrono"].Key))?.State);
-        Assert.Contains("remote:" + first.Games["Chrono"].Key.StorageKey, QueuedRemote(restarted.Service).Keys);
-        Assert.Equal(ArtworkCatalogState.Missing, (await restartedCatalog.GetAsync(first.Games["Sonic"].Key))?.State);
+        Assert.Equal(liveBytes, File.ReadAllBytes(RdbPath(SnesName)));
     }
 
     private async Task<Fixture> CreateAsync()
@@ -314,11 +264,6 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
                 await _gate;
             }
 
-            if (_stagingBody != null)
-            {
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(_stagingBody) };
-            }
-
             return request.RequestUri!.AbsoluteUri.Contains(Uri.EscapeDataString(SnesName), StringComparison.Ordinal) && _upstreamSnes is { } bytes
                 ? Ok(bytes, "\"v2\"")
                 : new HttpResponseMessage(HttpStatusCode.NotModified);
@@ -377,11 +322,6 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
         }
     }
 
-    private static Task ReconcileAsync(GameArtworkReconciliationService service) =>
-        (Task)typeof(GameArtworkReconciliationService)
-            .GetMethod("ReconcileAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(service, BindingFlags.DoNotWrapExceptions, binder: null, parameters: [CancellationToken.None, false], culture: null)!;
-
     private static Dictionary<string, ArtworkLane> QueuedRemote(GameArtworkReconciliationService service)
     {
         var queued = (System.Collections.IDictionary)typeof(GameArtworkReconciliationService)
@@ -410,162 +350,6 @@ public sealed class GameArtworkLibraryRefreshTests : IDisposable
             binder: null,
             parameters: [libraryId, gameId, GameThumbService.ThumbKind.Boxart, null],
             culture: null));
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
-    }
-}
-
-public sealed class RdbStagedUpdateTests : IDisposable
-{
-    private const string Platform = "Nintendo - Super Nintendo Entertainment System";
-    private const string BaseUrl = "https://mirror.test/rdb";
-
-    private readonly string _root = Path.Combine(Path.GetTempPath(), $"moonfin-rdb-staged-{Guid.NewGuid():N}");
-    private byte[]? _upstream;
-
-    private string RdbPath => Path.Combine(_root, "gamemeta", Platform + ".rdb");
-
-    private static global::Moonfin.Server.PluginConfiguration Config => new() { GamesMetadataDbUrlBase = BaseUrl };
-
-    private RdbIndexStore Store(out RdbUpdateCheckTests.ScriptedHandler handler)
-    {
-        handler = RdbUpdateCheckTests.ScriptedHandler.Sync(_ =>
-        {
-            if (_upstream is not { } bytes)
-            {
-                return new HttpResponseMessage(HttpStatusCode.NotModified);
-            }
-
-            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
-            response.Headers.ETag = EntityTagHeaderValue.Parse("\"v2\"");
-            return response;
-        });
-        return new RdbIndexStore(new FakeHttpClientFactory(handler), new NoOpLogger<RdbService>(), _root);
-    }
-
-    private byte[] WriteLive(params string[] names)
-    {
-        var bytes = RdbUpdateCheckTests.RdbBytes(names);
-        Directory.CreateDirectory(Path.GetDirectoryName(RdbPath)!);
-        File.WriteAllBytes(RdbPath, bytes);
-        File.WriteAllText(
-            RdbPath + ".json",
-            JsonSerializer.Serialize(
-                new { etag = "\"v1\"", sha256 = Sha(bytes), recordCount = names.Length },
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
-        return bytes;
-    }
-
-    private static string Sha(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-
-    [Fact]
-    public async Task Stage_LeavesTheLiveFileIndexAndSidecarUntouched()
-    {
-        var live = WriteLive("Alpha");
-        var store = Store(out _);
-        var before = await store.GetIndexAsync(Platform, Config);
-        var sidecarBefore = File.ReadAllText(RdbPath + ".json");
-        _upstream = RdbUpdateCheckTests.RdbBytes("Alpha", "Beta");
-
-        Assert.True(await store.StageUpdateAsync(Platform, Config, CancellationToken.None));
-
-        Assert.Equal(_upstream, File.ReadAllBytes(RdbPath + ".next"));
-        Assert.Equal(live, File.ReadAllBytes(RdbPath));
-        Assert.Equal(sidecarBefore, File.ReadAllText(RdbPath + ".json"));
-        Assert.Same(before, await store.GetIndexAsync(Platform, Config));
-        Assert.DoesNotContain(RdbMatcher.NormalizeName("Beta"), before!.ByName.Keys);
-    }
-
-    [Fact]
-    public async Task Stage_WhenUpstreamMatchesTheLiveFile_StagesNothingAndDropsAStaleStagedCopy()
-    {
-        var live = WriteLive("Alpha");
-        var store = Store(out _);
-        await store.EnsureUpdateCheckedAsync(Platform, Config);
-        _upstream = RdbUpdateCheckTests.RdbBytes("Alpha", "Beta");
-        Assert.True(await store.StageUpdateAsync(Platform, Config, CancellationToken.None));
-
-        _upstream = live;
-
-        Assert.False(await store.StageUpdateAsync(Platform, Config, CancellationToken.None));
-        Assert.False(File.Exists(RdbPath + ".next"));
-        Assert.False(File.Exists(RdbPath + ".next.json"));
-    }
-
-    [Fact]
-    public async Task StageThenFirstLoadInTheSameProcess_BuildsFromTheOldFile_AndARestartAppliesTheStagedOne()
-    {
-        var live = WriteLive("Alpha");
-        var store = Store(out _);
-        await store.EnsureUpdateCheckedAsync(Platform, Config);
-        _upstream = RdbUpdateCheckTests.RdbBytes("Alpha", "Beta", "Gamma");
-        Assert.True(await store.StageUpdateAsync(Platform, Config, CancellationToken.None));
-
-        var index = await store.GetIndexAsync(Platform, Config);
-
-        Assert.DoesNotContain(RdbMatcher.NormalizeName("Gamma"), index!.ByName.Keys);
-        Assert.Equal(live, File.ReadAllBytes(RdbPath));
-        Assert.True(File.Exists(RdbPath + ".next"));
-
-        var restarted = Store(out var handler);
-        var result = await restarted.EnsureUpdateCheckedAsync(Platform, Config);
-
-        Assert.True(result.ReopenPending);
-        Assert.Equal(Sha(_upstream), result.Digest);
-        Assert.Equal(_upstream, File.ReadAllBytes(RdbPath));
-        Assert.Equal(live, File.ReadAllBytes(RdbPath + ".prev"));
-        Assert.False(File.Exists(RdbPath + ".next"));
-        Assert.False(File.Exists(RdbPath + ".next.json"));
-        var sidecar = JsonDocument.Parse(File.ReadAllText(RdbPath + ".json")).RootElement;
-        Assert.Equal("\"v2\"", sidecar.GetProperty("etag").GetString());
-        Assert.Equal(3, sidecar.GetProperty("recordCount").GetInt32());
-        Assert.Equal("\"v2\"", Assert.Single(handler.Requests).IfNoneMatch);
-        Assert.Contains(RdbMatcher.NormalizeName("Gamma"), (await restarted.GetIndexAsync(Platform, Config))!.ByName.Keys);
-    }
-
-    [Fact]
-    public async Task ConcurrentStagesOfOnePlatform_LeaveOneValidStagedFile()
-    {
-        WriteLive("Alpha");
-        var store = Store(out _);
-        await store.EnsureUpdateCheckedAsync(Platform, Config);
-        _upstream = RdbUpdateCheckTests.RdbBytes("Alpha", "Beta");
-
-        var results = await Task.WhenAll(
-            Task.Run(() => store.StageUpdateAsync(Platform, Config, CancellationToken.None)),
-            Task.Run(() => store.StageUpdateAsync(Platform, Config, CancellationToken.None)));
-
-        Assert.All(results, Assert.True);
-        Assert.Equal(2, RdbReader.ReadAll(RdbPath + ".next").Count);
-        Assert.Equal(
-            [RdbPath + ".next", RdbPath + ".next.json"],
-            Directory.GetFiles(Path.GetDirectoryName(RdbPath)!, "*.next*").OrderBy(path => path, StringComparer.Ordinal));
-    }
-
-    [Theory]
-    [InlineData("garbage")]
-    [InlineData("shrunk")]
-    public async Task InvalidInheritedStagedFile_IsDeletedAndTheCurrentFileKept(string kind)
-    {
-        var live = WriteLive(Enumerable.Range(0, 10).Select(i => "Game " + i).ToArray());
-        File.WriteAllBytes(
-            RdbPath + ".next",
-            kind == "garbage" ? "<html>not an rdb</html>"u8.ToArray() : RdbUpdateCheckTests.RdbBytes("Game 0", "Game 1"));
-        File.WriteAllText(RdbPath + ".next.json", "{}");
-
-        var result = await Store(out _).EnsureUpdateCheckedAsync(Platform, Config);
-
-        Assert.False(result.ReopenPending);
-        Assert.Equal(live, File.ReadAllBytes(RdbPath));
-        Assert.False(File.Exists(RdbPath + ".next"));
-        Assert.False(File.Exists(RdbPath + ".next.json"));
-        Assert.False(File.Exists(RdbPath + ".prev"));
     }
 
     public void Dispose()

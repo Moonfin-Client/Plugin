@@ -28,6 +28,9 @@ internal sealed partial class RdbIndexStore
     // downloading" race would be needlessly punished with the same 5-minute wait as a truly
     // corrupt file.
     private readonly ConcurrentDictionary<string, DateTime> _parseRetryAfterUtc = new(StringComparer.Ordinal);
+
+    // Bumped when the update check replaces a platform's file, so a build that read the old file isn't kept.
+    private readonly ConcurrentDictionary<string, int> _fileGenerations = new(StringComparer.Ordinal);
     private int _buildIndexCallCount;
 
     internal RdbIndexStore(IHttpClientFactory httpClientFactory, ILogger<RdbService> logger, string? dataFolderPathOverride)
@@ -35,30 +38,6 @@ internal sealed partial class RdbIndexStore
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _dataFolderPathOverride = dataFolderPathOverride;
-        _inheritedStaged = new Lazy<IReadOnlySet<string>>(ScanStagedPlatforms, LazyThreadSafetyMode.ExecutionAndPublication);
-    }
-
-    private IReadOnlySet<string> ScanStagedPlatforms()
-    {
-        var found = new HashSet<string>(StringComparer.Ordinal);
-        try
-        {
-            var dataFolder = DataFolderPath;
-            var directory = string.IsNullOrWhiteSpace(dataFolder) ? null : Path.Combine(dataFolder, "gamemeta");
-            if (directory != null && Directory.Exists(directory))
-            {
-                foreach (var file in Directory.EnumerateFiles(directory, "*.rdb.next"))
-                {
-                    found.Add(Path.GetFileName(file)[..^".rdb.next".Length]);
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _logger.LogDebug(ex, "Listing staged game metadata failed");
-        }
-
-        return found;
     }
 
     internal int BuildIndexCallCountForTests => _buildIndexCallCount;
@@ -66,6 +45,9 @@ internal sealed partial class RdbIndexStore
     internal Action? BuildIndexAboutToRunForTests { get; set; }
 
     internal event Action<string>? IndexAvailable;
+
+    /// <summary>Raised after the update check swaps in a newer file for a platform.</summary>
+    internal event Action<string>? IndexReplaced;
 
     internal RdbPlatformIndex? GetIndexOrStartBuild(string platform, PluginConfiguration config)
     {
@@ -100,8 +82,9 @@ internal sealed partial class RdbIndexStore
             return null;
         }
 
-        // No index is built from a file that the once-per-process update check may still replace.
-        await EnsureUpdateCheckedAsync(platform, config).ConfigureAwait(false);
+        // The update check runs beside the build rather than ahead of it, so a slow or silent network
+        // never holds back the index. A newer file replaces this one when the check finishes.
+        _ = EnsureUpdateCheckedAsync(platform, config);
 
         var gate = _indexBuildGates.GetOrAdd(platform, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync().ConfigureAwait(false);
@@ -112,6 +95,7 @@ internal sealed partial class RdbIndexStore
                 return existing;
             }
 
+            var generation = _fileGenerations.GetValueOrDefault(platform);
             RdbPlatformIndex built;
             try
             {
@@ -126,6 +110,11 @@ internal sealed partial class RdbIndexStore
                 _parseRetryAfterUtc[platform] = DateTime.UtcNow + DownloadRetryBackoff;
                 _logger.LogDebug(ex, "Parsing game metadata index failed for {Platform}", platform);
                 return null;
+            }
+
+            if (_fileGenerations.GetValueOrDefault(platform) != generation)
+            {
+                return built;
             }
 
             _indexes[platform] = built;
@@ -168,6 +157,13 @@ internal sealed partial class RdbIndexStore
         {
             _logger.LogDebug(ex, "Building game metadata index failed for {Platform}", platform);
         }
+    }
+
+    private void DropReplacedIndex(string platform)
+    {
+        _fileGenerations.AddOrUpdate(platform, 1, static (_, generation) => generation + 1);
+        _indexes.TryRemove(platform, out _);
+        IndexReplaced?.Invoke(platform);
     }
 
     private RdbPlatformIndex BuildIndexTracked(string path)
