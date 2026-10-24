@@ -890,6 +890,10 @@
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5S10.5 3.17 10.5 4v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Messages</span><span class="moonfinNavSub">News for your users</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="accounts">
+                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Accounts</span><span class="moonfinNavSub">Server PINs</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="actions">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11v2h4v-2h-4zm-2 6.61c.96.71 2.21 1.65 3.2 2.39.4-.53.8-1.07 1.2-1.6-.99-.74-2.24-1.68-3.2-2.4-.4.54-.8 1.08-1.2 1.61zM20.4 5.6c-.4-.53-.8-1.07-1.2-1.6-.99.74-2.24 1.68-3.2 2.4.4.53.8 1.07 1.2 1.6.96-.72 2.21-1.65 3.2-2.4zM4 9c-1.1 0-2 .9-2 2v2c0 1.1.9 2 2 2h1v4h2v-4h1l5 3V6L8 9H4zm11.5 3c0-1.33-.58-2.53-1.5-3.35v6.69c.92-.81 1.5-2.01 1.5-3.34z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Actions</span><span class="moonfinNavSub">Apply Defaults &amp; Broadcast</span></span>
@@ -3687,6 +3691,20 @@
                             Shown in this order in the app. Up to 50 are kept, then the oldest are dropped.
                         </div>
                         <div id="MessagesList" style="max-height:340px;overflow-y:auto;border:1px solid rgba(128,128,128,0.3);border-radius:4px;padding:6px;"></div>
+                    </div>
+
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="accounts">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">PINs</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            A PIN kept here applies on every device, so a PIN set once holds on each new TV. An app
+                            that supports it asks for the PIN from this server and falls back to the PIN stored on the
+                            device otherwise. A PIN is exactly four digits. After too many wrong guesses the server makes
+                            the user wait. Setting a PIN here replaces any existing one, so it also resets a forgotten PIN.
+                        </div>
+                        <div id="AdminPinList"></div>
+                        <div id="AdminPinResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
                     </div>
 
                     </section>

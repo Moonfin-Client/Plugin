@@ -1,7 +1,8 @@
-using Moonfin.Server.Services;
+using System;
+using System.Collections.Generic;
 using Xunit;
 
-namespace Moonfin.Server.Tests;
+namespace Moonfin.Pin.Tests;
 
 public class PinServiceTests
 {

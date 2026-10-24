@@ -1,8 +1,8 @@
+using System;
+using System.Linq;
 using System.Security.Cryptography;
-using System.Text.Json;
-using Microsoft.Extensions.Logging;
 
-namespace Moonfin.Server.Services;
+namespace Moonfin.Pin;
 
 /// <summary>What the server keeps for one user's PIN. Never the PIN itself.</summary>
 public class PinRecord
@@ -47,8 +47,18 @@ public enum PinCheck
     NoPin,
 }
 
-public readonly record struct PinResult(PinCheck Check, int RetryAfterSeconds = 0)
+public readonly struct PinResult
 {
+    public PinResult(PinCheck check, int retryAfterSeconds = 0)
+    {
+        Check = check;
+        RetryAfterSeconds = retryAfterSeconds;
+    }
+
+    public PinCheck Check { get; }
+
+    public int RetryAfterSeconds { get; }
+
     public bool IsValid => Check == PinCheck.Valid;
 }
 
@@ -112,7 +122,8 @@ public class PinService
             return false;
         }
 
-        var salt = RandomNumberGenerator.GetBytes(SaltBytes);
+        var salt = new byte[SaltBytes];
+        RandomNumberGenerator.Fill(salt);
         lock (_gate)
         {
             _store.Save(userId, new PinRecord
@@ -200,50 +211,10 @@ public class PinService
         }
     }
 
-    private static byte[] Derive(string pin, byte[] salt, int iterations) =>
-        Rfc2898DeriveBytes.Pbkdf2(pin, salt, iterations, HashAlgorithmName.SHA256, HashBytes);
-}
-
-/// <summary>PIN records as one file per user under the plugin data folder.</summary>
-public class FilePinStore : IPinStore
-{
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    // The Emby plugin's netstandard2.1 has no static Pbkdf2 helper, and this gives the same hash.
+    private static byte[] Derive(string pin, byte[] salt, int iterations)
     {
-        WriteIndented = true,
-        PropertyNameCaseInsensitive = true,
-    };
-
-    private readonly string _directory;
-    private readonly ILogger<FilePinStore> _logger;
-
-    public FilePinStore(ILogger<FilePinStore> logger)
-    {
-        _logger = logger;
-        _directory = Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), "pins");
+        using var kdf = new Rfc2898DeriveBytes(pin, salt, iterations, HashAlgorithmName.SHA256);
+        return kdf.GetBytes(HashBytes);
     }
-
-    private string PathFor(Guid userId) => Path.Combine(_directory, $"{userId:N}.json");
-
-    public PinRecord? Load(Guid userId)
-    {
-        try
-        {
-            return AtomicFile.ReadWithRecovery(
-                PathFor(userId),
-                json => JsonSerializer.Deserialize<PinRecord>(json, JsonOptions));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to read the PIN record for user {UserId}", userId);
-            return null;
-        }
-    }
-
-    public void Save(Guid userId, PinRecord record)
-    {
-        Directory.CreateDirectory(_directory);
-        AtomicFile.WriteAllText(PathFor(userId), JsonSerializer.Serialize(record, JsonOptions));
-    }
-
-    public void Delete(Guid userId) => AtomicFile.DeleteWithSidecars(PathFor(userId));
 }

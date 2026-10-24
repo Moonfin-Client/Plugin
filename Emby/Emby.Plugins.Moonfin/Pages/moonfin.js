@@ -3529,6 +3529,105 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             });
     }
 
+    function loadAdminPins(view) {
+        var list = view.querySelector('#AdminPinList');
+        if (!list) return;
+
+        var result = view.querySelector('#AdminPinResult');
+        function say(text, isError) {
+            result.style.display = text ? '' : 'none';
+            result.textContent = text || '';
+            result.style.color = isError ? '#d9534f' : '';
+        }
+
+        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        function send(method, id, body) {
+            return fetch(serverUrl + '/Moonfin/Users/' + encodeURIComponent(id) + '/Pin', {
+                method: method,
+                headers: moonfinAuthHeaders(),
+                body: body ? JSON.stringify(body) : undefined
+            }).then(parseJsonResponse);
+        }
+
+        fetch(serverUrl + '/Moonfin/Admin/Pins', { method: 'GET', headers: moonfinAuthHeaders() })
+            .then(parseJsonResponse)
+            .then(function (users) {
+                list.innerHTML = '';
+                (Array.isArray(users) ? users : []).forEach(function (user) {
+                    var row = document.createElement('div');
+                    row.style.margin = '0 0 1.2em';
+
+                    var title = document.createElement('div');
+                    title.style.fontWeight = '600';
+                    row.appendChild(title);
+
+                    var input = document.createElement('input');
+                    input.type = 'password';
+                    input.maxLength = 4;
+                    input.setAttribute('inputmode', 'numeric');
+                    input.setAttribute('autocomplete', 'off');
+                    input.placeholder = '4 digits';
+                    input.style.width = '6em';
+                    input.style.marginRight = '0.6em';
+                    row.appendChild(input);
+
+                    var setBtn = document.createElement('button');
+                    setBtn.type = 'button';
+                    setBtn.setAttribute('is', 'emby-button');
+                    setBtn.className = 'raised';
+                    setBtn.style.marginRight = '0.6em';
+                    row.appendChild(setBtn);
+
+                    var removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.setAttribute('is', 'emby-button');
+                    removeBtn.className = 'raised';
+                    removeBtn.textContent = 'Remove PIN';
+                    row.appendChild(removeBtn);
+
+                    function show(hasPin) {
+                        title.textContent = user.name + (user.isAdministrator ? ' (administrator)' : '') + ': ' + (hasPin ? 'PIN set' : 'no PIN');
+                        setBtn.textContent = hasPin ? 'Change PIN' : 'Set PIN';
+                        removeBtn.style.display = hasPin ? '' : 'none';
+                    }
+
+                    function done(promise, message, hasPin) {
+                        setBtn.disabled = true;
+                        removeBtn.disabled = true;
+                        return promise.then(function () {
+                            input.value = '';
+                            show(hasPin);
+                            say(message, false);
+                        }, function () {
+                            say('Couldn\'t save the PIN for ' + user.name + '.', true);
+                        }).then(function () {
+                            setBtn.disabled = false;
+                            removeBtn.disabled = false;
+                        });
+                    }
+
+                    setBtn.addEventListener('click', function () {
+                        if (!/^[0-9]{4}$/.test(input.value)) {
+                            say('A PIN is exactly four digits.', true);
+                            return;
+                        }
+                        done(send('PUT', user.id, { pin: input.value }), 'Saved the PIN for ' + user.name + '.', true);
+                    });
+
+                    removeBtn.addEventListener('click', function () {
+                        done(send('DELETE', user.id), 'Removed the PIN for ' + user.name + '.', false);
+                    });
+
+                    show(user.hasPin);
+                    list.appendChild(row);
+                });
+                say('', false);
+            })
+            .catch(function () {
+                say('Couldn\'t load the users.', true);
+            });
+    }
+
     // Moves one message up or down and saves the whole order, so the app shows
     // them in the same sequence as this list.
     function moveMessage(view, messageId, delta) {
@@ -3836,6 +3935,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             resetMessageForm(view);
             loadMessagesList(view);
         });
+        loadAdminPins(view);
         loadConfig(view);
     };
 

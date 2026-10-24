@@ -1,6 +1,7 @@
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
+using Moonfin.Pin;
 using Moonfin.Romm;
 using Moonfin.Server.Services;
 

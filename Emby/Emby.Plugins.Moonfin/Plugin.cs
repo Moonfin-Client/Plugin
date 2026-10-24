@@ -14,6 +14,7 @@ using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
+using Moonfin.Pin;
 using Moonfin.Romm;
 
 namespace Emby.Plugins.Moonfin
@@ -61,6 +62,7 @@ namespace Emby.Plugins.Moonfin
         public AnimeMarkerCacheService? AnimeMarkerCache { get; private set; }
         public AnimeRecapFetchService? AnimeRecapFetch { get; private set; }
         public AnimeMarkerResolver? AnimeMarkerResolver { get; private set; }
+        public PinService? Pins { get; private set; }
 
         public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogManager logManager)
             : base(applicationPaths, xmlSerializer)
@@ -224,6 +226,7 @@ namespace Emby.Plugins.Moonfin
             PushDelivery = new PushDeliveryService(NotificationStore, RelaySender, FcmSender, notifyLogger);
             SeerrWebhook = new SeerrWebhookService(SeerrService, SettingsService, NotificationStore, PushDelivery, notifyLogger);
             SeerrProvisioning = new SeerrProvisioningService(SeerrService, appHost, notifyLogger);
+            Pins = new PinService(new FilePinStore(Path.Combine(DataFolderPath, "pins"), logManager.GetLogger("MoonfinPins")));
 
             // Ensure a webhook secret exists before provisioning tries to publish it.
             if (Configuration.EnsureWebhookSecret())

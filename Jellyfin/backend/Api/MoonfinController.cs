@@ -1574,7 +1574,6 @@ public class MoonfinPingResponse
     public bool? MessagesSupported { get; set; }
 
     /// <summary>
-    /// <summary>
     /// True when this plugin keeps PINs on the server. Older plugins leave it out, so the app
     /// keeps using the PIN stored on the device.
     /// </summary>

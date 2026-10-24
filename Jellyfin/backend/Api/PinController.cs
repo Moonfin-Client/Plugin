@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Moonfin.Pin;
 using Moonfin.Server.Services;
 
 namespace Moonfin.Server.Api;
@@ -129,15 +130,18 @@ public class PinController : ControllerBase
         return Ok(new PinStatusResponse { Enabled = false });
     }
 
-    /// <summary>Which administrators have a PIN, for the config page.</summary>
+    /// <summary>
+    /// Every user and whether they have a PIN, administrators first, so the config page can reset
+    /// a forgotten one.
+    /// </summary>
     [HttpGet("Admin/Pins")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<AdminPinResponse>> GetAdminPins() =>
         Ok(_directory.Users()
-            .Where(u => u.IsAdministrator)
-            .OrderBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(u => new AdminPinResponse { Id = u.Id.ToString("N"), Name = u.Name, HasPin = _pins.HasPin(u.Id) }));
+            .OrderByDescending(u => u.IsAdministrator)
+            .ThenBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(u => new AdminPinResponse { Id = u.Id.ToString("N"), Name = u.Name, IsAdministrator = u.IsAdministrator, HasPin = _pins.HasPin(u.Id) }));
 
     /// <summary>Sets a user's PIN without the current one, for an administrator.</summary>
     [HttpPut("Users/{userId}/Pin")]
@@ -225,6 +229,9 @@ public class AdminPinResponse
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("isAdministrator")]
+    public bool IsAdministrator { get; set; }
 
     [JsonPropertyName("hasPin")]
     public bool HasPin { get; set; }

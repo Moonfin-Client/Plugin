@@ -3613,7 +3613,7 @@
                     </section>
                     <section class="moonfinTabPanel" data-tab="accounts">
                     <div class="verticalSection">
-                        <h3 class="sectionTitle">Administrator PINs</h3>
+                        <h3 class="sectionTitle">PINs</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
                             A PIN kept here applies on every device, so a PIN set once holds on each new TV. An app
                             that supports it asks for the PIN from this server and falls back to the PIN stored on the
@@ -6214,9 +6214,9 @@
                     type: 'GET',
                     url: ApiClient.getUrl('Moonfin/Admin/Pins'),
                     dataType: 'json'
-                }).then(function(admins) {
+                }).then(function(users) {
                     list.innerHTML = '';
-                    (admins || []).forEach(function(admin) {
+                    (users || []).forEach(function(user) {
                         var row = document.createElement('div');
                         row.style.margin = '0 0 1.2em';
 
@@ -6249,7 +6249,7 @@
                         row.appendChild(removeBtn);
 
                         function show(hasPin) {
-                            title.textContent = admin.name + ' \u2013 ' + (hasPin ? 'PIN set' : 'no PIN');
+                            title.textContent = user.name + (user.isAdministrator ? ' (administrator)' : '') + ': ' + (hasPin ? 'PIN set' : 'no PIN');
                             setBtn.textContent = hasPin ? 'Change PIN' : 'Set PIN';
                             removeBtn.style.display = hasPin ? '' : 'none';
                         }
@@ -6262,7 +6262,7 @@
                                 show(hasPin);
                                 say(message, false);
                             }, function() {
-                                say('Could not save the PIN for ' + admin.name + '.', true);
+                                say('Couldn\'t save the PIN for ' + user.name + '.', true);
                             }).then(function() {
                                 setBtn.disabled = false;
                                 removeBtn.disabled = false;
@@ -6274,19 +6274,19 @@
                                 say('A PIN is exactly four digits.', true);
                                 return;
                             }
-                            done(send('PUT', admin.id, { pin: input.value }), 'Saved the PIN for ' + admin.name + '.', true);
+                            done(send('PUT', user.id, { pin: input.value }), 'Saved the PIN for ' + user.name + '.', true);
                         });
 
                         removeBtn.addEventListener('click', function() {
-                            done(send('DELETE', admin.id), 'Removed the PIN for ' + admin.name + '.', false);
+                            done(send('DELETE', user.id), 'Removed the PIN for ' + user.name + '.', false);
                         });
 
-                        show(admin.hasPin);
+                        show(user.hasPin);
                         list.appendChild(row);
                     });
                     say('', false);
                 }, function() {
-                    say('Could not load the administrators.', true);
+                    say('Couldn\'t load the users.', true);
                 });
             }
 
