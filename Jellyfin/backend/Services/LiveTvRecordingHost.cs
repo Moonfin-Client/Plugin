@@ -85,7 +85,8 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         foreach (var service in _liveTvManager.Services.Where(s => result.Items.Any(t =>
             t.Status == RecordingStatus.Cancelled && string.Equals(t.ServiceName, s.Name, StringComparison.OrdinalIgnoreCase))))
         {
-            // One service failing leaves its timers' IsManual unknown rather than failing the load.
+            // One service failing or timing out leaves its timers' IsManual unknown rather than
+            // failing the load; only the caller's own cancellation ends it.
             try
             {
                 foreach (var timer in await service.GetTimersAsync(cancellationToken).ConfigureAwait(false))
@@ -93,7 +94,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
                     manual[service.Name + "\0" + timer.Id] = timer.IsManual;
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 _logger.LogWarning(ex, "Could not read the timers of Live TV service {Service}", service.Name);
             }

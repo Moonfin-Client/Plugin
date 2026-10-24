@@ -105,13 +105,16 @@ public sealed class LiveTvRecordingHostTests : IDisposable
         Assert.Equal(isManual, (await context.Host.GetTimersAsync(CancellationToken.None)).Single().IsManual);
     }
 
-    [Fact]
-    public async Task AServiceThatFailsToListItsTimersLeavesTheManualFlagUnknown()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AServiceThatFailsToListItsTimersLeavesTheManualFlagUnknown(bool timesOut)
     {
+        Exception failure = timesOut ? new TaskCanceledException("timeout") : new InvalidOperationException("offline");
         var service = RecordingHostProxy.Create<ILiveTvService>((method, _) => method.Name switch
         {
             "get_Name" => "Dvr",
-            "GetTimersAsync" => Task.FromException<IEnumerable<TimerInfo>>(new InvalidOperationException("offline")),
+            "GetTimersAsync" => Task.FromException<IEnumerable<TimerInfo>>(failure),
             _ => throw new NotSupportedException(method.Name),
         });
         using var context = new RecordingHostTestContext((method, _) => method.Name switch
