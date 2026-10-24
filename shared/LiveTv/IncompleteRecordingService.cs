@@ -432,13 +432,16 @@ public sealed class IncompleteRecordingService : IDisposable
                 request.ClosedAt = now;
             }
 
-            Save(data);
-
             foreach (var id in record.TaggedItemIds)
             {
-                await SetTagSafeAsync(id, false, cancellationToken).ConfigureAwait(false);
+                if (!await SetTagSafeAsync(id, false, cancellationToken).ConfigureAwait(false)
+                    && !data.PendingUntags.Contains(id))
+                {
+                    data.PendingUntags.Add(id);
+                }
             }
 
+            Save(data);
             return true;
         }
         finally
@@ -812,13 +815,13 @@ public sealed class IncompleteRecordingService : IDisposable
     }
 
     // An item tagged again by a newer incomplete record keeps its tag, and one that's gone has
-    // nothing left to remove.
+    // nothing left to remove. A dismissed record never tags again, so it doesn't hold the tag.
     private async Task<bool> RetryUntagsAsync(IncompleteRecordingStoreData data, CancellationToken cancellationToken)
     {
         var changed = false;
         foreach (var itemId in data.PendingUntags.ToList())
         {
-            if (data.Records.Any(r => r.TaggedItemIds.Contains(itemId))
+            if (data.Records.Any(r => !r.Dismissed && r.TaggedItemIds.Contains(itemId))
                 || _host.GetTags(itemId) == null
                 || await SetTagSafeAsync(itemId, false, cancellationToken).ConfigureAwait(false))
             {

@@ -477,6 +477,24 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Empty(await service.GetStatesAsync(new[] { item.Id }, User, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task AFailedTagRemovalOnKeepAsCompleteIsRetried()
+    {
+        var item = _host.AddItem("/rec/a.ts");
+        var service = await RecordShow(writtenMinutes: 10);
+
+        _host.TagWritesFail = true;
+        Assert.True(await service.DismissAsync(item.Id, User, CancellationToken.None));
+
+        Assert.Contains(IncompleteRecordingRules.Tag, item.Tags);
+
+        _host.TagWritesFail = false;
+        await NewService().RunAsync(CancellationToken.None);
+
+        Assert.Empty(item.Tags);
+        Assert.Empty(await service.GetStatesAsync(new[] { item.Id }, User, CancellationToken.None));
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, false)]
