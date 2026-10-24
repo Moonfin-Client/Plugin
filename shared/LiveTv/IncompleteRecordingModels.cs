@@ -1,15 +1,18 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 
-namespace Moonfin.Server.Services;
+namespace Moonfin.LiveTv;
 
 /// <summary>
 /// Identifies one episode across airings. The persisted identity is the series plus season and
-/// episode number; the episode title is kept beside it as an anchor and only ever checked for
+/// episode number. The episode title is kept beside it as an anchor and only ever checked for
 /// compatibility, so it never changes which key an airing has.
 ///
 /// The series is the guide's series id when there is one ("id:" namespace), otherwise the
-/// normalized series name ("name:" namespace). Two sides that both carry an id compare ids; when
-/// either lacks one they compare names. A multi-episode airing is keyed by its first episode
+/// normalized series name ("name:" namespace). Two sides that both carry an id compare ids, and
+/// when either lacks one they compare names. A multi-episode airing is keyed by its first episode
 /// number.
 /// </summary>
 public sealed class EpisodeKey
@@ -130,8 +133,14 @@ public sealed class RecordingSnapshot
     /// <summary>The service's own timer id, which the recordings manager keys active recordings by.</summary>
     public string TimerId { get; set; } = string.Empty;
 
-    /// <summary>Library id of the guide program, in the "N" format the API uses.</summary>
+    /// <summary>The guide program's id, in the form the server's API takes it.</summary>
     public string? ProgramId { get; set; }
+
+    /// <summary>The id the Live TV API knows the timer by, which a cancellation may carry instead.</summary>
+    public string? ApiId { get; set; }
+
+    /// <summary>The timer was cancelled while it recorded, so a short file is what the user asked for.</summary>
+    public bool StoppedByUser { get; set; }
 
     public string? ChannelName { get; set; }
 
@@ -175,7 +184,7 @@ public sealed class IncompleteRecord
 
     public List<RecordingFragment> Fragments { get; set; } = new();
 
-    /// <summary>When the recording was judged; renamed files attach up to a day after this.</summary>
+    /// <summary>When the recording was judged. Renamed files attach up to a day after this.</summary>
     public DateTime JudgedAt { get; set; }
 
     /// <summary>Items the tag was added to. A tag missing from one of these means the user dismissed it.</summary>
@@ -218,7 +227,7 @@ public sealed class CompleteShowingRequest
 
     public string State { get; set; } = CompleteShowingState.Waiting;
 
-    /// <summary>Opened by a user from the Record prompt; survives the automatic setting being turned off.</summary>
+    /// <summary>Opened by a user from the Record prompt, so it survives the automatic setting being turned off.</summary>
     public bool Explicit { get; set; }
 
     public DateTime OpenedAt { get; set; }
@@ -259,17 +268,17 @@ public sealed class IncompleteRecordingStoreData
 
     public DateTime? LastRequestSearchAt { get; set; }
 
-    /// <summary>Complete copies whose incomplete tag couldn't be removed yet; each run tries again.</summary>
+    /// <summary>Complete copies whose incomplete tag couldn't be removed yet. Each run tries again.</summary>
     public List<Guid> PendingUntags { get; set; } = new();
 }
 
 /// <summary>A timer as the schedule cache holds it.</summary>
 public sealed class ScheduledTimer
 {
-    /// <summary>The API id; some cancellation events use this instead of the service's timer id.</summary>
+    /// <summary>The API id, which some cancellation events use instead of the service's timer id.</summary>
     public string? ApiId { get; set; }
 
-    /// <summary>The service's own timer id (TimerInfoDto.ExternalId).</summary>
+    /// <summary>The service's own timer id.</summary>
     public string TimerId { get; set; } = string.Empty;
 
     public string? ProgramId { get; set; }
@@ -319,6 +328,9 @@ public sealed class ActiveRecordingTimer
 /// <summary>One airing in the guide.</summary>
 public sealed class GuideProgram
 {
+    /// <summary>The program's library item, which visibility is checked on.</summary>
+    public Guid ItemId { get; set; }
+
     public string Id { get; set; } = string.Empty;
 
     public string? SeriesId { get; set; }
@@ -364,6 +376,10 @@ public enum ScheduleResult
 /// <summary>Server-wide settings for the feature.</summary>
 public sealed class IncompleteRecordingSettings
 {
+    // True when absent, so a client that doesn't send it can't turn detection off.
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
     [JsonPropertyName("autoRecordComplete")]
     public bool AutoRecordComplete { get; set; }
 

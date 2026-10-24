@@ -1,4 +1,8 @@
-namespace Moonfin.Server.Services;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace Moonfin.LiveTv;
 
 /// <summary>The pure decisions behind incomplete recordings, kept apart so they can be tested alone.</summary>
 public static class IncompleteRecordingRules
@@ -62,7 +66,7 @@ public static class IncompleteRecordingRules
 
     /// <summary>
     /// Judges a recording by its best single file, since only one playable file is a complete
-    /// copy; files are never added together. Complete when one file's estimated coverage reaches
+    /// copy, and files are never added together. Complete when one file's estimated coverage reaches
     /// the threshold. Incomplete when no file could reach it even if all of its unobserved time
     /// had been recorded. Anything between is unknown and isn't flagged.
     /// </summary>

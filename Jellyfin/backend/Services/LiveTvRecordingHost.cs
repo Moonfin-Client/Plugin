@@ -2,82 +2,17 @@ using System.Text.Json;
 using Jellyfin.Data.Events;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
+using Moonfin.LiveTv;
 using Moonfin.Server.Helpers;
 
 namespace Moonfin.Server.Services;
-
-/// <summary>
-/// The server calls the incomplete recordings feature makes, behind one small surface so its logic
-/// can be tested without a running server.
-/// </summary>
-public interface ILiveTvRecordingHost
-{
-    /// <summary>A timer or series timer was created or cancelled.</summary>
-    event EventHandler? ScheduleChanged;
-
-    event EventHandler<ScheduledTimer>? TimerCreated;
-
-    /// <summary>The id from Jellyfin's timer cancellation event.</summary>
-    event EventHandler<string>? TimerCancelled;
-
-    /// <summary>The server's Refresh Guide task finished.</summary>
-    event EventHandler? GuideRefreshed;
-
-    event EventHandler<LibraryItem>? ItemAdded;
-
-    event EventHandler<LibraryItem>? ItemUpdated;
-
-    event EventHandler<Guid>? ItemRemoved;
-
-    /// <summary>All timers the server knows, including cancelled and completed ones.</summary>
-    Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken);
-
-    /// <summary>The file a timer is writing right now, or null when it isn't recording.</summary>
-    string? GetActiveRecordingPath(string timerId);
-
-    ActiveRecordingTimer? GetActiveRecordingTimer(string path);
-
-    /// <summary>Current size of a file, or null when it doesn't exist.</summary>
-    long? GetFileLength(string path);
-
-    GuideProgram? GetProgram(string programId);
-
-    /// <summary>Guide airings of a series starting after a time, on every channel.</summary>
-    IReadOnlyList<GuideProgram> FindAirings(EpisodeKey episode, DateTime after);
-
-    /// <summary>Schedules a one-off recording of a program with the server's timer defaults.</summary>
-    Task<ScheduleResult> ScheduleProgramAsync(string programId, CancellationToken cancellationToken);
-
-    LibraryItem? FindItemByPath(string path);
-
-    bool FileExists(string path);
-
-    /// <summary>
-    /// Files beside a recording with the same name and another extension: what a post-processing
-    /// script leaves when it remuxes or transcodes in place.
-    /// </summary>
-    IReadOnlyList<string> FindRenamedSiblings(string path);
-
-    /// <summary>Whether a user may see a library item or guide program, parental limits and channel access included.</summary>
-    bool IsVisibleTo(Guid itemId, Guid userId);
-
-    /// <summary>The ones among the given items a user may see, resolving the user once.</summary>
-    IReadOnlySet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId);
-
-    /// <summary>An item's tags as they are now, or null when it no longer exists.</summary>
-    IReadOnlyList<string>? GetTags(Guid itemId);
-
-    Task SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken);
-
-    /// <summary>Deletes a library item and its file the way Jellyfin's own Delete does.</summary>
-    void DeleteItem(Guid itemId);
-}
 
 /// <summary>The Jellyfin implementation of <see cref="ILiveTvRecordingHost"/>.</summary>
 public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposable
@@ -245,7 +180,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         {
             var defaults = await _liveTvManager.GetNewTimerDefaults(programId, cancellationToken).ConfigureAwait(false);
 
-            // The defaults come back as a series timer; the timer DTO shares its base, so the
+            // The defaults come back as a series timer. The timer DTO shares its base, so the
             // shared fields carry over.
             var timer = JsonSerializer.Deserialize<TimerInfoDto>(JsonSerializer.Serialize<BaseTimerInfoDto>(defaults));
             if (timer == null)
@@ -315,7 +250,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         return user != null && IsVisibleTo(itemId, user);
     }
 
-    public IReadOnlySet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId)
+    public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId)
     {
         var user = itemIds.Count == 0 ? null : UserReflection.ResolveUser(_services, userId);
         return user == null
@@ -329,34 +264,57 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         return item == null ? null : item.Tags ?? Array.Empty<string>();
     }
 
-    public async Task SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken)
+    public async Task<bool> SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken)
     {
         var item = _libraryManager.GetItemById(itemId);
         if (item == null)
         {
-            return;
+            return false;
         }
 
         var tags = item.Tags ?? Array.Empty<string>();
         var has = tags.Contains(tag, StringComparer.OrdinalIgnoreCase);
         if (has == present)
         {
-            return;
+            return true;
         }
 
         item.Tags = present
             ? tags.Append(tag).ToArray()
             : tags.Where(t => !string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)).ToArray();
         await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
-    public void DeleteItem(Guid itemId)
+    public DateTime? GetFileWrittenAt(Guid itemId)
+    {
+        var path = _libraryManager.GetItemById(itemId)?.Path;
+        try
+        {
+            return path != null && File.Exists(path) ? File.GetLastWriteTimeUtc(path) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    // Deleting any other kind of video can take its whole folder with it.
+    public bool DeleteItem(Guid itemId)
     {
         var item = _libraryManager.GetItemById(itemId);
-        if (item != null)
+        if (item == null)
         {
-            _libraryManager.DeleteItem(item, new DeleteOptions { DeleteFileLocation = true });
+            return true;
         }
+
+        if (item is not Episode)
+        {
+            return false;
+        }
+
+        _libraryManager.DeleteItem(item, new DeleteOptions { DeleteFileLocation = true });
+        return true;
     }
 
     private bool IsVisibleTo(Guid itemId, object user)
@@ -383,6 +341,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         return new GuideProgram
         {
             Id = program.Id.ToString("N"),
+            ItemId = program.Id,
             SeriesId = program.ExternalSeriesId,
             SeriesName = program.Name,
             Season = program.ParentIndexNumber,
@@ -408,7 +367,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
 
     private void OnTimerEvent(object? sender, EventArgs e) => ScheduleChanged?.Invoke(this, EventArgs.Empty);
 
-    // A service that doesn't implement ISupportsNewTimerIds raises these without an id; the
+    // A service that doesn't implement ISupportsNewTimerIds raises these without an id. The
     // schedule still changed, so only the id-specific event is skipped.
     private void OnTimerCreated(object? sender, GenericEventArgs<TimerEventInfo> e)
     {

@@ -92,6 +92,7 @@ namespace Emby.Plugins.Moonfin.Api
                 // messages button.
                 messagesSupported = true,
                 pinSupported = true,
+                incompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
                 clientLogSupported = config?.EnableClientLogUpload ?? false,
                 defaultSettings = config?.DefaultUserSettings
             });

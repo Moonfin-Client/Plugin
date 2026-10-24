@@ -1,38 +1,35 @@
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace Moonfin.Server.Services;
+namespace Moonfin.LiveTv;
 
 /// <summary>
 /// Runs <see cref="IncompleteRecordingService"/> on the schedule it asks for: once a minute while a
 /// recording window is open, otherwise asleep until the next window, the safety-net check or a
-/// server event wakes it.
+/// server event wakes it. Each server starts <see cref="RunAsync"/> once and stops it on shutdown.
 /// </summary>
-public sealed class IncompleteRecordingWatcher : BackgroundService
+public sealed class IncompleteRecordingWatcher : IDisposable
 {
     private readonly IncompleteRecordingService _service;
     private readonly ILiveTvRecordingHost _host;
-    private readonly ILogger<IncompleteRecordingWatcher> _logger;
+    private readonly IRecordingLog _logger;
     private readonly SemaphoreSlim _wake = new(0, 1);
     private CancellationToken _stopping;
 
     public IncompleteRecordingWatcher(
         IncompleteRecordingService service,
         ILiveTvRecordingHost host,
-        ILogger<IncompleteRecordingWatcher> logger)
+        IRecordingLog logger)
     {
         _service = service;
         _host = host;
         _logger = logger;
     }
 
-    public override void Dispose()
-    {
-        _wake.Dispose();
-        base.Dispose();
-    }
+    public void Dispose() => _wake.Dispose();
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task RunAsync(CancellationToken stoppingToken)
     {
         _stopping = stoppingToken;
         _host.ScheduleChanged += OnScheduleChanged;
@@ -56,7 +53,7 @@ public sealed class IncompleteRecordingWatcher : BackgroundService
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _logger.LogError(ex, "Incomplete recordings check failed");
+                    _logger.Error(ex, "Incomplete recordings check failed");
                 }
 
                 if (delay < TimeSpan.FromSeconds(1))
@@ -113,7 +110,7 @@ public sealed class IncompleteRecordingWatcher : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Incomplete recordings schedule event failed");
+            _logger.Warn(ex, "Incomplete recordings schedule event failed");
         }
 
         Wake();
@@ -161,7 +158,7 @@ public sealed class IncompleteRecordingWatcher : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Incomplete recordings library event failed");
+                _logger.Warn(ex, "Incomplete recordings library event failed");
             }
         });
     }

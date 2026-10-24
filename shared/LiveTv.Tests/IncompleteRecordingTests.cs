@@ -1,8 +1,40 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
-using Moonfin.Server.Services;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
-namespace Moonfin.Server.Tests;
+namespace Moonfin.LiveTv.Tests;
+
+internal sealed class PlainStateFile : IStateFile
+{
+    public static readonly PlainStateFile Instance = new();
+
+    public T? Read<T>(string path, Func<string, T?> parse)
+        where T : class => File.Exists(path) ? parse(File.ReadAllText(path)) : null;
+
+    public void Write(string path, string contents) => File.WriteAllText(path, contents);
+}
+
+internal sealed class NoRecordingLog : IRecordingLog
+{
+    public static readonly NoRecordingLog Instance = new();
+
+    public void Info(string template, params object?[] args)
+    {
+    }
+
+    public void Warn(Exception? exception, string template, params object?[] args)
+    {
+    }
+
+    public void Error(Exception? exception, string template, params object?[] args)
+    {
+    }
+}
 
 internal sealed class ManualTimeProvider : TimeProvider
 {
@@ -35,6 +67,10 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     public Dictionary<string, ActiveRecordingTimer> ActiveTimers { get; } = new();
 
     public Dictionary<string, long> Files { get; } = new();
+
+    public Dictionary<string, DateTime> LastWrite { get; } = new();
+
+    public Func<DateTime>? Clock { get; set; }
 
     public List<GuideProgram> Programs { get; } = new();
 
@@ -95,7 +131,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public bool IsVisibleTo(Guid itemId, Guid userId) => true;
 
-    public IReadOnlySet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.ToHashSet();
+    public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.ToHashSet();
 
     public IReadOnlyList<string>? GetTags(Guid itemId) => Items.FirstOrDefault(i => i.Id == itemId)?.Tags;
 
@@ -107,14 +143,19 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         ScheduleChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public Task SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken)
+    public Task<bool> SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken)
     {
         if (TagWritesFail)
         {
             throw new IOException("The item could not be saved");
         }
 
-        var item = Items.First(i => i.Id == itemId);
+        var item = Items.FirstOrDefault(i => i.Id == itemId);
+        if (item == null)
+        {
+            return Task.FromResult(false);
+        }
+
         var tags = item.Tags.Where(t => t != tag).ToList();
         if (present)
         {
@@ -122,13 +163,19 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         }
 
         item.Tags = tags;
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
-    public void DeleteItem(Guid itemId)
+    public DateTime? GetFileWrittenAt(Guid itemId) =>
+        Items.FirstOrDefault(i => i.Id == itemId)?.Path is { } path && Files.ContainsKey(path)
+            ? LastWrite.GetValueOrDefault(path, DateTime.MinValue)
+            : null;
+
+    public bool DeleteItem(Guid itemId)
     {
         Items.RemoveAll(i => i.Id == itemId);
         Deleted.Add(itemId);
+        return true;
     }
 
     public void StartRecording(ScheduledTimer timer, string path, int? season, int? episode)
@@ -159,6 +206,10 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         foreach (var path in ActivePaths.Values)
         {
             Files[path] += 1_000_000;
+            if (Clock != null)
+            {
+                LastWrite[path] = Clock();
+            }
         }
     }
 
@@ -180,6 +231,8 @@ public sealed class IncompleteRecordingTests : IDisposable
     private readonly FakeRecordingHost _host = new();
     private readonly IncompleteRecordingSettings _settings = new() { AutoRecordComplete = true };
 
+    public IncompleteRecordingTests() => _host.Clock = () => _clock.UtcNow;
+
     public void Dispose()
     {
         if (Directory.Exists(_dir))
@@ -192,7 +245,7 @@ public sealed class IncompleteRecordingTests : IDisposable
 
     // A new instance is a new server process.
     private IncompleteRecordingService NewService() =>
-        new(_host, new NoOpLogger<IncompleteRecordingService>(), _clock, StorePath, () => _settings);
+        new(_host, NoRecordingLog.Instance, PlainStateFile.Instance, () => _clock.UtcNow, StorePath, () => _settings);
 
     private void ListenForTimerEvents(IncompleteRecordingService service)
     {
@@ -254,6 +307,27 @@ public sealed class IncompleteRecordingTests : IDisposable
         }
 
         return service;
+    }
+
+    // Runs one timer through its window, writing for the first given minutes, until it is judged.
+    private async Task Record(IncompleteRecordingService service, ScheduledTimer timer, string path, int writtenMinutes)
+    {
+        _clock.UtcNow = timer.StartDate;
+        _host.StartRecording(timer, path, 3, 7);
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            if ((_clock.UtcNow - timer.StartDate).TotalMinutes >= writtenMinutes)
+            {
+                _host.StopRecording(timer);
+            }
+
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.StopRecording(timer);
+        await service.RunAsync(CancellationToken.None);
     }
 
     // Rules
@@ -495,6 +569,178 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Empty(item.Tags);
     }
 
+    // A post-processing script remuxes the short recording to a.mkv. The complete re-recording
+    // goes to a.ts again and the script rewrites a.mkv, the same item, while it is judged.
+    [Fact]
+    public async Task ACompleteCopyRemuxedOverTheIncompleteRemuxIsKept()
+    {
+        _settings.DeleteIncompleteCopies = true;
+        AddAiring("p2", Start.AddDays(1));
+        var old = _host.AddItem("/rec/a.ts");
+        var service = await RecordShow(writtenMinutes: 10);
+        _host.Items.Remove(old);
+        _host.Files.Remove(old.Path!);
+        await service.OnItemRemovedAsync(old.Id, CancellationToken.None);
+        var remux = _host.AddItem("/rec/a.mkv");
+        remux.DateCreated = _clock.UtcNow;
+        _host.Files[remux.Path!] = 1;
+        _host.LastWrite[remux.Path!] = _clock.UtcNow;
+        _host.RenamedSiblingLookup = path => path == "/rec/a.ts" ? new[] { "/rec/a.mkv" } : Array.Empty<string>();
+        await service.OnItemAddedAsync(remux, CancellationToken.None);
+        Assert.Contains(IncompleteRecordingRules.Tag, remux.Tags);
+
+        await Record(service, _host.Timers.Single(t => t.ProgramId == "p2"), "/rec/a.ts", writtenMinutes: 20);
+
+        Assert.Empty(_host.Deleted);
+        Assert.Empty(remux.Tags);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ACopyThatLostItsTagOrChangedSinceIsNotDeleted(bool tagLost)
+    {
+        _settings.DeleteIncompleteCopies = true;
+        AddAiring("p2", Start.AddDays(1));
+        var incomplete = _host.AddItem("/rec/a.ts");
+        var service = await RecordShow(writtenMinutes: 10);
+        var timer = _host.Timers.Single(t => t.ProgramId == "p2");
+
+        // Without telling the service, as when the plugin was off or its save failed.
+        if (tagLost)
+        {
+            incomplete.Tags = Array.Empty<string>();
+        }
+        else
+        {
+            _host.LastWrite[incomplete.Path!] = timer.StartDate.AddMinutes(1);
+        }
+
+        await Record(service, timer, "/rec/b.ts", writtenMinutes: 20);
+
+        Assert.Empty(_host.Deleted);
+    }
+
+    [Fact]
+    public async Task ARecordingTheUserStoppedIsNotFlaggedOrRecordedAgain()
+    {
+        AddAiring("p2", Start.AddDays(1));
+        var item = _host.AddItem("/rec/a.ts");
+        var timer = new ScheduledTimer { TimerId = "t1", ProgramId = "p1", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" };
+        _host.Timers.Add(timer);
+        var service = NewService();
+        ListenForTimerEvents(service);
+        _clock.UtcNow = Start;
+        _host.StartRecording(timer, item.Path!, 3, 7);
+
+        for (var minute = 0; minute <= 25; minute++)
+        {
+            if (minute == 5)
+            {
+                _host.CancelTimer(timer);
+            }
+
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        Assert.Empty(item.Tags);
+        Assert.Empty(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task AnAiringTheUserCancelledIsNeverScheduledAgain()
+    {
+        AddAiring("p2", Start.AddDays(1));
+        AddAiring("p3", Start.AddDays(2));
+        _host.Timers.Add(new ScheduledTimer { TimerId = "t2", ProgramId = "p2", StartDate = Start.AddDays(1), EndDate = Start.AddDays(1).AddMinutes(20), Status = "Cancelled" });
+
+        await RecordShow(writtenMinutes: 10);
+
+        Assert.Equal(new[] { "p3" }, _host.Scheduled);
+    }
+
+    [Fact]
+    public async Task AnAiringASeriesRuleAlreadyRecordsIsFollowedInsteadOfDoubled()
+    {
+        AddAiring("p2", Start.AddDays(1));
+        var covered = AddAiring("p3", Start.AddDays(2));
+        _host.Timers.Add(new ScheduledTimer { TimerId = "t3", ProgramId = "p3", StartDate = covered.StartDate, EndDate = covered.EndDate, Status = "New" });
+        var item = _host.AddItem("/rec/a.ts");
+
+        var service = await RecordShow(writtenMinutes: 10);
+
+        Assert.Empty(_host.Scheduled);
+        var state = Assert.Single(await service.GetStatesAsync(new[] { item.Id }, User, CancellationToken.None));
+        Assert.Equal(covered.StartDate, state.ScheduledStart);
+    }
+
+    [Fact]
+    public async Task AFileSizeThatCantBeReadIsNotCountedAsNotRecording()
+    {
+        var item = _host.AddItem("/rec/a.ts");
+        var timer = new ScheduledTimer { TimerId = "t1", ProgramId = "p1", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" };
+        _host.Timers.Add(timer);
+        var service = NewService();
+        _clock.UtcNow = Start;
+        _host.StartRecording(timer, item.Path!, 3, 7);
+        long size = 0;
+
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            size += 1_000_000;
+            var minute = (_clock.UtcNow - Start).TotalMinutes;
+            if (minute is >= 8 and < 12)
+            {
+                _host.Files.Remove(item.Path!);
+            }
+            else
+            {
+                _host.Files[item.Path!] = size;
+            }
+
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.StopRecording(timer);
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Empty(item.Tags);
+    }
+
+    [Fact]
+    public async Task WithDetectionOffNothingIsTaggedOrScheduled()
+    {
+        _settings.Enabled = false;
+        AddAiring("p2", Start.AddDays(1));
+        var item = _host.AddItem("/rec/a.ts");
+
+        var service = await RecordShow(writtenMinutes: 10);
+
+        Assert.Empty(item.Tags);
+        Assert.Empty(_host.Scheduled);
+        Assert.True(service.NextRunAt() > _clock.UtcNow);
+    }
+
+    [Fact]
+    public async Task AShortRecordingAfterACompleteCopyOpensNoNewRequest()
+    {
+        AddAiring("p2", Start.AddDays(1));
+        var later = AddAiring("p3", Start.AddDays(2));
+        AddAiring("p4", Start.AddDays(3));
+        var service = await RecordShow(writtenMinutes: 10);
+        await Record(service, _host.Timers.Single(t => t.ProgramId == "p2"), "/rec/b.ts", writtenMinutes: 20);
+
+        var rule = new ScheduledTimer { TimerId = "t3", ProgramId = "p3", StartDate = later.StartDate, EndDate = later.EndDate, Status = "New" };
+        _host.Timers.Add(rule);
+        service.MarkScheduleChanged();
+        await Record(service, rule, "/rec/c.ts", writtenMinutes: 10);
+
+        Assert.Equal(new[] { "p2" }, _host.Scheduled);
+    }
+
     [Fact]
     public async Task AProgramWithoutEpisodeNumbersGetsNoRequest()
     {
@@ -575,14 +821,11 @@ public sealed class IncompleteRecordingTests : IDisposable
     }
 
     [Fact]
-    public async Task ARemuxBesideItsMetadataAttachesToTheIncompleteRecording()
+    public async Task ARemuxBesideTheRecordingAttachesToTheIncompleteRecording()
     {
         Directory.CreateDirectory(_dir);
         var original = Path.Combine(_dir, "show.ts");
         var remux = Path.Combine(_dir, "show.mkv");
-        File.WriteAllText(remux, "video");
-        File.WriteAllText(Path.Combine(_dir, "show.nfo"), "metadata");
-        File.WriteAllText(Path.Combine(_dir, "show.srt"), "subtitles");
         var record = new IncompleteRecord
         {
             JudgedAt = Start,
@@ -590,8 +833,7 @@ public sealed class IncompleteRecordingTests : IDisposable
         };
         File.WriteAllText(StorePath, JsonSerializer.Serialize(new IncompleteRecordingStoreData { Records = new() { record } }));
         _clock.UtcNow = Start;
-        using var context = new RecordingHostTestContext();
-        _host.RenamedSiblingLookup = context.Host.FindRenamedSiblings;
+        _host.RenamedSiblingLookup = _ => new[] { remux };
         var item = _host.AddItem(remux);
         item.DateCreated = Start;
 
@@ -685,8 +927,8 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Single(await service.GetStatesAsync(new[] { item.Id }, User, CancellationToken.None));
     }
 
-    // Deleted, the record waits out the attach window; remuxed, it lives on through the new file.
-    // Either way Jellyfin can write a later recording of the episode to the original path.
+    // Deleted, the record waits out the attach window. Remuxed, it lives on through the new file.
+    // Either way the server can write a later recording of the episode to the original path.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -52,6 +52,7 @@
   <!-- The seasonal row's pure logic and rules are shared with the Emby port, so both read the
        same files from the repo's shared folder. -->
   <ItemGroup>
+    <Compile Include="../../shared/LiveTv/*.cs" Link="LiveTv/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Pin/*.cs" Link="Pin/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Seasonal/*.cs" Link="Seasonal/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Seerr/*.cs" Link="Seerr/%(Filename)%(Extension)" />

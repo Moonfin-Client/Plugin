@@ -1,8 +1,13 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace Moonfin.Server.Services;
+namespace Moonfin.LiveTv;
 
 /// <summary>
 /// Flags Live TV recordings that came out incomplete and, when asked, schedules a later showing of
@@ -18,13 +23,15 @@ namespace Moonfin.Server.Services;
 /// </summary>
 public sealed class IncompleteRecordingService : IDisposable
 {
-    private const string StoreFileName = "livetv-incomplete-recordings.json";
+    /// <summary>The state file's name inside the plugin's data folder.</summary>
+    public const string StoreFileName = "livetv-incomplete-recordings.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
 
     private readonly ILiveTvRecordingHost _host;
-    private readonly ILogger<IncompleteRecordingService> _logger;
-    private readonly TimeProvider _time;
+    private readonly IRecordingLog _logger;
+    private readonly IStateFile _stateFile;
+    private readonly Func<DateTime> _utcNow;
     private readonly string _storePath;
     private readonly Func<IncompleteRecordingSettings> _settings;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -33,6 +40,7 @@ public sealed class IncompleteRecordingService : IDisposable
     private readonly HashSet<string> _searchNow = new(StringComparer.Ordinal);
 
     private readonly ConcurrentQueue<string> _cancelledTimers = new();
+    private readonly ConcurrentQueue<string> _stoppedTimers = new();
     private readonly ConcurrentDictionary<string, string> _createdTimerPrograms = new(StringComparer.OrdinalIgnoreCase);
 
     // Nothing this process recorded predates its start.
@@ -63,47 +71,26 @@ public sealed class IncompleteRecordingService : IDisposable
     // until the store is loaded, when every event is handled.
     private volatile TrackedItems? _tracked;
 
-    public IncompleteRecordingService(ILiveTvRecordingHost host, ILogger<IncompleteRecordingService> logger)
-        : this(
-            host,
-            logger,
-            TimeProvider.System,
-            Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), StoreFileName),
-            ReadPluginSettings)
-    {
-    }
-
-    internal IncompleteRecordingService(
+    public IncompleteRecordingService(
         ILiveTvRecordingHost host,
-        ILogger<IncompleteRecordingService> logger,
-        TimeProvider time,
+        IRecordingLog logger,
+        IStateFile stateFile,
+        Func<DateTime> utcNow,
         string storePath,
         Func<IncompleteRecordingSettings> settings)
     {
         _host = host;
         _logger = logger;
-        _time = time;
+        _stateFile = stateFile;
+        _utcNow = utcNow;
         _storePath = storePath;
         _settings = settings;
         _processStart = Now;
     }
 
-    private DateTime Now => _time.GetUtcNow().UtcDateTime;
+    private DateTime Now => _utcNow();
 
     public void Dispose() => _lock.Dispose();
-
-    /// <summary>The settings as stored in the plugin configuration.</summary>
-    public static IncompleteRecordingSettings ReadPluginSettings()
-    {
-        var config = MoonfinPlugin.Instance?.Configuration;
-        return new IncompleteRecordingSettings
-        {
-            AutoRecordComplete = config?.LiveTvAutoRecordCompleteShowing ?? false,
-            ThresholdPercent = IncompleteRecordingRules.ClampThreshold(
-                config?.LiveTvIncompleteThresholdPercent ?? IncompleteRecordingRules.DefaultThresholdPercent),
-            DeleteIncompleteCopies = config?.LiveTvDeleteIncompleteCopies ?? false,
-        };
-    }
 
     /// <summary>The schedule changed, so the cache reloads on the next run.</summary>
     public void MarkScheduleChanged() => _timersStale = true;
@@ -113,6 +100,7 @@ public sealed class IncompleteRecordingService : IDisposable
         if (!string.IsNullOrEmpty(timerId))
         {
             _cancelledTimers.Enqueue(timerId);
+            _stoppedTimers.Enqueue(timerId);
         }
 
         _timersStale = true;
@@ -145,7 +133,7 @@ public sealed class IncompleteRecordingService : IDisposable
     /// <summary>
     /// When the next run is due: every sample interval while a recording window is open, otherwise
     /// the next window's start, the safety-net check or the daily request search, whichever is first.
-    /// Safe to call without the lock; it reads only what the last pass worked out.
+    /// Safe to call without the lock, since it reads only what the last pass worked out.
     /// </summary>
     public DateTime NextRunAt() =>
         _timersStale ? Now : new DateTime(Interlocked.Read(ref _nextRunTicks), DateTimeKind.Utc);
@@ -200,6 +188,14 @@ public sealed class IncompleteRecordingService : IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (!_settings().Enabled)
+            {
+                // Checked again at the safety-net interval, so turning detection back on is picked up.
+                _timersStale = false;
+                Interlocked.Exchange(ref _nextRunTicks, (Now + IncompleteRecordingRules.SafetyNetInterval).Ticks);
+                return;
+            }
+
             var data = Load();
             var now = Now;
             var previousTimers = _timers;
@@ -223,6 +219,7 @@ public sealed class IncompleteRecordingService : IDisposable
             changed |= Sample(data, now);
             changed |= TrackScheduledRequests(data, now, previousTimers);
             changed |= await RetryUntagsAsync(data, cancellationToken).ConfigureAwait(false);
+            changed |= MarkStoppedRecordings(data);
             changed |= await JudgeClosedAsync(data, now, cancellationToken).ConfigureAwait(false);
             changed |= ApplySettings(data);
 
@@ -257,6 +254,11 @@ public sealed class IncompleteRecordingService : IDisposable
     /// <summary>Attaches a newly added library item to the incomplete recording that wrote its file.</summary>
     public async Task OnItemAddedAsync(LibraryItem item, CancellationToken cancellationToken)
     {
+        if (!_settings().Enabled)
+        {
+            return;
+        }
+
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -403,7 +405,7 @@ public sealed class IncompleteRecordingService : IDisposable
 
     /// <summary>
     /// Keep as Complete: dismisses the item's record for everyone and removes the tag. An automatic
-    /// request opened for it closes too, since the user is satisfied with this copy; an explicit
+    /// request opened for it closes too, since the user is satisfied with this copy. An explicit
     /// request someone asked for stays. A timer already scheduled is left alone.
     /// </summary>
     public async Task<bool> DismissAsync(Guid itemId, Guid userId, CancellationToken cancellationToken)
@@ -451,14 +453,9 @@ public sealed class IncompleteRecordingService : IDisposable
     /// </summary>
     public async Task<(CompleteShowingRequest? Request, CompleteShowingRefusal Refusal)> RequestCompleteShowingAsync(string programId, Guid userId, CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(programId, out var programGuid) || !_host.IsVisibleTo(programGuid, userId))
-        {
-            return (null, CompleteShowingRefusal.NotFound);
-        }
-
-        // A visible item that isn't a guide program, or one a guide refresh just removed.
+        // Not a guide program, one a guide refresh just removed, or one the user can't see.
         var program = _host.GetProgram(programId);
-        if (program == null)
+        if (program == null || !_host.IsVisibleTo(program.ItemId, userId))
         {
             return (null, CompleteShowingRefusal.NotFound);
         }
@@ -517,7 +514,7 @@ public sealed class IncompleteRecordingService : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Could not load Live TV timers");
+            _logger.Warn(ex, "Could not load Live TV timers");
             _timersCurrent = false;
         }
 
@@ -562,6 +559,7 @@ public sealed class IncompleteRecordingService : IDisposable
         {
             TimerId = timer.TimerId,
             ProgramId = timer.ProgramId,
+            ApiId = timer.ApiId,
             ChannelName = timer.ChannelName,
             WindowEnd = details.EndDate.AddSeconds(details.PostPaddingSeconds),
             Episode = EpisodeKey.Create(details.SeriesId, details.Name, details.SeasonNumber, details.EpisodeNumber, details.EpisodeTitle),
@@ -619,7 +617,20 @@ public sealed class IncompleteRecordingService : IDisposable
                 continue;
             }
 
-            var size = _host.GetFileLength(path) ?? 0;
+            // A size that can't be read says nothing about whether the file grew.
+            var size = _host.GetFileLength(path);
+            if (size == null)
+            {
+                if (open != null)
+                {
+                    open.UnknownSeconds += (now - open.LastSampleAt).TotalSeconds;
+                    open.LastSampleAt = now;
+                    changed = true;
+                }
+
+                continue;
+            }
+
             if (open == null)
             {
                 // The file began after the window opened, after this process started, after the
@@ -646,7 +657,7 @@ public sealed class IncompleteRecordingService : IDisposable
                     ProcessId = _processId,
                     FirstSampleAt = now,
                     LastSampleAt = now,
-                    LastSize = size,
+                    LastSize = size.Value,
                     UnknownSeconds = Math.Max(0, (now - earliest).TotalSeconds),
                 });
             }
@@ -666,7 +677,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 }
 
                 open.LastSampleAt = now;
-                open.LastSize = size;
+                open.LastSize = size.Value;
             }
 
             changed = true;
@@ -710,9 +721,14 @@ public sealed class IncompleteRecordingService : IDisposable
             _timerCreatedAt.TryRemove(snapshot.TimerId, out _);
             snapshot.JudgedAt = now;
             snapshot.Verdict = IncompleteRecordingRules.Classify(snapshot.Fragments, snapshot.ExpectedMinutes, threshold);
+            if (snapshot.StoppedByUser && snapshot.Verdict == RecordingVerdict.Incomplete)
+            {
+                snapshot.Verdict = RecordingVerdict.Unknown;
+            }
+
             changed = true;
 
-            _logger.LogInformation(
+            _logger.Info(
                 "Live TV recording {TimerId}: best file covered an estimated {Covered:0.#} of {Expected:0.#} scheduled minutes in {Files} file(s), {Verdict}",
                 snapshot.TimerId,
                 snapshot.BestCoveredMinutes,
@@ -724,13 +740,14 @@ public sealed class IncompleteRecordingService : IDisposable
             {
                 case RecordingVerdict.Complete:
                     OnCompleteRecording(data, snapshot, now);
-                    await ReleaseCompleteCopiesAsync(data, snapshot, cancellationToken).ConfigureAwait(false);
-                    DeleteIncompleteCopies(data, snapshot, now);
+                    await ReleaseOverwrittenCopiesAsync(data, snapshot, cancellationToken).ConfigureAwait(false);
+                    await DeleteIncompleteCopiesAsync(data, snapshot, now, cancellationToken).ConfigureAwait(false);
                     break;
                 case RecordingVerdict.Incomplete:
                     await OnIncompleteRecordingAsync(data, snapshot, now, cancellationToken).ConfigureAwait(false);
                     break;
                 default:
+                    await ReleaseOverwrittenCopiesAsync(data, snapshot, cancellationToken).ConfigureAwait(false);
                     OnUnknownRecording(data, snapshot, now);
                     break;
             }
@@ -757,15 +774,19 @@ public sealed class IncompleteRecordingService : IDisposable
     }
 
     /// <summary>
-    /// Jellyfin derives an item's id from its path, so a complete recording written where an
-    /// incomplete one was, before the library dropped the old item, is the same item. It is the
-    /// complete copy now, so it leaves the old record and loses the tag before anything is deleted.
-    /// A removal that fails is retried on later runs; having left the record, the item can't be
-    /// deleted meanwhile.
+    /// Jellyfin derives an item's id from its path, so a newer recording written where an
+    /// incomplete one was, or remuxed beside it by a post-processing script, is the same item as
+    /// the old copy. It belongs to the newer recording now, so it leaves the old record and loses
+    /// the tag before anything is deleted. A removal that fails is retried on later runs. Having
+    /// left the record, the item can't be deleted meanwhile.
     /// </summary>
-    private async Task ReleaseCompleteCopiesAsync(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, CancellationToken cancellationToken)
+    private async Task ReleaseOverwrittenCopiesAsync(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, CancellationToken cancellationToken)
     {
-        foreach (var path in snapshot.Fragments.Select(f => f.Path).Distinct(StringComparer.OrdinalIgnoreCase))
+        var paths = snapshot.Fragments
+            .Select(f => f.Path)
+            .SelectMany(path => _host.FindRenamedSiblings(path).Prepend(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths)
         {
             var item = _host.FindItemByPath(path);
             if (item == null)
@@ -811,10 +832,10 @@ public sealed class IncompleteRecordingService : IDisposable
 
     /// <summary>
     /// With the setting on, a complete recording deletes the earlier copies of its episode that
-    /// carry the incomplete tag, through Jellyfin's own delete. Copies kept as complete are dismissed
+    /// carry the incomplete tag, through the server's own delete. Copies kept as complete are dismissed
     /// and untagged, so they stay.
     /// </summary>
-    private void DeleteIncompleteCopies(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, DateTime now)
+    private async Task DeleteIncompleteCopiesAsync(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, DateTime now, CancellationToken cancellationToken)
     {
         if (!_settings().DeleteIncompleteCopies || snapshot.Episode == null)
         {
@@ -827,15 +848,39 @@ public sealed class IncompleteRecordingService : IDisposable
             var kept = 0;
             foreach (var itemId in record.TaggedItemIds.ToList())
             {
+                // The stored id is checked again right before deleting: the item has to still carry
+                // the tag and its file has to predate the complete recording, so a copy the user
+                // kept or a newer file at a reused path is never touched.
+                var tags = _host.GetTags(itemId);
+                if (tags == null || !HasIncompleteTag(tags) || data.PendingUntags.Contains(itemId))
+                {
+                    continue;
+                }
+
+                var writtenAt = _host.GetFileWrittenAt(itemId);
+                if (writtenAt == null || writtenAt >= snapshot.WindowStart)
+                {
+                    kept++;
+                    _logger.Info("Kept {ItemId}: its file changed after the complete copy of {Series} started recording", itemId, snapshot.Episode.SeriesName);
+                    continue;
+                }
+
                 try
                 {
-                    _host.DeleteItem(itemId);
-                    _logger.LogInformation("Deleted incomplete recording {ItemId} of {Series}, a complete copy recorded", itemId, snapshot.Episode.SeriesName);
+                    if (_host.DeleteItem(itemId))
+                    {
+                        _logger.Info("Deleted incomplete recording {ItemId} of {Series}, a complete copy recorded", itemId, snapshot.Episode.SeriesName);
+                    }
+                    else
+                    {
+                        kept++;
+                        _logger.Info("Kept {ItemId}: only episodes are deleted", itemId);
+                    }
                 }
                 catch (Exception ex)
                 {
                     kept++;
-                    _logger.LogWarning(ex, "Could not delete incomplete recording {ItemId}", itemId);
+                    _logger.Warn(ex, "Could not delete incomplete recording {ItemId}", itemId);
                 }
             }
 
@@ -845,6 +890,25 @@ public sealed class IncompleteRecordingService : IDisposable
                 record.DismissedAt = now;
             }
         }
+    }
+
+    // A timer cancelled while its recording ran was stopped on purpose. Jellyfin only cancels a
+    // running timer when someone does, so the short file is what they asked for.
+    private bool MarkStoppedRecordings(IncompleteRecordingStoreData data)
+    {
+        var changed = false;
+        while (_stoppedTimers.TryDequeue(out var id))
+        {
+            foreach (var snapshot in data.Snapshots.Where(s => s.JudgedAt == null
+                && (string.Equals(s.TimerId, id, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(s.ApiId, id, StringComparison.OrdinalIgnoreCase))))
+            {
+                snapshot.StoppedByUser = true;
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     // Too little was observed to judge. If this was the scheduled showing, the request ends
@@ -892,7 +956,7 @@ public sealed class IncompleteRecordingService : IDisposable
         }
 
         // The server queues a library refresh when a recording starts and again when it stops,
-        // so the items may already be there. Reconcile with them now; later arrivals come
+        // so the items may already be there. Reconcile with them now, and later arrivals come
         // through ItemAdded.
         foreach (var fragment in record.Fragments)
         {
@@ -921,9 +985,10 @@ public sealed class IncompleteRecordingService : IDisposable
             return open;
         }
 
-        // A request that gave up or that the user cancelled isn't reopened by a later recording.
+        // A request that gave up, that the user cancelled or that already got a complete copy isn't
+        // reopened by a later recording.
         var ended = data.Requests
-            .Where(r => r.State is CompleteShowingState.GaveUp or CompleteShowingState.CancelledByUser)
+            .Where(r => r.State is CompleteShowingState.GaveUp or CompleteShowingState.CancelledByUser or CompleteShowingState.Done)
             .LastOrDefault(r => r.Episode.Matches(episode));
         if (ended != null)
         {
@@ -1064,7 +1129,7 @@ public sealed class IncompleteRecordingService : IDisposable
         return changed;
     }
 
-    // Turning the automatic setting off drops the automatic requests still waiting; explicit ones,
+    // Turning the automatic setting off drops the automatic requests still waiting. Explicit ones,
     // including any an explicit request folded into, stay.
     private bool ApplySettings(IncompleteRecordingStoreData data)
     {
@@ -1099,7 +1164,7 @@ public sealed class IncompleteRecordingService : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Could not search the guide for {Series} S{Season}E{Episode}", episode.SeriesName, episode.Season, episode.Episode);
+            _logger.Warn(ex, "Could not search the guide for {Series} S{Season}E{Episode}", episode.SeriesName, episode.Season, episode.Episode);
             return Array.Empty<GuideProgram>();
         }
     }
@@ -1123,7 +1188,7 @@ public sealed class IncompleteRecordingService : IDisposable
             _searchNow.Remove(request.Id);
 
             // A showing chosen before a crash or a failed call: if the server made its timer,
-            // adopt it; otherwise ask again for the same showing while it is still ahead.
+            // adopt it, otherwise ask again for the same showing while it is still ahead.
             GuideProgram? showing = null;
             if (request.PendingProgramId != null)
             {
@@ -1147,7 +1212,17 @@ public sealed class IncompleteRecordingService : IDisposable
                 continue;
             }
 
-            showing ??= IncompleteRecordingRules.ChooseShowing(request.Episode, FindAiringsSafe(request.Episode, now), now);
+            if (showing == null)
+            {
+                // An airing a series rule already records is followed rather than doubled, and one
+                // the user cancelled is never picked, since scheduling it would quietly undo that.
+                var airings = FindAiringsSafe(request.Episode, now)
+                    .Where(p => !_timers.Any(t => t.Status == "Cancelled" && string.Equals(t.ProgramId, p.Id, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+                showing = IncompleteRecordingRules.ChooseShowing(request.Episode, airings.Where(p => LiveTimerFor(p.Id) != null), now)
+                    ?? IncompleteRecordingRules.ChooseShowing(request.Episode, airings, now);
+            }
+
             if (showing == null)
             {
                 continue;
@@ -1172,7 +1247,7 @@ public sealed class IncompleteRecordingService : IDisposable
             SetScheduled(request, showing);
             changed = true;
 
-            _logger.LogInformation(
+            _logger.Info(
                 "Following a later showing of {Series} S{Season}E{Episode} at {Start} on {Channel}",
                 request.Episode.SeriesName,
                 request.Episode.Season,
@@ -1314,12 +1389,11 @@ public sealed class IncompleteRecordingService : IDisposable
     {
         try
         {
-            await _host.SetTagAsync(itemId, IncompleteRecordingRules.Tag, present, cancellationToken).ConfigureAwait(false);
-            return true;
+            return await _host.SetTagAsync(itemId, IncompleteRecordingRules.Tag, present, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Could not update the incomplete tag on {ItemId}", itemId);
+            _logger.Warn(ex, "Could not update the incomplete tag on {ItemId}", itemId);
             return false;
         }
     }
@@ -1336,7 +1410,7 @@ public sealed class IncompleteRecordingService : IDisposable
             return _data;
         }
 
-        _data = AtomicFile.ReadWithRecovery(_storePath, json => JsonSerializer.Deserialize<IncompleteRecordingStoreData>(json, JsonOptions))
+        _data = _stateFile.Read(_storePath, json => JsonSerializer.Deserialize<IncompleteRecordingStoreData>(json, JsonOptions))
             ?? new IncompleteRecordingStoreData();
         RefreshTracked(_data);
         return _data;
@@ -1350,11 +1424,11 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_storePath)!);
-            AtomicFile.WriteAllText(_storePath, JsonSerializer.Serialize(data, JsonOptions));
+            _stateFile.Write(_storePath, JsonSerializer.Serialize(data, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "Could not save incomplete recordings to {Path}", _storePath);
+            _logger.Warn(ex, "Could not save incomplete recordings to {Path}", _storePath);
         }
     }
 

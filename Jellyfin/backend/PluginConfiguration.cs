@@ -100,8 +100,14 @@ public class PluginConfiguration : BasePluginConfiguration
     public int StudioLogosMaxAgeDays { get; set; } = 30;
 
     /// <summary>
+    /// Watches Live TV recordings and tags the ones that come out incomplete. The other Live TV
+    /// recording settings only act while this is on.
+    /// </summary>
+    public bool LiveTvDetectIncompleteRecordings { get; set; } = true;
+
+    /// <summary>
     /// When a Live TV recording comes out incomplete, schedule the earliest later showing of the
-    /// same episode. Off by default; incomplete recordings are tagged either way.
+    /// same episode.
     /// </summary>
     public bool LiveTvAutoRecordCompleteShowing { get; set; } = false;
 

@@ -4,6 +4,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.Tasks;
+using Moonfin.LiveTv;
 using Moonfin.Server.Services;
 using Xunit;
 
@@ -102,6 +103,18 @@ public sealed class LiveTvRecordingHostTests : IDisposable
         using var context = new RecordingHostTestContext();
 
         Assert.Equal(2, context.Host.FindRenamedSiblings(Path.Combine(_dir, "show.ts")).Count);
+    }
+
+    [Fact]
+    public void MetadataAndSubtitlesBesideARemuxAreNotSiblings()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "show.mkv"), "video");
+        File.WriteAllText(Path.Combine(_dir, "show.nfo"), "metadata");
+        File.WriteAllText(Path.Combine(_dir, "show.srt"), "subtitles");
+        using var context = new RecordingHostTestContext();
+
+        Assert.Equal(new[] { Path.Combine(_dir, "show.mkv") }, context.Host.FindRenamedSiblings(Path.Combine(_dir, "show.ts")));
     }
 
     private sealed class AccessCheckedVideo : Video

@@ -168,6 +168,21 @@ namespace Emby.Plugins.Moonfin
         /// <summary>Lets Moonfin clients upload diagnostic and crash reports into the server's log folder, where they appear in Dashboard > Logs.</summary>
         public bool EnableClientLogUpload { get; set; } = true;
 
+        /// <summary>
+        /// Watches Live TV recordings and tags the ones that come out incomplete. The other Live TV
+        /// recording settings only act while this is on.
+        /// </summary>
+        public bool LiveTvDetectIncompleteRecordings { get; set; } = true;
+
+        /// <summary>When a Live TV recording comes out incomplete, schedule the earliest later showing of the same episode.</summary>
+        public bool LiveTvAutoRecordCompleteShowing { get; set; }
+
+        /// <summary>A recording written for less than this percentage of its padded schedule is incomplete.</summary>
+        public int LiveTvIncompleteThresholdPercent { get; set; } = 90;
+
+        /// <summary>When a complete copy of an episode records, delete the copies of it tagged incomplete.</summary>
+        public bool LiveTvDeleteIncompleteCopies { get; set; }
+
         /// <summary>Admin-configured default settings. Users who haven't customized a setting inherit this value.</summary>
         public MoonfinSettingsProfile? DefaultUserSettings { get; set; }
 

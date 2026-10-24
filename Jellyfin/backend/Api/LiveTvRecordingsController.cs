@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Moonfin.LiveTv;
 using Moonfin.Server.Services;
 
 namespace Moonfin.Server.Api;
@@ -123,7 +124,7 @@ public class LiveTvRecordingsController : ControllerBase
     [Authorize(Policy = LiveTvAccess)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IncompleteRecordingSettings> GetSettings() =>
-        Ok(IncompleteRecordingService.ReadPluginSettings());
+        Ok(IncompleteRecordingConfig.Read());
 
     /// <summary>Changes the server-wide settings. Administrators only.</summary>
     [HttpPost("Settings/IncompleteRecordings")]
@@ -138,11 +139,12 @@ public class LiveTvRecordingsController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
+        plugin.Configuration.LiveTvDetectIncompleteRecordings = settings.Enabled;
         plugin.Configuration.LiveTvAutoRecordCompleteShowing = settings.AutoRecordComplete;
         plugin.Configuration.LiveTvIncompleteThresholdPercent = IncompleteRecordingRules.ClampThreshold(settings.ThresholdPercent);
         plugin.Configuration.LiveTvDeleteIncompleteCopies = settings.DeleteIncompleteCopies;
         plugin.SaveConfiguration();
-        return Ok(IncompleteRecordingService.ReadPluginSettings());
+        return Ok(IncompleteRecordingConfig.Read());
     }
 }
 

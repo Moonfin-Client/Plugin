@@ -14,7 +14,10 @@ internal static class UserReflection
     private static readonly MethodInfo? GetUserById = UserManagerType?.GetMethod("GetUserById", [typeof(Guid)]);
     private static readonly MethodInfo? SetUser = typeof(InternalItemsQuery).GetMethod("SetUser", BindingFlags.Public | BindingFlags.Instance);
     private static readonly PropertyInfo? UserProperty = typeof(InternalItemsQuery).GetProperty(nameof(InternalItemsQuery.User), BindingFlags.Public | BindingFlags.Instance);
-    private static readonly MethodInfo? IsVisibleStandalone = typeof(BaseItem).GetMethod(nameof(BaseItem.IsVisibleStandalone), BindingFlags.Public | BindingFlags.Instance);
+    // Matched on its one parameter, so a future overload can't make the lookup throw for every caller here.
+    private static readonly MethodInfo? IsVisibleStandalone = typeof(BaseItem)
+        .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+        .FirstOrDefault(m => m.Name == nameof(BaseItem.IsVisibleStandalone) && m.GetParameters().Length == 1);
 
     // IsVisible grew a skipAllowedTagsCheck parameter in 10.11, so any overload whose extra
     // parameters are booleans is taken and those are passed as false.
