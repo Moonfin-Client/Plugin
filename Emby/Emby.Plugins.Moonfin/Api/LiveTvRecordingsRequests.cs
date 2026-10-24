@@ -1,5 +1,6 @@
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Services;
+using Moonfin.LiveTv;
 
 namespace Emby.Plugins.Moonfin.Api
 {
@@ -24,6 +25,20 @@ namespace Emby.Plugins.Moonfin.Api
         public System.IO.Stream RequestStream { get; set; } = null!;
     }
 
+    [Route("/Moonfin/LiveTv/CompleteShowing/Options", "GET")]
+    [Authenticated]
+    public class GetCompleteShowingOptionsRequest : IReturn<object>
+    {
+        public string? ProgramId { get; set; }
+    }
+
+    [Route("/Moonfin/LiveTv/CompleteShowing/Suggestion", "POST")]
+    [Authenticated]
+    public class ScheduleSuggestedShowingRequest : IReturn<object>, IRequiresRequestStream
+    {
+        public System.IO.Stream RequestStream { get; set; } = null!;
+    }
+
     [Route("/Moonfin/LiveTv/Settings/IncompleteRecordings", "GET")]
     [Authenticated]
     public class GetIncompleteRecordingSettingsRequest : IReturn<object> { }
@@ -39,5 +54,13 @@ namespace Emby.Plugins.Moonfin.Api
     public class CompleteShowingBody
     {
         public string? ProgramId { get; set; }
+    }
+
+    /// <summary>Body for scheduling a future showing the user confirmed.</summary>
+    public class SuggestedShowingBody
+    {
+        public string? ProgramId { get; set; }
+
+        public SuggestedShowing? Showing { get; set; }
     }
 }

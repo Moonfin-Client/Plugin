@@ -108,7 +108,7 @@ namespace Emby.Plugins.Moonfin.Api
             if (showing == null)
             {
                 return refusal == CompleteShowingRefusal.NoEpisodeNumbers
-                    ? Json(400, new { error = "The program has no season and episode numbers." })
+                    ? Json(400, new { error = "The program needs season and episode numbers, or movie classification with a title and description." })
                     : Json(404, new { error = "No guide program with that id" });
             }
 
@@ -118,6 +118,42 @@ namespace Emby.Plugins.Moonfin.Api
                 scheduledStart = showing.ScheduledStart,
                 channelName = showing.ScheduledChannelName,
             });
+        }
+
+        /// <summary>Whether a program's episode or movie can be searched for, and the future showing that would record it.</summary>
+        public async Task<object> Get(GetCompleteShowingOptionsRequest request)
+        {
+            var service = PluginServices.IncompleteRecordings;
+            if (service == null) return NotReady();
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            if (user == null) return NoUser();
+            if (user.Policy?.EnableLiveTvManagement != true) return NotAllowed();
+
+            return Json(await service.GetCompleteShowingOptionsAsync(request.ProgramId ?? string.Empty, user.Id, CancellationToken.None).ConfigureAwait(false));
+        }
+
+        /// <summary>Schedules the future showing the user confirmed, when it still matches.</summary>
+        public async Task<object> Post(ScheduleSuggestedShowingRequest request)
+        {
+            var service = PluginServices.IncompleteRecordings;
+            if (service == null) return NotReady();
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            if (user == null) return NoUser();
+            if (user.Policy?.EnableLiveTvManagement != true) return NotAllowed();
+
+            var body = await MoonfinJson.ReadBodyAsync<SuggestedShowingBody>(request.RequestStream).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(body?.ProgramId) || body!.Showing == null)
+            {
+                return Json(400, new { error = "programId and showing are required." });
+            }
+
+            if (!await service.ScheduleSuggestedShowingAsync(body.ProgramId!, body.Showing, user.Id, CancellationToken.None).ConfigureAwait(false))
+            {
+                return Json(409, new { error = "The selected airing is no longer available or no longer matches." });
+            }
+
+            Request.Response.StatusCode = 204;
+            return null!;
         }
 
         public object Get(GetIncompleteRecordingSettingsRequest request)
