@@ -44,6 +44,9 @@ public interface ILiveTvRecordingHost
     /// <summary>Guide airings of a series starting after a time, on every channel.</summary>
     IReadOnlyList<GuideProgram> FindAirings(EpisodeKey episode, DateTime after);
 
+    /// <summary>Guide programs with a name starting after a time, on every channel.</summary>
+    IReadOnlyList<GuideProgram> FindProgramsByName(string name, DateTime after);
+
     /// <summary>Schedules a one-off recording of a program with the server's timer defaults.</summary>
     Task<ScheduleResult> ScheduleProgramAsync(string programId, CancellationToken cancellationToken);
 

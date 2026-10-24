@@ -107,7 +107,7 @@ public class LiveTvRecordingsController : ControllerBase
         if (request == null)
         {
             return refusal == CompleteShowingRefusal.NoEpisodeNumbers
-                ? BadRequest("The program has no season and episode numbers.")
+                ? BadRequest("The program needs season and episode numbers, or movie classification with a title and description.")
                 : NotFound();
         }
 
@@ -117,6 +117,33 @@ public class LiveTvRecordingsController : ControllerBase
             ScheduledStart = request.ScheduledStart,
             ChannelName = request.ScheduledChannelName,
         });
+    }
+
+    [HttpGet("CompleteShowing/Options")]
+    [Authorize(Policy = LiveTvManagement)]
+    public async Task<ActionResult<CompleteShowingOptions>> GetCompleteShowingOptions([FromQuery] string programId, CancellationToken cancellationToken)
+    {
+        var userId = this.GetUserIdFromClaims();
+        return userId == null ? Unauthorized() : Ok(await _service.GetCompleteShowingOptionsAsync(programId, userId.Value, cancellationToken).ConfigureAwait(false));
+    }
+
+    [HttpPost("CompleteShowing/Suggestion")]
+    [Authorize(Policy = LiveTvManagement)]
+    public async Task<ActionResult> ScheduleSuggestedShowing([FromBody] SuggestedShowingBody body, CancellationToken cancellationToken)
+    {
+        var userId = this.GetUserIdFromClaims();
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        if (string.IsNullOrWhiteSpace(body.ProgramId) || body.Showing == null)
+        {
+            return BadRequest();
+        }
+
+        return await _service.ScheduleSuggestedShowingAsync(body.ProgramId, body.Showing, userId.Value, cancellationToken).ConfigureAwait(false)
+            ? NoContent() : Conflict("The selected airing is no longer available or no longer matches.");
     }
 
     /// <summary>The server-wide settings.</summary>
@@ -146,6 +173,15 @@ public class LiveTvRecordingsController : ControllerBase
         plugin.SaveConfiguration();
         return Ok(IncompleteRecordingConfig.Read());
     }
+}
+
+public sealed class SuggestedShowingBody
+{
+    [JsonPropertyName("programId")]
+    public string? ProgramId { get; set; }
+
+    [JsonPropertyName("showing")]
+    public SuggestedShowing? Showing { get; set; }
 }
 
 public sealed class CompleteShowingBody

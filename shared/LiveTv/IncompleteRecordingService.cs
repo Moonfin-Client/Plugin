@@ -474,10 +474,11 @@ public sealed class IncompleteRecordingService : IDisposable
         {
             var data = Load();
             var now = Now;
+            await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
             var request = FindOpenRequest(data, key);
             if (request == null)
             {
-                request = new CompleteShowingRequest { Episode = key, OpenedAt = now };
+                request = new CompleteShowingRequest { Episode = key, OpenedAt = now, RequestedByUserId = userId };
                 data.Requests.Add(request);
                 _searchNow.Add(request.Id);
             }
@@ -491,11 +492,220 @@ public sealed class IncompleteRecordingService : IDisposable
             await SearchAsync(data, now, false, cancellationToken).ConfigureAwait(false);
             Save(data);
             ScheduleNextRun(data, Now);
-            return (request, CompleteShowingRefusal.None);
+            var response = request.Copy();
+            if (response.State != CompleteShowingState.Scheduled)
+            {
+                response.ScheduledStart = null;
+                response.ScheduledChannelName = null;
+            }
+            else if (response.ScheduledProgramId == null || !CanSeeProgram(response.ScheduledProgramId, userId))
+            {
+                response.ScheduledChannelName = null;
+            }
+
+            return (response, CompleteShowingRefusal.None);
         }
         finally
         {
             _lock.Release();
+        }
+    }
+
+    /// <summary>Offers a current-guide candidate without opening a recovery request.</summary>
+    public async Task<CompleteShowingOptions> GetCompleteShowingOptionsAsync(string programId, Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var data = Load();
+            await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
+            return _timersCurrent ? CompleteShowingOptionsCore(data, programId, userId) : new();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    private CompleteShowingOptions CompleteShowingOptionsCore(IncompleteRecordingStoreData data, string programId, Guid userId)
+    {
+        var source = VisibleProgram(programId, userId);
+        var now = Now;
+        if (source == null || source.StartDate >= now || source.EndDate <= now)
+        {
+            return new();
+        }
+
+        if (source.Key is { } key)
+        {
+            var request = FindOpenRequest(data, key);
+            var selectedId = request?.State == CompleteShowingState.Scheduled ? request.ScheduledProgramId : request?.PendingProgramId;
+            if (selectedId != null)
+            {
+                var booked = VisibleProgram(selectedId, userId);
+                return new()
+                {
+                    CanSearch = true,
+                    Showing = booked?.StartDate > now && booked.Key is { } bookedKey && key.Matches(bookedKey)
+                        ? Offer(data, booked) : null,
+                };
+            }
+
+            var next = FindAiringsSafe(key, now)
+                .Where(p => p.StartDate > now && p.Key is { } candidateKey && key.Matches(candidateKey))
+                .OrderBy(p => p.StartDate).ThenByDescending(p => p.IsHD)
+                .FirstOrDefault(p => CanSeeProgram(p.Id, userId));
+            return new() { CanSearch = true, Showing = next == null ? null : Offer(data, next) };
+        }
+
+        if (string.IsNullOrWhiteSpace(source.SeriesName) || string.IsNullOrWhiteSpace(source.Overview))
+        {
+            return new();
+        }
+
+        var candidate = _host.FindProgramsByName(source.SeriesName, now)
+            .Where(p => p.StartDate > now && source.HasMatchingMetadata(p))
+            .OrderBy(p => p.StartDate).ThenByDescending(p => p.IsHD)
+            .FirstOrDefault(p => CanSeeProgram(p.Id, userId));
+        return new() { Showing = candidate == null ? null : Offer(data, candidate) };
+    }
+
+    /// <summary>Records the confirmed airing; only identified episodes/movies enter recovery.</summary>
+    public async Task<bool> ScheduleSuggestedShowingAsync(string programId, SuggestedShowing showing,
+        Guid userId, CancellationToken cancellationToken)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var data = Load();
+            await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
+            if (!_timersCurrent)
+            {
+                return false;
+            }
+
+            var source = VisibleProgram(programId, userId);
+            if (source == null) return false;
+            var request = source.Key == null ? null : FindOpenRequest(data, source.Key);
+            var bookedId = request?.State == CompleteShowingState.Scheduled ? request.ScheduledProgramId : request?.PendingProgramId;
+            if (bookedId != null && string.Equals(bookedId, showing.ProgramId, StringComparison.OrdinalIgnoreCase)
+                && LiveTimerFor(bookedId) != null && VisibleProgram(bookedId, userId) is { } booked)
+            {
+                request!.Explicit = true;
+                SetScheduled(request, booked);
+                Save(data);
+                ScheduleNextRun(data, Now);
+                return true;
+            }
+
+            if (!string.Equals(showing.CancellationVersion ?? string.Empty, CancellationVersion(data, showing.ProgramId), StringComparison.Ordinal)
+                && LiveTimerFor(showing.ProgramId) == null) return false;
+
+            var candidate = VisibleProgram(showing.ProgramId, userId);
+            if (candidate == null
+                || candidate.StartDate <= Now || candidate.StartDate != showing.StartDate
+                || (source.Key is { } key
+                    ? candidate.Key == null || !key.Matches(candidate.Key)
+                    : !source.HasMatchingMetadata(candidate))
+                || candidate.SeriesName != showing.Name || (candidate.Overview ?? string.Empty) != showing.Description)
+            {
+                return false;
+            }
+
+            if (request != null && ((request.State == CompleteShowingState.Scheduled && request.ScheduledProgramId != candidate.Id)
+                || (request.PendingProgramId != null && request.PendingProgramId != candidate.Id && LiveTimerFor(request.PendingProgramId) != null)))
+            {
+                return false;
+            }
+
+            var createdRequest = request == null && source.Key != null;
+            var previousPending = request?.PendingProgramId;
+            var previousExplicit = request?.Explicit ?? false;
+            if (source.Key != null)
+            {
+                request ??= new CompleteShowingRequest { Episode = source.Key, OpenedAt = Now, RequestedByUserId = userId };
+                if (createdRequest) data.Requests.Add(request);
+                request.Explicit = true;
+                request.PendingProgramId = candidate.Id;
+                Save(data);
+            }
+
+            if (LiveTimerFor(candidate.Id) == null)
+            {
+                var result = await _host.ScheduleProgramAsync(candidate.Id, cancellationToken).ConfigureAwait(false);
+                _timersStale = true;
+                if (result == ScheduleResult.Failed)
+                {
+                    if (request != null)
+                    {
+                        if (createdRequest) data.Requests.Remove(request);
+                        else
+                        {
+                            request.PendingProgramId = previousPending;
+                            request.Explicit = previousExplicit;
+                        }
+
+                        Save(data);
+                        ScheduleNextRun(data, Now);
+                    }
+
+                    return false;
+                }
+            }
+
+            if (request != null)
+            {
+                SetScheduled(request, candidate);
+                Save(data);
+                ScheduleNextRun(data, Now);
+            }
+
+            return true;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    private bool CanSeeProgram(string programId, Guid userId) =>
+        Guid.TryParse(programId, out var id) && _host.IsVisibleTo(id, userId);
+
+    private GuideProgram? VisibleProgram(string programId, Guid userId) =>
+        CanSeeProgram(programId, userId) ? _host.GetProgram(programId) : null;
+
+    private string CancellationVersion(IncompleteRecordingStoreData data, string programId)
+    {
+        var request = data.Requests.LastOrDefault(r => r.State == CompleteShowingState.CancelledByUser
+            && (r.ScheduledProgramId == programId || r.PendingProgramId == programId));
+        return (request?.Id ?? string.Empty) + (IsCancelledProgram(programId) ? ":manual" : string.Empty);
+    }
+
+    private SuggestedShowing Offer(IncompleteRecordingStoreData data, GuideProgram program)
+    {
+        var showing = SuggestedShowing.FromProgram(program);
+        showing.CancellationVersion = CancellationVersion(data, program.Id);
+        showing.AlreadyScheduled = LiveTimerFor(program.Id) != null;
+        return showing;
+    }
+
+    private bool IsCancelledProgram(string programId) =>
+        LiveTimerFor(programId) == null && _timers.Any(t => t.Status == "Cancelled" && t.IsManual != false
+            && string.Equals(t.ProgramId, programId, StringComparison.OrdinalIgnoreCase));
+
+    private async Task RefreshRequestTimersAsync(IncompleteRecordingStoreData data, CancellationToken cancellationToken)
+    {
+        var previousTimers = _timers;
+        if (_timersStale || _timersLoadedAt == null || Now - _timersLoadedAt >= IncompleteRecordingRules.SafetyNetInterval)
+        {
+            await ReloadTimersAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (TrackScheduledRequests(data, Now, previousTimers))
+        {
+            Save(data);
+            ScheduleNextRun(data, Now);
         }
     }
 
@@ -515,7 +725,13 @@ public sealed class IncompleteRecordingService : IDisposable
             _timers = await _host.GetTimersAsync(cancellationToken).ConfigureAwait(false);
             _timersCurrent = true;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _timersStale = true;
+            _timersCurrent = false;
+            throw;
+        }
+        catch (Exception ex)
         {
             _logger.Warn(ex, "Could not load Live TV timers");
             _timersCurrent = false;
@@ -558,6 +774,7 @@ public sealed class IncompleteRecordingService : IDisposable
 
     private RecordingSnapshot CreateSnapshot(ScheduledTimer timer, ActiveRecordingTimer details)
     {
+        var guideProgram = timer.ProgramId == null ? null : _host.GetProgram(timer.ProgramId);
         var snapshot = new RecordingSnapshot
         {
             TimerId = timer.TimerId,
@@ -565,7 +782,8 @@ public sealed class IncompleteRecordingService : IDisposable
             ApiId = timer.ApiId,
             ChannelName = timer.ChannelName,
             WindowEnd = details.EndDate.AddSeconds(details.PostPaddingSeconds),
-            Episode = EpisodeKey.Create(details.SeriesId, details.Name, details.SeasonNumber, details.EpisodeNumber, details.EpisodeTitle),
+            Episode = EpisodeKey.Create(details.SeriesId, details.Name, details.SeasonNumber, details.EpisodeNumber, details.EpisodeTitle)
+                ?? guideProgram?.Key,
         };
 
         if (details.RetryCount == 0)
@@ -579,7 +797,7 @@ public sealed class IncompleteRecordingService : IDisposable
         {
             // A retry has rewritten the timer's start and dropped its pre-padding, so the runtime
             // comes from the guide and the padding isn't known.
-            var program = timer.ProgramId == null ? null : _host.GetProgram(timer.ProgramId);
+            var program = guideProgram;
             var start = program?.StartDate ?? details.StartDate;
             var end = program?.EndDate ?? details.EndDate;
             snapshot.RuntimeMinutes = Math.Max(0, (end - start).TotalMinutes);
@@ -1088,12 +1306,23 @@ public sealed class IncompleteRecordingService : IDisposable
         }
 
         var changed = false;
+        foreach (var request in data.Requests.Where(r => r.State == CompleteShowingState.Waiting && r.PendingProgramId != null))
+        {
+            if ((!request.Explicit && IsCancelledProgram(request.PendingProgramId!)) || cancelledPrograms.Contains(request.PendingProgramId!))
+            {
+                request.State = CompleteShowingState.CancelledByUser;
+                request.ClosedAt = now;
+                changed = true;
+            }
+        }
+
         foreach (var request in data.Requests.Where(r => r.State == CompleteShowingState.Scheduled).ToList())
         {
-            var timer = _timers.FirstOrDefault(t =>
-                string.Equals(t.ProgramId, request.ScheduledProgramId, StringComparison.OrdinalIgnoreCase));
+            var timer = request.ScheduledProgramId == null ? null
+                : LiveTimerFor(request.ScheduledProgramId) ?? _timers.FirstOrDefault(t =>
+                    string.Equals(t.ProgramId, request.ScheduledProgramId, StringComparison.OrdinalIgnoreCase));
 
-            if (timer?.Status == "Cancelled"
+            if (timer?.Status == "Cancelled" && timer.IsManual != false
                 || (request.ScheduledProgramId != null && cancelledPrograms.Contains(request.ScheduledProgramId)))
             {
                 var moved = FindAiringsSafe(request.Episode, now)
@@ -1113,7 +1342,7 @@ public sealed class IncompleteRecordingService : IDisposable
 
                 changed = true;
             }
-            else if (timer == null && request.ScheduledStart > now)
+            else if ((timer == null || timer.Status == "Cancelled") && request.ScheduledStart > now)
             {
                 ClearScheduled(request);
                 request.State = CompleteShowingState.Waiting;
@@ -1196,7 +1425,9 @@ public sealed class IncompleteRecordingService : IDisposable
             if (request.PendingProgramId != null)
             {
                 var pending = _host.GetProgram(request.PendingProgramId);
-                if (pending != null && (LiveTimerFor(pending.Id) != null || pending.StartDate > now))
+                if (pending != null && (!IsCancelledProgram(pending.Id) || request.Explicit) && (pending.Key is { } pendingKey && request.Episode.Matches(pendingKey))
+                    && (request.RequestedByUserId == null || CanSeeProgram(pending.Id, request.RequestedByUserId.Value))
+                    && (LiveTimerFor(pending.Id) != null || pending.StartDate > now))
                 {
                     showing = pending;
                 }
@@ -1220,7 +1451,8 @@ public sealed class IncompleteRecordingService : IDisposable
                 // An airing a series rule already records is followed rather than doubled, and one
                 // the user cancelled is never picked, since scheduling it would quietly undo that.
                 var airings = FindAiringsSafe(request.Episode, now)
-                    .Where(p => !_timers.Any(t => t.Status == "Cancelled" && string.Equals(t.ProgramId, p.Id, StringComparison.OrdinalIgnoreCase)))
+                    .Where(p => !IsCancelledProgram(p.Id)
+                        && (request.RequestedByUserId == null || CanSeeProgram(p.Id, request.RequestedByUserId.Value)))
                     .ToList();
                 showing = IncompleteRecordingRules.ChooseShowing(request.Episode, airings.Where(p => LiveTimerFor(p.Id) != null), now)
                     ?? IncompleteRecordingRules.ChooseShowing(request.Episode, airings, now);

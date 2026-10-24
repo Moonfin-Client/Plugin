@@ -51,7 +51,7 @@ public sealed class IncompleteRecordingWatcher : IDisposable
                     await _service.RunAsync(stoppingToken).ConfigureAwait(false);
                     delay = _service.NextRunAt() - DateTime.UtcNow;
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
                 {
                     _logger.Error(ex, "Incomplete recordings check failed");
                 }
@@ -64,7 +64,7 @@ public sealed class IncompleteRecordingWatcher : IDisposable
                 await _wake.WaitAsync(delay, stoppingToken).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             // Server shutting down.
         }
@@ -152,7 +152,7 @@ public sealed class IncompleteRecordingWatcher : IDisposable
             {
                 await work().ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
             {
                 // Server shutting down.
             }

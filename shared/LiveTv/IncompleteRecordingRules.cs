@@ -87,7 +87,7 @@ public static class IncompleteRecordingRules
     }
 
     /// <summary>
-    /// The earliest airing of the episode that starts after now, on any channel, preferring HD when
+    /// The earliest airing of the episode or movie that starts after now, on any channel, preferring HD when
     /// two start together. This is how the server itself picks among duplicate showings.
     /// </summary>
     public static GuideProgram? ChooseShowing(EpisodeKey episode, IEnumerable<GuideProgram> programs, DateTime now)

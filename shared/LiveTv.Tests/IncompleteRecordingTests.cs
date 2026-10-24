@@ -86,12 +86,29 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public bool TimersUnavailable { get; set; }
 
+    public bool TimerBackendTimesOut { get; set; }
+
+    public bool GuideBackendTimesOut { get; set; }
+
+    public TaskCompletionSource? GuideReadAttempted { get; set; }
+
     public bool TagWritesFail { get; set; }
 
-    public Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken) =>
-        TimersUnavailable
-            ? Task.FromException<IReadOnlyList<ScheduledTimer>>(new InvalidOperationException("Live TV is not ready"))
-            : Task.FromResult<IReadOnlyList<ScheduledTimer>>(Timers.ToList());
+    public bool SchedulingFails { get; set; }
+
+    public TaskCompletionSource? TimerReadGate { get; set; }
+
+    public int ProgramLookups { get; set; }
+
+    public HashSet<string> HiddenPrograms { get; } = new();
+
+    public async Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
+    {
+        if (TimerReadGate != null) await TimerReadGate.Task.WaitAsync(cancellationToken);
+        if (TimerBackendTimesOut) throw new TaskCanceledException("DVR backend timed out");
+        if (TimersUnavailable) throw new InvalidOperationException("Live TV is not ready");
+        return Timers.ToList();
+    }
 
     public string? GetActiveRecordingPath(string timerId) => ActivePaths.GetValueOrDefault(timerId);
 
@@ -99,16 +116,30 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public long? GetFileLength(string path) => Files.TryGetValue(path, out var size) ? size : null;
 
-    public GuideProgram? GetProgram(string programId) => Programs.FirstOrDefault(p => p.Id == programId);
+    public GuideProgram? GetProgram(string programId)
+    {
+        ProgramLookups++;
+        return Programs.FirstOrDefault(p => p.Id == programId);
+    }
 
-    public IReadOnlyList<GuideProgram> FindAirings(EpisodeKey episode, DateTime after) =>
-        Programs.Where(p => p.StartDate > after).ToList();
+    public IReadOnlyList<GuideProgram> FindAirings(EpisodeKey episode, DateTime after)
+    {
+        GuideReadAttempted?.TrySetResult();
+        if (GuideBackendTimesOut) throw new TaskCanceledException("Guide backend timed out");
+        return Programs.Where(p => p.StartDate > after).ToList();
+    }
+
+    public void RefreshGuide() => GuideRefreshed?.Invoke(this, EventArgs.Empty);
+
+    public IReadOnlyList<GuideProgram> FindProgramsByName(string name, DateTime after) =>
+        Programs.Where(p => p.StartDate > after && EpisodeKey.NormalizeName(p.SeriesName) == EpisodeKey.NormalizeName(name)).ToList();
 
     public Task<ScheduleResult> ScheduleProgramAsync(string programId, CancellationToken cancellationToken)
     {
+        if (SchedulingFails) return Task.FromResult(ScheduleResult.Failed);
         Scheduled.Add(programId);
         var program = Programs.First(p => p.Id == programId);
-        var timer = new ScheduledTimer
+        var timer = Timers.FirstOrDefault(t => t.ProgramId == programId && t.Status == "Cancelled") ?? new ScheduledTimer
         {
             ApiId = "api-" + programId,
             TimerId = "t-" + programId,
@@ -117,7 +148,9 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
             EndDate = program.EndDate,
             Status = "New",
         };
-        Timers.Add(timer);
+        timer.Status = "New";
+        timer.IsManual = true;
+        if (!Timers.Contains(timer)) Timers.Add(timer);
         TimerCreated?.Invoke(this, timer);
         TimerScheduled?.Invoke(timer);
         return Task.FromResult(ScheduleResult.Created);
@@ -129,7 +162,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public IReadOnlyList<string> FindRenamedSiblings(string path) => RenamedSiblingLookup?.Invoke(path) ?? Array.Empty<string>();
 
-    public bool IsVisibleTo(Guid itemId, Guid userId) => true;
+    public bool IsVisibleTo(Guid itemId, Guid userId) => !HiddenPrograms.Contains(itemId.ToString("N"));
 
     public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.ToHashSet();
 
@@ -328,6 +361,750 @@ public sealed class IncompleteRecordingTests : IDisposable
 
         _host.StopRecording(timer);
         await service.RunAsync(CancellationToken.None);
+    }
+
+    private GuideProgram AddMovie(string id, DateTime start, string description = "A distinctive movie plot.")
+    {
+        var program = AddAiring(id, start, season: null, episode: null);
+        program.IsMovie = true;
+        program.SeriesName = "The Movie";
+        program.Overview = description;
+        return program;
+    }
+
+    [Fact]
+    public void MovieKeysRequirePositiveClassificationAndNonemptyTitleAndDescription()
+    {
+        var movie = AddMovie("p", Start);
+        var key = movie.Key!;
+        movie.SeriesName = "  THE   MOVIE  ";
+        movie.Overview = " a DISTINCTIVE movie plot. ";
+        Assert.True(key.Matches(movie.Key!));
+        movie.Overview = "A different movie.";
+        Assert.False(key.Matches(movie.Key!));
+        movie.Overview = "  ";
+        Assert.Null(movie.Key);
+        movie.Overview = "A distinctive movie plot.";
+        movie.SeriesName = " ";
+        Assert.Null(movie.Key);
+        movie.SeriesName = "The Movie";
+        movie.IsMovie = false;
+        Assert.Null(movie.Key);
+        movie.Season = 0;
+        movie.Episode = 0;
+        Assert.False(key.Matches(movie.Key!));
+    }
+
+    [Fact]
+    public void ConflictingMovieYearsAndContentIdsAreRejected()
+    {
+        var first = AddMovie("a", Start);
+        var other = AddMovie("b", Start.AddDays(1));
+        first.ProductionYear = 1980;
+        other.ProductionYear = 2020;
+        Assert.False(first.Key!.Matches(other.Key!));
+        other.ProductionYear = null;
+        Assert.True(first.Key!.Matches(other.Key!));
+        first.ContentIds["Imdb"] = "tt1";
+        other.ContentIds["imdb"] = "tt2";
+        Assert.False(first.Key!.Matches(other.Key!));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IncompleteMoviesRecoverAcrossRestartAndDeleteOnlyWhenEnabled(bool delete)
+    {
+        _settings.DeleteIncompleteCopies = delete;
+        AddMovie("p1", Start);
+        AddMovie("p2", Start.AddDays(1));
+        AddMovie("wrong", Start.AddHours(1), "Different plot.");
+        var original = _host.AddItem("/rec/a.ts");
+        await RecordShow(10, season: null, episode: null);
+        Assert.Equal(new[] { "p2" }, _host.Scheduled);
+
+        var service = NewService();
+        var timer = _host.Timers.Single(t => t.ProgramId == "p2");
+        var replacement = _host.AddItem("/rec/movie.ts");
+        _clock.UtcNow = timer.StartDate;
+        _host.StartRecording(timer, replacement.Path!, null, null);
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.StopRecording(timer);
+        await service.RunAsync(CancellationToken.None);
+        Assert.Equal(delete ? new[] { original.Id } : Array.Empty<Guid>(), _host.Deleted);
+        Assert.Contains(replacement, _host.Items);
+        Assert.Empty(replacement.Tags);
+        Assert.Equal(CompleteShowingState.Done, ReadStore().Requests.Single().State);
+    }
+
+    [Fact]
+    public async Task ACompleteDifferentMovieCannotDeleteTheOriginal()
+    {
+        _settings.DeleteIncompleteCopies = true;
+        AddMovie("p1", Start);
+        var original = _host.AddItem("/rec/a.ts");
+        await RecordShow(10, season: null, episode: null);
+        var wrong = AddMovie("wrong", Start.AddDays(1), "A different story.");
+        var timer = new ScheduledTimer
+        {
+            TimerId = "wrong-timer",
+            ProgramId = wrong.Id,
+            StartDate = wrong.StartDate,
+            EndDate = wrong.EndDate,
+            Status = "New"
+        };
+        _host.Timers.Add(timer);
+        _clock.UtcNow = wrong.StartDate;
+        _host.StartRecording(timer, "/rec/wrong.ts", null, null);
+        var service = NewService();
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.StopRecording(timer);
+        await service.RunAsync(CancellationToken.None);
+        Assert.Empty(_host.Deleted);
+        Assert.Contains(IncompleteRecordingRules.Tag, original.Tags);
+        Assert.NotEqual(CompleteShowingState.Done, ReadStore().Requests.Single().State);
+    }
+
+    [Fact]
+    public async Task ExplicitMovieRequestUsesTheNormalRecoveryLifecycle()
+    {
+        var movie = AddMovie(Guid.NewGuid().ToString("N"), Start);
+        var next = AddMovie(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start;
+        var (request, refusal) = await NewService().RequestCompleteShowingAsync(movie.Id, User, CancellationToken.None);
+        Assert.Equal(CompleteShowingRefusal.None, refusal);
+        Assert.True(request!.Explicit);
+        Assert.True(request.Episode.IsMovie);
+        Assert.Equal(new[] { next.Id }, _host.Scheduled);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task KnownEpisodeAndMovieOptionsShowTheNextAccessibleMatchingAiring(bool movie)
+    {
+        var source = movie ? AddMovie(Guid.NewGuid().ToString("N"), Start)
+            : AddAiring(Guid.NewGuid().ToString("N"), Start);
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        var empty = (await service.GetCompleteShowingOptionsAsync(source.Id, User));
+        Assert.True(empty.CanSearch);
+        Assert.Null(empty.Showing);
+        var hidden = movie ? AddMovie(Guid.NewGuid().ToString("N"), Start.AddHours(1))
+            : AddAiring(Guid.NewGuid().ToString("N"), Start.AddHours(1));
+        _host.HiddenPrograms.Add(hidden.Id);
+        var next = movie ? AddMovie(Guid.NewGuid().ToString("N"), Start.AddDays(1))
+            : AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        var options = (await service.GetCompleteShowingOptionsAsync(source.Id, User));
+        Assert.True(options.CanSearch);
+        Assert.Equal(next.Id, options.Showing!.ProgramId);
+        Assert.Equal(next.StartDate, options.Showing.StartDate);
+        Assert.Empty(_host.Scheduled);
+    }
+
+    private (GuideProgram Source, GuideProgram Future) AddUnnumberedShowings()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start, null, null);
+        source.SeriesName = "Stephen King: A Necessary Evil";
+        source.Overview = "Interviews explore the author's work.";
+        var future = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1), null, null);
+        future.SeriesName = source.SeriesName;
+        future.Overview = source.Overview;
+        _clock.UtcNow = Start.AddMinutes(5);
+        return (source, future);
+    }
+
+    [Fact]
+    public async Task AnUnnumberedSuggestionSchedulesOneAiringWithoutRecoveryOrDeletion()
+    {
+        var (source, future) = AddUnnumberedShowings();
+        var service = NewService();
+        var options = (await service.GetCompleteShowingOptionsAsync(source.Id, User));
+        Assert.False(options.CanSearch);
+        Assert.Equal(future.Id, options.Showing!.ProgramId);
+        Assert.Empty(_host.Scheduled);
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, options.Showing, User, CancellationToken.None));
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, options.Showing, User, CancellationToken.None));
+        Assert.Equal(new[] { future.Id }, _host.Scheduled);
+        await service.RunAsync(CancellationToken.None);
+        Assert.Empty(ReadStore().Requests);
+        Assert.Empty(_host.Deleted);
+    }
+
+    [Theory]
+    [InlineData("description")]
+    [InlineData("time")]
+    [InlineData("past")]
+    [InlineData("hidden")]
+    [InlineData("missing")]
+    public async Task AChangedOrUnavailableSuggestionIsNotScheduled(string change)
+    {
+        var (source, future) = AddUnnumberedShowings();
+        var service = NewService();
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        switch (change)
+        {
+            case "description": future.Overview = "Changed plot."; break;
+            case "time": future.StartDate = future.StartDate.AddHours(1); break;
+            case "past": _clock.UtcNow = future.StartDate; break;
+            case "hidden": _host.HiddenPrograms.Add(future.Id); break;
+            case "missing": _host.Programs.Remove(future); break;
+        }
+
+        Assert.False(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+        Assert.Empty(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task SuggestionsRequireDescriptionAccessAndAFutureMatchInTheCurrentGuide()
+    {
+        var (source, future) = AddUnnumberedShowings();
+        var service = NewService();
+        _host.HiddenPrograms.Add(source.Id);
+        Assert.Null((await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing);
+        _host.HiddenPrograms.Clear();
+        _host.HiddenPrograms.Add(future.Id);
+        Assert.Null((await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing);
+        _host.HiddenPrograms.Clear();
+        source.Overview = future.Overview = " ";
+        Assert.Null((await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing);
+        Assert.Empty(_host.Scheduled);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("A distinctive plot.")]
+    public async Task NumberedMoviesPreserveExistingEpisodeIdentity(string? description)
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var legacy = source.Key!;
+        source.IsMovie = true;
+        source.Overview = description;
+        Assert.False(source.Key!.IsMovie);
+        Assert.True(legacy.Matches(source.Key));
+        Assert.Equal(legacy.Id, source.Key.Id);
+        var next = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        next.IsMovie = true;
+        next.Overview = description;
+        _clock.UtcNow = Start;
+        var service = NewService();
+        var first = await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        var second = await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        Assert.Equal(first.Request!.Id, second.Request!.Id);
+        Assert.Single(ReadStore().Requests);
+        Assert.Equal(new[] { next.Id }, _host.Scheduled);
+    }
+
+    [Fact]
+    public async Task ConfirmedKnownAiringIsScheduledExactlyAndRevalidated()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var hidden = AddAiring(Guid.NewGuid().ToString("N"), Start.AddHours(1));
+        _host.HiddenPrograms.Add(hidden.Id);
+        var next = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        Assert.Equal(next.Id, offered.ProgramId);
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+        Assert.Equal(new[] { next.Id }, _host.Scheduled);
+        Assert.Equal(next.Id, ReadStore().Requests.Single().ScheduledProgramId);
+        _host.HiddenPrograms.Add(next.Id);
+        Assert.False(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AShowingAnotherUserAlreadyScheduledIsOfferedAsScheduledAndAdopted()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var later = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _host.Timers.Add(new ScheduledTimer { TimerId = "other", ProgramId = later.Id, StartDate = later.StartDate, EndDate = later.EndDate, Status = "New" });
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+
+        Assert.Equal(later.Id, offered.ProgramId);
+        Assert.True(offered.AlreadyScheduled);
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+        Assert.Empty(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task AnExistingBookingIsOfferedAndADifferentShowingIsNotConfirmedInItsPlace()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var booked = AddAiring(Guid.NewGuid().ToString("N"), Start.AddHours(1));
+        var later = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        Assert.Equal(booked.Id, (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!.ProgramId);
+        _host.HiddenPrograms.Add(booked.Id);
+        Assert.Null((await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing);
+        Assert.False(await service.ScheduleSuggestedShowingAsync(source.Id, SuggestedShowing.FromProgram(later), User, CancellationToken.None));
+        var joined = await service.RequestCompleteShowingAsync(source.Id, Guid.NewGuid(), CancellationToken.None);
+        Assert.NotNull(joined.Request);
+        Assert.Equal(User, joined.Request!.RequestedByUserId);
+        Assert.Single(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task AFailedConfirmedBookingCannotCreateBackgroundRetryIntent()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var future = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        _host.SchedulingFails = true;
+        Assert.False(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+        Assert.Empty(ReadStore().Requests);
+        _host.SchedulingFails = false;
+        _clock.Advance(TimeSpan.FromMinutes(15));
+        await NewService().RunAsync(CancellationToken.None);
+        Assert.Empty(_host.Scheduled);
+        Assert.Empty(ReadStore().Requests);
+    }
+
+    [Fact]
+    public async Task JoiningAnAutomaticRequestDoesNotRestrictItsChannels()
+    {
+        var source = AddAiring("p1", Start);
+        var future = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        var service = await RecordShow(10);
+        Assert.Null(ReadStore().Requests.Single().RequestedByUserId);
+        var visibleSource = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        _host.HiddenPrograms.Add(future.Id);
+        var joined = await service.RequestCompleteShowingAsync(visibleSource.Id, User, CancellationToken.None);
+        Assert.NotNull(joined.Request);
+        Assert.Null(joined.Request!.RequestedByUserId);
+        Assert.False(await service.ScheduleSuggestedShowingAsync(visibleSource.Id, SuggestedShowing.FromProgram(future), User, CancellationToken.None));
+        Assert.Null(ReadStore().Requests.Single().RequestedByUserId);
+        Assert.Single(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task AFailedConfirmationRestoresAnExistingWaitingRequest()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        var original = await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        var future = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _host.SchedulingFails = true;
+        Assert.False(await service.ScheduleSuggestedShowingAsync(source.Id, SuggestedShowing.FromProgram(future), Guid.NewGuid(), CancellationToken.None));
+        var saved = ReadStore().Requests.Single();
+        Assert.Equal(original.Request!.Id, saved.Id);
+        Assert.Equal(User, saved.RequestedByUserId);
+        Assert.Null(saved.PendingProgramId);
+        Assert.Equal(CompleteShowingState.Waiting, saved.State);
+        Assert.Empty(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task NumberedMovieSnapshotsUseTheExistingEpisodeKeyWithoutADescription()
+    {
+        var source = AddAiring("p1", Start);
+        var legacy = source.Key!;
+        source.IsMovie = true;
+        var next = AddAiring("p2", Start.AddDays(1));
+        next.IsMovie = true;
+        await RecordShow(10);
+        Assert.Equal(new[] { next.Id }, _host.Scheduled);
+        Assert.Equal(legacy.Id, ReadStore().Records.Single().Episode!.Id);
+        Assert.False(ReadStore().Records.Single().Episode!.IsMovie);
+    }
+
+    [Fact]
+    public async Task AChangedPendingEpisodeIsNotScheduledAfterRestart()
+    {
+        var source = AddAiring("source", Start);
+        var pending = AddAiring("pending", Start.AddHours(1));
+        var next = AddAiring("next", Start.AddDays(1));
+        var data = new IncompleteRecordingStoreData();
+        data.Requests.Add(new CompleteShowingRequest
+        {
+            Episode = source.Key!,
+            OpenedAt = Start,
+            PendingProgramId = pending.Id,
+        });
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(StorePath, JsonSerializer.Serialize(data));
+        pending.Episode = 99;
+        _clock.UtcNow = Start.AddMinutes(5);
+        await NewService().RunAsync(CancellationToken.None);
+        Assert.Equal(new[] { next.Id }, _host.Scheduled);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task AStaleConfirmationCannotRecreateACancelledTimerButANewConfirmationCan(bool optionsFirst, bool retainedTimer)
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var next = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        ListenForTimerEvents(service);
+        await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        var timer = _host.Timers.Single();
+        if (retainedTimer)
+        {
+            timer.Status = "Cancelled";
+            timer.IsManual = true;
+            service.MarkScheduleChanged();
+        }
+        else _host.CancelTimer(timer);
+        if (optionsFirst) Assert.Equal(next.Id, (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!.ProgramId);
+        Assert.False(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+        await service.RunAsync(CancellationToken.None);
+        Assert.Single(_host.Scheduled);
+        Assert.Contains(ReadStore().Requests, r => r.State == CompleteShowingState.CancelledByUser);
+        var fresh = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        Assert.Equal(next.Id, fresh.ProgramId);
+        Assert.NotEqual(offered.CancellationVersion, fresh.CancellationVersion);
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, fresh, User, CancellationToken.None));
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, fresh, User, CancellationToken.None));
+        Assert.Equal(new[] { next.Id, next.Id }, _host.Scheduled);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task AutomaticSeriesSkipsRemainEligibleForRecovery(bool requestAlreadyScheduled, bool pending)
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var next = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        if (requestAlreadyScheduled)
+        {
+            _host.SchedulingFails = pending;
+            await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+            _host.SchedulingFails = false;
+        }
+        var timer = _host.Timers.FirstOrDefault() ?? new ScheduledTimer
+        {
+            TimerId = "series-skip",
+            ProgramId = next.Id,
+            StartDate = next.StartDate,
+            EndDate = next.EndDate,
+        };
+        if (!_host.Timers.Contains(timer)) _host.Timers.Add(timer);
+        timer.Status = "Cancelled";
+        timer.IsManual = false;
+        service.MarkScheduleChanged();
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing;
+        Assert.Equal(next.Id, offered!.ProgramId);
+        if (requestAlreadyScheduled)
+        {
+            await service.RunAsync(CancellationToken.None);
+        }
+        else
+        {
+            await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        }
+        Assert.Equal("New", timer.Status);
+        Assert.Equal(CompleteShowingState.Scheduled, ReadStore().Requests.Single().State);
+        Assert.DoesNotContain(ReadStore().Requests, r => r.State == CompleteShowingState.CancelledByUser);
+    }
+
+    [Fact]
+    public async Task ACanceledTimerReloadIsImmediatelyRetriedEvenWithAPreviouslyWarmCache()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var next = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        await service.GetCompleteShowingOptionsAsync(source.Id, User);
+        service.MarkScheduleChanged();
+        _host.TimerReadGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+        var aborted = service.GetCompleteShowingOptionsAsync(source.Id, User, cancellation.Token);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => aborted);
+        _host.TimerReadGate = null;
+        var timer = new ScheduledTimer
+        {
+            TimerId = "already-booked",
+            ProgramId = next.Id,
+            StartDate = next.StartDate,
+            EndDate = next.EndDate,
+            Status = "New",
+        };
+        _host.Timers.Add(timer);
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+        Assert.Empty(_host.Scheduled);
+        Assert.Equal(next.Id, ReadStore().Requests.Single().ScheduledProgramId);
+    }
+
+    [Fact]
+    public async Task AStaleConfirmationOfACancelledShowingIsRefusedAndNotRecreated()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var first = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        var different = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(2));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        ListenForTimerEvents(service);
+        await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        var stale = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        _host.CancelTimer(_host.Timers.Single());
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, SuggestedShowing.FromProgram(different), User, CancellationToken.None));
+        Assert.False(await service.ScheduleSuggestedShowingAsync(source.Id, stale, User, CancellationToken.None));
+        Assert.Equal(new[] { first.Id, different.Id }, _host.Scheduled);
+        Assert.Equal(different.Id, ReadStore().Requests.Last().ScheduledProgramId);
+    }
+
+    [Fact]
+    public async Task OptionsWaitCanBeCancelledWhileAWorkerHoldsTheLock()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        _clock.UtcNow = Start.AddMinutes(5);
+        _host.TimerReadGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = NewService();
+        var worker = service.RunAsync(CancellationToken.None);
+        using var cancelled = new CancellationTokenSource();
+        var options = service.GetCompleteShowingOptionsAsync(source.Id, User, cancelled.Token);
+        cancelled.Cancel();
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => options);
+        }
+        finally
+        {
+            _host.TimerReadGate.SetResult();
+            await worker;
+        }
+    }
+
+    [Fact]
+    public async Task PendingOptionsAndSelectedReplacementDoNotConflict()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var pending = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(2));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        _host.SchedulingFails = true;
+        await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        var earlier = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        Assert.Equal(pending.Id, (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!.ProgramId);
+        _host.SchedulingFails = false;
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, SuggestedShowing.FromProgram(earlier), User, CancellationToken.None));
+        Assert.Equal(new[] { earlier.Id }, _host.Scheduled);
+        Assert.Equal(earlier.Id, ReadStore().Requests.Single().ScheduledProgramId);
+    }
+
+    [Fact]
+    public async Task ResponseUsesActualBookingAfterSourceEndsAndDoesNotInventOneOnFailure()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var next = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(25);
+        var service = NewService();
+        var booked = await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        Assert.Equal(CompleteShowingState.Scheduled, booked.Request!.State);
+        Assert.Equal(next.StartDate, booked.Request.ScheduledStart);
+        _host.HiddenPrograms.Add(next.Id);
+        var joined = await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        Assert.Equal(next.StartDate, joined.Request!.ScheduledStart);
+        Assert.Null(joined.Request.ScheduledChannelName);
+        _host.HiddenPrograms.Clear();
+        var other = AddAiring(Guid.NewGuid().ToString("N"), Start, episode: 88);
+        AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1), episode: 88);
+        _host.SchedulingFails = true;
+        var failed = await service.RequestCompleteShowingAsync(other.Id, User, CancellationToken.None);
+        Assert.Equal(CompleteShowingState.Waiting, failed.Request!.State);
+        Assert.Null(failed.Request.ScheduledStart);
+        Assert.Null(failed.Request.ScheduledChannelName);
+    }
+
+    [Fact]
+    public async Task OptionsDoesNotRefetchEachGuideCandidateToCheckVisibility()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        for (var i = 1; i <= 10; i++)
+        {
+            var airing = AddAiring(Guid.NewGuid().ToString("N"), Start.AddHours(i));
+            _host.HiddenPrograms.Add(airing.Id);
+        }
+        var visible = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var offered = await NewService().GetCompleteShowingOptionsAsync(source.Id, User);
+        Assert.Equal(visible.Id, offered.Showing!.ProgramId);
+        Assert.Equal(1, _host.ProgramLookups);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ACompletedUncertainSuggestionCannotDeleteOrCompleteTheOriginal(bool futureMarkedMovie)
+    {
+        _settings.DeleteIncompleteCopies = true;
+        var (source, future) = AddUnnumberedShowings();
+        var original = _host.AddItem("/rec/a.ts");
+        var guideOriginal = AddAiring("p1", Start, null, null);
+        guideOriginal.SeriesName = source.SeriesName;
+        guideOriginal.Overview = source.Overview;
+        var service = NewService();
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+        service = await RecordShow(10, season: null, episode: null);
+        Assert.Null(ReadStore().Records.Single().Episode);
+        future.IsMovie = futureMarkedMovie;
+        var timer = _host.Timers.Single(t => t.ProgramId == future.Id);
+        var replacement = _host.AddItem("/rec/different-broadcast.ts");
+        _clock.UtcNow = timer.StartDate;
+        _host.StartRecording(timer, replacement.Path!, null, null);
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+        _host.StopRecording(timer);
+        await service.RunAsync(CancellationToken.None);
+        Assert.Empty(_host.Deleted);
+        Assert.Empty(ReadStore().Requests);
+        Assert.False(ReadStore().Records.Single().Dismissed);
+        Assert.Contains(IncompleteRecordingRules.Tag, original.Tags);
+        Assert.Contains(original, _host.Items);
+    }
+
+    [Fact]
+    public async Task AnExplicitRequestDoesNotPickAnAiringTheUserCancelled()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var future = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _host.Timers.Add(new ScheduledTimer
+        {
+            TimerId = "manually-cancelled",
+            ProgramId = future.Id,
+            StartDate = future.StartDate,
+            EndDate = future.EndDate,
+            Status = "Cancelled",
+            IsManual = true,
+        });
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+
+        await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        await service.RunAsync(CancellationToken.None);
+
+        var request = ReadStore().Requests.Single();
+        Assert.Equal(CompleteShowingState.Waiting, request.State);
+        Assert.Null(request.PendingProgramId);
+        Assert.Empty(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task ALiveTimerWinsOverAnOlderCancelledOneForTheSameShowing()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var future = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        var offered = (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing!;
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, offered, User, CancellationToken.None));
+
+        _host.Timers.Insert(0, new ScheduledTimer
+        {
+            TimerId = "cancelled-earlier",
+            ProgramId = future.Id,
+            StartDate = future.StartDate,
+            EndDate = future.EndDate,
+            Status = "Cancelled",
+            IsManual = true,
+        });
+        service.MarkScheduleChanged();
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal(CompleteShowingState.Scheduled, ReadStore().Requests.Single().State);
+    }
+
+    [Theory]
+    [InlineData("options")]
+    [InlineData("request")]
+    [InlineData("suggestion")]
+    public async Task ATimerBackendTimeoutIsAnUnavailableReadRatherThanACallerCancellation(string operation)
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var future = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        _host.TimerBackendTimesOut = true;
+        var service = NewService();
+        switch (operation)
+        {
+            case "options":
+                Assert.Null((await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing);
+                break;
+            case "request":
+                var requested = await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+                Assert.Equal(CompleteShowingState.Waiting, requested.Request!.State);
+                Assert.Null(requested.Request.ScheduledStart);
+                break;
+            default:
+                Assert.False(await service.ScheduleSuggestedShowingAsync(source.Id, SuggestedShowing.FromProgram(future), User, CancellationToken.None));
+                break;
+        }
+        Assert.Empty(_host.Scheduled);
+        _host.TimerBackendTimesOut = false;
+        service.MarkScheduleChanged();
+        Assert.True(await service.ScheduleSuggestedShowingAsync(source.Id, SuggestedShowing.FromProgram(future), User, CancellationToken.None));
+        Assert.Equal(new[] { future.Id }, _host.Scheduled);
+    }
+
+    [Fact]
+    public async Task AnUnownedCancellationExceptionDoesNotEndTheWatcher()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+        await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        var future = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _host.GuideBackendTimesOut = true;
+        _host.GuideReadAttempted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var scheduled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _host.TimerScheduled = _ => scheduled.TrySetResult();
+        using var watcher = new IncompleteRecordingWatcher(service, _host, NoRecordingLog.Instance);
+        using var stopping = new CancellationTokenSource();
+        var running = watcher.RunAsync(stopping.Token);
+        try
+        {
+            await _host.GuideReadAttempted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(running.IsCompleted);
+            _host.GuideBackendTimesOut = false;
+            _host.RefreshGuide();
+            await scheduled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(running.IsCompleted);
+            Assert.Equal(new[] { future.Id }, _host.Scheduled);
+        }
+        finally
+        {
+            stopping.Cancel();
+            await running;
+        }
+        Assert.True(running.IsCompletedSuccessfully);
     }
 
     // Rules

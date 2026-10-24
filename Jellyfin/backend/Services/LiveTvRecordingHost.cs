@@ -80,6 +80,25 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
     public async Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
     {
         var result = await _liveTvManager.GetTimers(new TimerQuery(), cancellationToken).ConfigureAwait(false);
+        var manual = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        // The public DTO omits IsManual; only cancelled timers need the service's distinction.
+        foreach (var service in _liveTvManager.Services.Where(s => result.Items.Any(t =>
+            t.Status == RecordingStatus.Cancelled && string.Equals(t.ServiceName, s.Name, StringComparison.OrdinalIgnoreCase))))
+        {
+            // One service failing leaves its timers' IsManual unknown rather than failing the load.
+            try
+            {
+                foreach (var timer in await service.GetTimersAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    manual[service.Name + "\0" + timer.Id] = timer.IsManual;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Could not read the timers of Live TV service {Service}", service.Name);
+            }
+        }
+
         return result.Items
             .Where(t => !string.IsNullOrEmpty(t.ExternalId))
             .Select(t => new ScheduledTimer
@@ -93,6 +112,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
                 PrePaddingSeconds = t.PrePaddingSeconds,
                 PostPaddingSeconds = t.PostPaddingSeconds,
                 Status = t.Status.ToString(),
+                IsManual = manual.TryGetValue(t.ServiceName + "\0" + t.ExternalId, out var isManual) ? isManual : null,
             })
             .ToList();
     }
@@ -151,11 +171,12 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         {
             IncludeItemTypes = [BaseItemKind.LiveTvProgram],
             MinStartDate = after,
-            ParentIndexNumber = episode.Season,
-            IndexNumber = episode.Episode,
+            ParentIndexNumber = episode.IsMovie ? null : episode.Season,
+            IndexNumber = episode.IsMovie ? null : episode.Episode,
+            IsMovie = episode.IsMovie ? true : null,
         };
 
-        if (episode.SeriesId != null)
+        if (!episode.IsMovie && episode.SeriesId != null)
         {
             query.ExternalSeriesId = episode.SeriesId;
         }
@@ -172,6 +193,17 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
             .OfType<LiveTvProgram>()
             .Select(p => ToGuideProgram(p, channels))
             .ToList();
+    }
+
+    public IReadOnlyList<GuideProgram> FindProgramsByName(string name, DateTime after)
+    {
+        var channels = new Dictionary<Guid, BaseItem?>();
+        return _libraryManager.GetItemsResult(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.LiveTvProgram],
+            MinStartDate = after,
+            Name = name,
+        }).Items.OfType<LiveTvProgram>().Select(p => ToGuideProgram(p, channels)).ToList();
     }
 
     public async Task<ScheduleResult> ScheduleProgramAsync(string programId, CancellationToken cancellationToken)
@@ -342,6 +374,14 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         {
             Id = program.Id.ToString("N"),
             ItemId = program.Id,
+            IsMovie = program.IsMovie,
+            Overview = program.Overview,
+            ProductionYear = program.ProductionYear,
+            ContentIds = program.ProviderIds
+                .Where(p => p.Key.Equals("Imdb", StringComparison.OrdinalIgnoreCase)
+                    || p.Key.Equals("Tmdb", StringComparison.OrdinalIgnoreCase)
+                    || p.Key.Equals("Tvdb", StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(p => p.Key, p => p.Value),
             SeriesId = program.ExternalSeriesId,
             SeriesName = program.Name,
             Season = program.ParentIndexNumber,
@@ -350,6 +390,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
             StartDate = program.StartDate,
             EndDate = program.EndDate ?? program.StartDate,
             ChannelName = channel?.Name,
+            ChannelNumber = (channel as LiveTvChannel)?.Number,
             IsHD = channel?.IsHD ?? false,
         };
     }

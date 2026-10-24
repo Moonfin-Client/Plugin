@@ -185,11 +185,12 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 IncludeItemTypes = new[] { nameof(LiveTvProgram) },
                 MinStartDate = new DateTimeOffset(DateTime.SpecifyKind(after, DateTimeKind.Utc)),
-                ParentIndexNumber = episode.Season,
-                IndexNumber = episode.Episode,
+                ParentIndexNumber = episode.IsMovie ? null : episode.Season,
+                IndexNumber = episode.IsMovie ? null : episode.Episode,
+                IsMovie = episode.IsMovie ? true : null,
             };
 
-            if (episode.SeriesId != null && long.TryParse(episode.SeriesId, NumberStyles.None, CultureInfo.InvariantCulture, out var seriesId))
+            if (!episode.IsMovie && episode.SeriesId != null && long.TryParse(episode.SeriesId, NumberStyles.None, CultureInfo.InvariantCulture, out var seriesId))
             {
                 query.SeriesIds = new[] { seriesId };
             }
@@ -200,6 +201,20 @@ namespace Emby.Plugins.Moonfin.Services
 
             var channels = new Dictionary<long, LiveTvChannel?>();
             return _libraryManager.GetItemList(query)
+                .OfType<LiveTvProgram>()
+                .Select(p => ToGuideProgram(p, channels))
+                .ToList();
+        }
+
+        public IReadOnlyList<GuideProgram> FindProgramsByName(string name, DateTime after)
+        {
+            var channels = new Dictionary<long, LiveTvChannel?>();
+            return _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { nameof(LiveTvProgram) },
+                MinStartDate = new DateTimeOffset(DateTime.SpecifyKind(after, DateTimeKind.Utc)),
+                Name = name,
+            })
                 .OfType<LiveTvProgram>()
                 .Select(p => ToGuideProgram(p, channels))
                 .ToList();
@@ -376,6 +391,14 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 Id = program.InternalId.ToString(CultureInfo.InvariantCulture),
                 ItemId = program.Id,
+                IsMovie = program.IsMovie,
+                Overview = program.Overview,
+                ProductionYear = program.ProductionYear,
+                ContentIds = program.ProviderIds
+                    .Where(p => p.Key.Equals("Imdb", StringComparison.OrdinalIgnoreCase)
+                        || p.Key.Equals("Tmdb", StringComparison.OrdinalIgnoreCase)
+                        || p.Key.Equals("Tvdb", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(p => p.Key, p => p.Value),
                 SeriesId = SeriesIdOf(program),
                 SeriesName = SeriesNameOf(program),
                 Season = program.ParentIndexNumber,
@@ -383,6 +406,7 @@ namespace Emby.Plugins.Moonfin.Services
                 StartDate = program.StartDate.UtcDateTime,
                 EndDate = (program.EndDate ?? program.StartDate).UtcDateTime,
                 ChannelName = channel?.Name,
+                ChannelNumber = channel?.Number,
                 IsHD = channel?.IsHD ?? false,
             };
         }

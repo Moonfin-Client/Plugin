@@ -141,6 +141,7 @@ public class MoonfinController : ControllerBase
             MessagesSupported = true,
             PinSupported = true,
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
+            ExtendedCompleteShowingsSupported = true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             DefaultSettings = config?.DefaultUserSettings
         });
@@ -1593,6 +1594,10 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("incompleteRecordingsSupported")]
     public bool? IncompleteRecordingsSupported { get; set; }
+
+    /// <summary>Movie recovery and user-confirmed current-guide suggestions.</summary>
+    [JsonPropertyName("extendedCompleteShowingsSupported")]
+    public bool? ExtendedCompleteShowingsSupported { get; set; }
 
     /// <summary>
     /// True when this plugin supports server-side recommendations scoring.

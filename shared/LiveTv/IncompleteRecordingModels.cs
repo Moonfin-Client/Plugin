@@ -6,9 +6,10 @@ using System.Text.Json.Serialization;
 namespace Moonfin.LiveTv;
 
 /// <summary>
-/// Identifies one episode across airings. The persisted identity is the series plus season and
-/// episode number. The episode title is kept beside it as an anchor and only ever checked for
-/// compatibility, so it never changes which key an airing has.
+/// Identifies an episode or movie across airings. A movie matches on its nonempty name and
+/// description, with no conflicting year or content ids. An episode's persisted identity is the
+/// series plus season and episode number. The episode title is kept beside it as an anchor and
+/// only ever checked for compatibility, so it never changes which key an airing has.
 ///
 /// The series is the guide's series id when there is one ("id:" namespace), otherwise the
 /// normalized series name ("name:" namespace). Two sides that both carry an id compare ids, and
@@ -17,6 +18,55 @@ namespace Moonfin.LiveTv;
 /// </summary>
 public sealed class EpisodeKey
 {
+    // Absent on older persisted episode keys.
+    public bool IsMovie { get; set; }
+
+    public string? Description { get; set; }
+
+    public int? ProductionYear { get; set; }
+
+    public Dictionary<string, string> ContentIds { get; set; } = new();
+
+    public static EpisodeKey? FromProgram(GuideProgram program)
+    {
+        if (!program.IsMovie || (program.Season.HasValue && program.Episode.HasValue))
+        {
+            return Create(program.SeriesId, program.SeriesName, program.Season, program.Episode, program.EpisodeTitle);
+        }
+
+        return string.IsNullOrWhiteSpace(program.SeriesName) || string.IsNullOrWhiteSpace(program.Overview)
+            ? null
+            : new EpisodeKey
+            {
+                IsMovie = true,
+                SeriesName = program.SeriesName,
+                Description = program.Overview,
+                ProductionYear = program.ProductionYear,
+                ContentIds = new Dictionary<string, string>(program.ContentIds),
+            };
+    }
+
+    public static bool CompatibleMetadata(int? year, IReadOnlyDictionary<string, string> ids,
+        int? otherYear, IReadOnlyDictionary<string, string> otherIds)
+    {
+        if (year.HasValue && otherYear.HasValue && year != otherYear)
+        {
+            return false;
+        }
+
+        foreach (var id in ids)
+        {
+            var other = otherIds.FirstOrDefault(p => string.Equals(p.Key, id.Key, StringComparison.OrdinalIgnoreCase)).Value;
+            if (!string.IsNullOrWhiteSpace(id.Value) && !string.IsNullOrWhiteSpace(other)
+                && !string.Equals(id.Value.Trim(), other.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public string? SeriesId { get; set; }
 
     public string SeriesName { get; set; } = string.Empty;
@@ -28,9 +78,11 @@ public sealed class EpisodeKey
     /// <summary>The title of the airing this key came from. Compared, never keyed on.</summary>
     public string? EpisodeTitle { get; set; }
 
-    /// <summary>The persisted key: series identity, season and episode.</summary>
+    /// <summary>The persisted identity: movie title and description, or series, season and episode.</summary>
     [JsonIgnore]
-    public string Id => SeriesId != null
+    public string Id => IsMovie
+        ? $"movie:{NormalizeName(SeriesName)}|{NormalizeName(Description)}"
+        : SeriesId != null
         ? $"id:{SeriesId.Trim().ToLowerInvariant()}|{Season}|{Episode}"
         : $"name:{NormalizeName(SeriesName)}|{Season}|{Episode}";
 
@@ -57,12 +109,31 @@ public sealed class EpisodeKey
         };
     }
 
+    /// <summary>
+    /// The movie rule: both names and descriptions present and equal once normalized, with no
+    /// conflicting year or content ids.
+    /// </summary>
+    public static bool SameMovie(string? name, string? description, int? year, IReadOnlyDictionary<string, string> ids,
+        string? otherName, string? otherDescription, int? otherYear, IReadOnlyDictionary<string, string> otherIds) =>
+        !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(otherName)
+        && !string.IsNullOrWhiteSpace(description) && !string.IsNullOrWhiteSpace(otherDescription)
+        && NormalizeName(name) == NormalizeName(otherName)
+        && NormalizeName(description) == NormalizeName(otherDescription)
+        && CompatibleMetadata(year, ids, otherYear, otherIds);
+
     public static string NormalizeName(string? name) =>
         string.Join(' ', (name ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
 
     /// <summary>Same series, season and episode. Titles are not looked at.</summary>
     public bool SameEpisode(EpisodeKey other)
     {
+        if (IsMovie || other.IsMovie)
+        {
+            return IsMovie && other.IsMovie
+                && SameMovie(SeriesName, Description, ProductionYear, ContentIds,
+                    other.SeriesName, other.Description, other.ProductionYear, other.ContentIds);
+        }
+
         if (Season != other.Season || Episode != other.Episode)
         {
             return false;
@@ -230,6 +301,10 @@ public sealed class CompleteShowingRequest
     /// <summary>Opened by a user from the Record prompt, so it survives the automatic setting being turned off.</summary>
     public bool Explicit { get; set; }
 
+    public Guid? RequestedByUserId { get; set; }
+
+    internal CompleteShowingRequest Copy() => (CompleteShowingRequest)MemberwiseClone();
+
     public DateTime OpenedAt { get; set; }
 
     /// <summary>
@@ -275,6 +350,9 @@ public sealed class IncompleteRecordingStoreData
 /// <summary>A timer as the schedule cache holds it.</summary>
 public sealed class ScheduledTimer
 {
+    /// <summary>Whether a user made or cancelled the timer by hand; null when the server doesn't say.</summary>
+    public bool? IsManual { get; set; }
+
     /// <summary>The API id, which some cancellation events use instead of the service's timer id.</summary>
     public string? ApiId { get; set; }
 
@@ -331,6 +409,18 @@ public sealed class GuideProgram
     /// <summary>The program's library item, which visibility is checked on.</summary>
     public Guid ItemId { get; set; }
 
+    public bool IsMovie { get; set; }
+
+    public string? Overview { get; set; }
+
+    public int? ProductionYear { get; set; }
+
+    public Dictionary<string, string> ContentIds { get; set; } = new();
+
+    public bool HasMatchingMetadata(GuideProgram other) =>
+        EpisodeKey.SameMovie(SeriesName, Overview, ProductionYear, ContentIds,
+            other.SeriesName, other.Overview, other.ProductionYear, other.ContentIds);
+
     public string Id { get; set; } = string.Empty;
 
     public string? SeriesId { get; set; }
@@ -351,7 +441,9 @@ public sealed class GuideProgram
 
     public bool IsHD { get; set; }
 
-    public EpisodeKey? Key => EpisodeKey.Create(SeriesId, SeriesName, Season, Episode, EpisodeTitle);
+    public string? ChannelNumber { get; set; }
+
+    public EpisodeKey? Key => EpisodeKey.FromProgram(this);
 }
 
 /// <summary>The parts of a library item the attach step looks at.</summary>
@@ -364,6 +456,53 @@ public sealed class LibraryItem
     public DateTime DateCreated { get; set; }
 
     public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
+}
+
+public sealed class CompleteShowingOptions
+{
+    [JsonPropertyName("canSearch")]
+    public bool CanSearch { get; set; }
+
+    [JsonPropertyName("showing")]
+    public SuggestedShowing? Showing { get; set; }
+}
+
+public sealed class SuggestedShowing
+{
+    [JsonPropertyName("cancellationVersion")]
+    public string? CancellationVersion { get; set; }
+
+    [JsonPropertyName("programId")]
+    public string ProgramId { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("startDate")]
+    public DateTime StartDate { get; set; }
+
+    [JsonPropertyName("channelName")]
+    public string? ChannelName { get; set; }
+
+    [JsonPropertyName("channelNumber")]
+    public string? ChannelNumber { get; set; }
+
+    /// <summary>A timer already records this showing, whoever made it; confirming adopts it.</summary>
+    [JsonPropertyName("alreadyScheduled")]
+    public bool AlreadyScheduled { get; set; }
+
+    public static SuggestedShowing FromProgram(GuideProgram program) => new()
+    {
+        ProgramId = program.Id,
+        Name = program.SeriesName ?? string.Empty,
+        Description = program.Overview ?? string.Empty,
+        StartDate = program.StartDate,
+        ChannelName = program.ChannelName,
+        ChannelNumber = program.ChannelNumber,
+    };
 }
 
 public enum ScheduleResult

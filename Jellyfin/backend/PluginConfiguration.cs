@@ -117,7 +117,7 @@ public class PluginConfiguration : BasePluginConfiguration
     public int LiveTvIncompleteThresholdPercent { get; set; } = 90;
 
     /// <summary>
-    /// When a complete copy of an episode records, delete the copies of it tagged incomplete.
+    /// When a complete copy of an episode or movie records, delete the copies of it tagged incomplete.
     /// </summary>
     public bool LiveTvDeleteIncompleteCopies { get; set; }
 
