@@ -498,7 +498,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 response.ScheduledStart = null;
                 response.ScheduledChannelName = null;
             }
-            else if (response.ScheduledProgramId == null || !CanSeeProgram(response.ScheduledProgramId, userId))
+            else if (response.ScheduledProgramId == null || VisibleProgram(response.ScheduledProgramId, userId) == null)
             {
                 response.ScheduledChannelName = null;
             }
@@ -555,7 +555,7 @@ public sealed class IncompleteRecordingService : IDisposable
             var next = FindAiringsSafe(key, now)
                 .Where(p => p.StartDate > now && p.Key is { } candidateKey && key.Matches(candidateKey))
                 .OrderBy(p => p.StartDate).ThenByDescending(p => p.IsHD)
-                .FirstOrDefault(p => CanSeeProgram(p.Id, userId));
+                .FirstOrDefault(p => CanSeeProgram(p, userId));
             return new() { CanSearch = true, Showing = next == null ? null : Offer(data, next) };
         }
 
@@ -567,7 +567,7 @@ public sealed class IncompleteRecordingService : IDisposable
         var candidate = _host.FindProgramsByName(source.SeriesName, now)
             .Where(p => p.StartDate > now && source.HasMatchingMetadata(p))
             .OrderBy(p => p.StartDate).ThenByDescending(p => p.IsHD)
-            .FirstOrDefault(p => CanSeeProgram(p.Id, userId));
+            .FirstOrDefault(p => CanSeeProgram(p, userId));
         return new() { Showing = candidate == null ? null : Offer(data, candidate) };
     }
 
@@ -669,11 +669,10 @@ public sealed class IncompleteRecordingService : IDisposable
         }
     }
 
-    private bool CanSeeProgram(string programId, Guid userId) =>
-        Guid.TryParse(programId, out var id) && _host.IsVisibleTo(id, userId);
+    private bool CanSeeProgram(GuideProgram program, Guid userId) => _host.IsVisibleTo(program.ItemId, userId);
 
     private GuideProgram? VisibleProgram(string programId, Guid userId) =>
-        CanSeeProgram(programId, userId) ? _host.GetProgram(programId) : null;
+        _host.GetProgram(programId) is { } program && CanSeeProgram(program, userId) ? program : null;
 
     private string CancellationVersion(IncompleteRecordingStoreData data, string programId)
     {
@@ -1054,11 +1053,12 @@ public sealed class IncompleteRecordingService : IDisposable
     /// <summary>
     /// With the setting on, a complete recording deletes the earlier copies of its episode that
     /// carry the incomplete tag, through the server's own delete. Copies kept as complete are dismissed
-    /// and untagged, so they stay.
+    /// and untagged, so they stay. A movie's copies stay too, since deleting a movie can take its
+    /// whole folder with it.
     /// </summary>
     private async Task DeleteIncompleteCopiesAsync(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, DateTime now, CancellationToken cancellationToken)
     {
-        if (!_settings().DeleteIncompleteCopies || snapshot.Episode == null)
+        if (!_settings().DeleteIncompleteCopies || snapshot.Episode == null || snapshot.Episode.IsMovie)
         {
             return;
         }
@@ -1426,7 +1426,7 @@ public sealed class IncompleteRecordingService : IDisposable
             {
                 var pending = _host.GetProgram(request.PendingProgramId);
                 if (pending != null && (!IsCancelledProgram(pending.Id) || request.Explicit) && (pending.Key is { } pendingKey && request.Episode.Matches(pendingKey))
-                    && (request.RequestedByUserId == null || CanSeeProgram(pending.Id, request.RequestedByUserId.Value))
+                    && (request.RequestedByUserId == null || CanSeeProgram(pending, request.RequestedByUserId.Value))
                     && (LiveTimerFor(pending.Id) != null || pending.StartDate > now))
                 {
                     showing = pending;
@@ -1452,7 +1452,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 // the user cancelled is never picked, since scheduling it would quietly undo that.
                 var airings = FindAiringsSafe(request.Episode, now)
                     .Where(p => !IsCancelledProgram(p.Id)
-                        && (request.RequestedByUserId == null || CanSeeProgram(p.Id, request.RequestedByUserId.Value)))
+                        && (request.RequestedByUserId == null || CanSeeProgram(p, request.RequestedByUserId.Value)))
                     .ToList();
                 showing = IncompleteRecordingRules.ChooseShowing(request.Episode, airings.Where(p => LiveTimerFor(p.Id) != null), now)
                     ?? IncompleteRecordingRules.ChooseShowing(request.Episode, airings, now);

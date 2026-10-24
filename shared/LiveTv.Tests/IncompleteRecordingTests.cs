@@ -294,6 +294,7 @@ public sealed class IncompleteRecordingTests : IDisposable
         var program = new GuideProgram
         {
             Id = id,
+            ItemId = Guid.TryParse(id, out var itemId) ? itemId : Guid.Empty,
             SeriesId = "SH001",
             SeriesName = "Storage Wars",
             Season = season,
@@ -413,7 +414,7 @@ public sealed class IncompleteRecordingTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task IncompleteMoviesRecoverAcrossRestartAndDeleteOnlyWhenEnabled(bool delete)
+    public async Task IncompleteMoviesRecoverAcrossRestartAndAreNeverDeleted(bool delete)
     {
         _settings.DeleteIncompleteCopies = delete;
         AddMovie("p1", Start);
@@ -437,7 +438,9 @@ public sealed class IncompleteRecordingTests : IDisposable
 
         _host.StopRecording(timer);
         await service.RunAsync(CancellationToken.None);
-        Assert.Equal(delete ? new[] { original.Id } : Array.Empty<Guid>(), _host.Deleted);
+        Assert.Empty(_host.Deleted);
+        Assert.Contains(original, _host.Items);
+        Assert.Contains(IncompleteRecordingRules.Tag, original.Tags);
         Assert.Contains(replacement, _host.Items);
         Assert.Empty(replacement.Tags);
         Assert.Equal(CompleteShowingState.Done, ReadStore().Requests.Single().State);
@@ -581,6 +584,26 @@ public sealed class IncompleteRecordingTests : IDisposable
         source.Overview = future.Overview = " ";
         Assert.Null((await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing);
         Assert.Empty(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task VisibilityIsCheckedOnTheProgramsItemNotItsId()
+    {
+        // Emby's program ids are numbers, so only the item id says who can see a program.
+        var source = AddAiring("1001", Start);
+        source.ItemId = Guid.NewGuid();
+        var future = AddAiring("1002", Start.AddDays(1));
+        future.ItemId = Guid.NewGuid();
+        _clock.UtcNow = Start.AddMinutes(5);
+        var service = NewService();
+
+        Assert.Equal("1002", (await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing?.ProgramId);
+
+        _host.HiddenPrograms.Add(future.ItemId.ToString("N"));
+        Assert.Null((await service.GetCompleteShowingOptionsAsync(source.Id, User)).Showing);
+
+        _host.HiddenPrograms.Add(source.ItemId.ToString("N"));
+        Assert.False((await service.GetCompleteShowingOptionsAsync(source.Id, User)).CanSearch);
     }
 
     [Theory]
