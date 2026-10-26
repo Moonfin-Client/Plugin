@@ -7325,6 +7325,9 @@
                     setNullableBoolSelect('#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
                     setNullableBoolSelect('#DefaultSeerrShowMissingCollectionItems', defaults.seerrShowMissingCollectionItems);
                     setNullableBoolSelect('#DefaultShowSeerrAvailabilityBadges', defaults.showSeerrAvailabilityBadges);
+                    fillExternalRowSortSelect('#DefaultSeerrRowsSortBy');
+                    setSelectValue('#DefaultSeerrRowsSortBy', defaults.seerrRowsSortBy, 'Configured sort');
+                    setSelectValue('#DefaultSeerrRowsSortOrder', defaults.seerrRowsSortOrder, 'Configured direction');
                     var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
                     loadSeerrDiscoveryPicker(seerrPicker.order, seerrPicker.hidden);
 
@@ -8248,6 +8251,8 @@
                         var seerrRows = Object.assign({}, config.DefaultUserSettings.seerrRows || {});
                         seerrRows.rowOrder = getSeerrDiscoveryRowOrder();
                         config.DefaultUserSettings.seerrRows = seerrRows;
+                        config.DefaultUserSettings.seerrRowsSortBy = document.querySelector('#DefaultSeerrRowsSortBy').value || null;
+                        config.DefaultUserSettings.seerrRowsSortOrder = document.querySelector('#DefaultSeerrRowsSortOrder').value || null;
 
                         config.DefaultUserSettings.confirmExit = getNullableBoolSelect('#DefaultConfirmExit');
                         config.DefaultUserSettings.keyboardStyle = document.querySelector('#DefaultKeyboardStyle').value || null;
