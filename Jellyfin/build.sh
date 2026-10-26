@@ -6,6 +6,14 @@
 
 set -e
 
+# The target ABI used to be the second argument. It now comes from MoonfinCatalogAbis, so
+# reject the old form rather than publish an ABI as the download URL.
+if [ $# -gt 2 ] || { [ -n "${2:-}" ] && [[ ! "$2" =~ ^https?:// ]]; }; then
+    echo "Usage: ./build.sh [version] [source-url]" >&2
+    echo "The target ABI argument was removed; set MoonfinCatalogAbis in backend/Moonfin.Server.csproj instead." >&2
+    exit 1
+fi
+
 VERSION="${1:-2.4.0.0}"
 SOURCE_URL="${2:-}"
 BUILD_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')

@@ -10,6 +10,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# The target ABI used to be the second parameter. It now comes from MoonfinCatalogAbis, so
+# reject the old form rather than publish an ABI as the download URL.
+if ($args.Count -gt 0 -or ($SourceUrl -and $SourceUrl -notmatch '^https?://')) {
+    Write-Error "Usage: .\build.ps1 [-Version ""1.1.0.0""] [-SourceUrl ""https://...""] [-SkipManifestUpdate]. The target ABI parameter was removed; set MoonfinCatalogAbis in backend\Moonfin.Server.csproj instead."
+    exit 1
+}
+
 $BuildTimestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $RootDir = $PSScriptRoot
 $BackendDir = Join-Path $RootDir "backend"
