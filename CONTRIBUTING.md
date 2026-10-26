@@ -47,7 +47,7 @@ You don't need a running server to build, but you do need one to test. A spare J
 2. Make your change and test it against a server.
 3. Open a pull request against `master` and fill in the template. The Area, Client Impact and Compatibility sections are the ones a reviewer reads first.
 4. Include config page screenshots or request and response samples where they help.
-5. CI builds both plugins, runs the tests and the verify tool, and fails when the version in `build.sh` drifts from the csproj or the target ABI drifts from the referenced Jellyfin package. A bot comment on the pull request shows how it went and updates with every push. Check it before asking for a review.
+5. CI builds both plugins, runs the tests and the verify tool, and fails when the version in `build.sh` drifts from the csproj or the lowest `MoonfinCatalogAbis` entry in the csproj drifts from the referenced Jellyfin package. A bot comment on the pull request shows how it went and updates with every push. Check it before asking for a review.
 
 Reviews happen in the pull request. If something is asked of you, reply there, even if it's to disagree.
 

@@ -1,10 +1,9 @@
 # Build script for Moonfin Jellyfin plugin
 # Creates a release ZIP with proper structure for plugin manifest
-# Usage: .\build.ps1 [-Version "1.1.0.0"] [-TargetAbi "10.10.0"] [-SourceUrl "https://..."] [-SkipManifestUpdate]
+# Usage: .\build.ps1 [-Version "1.1.0.0"] [-SourceUrl "https://..."] [-SkipManifestUpdate]
 
 param(
     [string]$Version = "2.4.0.0",
-    [string]$TargetAbi = "10.10.0",
     [string]$SourceUrl = "",
     [switch]$SkipManifestUpdate
 )
@@ -17,6 +16,18 @@ $BackendDir = Join-Path $RootDir "backend"
 $FrontendDir = Join-Path $RootDir "frontend"
 $VerifyDir = Join-Path $RootDir "tools\verify-plugin"
 $VerifyProject = Join-Path $VerifyDir "VerifyPlugin.csproj"
+
+# Every Jellyfin version a release is listed for, newest first. The lowest is the minimum
+# server and goes into meta.json.
+$Csproj = [xml][System.IO.File]::ReadAllText((Join-Path $BackendDir "Moonfin.Server.csproj"))
+$CatalogAbis = @($Csproj.Project.PropertyGroup | Where-Object { $_.MoonfinCatalogAbis } |
+    ForEach-Object { $_.MoonfinCatalogAbis -split ',' } | ForEach-Object { $_.Trim() })
+if ($CatalogAbis.Count -eq 0 -or @($CatalogAbis | Where-Object { $_ -notmatch '^\d+\.\d+\.\d+$' }).Count -gt 0) {
+    Write-Error "MoonfinCatalogAbis in Moonfin.Server.csproj must be a comma-separated list of x.y.z versions."
+    exit 1
+}
+$CatalogAbis = @($CatalogAbis | Sort-Object { [version]$_ } -Descending)
+$TargetAbi = $CatalogAbis[-1]
 
 Write-Host "Building Moonfin v${Version} for Jellyfin ${TargetAbi}..."
 Write-Host "Build Time: ${BuildTimestamp}"
@@ -153,24 +164,27 @@ if (-not $SkipManifestUpdate -and (Test-Path $ManifestFile)) {
         $NewSourceUrl = "$UrlBase/download/$ReleaseTag/$ZipName"
     }
 
-    $NewEntry = [ordered]@{
-        version = $Version
-        changelog = ""
-        targetAbi = "${TargetAbi}.0"
-        sourceUrl = $NewSourceUrl
-        checksum = $Hash
-        timestamp = $Timestamp
-        dependencies = @()
-    }
+    # One entry per catalog ABI, all pointing at the same zip.
+    $NewEntries = @($CatalogAbis | ForEach-Object {
+        [pscustomobject][ordered]@{
+            version = $Version
+            changelog = ""
+            targetAbi = "$_.0"
+            sourceUrl = $NewSourceUrl
+            checksum = $Hash
+            timestamp = $Timestamp
+            dependencies = @()
+        }
+    })
 
-    $Manifest[0].versions = @([pscustomobject]$NewEntry) + @($Manifest[0].versions)
+    $Manifest[0].versions = $NewEntries + @($Manifest[0].versions)
 
     $Json = ConvertTo-Json -InputObject $Manifest -Depth 10
     if ($Manifest.Count -eq 1 -and -not $Json.TrimStart().StartsWith('[')) {
         $Json = "[$Json]"
     }
     [System.IO.File]::WriteAllText($ManifestFile, $Json, (New-Object System.Text.UTF8Encoding $false))
-    Write-Host "Prepended version $Version to manifest.json (changelog left blank, fill it in)"
+    Write-Host "Prepended version $Version to manifest.json for Jellyfin $($CatalogAbis -join ',') (changelogs left blank, fill each in)"
 
     # The catalog URL people add points at the manifest in the repo root, not this one.
     $RepoRootManifest = Join-Path (Split-Path $RootDir -Parent) "manifest.json"

@@ -32,11 +32,12 @@ jobs:
             exit 1
           fi
 
-          # build.sh hardcodes the ABI on purpose. Deriving it from the PackageReference would
+          # The lowest catalog ABI is declared on purpose. Deriving it from the PackageReference would
           # let a routine package bump raise the minimum server version and strand 10.10 installs.
-          SCRIPT_ABI=$(grep -oPm1 'TARGET_ABI="\$\{2:-\K[^}]+' Jellyfin/build.sh)
-          if [ "$SCRIPT_ABI" != "$ABI" ]; then
-            echo "::error::Target ABI drift: build.sh says ${SCRIPT_ABI}, Jellyfin.Controller says ${ABI}."
+          MIN_ABI=$(grep -oPm1 '(?<=<MoonfinCatalogAbis>)[^<]+' Jellyfin/backend/Moonfin.Server.csproj \
+            | tr ',' '\n' | tr -d ' ' | sort -t. -k1,1n -k2,2n -k3,3n | head -1)
+          if [ "$MIN_ABI" != "$ABI" ]; then
+            echo "::error::Target ABI drift: the lowest MoonfinCatalogAbis entry is ${MIN_ABI}, Jellyfin.Controller says ${ABI}."
             echo "::error::Change both together, and only when you mean to drop older servers."
             exit 1
           fi

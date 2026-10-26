@@ -2,13 +2,12 @@
 # Build script for Moonfin Jellyfin plugin
 # Creates a release ZIP with proper structure for plugin manifest
 # Works on Linux, macOS, and Windows (Git Bash/WSL)
-# Usage: ./build.sh [version] [target-abi] [source-url]
+# Usage: ./build.sh [version] [source-url]
 
 set -e
 
 VERSION="${1:-2.4.0.0}"
-TARGET_ABI="${2:-10.10.0}"
-SOURCE_URL="${3:-}"
+SOURCE_URL="${2:-}"
 BUILD_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 # Release tags are the three-part version, so 2.4.0.0 is published under the tag 2.4.0
 RELEASE_TAG="${VERSION%.*}"
@@ -19,6 +18,16 @@ BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 VERIFY_PROJECT="$ROOT_DIR/tools/verify-plugin/VerifyPlugin.csproj"
 VERIFY_DIR="$ROOT_DIR/tools/verify-plugin"
+
+# Every Jellyfin version a release is listed for, newest first. The lowest is the minimum
+# server and goes into meta.json.
+CATALOG_ABIS=$(sed -n 's:.*<MoonfinCatalogAbis>\(.*\)</MoonfinCatalogAbis>.*:\1:p' "$BACKEND_DIR/Moonfin.Server.csproj" \
+    | tr ',' '\n' | tr -d ' \r' | sort -t. -k1,1nr -k2,2nr -k3,3nr)
+if [ -z "$CATALOG_ABIS" ] || echo "$CATALOG_ABIS" | grep -qvE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "Error: MoonfinCatalogAbis in Moonfin.Server.csproj must be a comma-separated list of x.y.z versions." >&2
+    exit 1
+fi
+TARGET_ABI=$(echo "$CATALOG_ABIS" | tail -1)
 
 echo "Building Moonfin v${VERSION} for Jellyfin ${TARGET_ABI}..."
 echo "Build Time: ${BUILD_TIMESTAMP}"
@@ -153,27 +162,30 @@ if [ "${SKIP_MANIFEST_UPDATE:-0}" != "1" ] && [ -f "$MANIFEST_FILE" ]; then
             exit 1
         fi
 
+        # One entry per catalog ABI, all pointing at the same zip.
+        ABIS_JSON=$(echo "$CATALOG_ABIS" | jq -R '. + ".0"' | jq -sc .)
         jq --arg ver "$VERSION" \
-           --arg abi "${TARGET_ABI}.0" \
+           --argjson abis "$ABIS_JSON" \
            --arg sum "$CHECKSUM" \
            --arg time "$TIMESTAMP" \
            --arg source "$SOURCE_URL" \
            --arg zip "$ZIP_NAME" \
            --arg tag "$RELEASE_TAG" \
-           '.[0].versions |= ([{
-                version: $ver,
-                changelog: "",
-                targetAbi: $abi,
-                sourceUrl: (if $source != "" then $source
-                            else ((.[0].sourceUrl | sub("/download/[^/]+/[^/]+$"; ""))
-                                  + "/download/" + $tag + "/" + $zip)
-                            end),
-                checksum: $sum,
-                timestamp: $time,
-                dependencies: []
-            }] + .)' \
+           '.[0].versions |= ((if $source != "" then $source
+                               else ((.[0].sourceUrl | sub("/download/[^/]+/[^/]+$"; ""))
+                                     + "/download/" + $tag + "/" + $zip)
+                               end) as $url
+                | [$abis[] | {
+                    version: $ver,
+                    changelog: "",
+                    targetAbi: .,
+                    sourceUrl: $url,
+                    checksum: $sum,
+                    timestamp: $time,
+                    dependencies: []
+                }] + .)' \
            "$MANIFEST_FILE" > "${MANIFEST_FILE}.tmp" && mv "${MANIFEST_FILE}.tmp" "$MANIFEST_FILE"
-        echo "Prepended version $VERSION to manifest.json (changelog left blank, fill it in)"
+        echo "Prepended version $VERSION to manifest.json for Jellyfin $(echo $CATALOG_ABIS | tr ' ' ',') (changelogs left blank, fill each in)"
 
         # The catalog URL people add points at the manifest in the repo root, not this one.
         REPO_ROOT_MANIFEST="$(cd "$ROOT_DIR/.." && pwd)/manifest.json"
@@ -184,8 +196,8 @@ if [ "${SKIP_MANIFEST_UPDATE:-0}" != "1" ] && [ -f "$MANIFEST_FILE" ]; then
         MANIFEST_UPDATED="yes"
     else
         echo "Error: jq not found. manifest.json was NOT updated." >&2
-        echo "Install jq, or update versions[0] manually:" >&2
-        echo "  version=$VERSION  targetAbi=${TARGET_ABI}.0  checksum=$CHECKSUM  timestamp=$TIMESTAMP  sourceUrl=$SOURCE_URL" >&2
+        echo "Install jq, or prepend one entry per targetAbi manually:" >&2
+        echo "  version=$VERSION  targetAbi=$(echo $CATALOG_ABIS | sed 's/\([^ ]*\)/\1.0/g; s/ /,/g')  checksum=$CHECKSUM  timestamp=$TIMESTAMP  sourceUrl=$SOURCE_URL" >&2
         exit 1
     fi
 fi
