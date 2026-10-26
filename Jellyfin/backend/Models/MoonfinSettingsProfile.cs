@@ -878,6 +878,24 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("audioRowsSortOrder")]
     public string? AudioRowsSortOrder { get; set; }
 
+    [JsonPropertyName("imdbRowsSortBy")]
+    public string? ImdbRowsSortBy { get; set; }
+
+    [JsonPropertyName("imdbRowsSortOrder")]
+    public string? ImdbRowsSortOrder { get; set; }
+
+    [JsonPropertyName("tmdbRowsSortBy")]
+    public string? TmdbRowsSortBy { get; set; }
+
+    [JsonPropertyName("tmdbRowsSortOrder")]
+    public string? TmdbRowsSortOrder { get; set; }
+
+    [JsonPropertyName("seerrRowsSortBy")]
+    public string? SeerrRowsSortBy { get; set; }
+
+    [JsonPropertyName("seerrRowsSortOrder")]
+    public string? SeerrRowsSortOrder { get; set; }
+
     [JsonPropertyName("displayStudiosRows")]
     public bool? DisplayStudiosRows { get; set; }
 

@@ -2614,6 +2614,18 @@
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">External Sources</h4>
                             <div class="fieldDescription" style="margin-bottom:0.75em;">Chart rows the home sections page can offer. IMDb rows need IMDb Charts enabled above, TMDB rows need a TMDB API key.</div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbRowsSortBy">IMDb Rows Sorting</label>
+                                <select id="DefaultImdbRowsSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultImdbRowsSortOrder">IMDb Rows Sort Direction</label>
+                                <select id="DefaultImdbRowsSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultImdbTop250MoviesEnabled">IMDb Top 250 Movies</label>
                                 <select id="DefaultImdbTop250MoviesEnabled" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -2659,6 +2671,18 @@
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbRowsSortBy">TMDB Rows Sorting</label>
+                                <select id="DefaultTmdbRowsSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbRowsSortOrder">TMDB Rows Sort Direction</label>
+                                <select id="DefaultTmdbRowsSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -3562,6 +3586,18 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrRowsSortBy">Seerr Rows Sorting</label>
+                                <select id="DefaultSeerrRowsSortBy" is="emby-select"></select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrRowsSortOrder">Seerr Rows Sort Direction</label>
+                                <select id="DefaultSeerrRowsSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="ascending">Ascending</option>
+                                    <option value="descending">Descending</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Seerr Discovery Rows &amp; Order</label>
                                 <div class="fieldDescription">Enable rows to see on Seerr mainpage and use the arrows to set their order.</div>
                                 <div id="DefaultSeerrDiscoveryList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
@@ -4243,7 +4279,7 @@
             // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
             // has to come after the rule that hides its parent.
             var FIELD_DEPENDENCIES = [
-                { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar'] },
+                { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
                 { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
@@ -5131,6 +5167,26 @@
                 var html = '<option value="">Not set (user decides)</option>';
                 LIBRARY_SORT_OPTIONS.forEach(function(option) {
                     if (option[2] && !includeDedicated) return;
+                    html += '<option value="' + esc(option[0]) + '">' + esc(option[1]) + '</option>';
+                });
+                select.innerHTML = html;
+            }
+
+            var EXTERNAL_ROW_SORT_OPTIONS = [
+                ['none', 'Default (List Order)'],
+                ['name', 'Name'],
+                ['releaseDate', 'Release Date'],
+                ['rating', 'Rating'],
+                ['popularity', 'Popularity'],
+                ['shuffle', 'Shuffle']
+            ];
+
+            function fillExternalRowSortSelect(selector) {
+                var select = document.querySelector(selector);
+                if (!select || select.dataset.filled) return;
+                select.dataset.filled = 'true';
+                var html = '<option value="">Not set (user decides)</option>';
+                EXTERNAL_ROW_SORT_OPTIONS.forEach(function(option) {
                     html += '<option value="' + esc(option[0]) + '">' + esc(option[1]) + '</option>';
                 });
                 select.innerHTML = html;
@@ -7300,12 +7356,18 @@
                     setNullableBoolSelect('#DefaultDisplayAudioAlbumArtists', defaults.displayAudioAlbumArtists);
                     setNullableBoolSelect('#DefaultDisplayAudioArtists', defaults.displayAudioArtists);
                     setNullableBoolSelect('#DefaultDisplayAudioAlbums', defaults.displayAudioAlbums);
+                    fillExternalRowSortSelect('#DefaultImdbRowsSortBy');
+                    setSelectValue('#DefaultImdbRowsSortBy', defaults.imdbRowsSortBy, 'Configured sort');
+                    setSelectValue('#DefaultImdbRowsSortOrder', defaults.imdbRowsSortOrder, 'Configured direction');
                     setNullableBoolSelect('#DefaultImdbTop250MoviesEnabled', defaults.imdbTop250MoviesEnabled);
                     setNullableBoolSelect('#DefaultImdbTop250TvShowsEnabled', defaults.imdbTop250TvShowsEnabled);
                     setNullableBoolSelect('#DefaultImdbMostPopularMoviesEnabled', defaults.imdbMostPopularMoviesEnabled);
                     setNullableBoolSelect('#DefaultImdbMostPopularTvShowsEnabled', defaults.imdbMostPopularTvShowsEnabled);
                     setNullableBoolSelect('#DefaultImdbTopEnglishMoviesEnabled', defaults.imdbTopEnglishMoviesEnabled);
                     setNullableBoolSelect('#DefaultImdbLowestRatedMoviesEnabled', defaults.imdbLowestRatedMoviesEnabled);
+                    fillExternalRowSortSelect('#DefaultTmdbRowsSortBy');
+                    setSelectValue('#DefaultTmdbRowsSortBy', defaults.tmdbRowsSortBy, 'Configured sort');
+                    setSelectValue('#DefaultTmdbRowsSortOrder', defaults.tmdbRowsSortOrder, 'Configured direction');
                     setNullableBoolSelect('#DefaultTmdbTrendingAllWeeklyEnabled', defaults.tmdbTrendingAllWeeklyEnabled);
                     setNullableBoolSelect('#DefaultTmdbTrendingMovieDailyEnabled', defaults.tmdbTrendingMovieDailyEnabled);
                     setNullableBoolSelect('#DefaultTmdbTrendingMovieWeeklyEnabled', defaults.tmdbTrendingMovieWeeklyEnabled);
@@ -8215,12 +8277,16 @@
                         config.DefaultUserSettings.displayAudioAlbumArtists = getNullableBoolSelect('#DefaultDisplayAudioAlbumArtists');
                         config.DefaultUserSettings.displayAudioArtists = getNullableBoolSelect('#DefaultDisplayAudioArtists');
                         config.DefaultUserSettings.displayAudioAlbums = getNullableBoolSelect('#DefaultDisplayAudioAlbums');
+                        config.DefaultUserSettings.imdbRowsSortBy = document.querySelector('#DefaultImdbRowsSortBy').value || null;
+                        config.DefaultUserSettings.imdbRowsSortOrder = document.querySelector('#DefaultImdbRowsSortOrder').value || null;
                         config.DefaultUserSettings.imdbTop250MoviesEnabled = getNullableBoolSelect('#DefaultImdbTop250MoviesEnabled');
                         config.DefaultUserSettings.imdbTop250TvShowsEnabled = getNullableBoolSelect('#DefaultImdbTop250TvShowsEnabled');
                         config.DefaultUserSettings.imdbMostPopularMoviesEnabled = getNullableBoolSelect('#DefaultImdbMostPopularMoviesEnabled');
                         config.DefaultUserSettings.imdbMostPopularTvShowsEnabled = getNullableBoolSelect('#DefaultImdbMostPopularTvShowsEnabled');
                         config.DefaultUserSettings.imdbTopEnglishMoviesEnabled = getNullableBoolSelect('#DefaultImdbTopEnglishMoviesEnabled');
                         config.DefaultUserSettings.imdbLowestRatedMoviesEnabled = getNullableBoolSelect('#DefaultImdbLowestRatedMoviesEnabled');
+                        config.DefaultUserSettings.tmdbRowsSortBy = document.querySelector('#DefaultTmdbRowsSortBy').value || null;
+                        config.DefaultUserSettings.tmdbRowsSortOrder = document.querySelector('#DefaultTmdbRowsSortOrder').value || null;
                         config.DefaultUserSettings.tmdbTrendingAllWeeklyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingAllWeeklyEnabled');
                         config.DefaultUserSettings.tmdbTrendingMovieDailyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingMovieDailyEnabled');
                         config.DefaultUserSettings.tmdbTrendingMovieWeeklyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingMovieWeeklyEnabled');
