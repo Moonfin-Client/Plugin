@@ -62,3 +62,7 @@ Desktop.ini
 # direnv
 .direnv/
 .envrc
+
+# Nix build outputs
+result
+result-*
