@@ -3078,6 +3078,22 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarHideDownloaded">Radarr: Hide Movies Already on the Server</label>
+                                <select id="DefaultRadarrCalendarHideDownloaded" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarHideDownloaded">Sonarr: Hide Episodes Already on the Server</label>
+                                <select id="DefaultSonarrCalendarHideDownloaded" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultMediaTypeBadgeBehavior">Media Type Badges</label>
                                 <select id="DefaultMediaTypeBadgeBehavior" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -8069,6 +8085,8 @@
                     setNullableBoolSelect('#DefaultRadarrCalendarShowDate', defaults.radarrCalendarShowDate);
                     setNullableBoolSelect('#DefaultSonarrCalendarShowDate', defaults.sonarrCalendarShowDate);
                     setNullableBoolSelect('#DefaultSonarrCalendarShowEpisodeInfo', defaults.sonarrCalendarShowEpisodeInfo);
+                    setNullableBoolSelect('#DefaultRadarrCalendarHideDownloaded', defaults.radarrCalendarHideDownloaded);
+                    setNullableBoolSelect('#DefaultSonarrCalendarHideDownloaded', defaults.sonarrCalendarHideDownloaded);
                     setSelectValue('#DefaultPersonalRatingStyle', defaults.personalRatingStyle, 'Configured style');
                     setSelectValue('#DefaultPersonPageSortOption', defaults.personPageSortOption, 'Configured sort');
                     setSelectValue('#DefaultShuffleContentType', defaults.shuffleContentType, 'Configured content');
@@ -9026,6 +9044,8 @@
                         config.DefaultUserSettings.radarrCalendarShowDate = getNullableBoolSelect('#DefaultRadarrCalendarShowDate');
                         config.DefaultUserSettings.sonarrCalendarShowDate = getNullableBoolSelect('#DefaultSonarrCalendarShowDate');
                         config.DefaultUserSettings.sonarrCalendarShowEpisodeInfo = getNullableBoolSelect('#DefaultSonarrCalendarShowEpisodeInfo');
+                        config.DefaultUserSettings.radarrCalendarHideDownloaded = getNullableBoolSelect('#DefaultRadarrCalendarHideDownloaded');
+                        config.DefaultUserSettings.sonarrCalendarHideDownloaded = getNullableBoolSelect('#DefaultSonarrCalendarHideDownloaded');
                         config.DefaultUserSettings.personalRatingStyle = document.querySelector('#DefaultPersonalRatingStyle').value || null;
                         config.DefaultUserSettings.personPageSortOption = document.querySelector('#DefaultPersonPageSortOption').value || null;
                         config.DefaultUserSettings.shuffleContentType = document.querySelector('#DefaultShuffleContentType').value || null;
