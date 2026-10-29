@@ -698,6 +698,60 @@
                 text-decoration: underline;
             }
 
+            /* The settings preview tables. Long values are cut, a click on a cell shows it whole. */
+            #MoonfinConfigPage .previewTable {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.85em;
+                table-layout: fixed;
+            }
+
+            #MoonfinConfigPage .previewTable th {
+                padding: 4px 8px;
+                text-align: left;
+                color: rgba(255, 255, 255, 0.5);
+            }
+
+            #MoonfinConfigPage .previewTable td {
+                padding: 4px 8px;
+                vertical-align: top;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            #MoonfinConfigPage .previewTable td.is-expanded {
+                white-space: normal;
+                word-break: break-all;
+            }
+
+            #MoonfinConfigPage .previewTable tbody tr {
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
+            }
+
+            #MoonfinConfigPage .previewTable tbody tr.is-active {
+                background: rgba(0, 164, 220, 0.12);
+            }
+
+            #MoonfinConfigPage .previewTable .previewRepeat {
+                color: #e0a030;
+            }
+
+            #MoonfinConfigPage #PreviewSettingsSummary ul {
+                margin: 0.3em 0 0;
+                padding-left: 1.4em;
+            }
+
+            /* User names in the settings overview: same link, sized to fit a table cell. */
+            #MoonfinConfigPage #PreviewOverview .moonfinLinkButton {
+                padding: 0;
+                max-width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                text-align: left;
+            }
+
             #MoonfinConfigPage.moonfin-searching .moonfinPageHead,
             #MoonfinConfigPage.moonfin-searching .moonfinSyncDeps,
             #MoonfinConfigPage.moonfin-searching .moonfinLayersCard {
@@ -848,7 +902,7 @@
                         <div id="PreviewSettingsActions" style="margin-top:1.2em;">
                             <div class="fieldDescription" style="margin-bottom: 0.8em;">
                                 <strong>Remove Repeated Values</strong> deletes the stored values that only repeat what the layers below give, for the ticked users.
-                                Nobody's settings change, but the Admin defaults reach those users again when you change them later.<br>
+                                Nobody's settings change, but the Admin defaults reach those users again when you change them later.<br><br>
                                 <strong>Clear Selected Settings</strong> deletes the settings ticked in a user's table below from the ticked users' Device profiles and Global,
                                 so the Admin defaults apply instead. Set and save an Admin default for those settings first: where there is none,
                                 apps keep the value they already have.
@@ -8695,6 +8749,7 @@
                     var previewUserId = '';
                     var previewData = null;
                     var previewSelected = {};
+                    var detailRequest = 0;
                     // The server refuses to clear these, they hold what the user hid themselves.
                     var previewProtected = { hiddenContinueWatchingItems: true, hiddenNextUpSeries: true };
 
@@ -8738,31 +8793,21 @@
                     // Values come from what users stored, so cells are filled with textContent, never as HTML.
                     // Long values are cut to keep every column on screen. A click shows the whole value,
                     // another one cuts it again.
-                    var previewCell = function(row, text, title, color) {
+                    var previewCell = function(row, text, title, className) {
                         var cell = document.createElement('td');
-                        cell.style.padding = '4px 8px';
-                        cell.style.verticalAlign = 'top';
-                        cell.style.whiteSpace = 'nowrap';
-                        cell.style.overflow = 'hidden';
-                        cell.style.textOverflow = 'ellipsis';
                         cell.addEventListener('click', function() {
-                            var cut = cell.style.whiteSpace === 'nowrap';
-                            cell.style.whiteSpace = cut ? 'normal' : 'nowrap';
-                            cell.style.wordBreak = cut ? 'break-all' : '';
+                            cell.classList.toggle('is-expanded');
                         });
                         cell.textContent = text;
                         if (title) cell.title = title;
-                        if (color) cell.style.color = color;
+                        if (className) cell.className = className;
                         row.appendChild(cell);
                         return cell;
                     };
 
                     var previewTable = function(widths, labels, selectAll) {
                         var table = document.createElement('table');
-                        table.style.width = '100%';
-                        table.style.borderCollapse = 'collapse';
-                        table.style.fontSize = '0.85em';
-                        table.style.tableLayout = 'fixed';
+                        table.className = 'previewTable';
 
                         var columns = document.createElement('colgroup');
                         widths.forEach(function(width) {
@@ -8773,15 +8818,11 @@
                         table.appendChild(columns);
 
                         var head = document.createElement('tr');
-                        head.style.textAlign = 'left';
-                        head.style.color = 'rgba(255,255,255,0.5)';
                         var boxCell = document.createElement('th');
-                        boxCell.style.padding = '4px 8px';
                         if (selectAll) boxCell.appendChild(selectAll);
                         head.appendChild(boxCell);
                         labels.forEach(function(label) {
                             var th = document.createElement('th');
-                            th.style.padding = '4px 8px';
                             th.textContent = label;
                             head.appendChild(th);
                         });
@@ -8820,8 +8861,7 @@
                         var body = document.createElement('tbody');
                         overviewData.forEach(function(e) {
                             var row = document.createElement('tr');
-                            row.style.borderTop = '1px solid rgba(255,255,255,0.06)';
-                            if (e.userId === previewUserId) row.style.background = 'rgba(0,164,220,0.12)';
+                            if (e.userId === previewUserId) row.className = 'is-active';
 
                             var pick = previewCell(row, '');
                             pick.appendChild(checkbox(!!checkedUsers[e.userId], function(checked) {
@@ -8829,20 +8869,27 @@
                                 renderOverview();
                             }));
 
-                            var name = previewCell(row, e.name, 'Show ' + e.name + '\'s settings', '#00a4dc');
-                            name.style.cursor = 'pointer';
-                            name.addEventListener('click', function() {
+                            // A button, so the name opens with Enter or Space and reads as a control.
+                            var open = document.createElement('button');
+                            open.type = 'button';
+                            open.textContent = e.name;
+                            open.title = 'Show ' + e.name + '\'s settings';
+                            open.className = 'moonfinLinkButton';
+                            open.addEventListener('click', function(event) {
+                                // The cell's own click expands long values, which a name doesn't need.
+                                event.stopPropagation();
                                 previewUserId = e.userId;
                                 previewSelected = {};
                                 renderOverview();
                                 loadDetail();
                             });
+                            previewCell(row, '').appendChild(open);
 
                             var synced = e.hasSettingsFile;
                             [e.desktop, e.mobile, e.tv, e.global].forEach(function(count) {
                                 previewCell(row, synced ? String(count) : '-');
                             });
-                            previewCell(row, synced ? String(e.repeated) : '-', '', e.repeated > 0 ? '#e0a030' : '');
+                            previewCell(row, synced ? String(e.repeated) : '-', '', e.repeated > 0 ? 'previewRepeat' : '');
                             previewCell(row, synced
                                 ? (e.lastUpdated ? new Date(e.lastUpdated).toLocaleString() : 'unknown') + ', ' + (e.lastUpdatedBy || 'unknown client')
                                 : 'Never');
@@ -8892,8 +8939,6 @@
                                 (previewData.lastUpdated ? new Date(previewData.lastUpdated).toLocaleString() : 'at an unknown time') +
                                 ' by ' + (previewData.lastUpdatedBy || 'an unknown client') + ':'));
                             var counts = document.createElement('ul');
-                            counts.style.margin = '0.3em 0 0';
-                            counts.style.paddingLeft = '1.4em';
                             var profileName = previewData.profile === 'tv' ? 'TV' : previewData.profile.charAt(0).toUpperCase() + previewData.profile.slice(1);
                             var lines = previewData.profile === 'global' ? [] : [profileName + ' Device profile: ' + onDevice];
                             lines.push('Global: ' + onGlobal, 'Repeated stored values: ' + repeats);
@@ -8929,7 +8974,6 @@
                         var body = document.createElement('tbody');
                         shown.forEach(function(f) {
                             var row = document.createElement('tr');
-                            row.style.borderTop = '1px solid rgba(255,255,255,0.06)';
                             var pick = previewCell(row, '');
                             if (previewProtected[f.name]) {
                                 pick.title = 'Hidden items can\'t be cleared here';
@@ -8946,7 +8990,7 @@
                             previewCell(row, previewValueText(f['default']), JSON.stringify(f['default']));
                             previewCell(row, f.deviceRedundant || f.globalRedundant ? 'repeat' : '',
                                 f.deviceRedundant || f.globalRedundant ? 'Removing this stored value would change nothing for the user' : '',
-                                '#e0a030');
+                                'previewRepeat');
                             body.appendChild(row);
                         });
                         table.appendChild(body);
@@ -8967,16 +9011,21 @@
                         if (!previewUserId) return Promise.resolve();
                         var activeTab = document.querySelector('#PreviewProfileTabs .previewProfileTab.active');
                         var profile = activeTab ? activeTab.getAttribute('data-profile') : 'mobile';
+                        // Clicking another user or tab before this answer lands makes it stale, and
+                        // showing it would put one user's settings under another's name.
+                        var request = ++detailRequest;
                         Dashboard.showLoadingMsg();
                         return fetch(serverUrl() + '/Moonfin/Admin/Settings/Explain/' + encodeURIComponent(previewUserId) + '?profile=' + encodeURIComponent(profile), {
                             headers: getMoonfinAuthHeaders()
                         })
                             .then(parseJsonResponse)
                             .then(function(data) {
+                                if (request !== detailRequest) return;
                                 previewData = data;
                                 renderDetail();
                             })
                             .catch(function(error) {
+                                if (request !== detailRequest) return;
                                 previewActionResult('Could not load ' + userName(previewUserId) + '\'s settings: ' + error.message, true);
                             })
                             .finally(function() {
