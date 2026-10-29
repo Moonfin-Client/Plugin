@@ -179,6 +179,23 @@ public sealed class InheritedSettingsTests : IDisposable
     }
 
     [Fact]
+    public void AnEmptyAdminRatingListIsUnsetSoTheUsersEmptyListStays()
+    {
+        // XmlSerializer loads an unset admin list as [], which resolution reads as unset. A user
+        // who turned every source off must keep that, not fall back to the app's sources.
+        var settings = new MoonfinUserSettings { Mobile = new MoonfinSettingsProfile { MdblistRatingSources = new List<string>() } };
+        var defaults = new MoonfinSettingsProfile { MdblistRatingSources = new List<string>() };
+
+        Assert.Equal(0, MoonfinSettingsService.RemoveRepeatedValues(settings, defaults));
+        Assert.Empty(settings.Mobile.MdblistRatingSources!);
+
+        var explained = MoonfinSettingsService.ExplainProfile(settings, "mobile", defaults)
+            .Fields.Single(f => f.Name == "mdblistRatingSources");
+        Assert.Null(explained.Default);
+        Assert.False(explained.DeviceRedundant);
+    }
+
+    [Fact]
     public async Task TheOverviewCountsWhatEachProfileStoresAndWhatRepeats()
     {
         var rows = new List<MoonfinHomeSectionConfig> { new() { Kind = "builtin", Type = "nextup", Enabled = true, Order = 0 } };

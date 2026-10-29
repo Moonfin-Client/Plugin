@@ -36,6 +36,13 @@ public class MoonfinSettingsService
         nameof(MoonfinSettingsProfile.MediaBarMdblistRatingSources),
     ];
 
+    /// <summary>The admin default for a setting, as resolution reads it.</summary>
+    private static object? AdminDefault(System.Reflection.PropertyInfo prop, MoonfinSettingsProfile? adminDefaults)
+    {
+        var value = adminDefaults == null ? null : prop.GetValue(adminDefaults);
+        return value is List<string> { Count: 0 } && RatingSourceLists.Contains(prop.Name) ? null : value;
+    }
+
     public MoonfinSettingsService(ILogger<MoonfinSettingsService> logger)
         : this(logger, MoonfinPlugin.ResolveDataFolderPath())
     {
@@ -188,14 +195,7 @@ public class MoonfinSettingsService
             // Resolution chain: device → global → admin defaults
             var value = deviceProfile != null ? prop.GetValue(deviceProfile) : null;
             value ??= global != null ? prop.GetValue(global) : null;
-            if (value == null && adminDefaults != null)
-            {
-                value = prop.GetValue(adminDefaults);
-                if (value is List<string> { Count: 0 } && RatingSourceLists.Contains(prop.Name))
-                {
-                    value = null;
-                }
-            }
+            value ??= AdminDefault(prop, adminDefaults);
 
             if (value != null)
             {
@@ -325,7 +325,7 @@ public class MoonfinSettingsService
                 prop.Name.EndsWith("ApiKey", StringComparison.Ordinal),
                 device == null ? null : prop.GetValue(device),
                 global == null ? null : prop.GetValue(global),
-                adminDefaults == null ? null : prop.GetValue(adminDefaults)));
+                AdminDefault(prop, adminDefaults)));
         }
 
         // The home rows resolve as one block: the first layer that has a layout wins whole.
@@ -410,8 +410,7 @@ public class MoonfinSettingsService
             }
 
             var value = prop.GetValue(profile);
-            var inherited = (below == null ? null : prop.GetValue(below))
-                ?? (adminDefaults == null ? null : prop.GetValue(adminDefaults));
+            var inherited = (below == null ? null : prop.GetValue(below)) ?? AdminDefault(prop, adminDefaults);
             if (value == null || inherited == null)
             {
                 continue;
