@@ -279,6 +279,358 @@ public class MoonfinSettingsService
         return homeRowOrder.Count > 0 ? homeRowOrder : null;
     }
 
+    private static readonly JsonSerializerOptions ExplainJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+
+    /// <summary>
+    /// Every setting the user gets on one device type, the layer it comes from, and whether a
+    /// stored value only repeats what the layers below would give. Read-only, for the admin preview.
+    /// </summary>
+    public async Task<SettingsExplanation> ExplainProfileAsync(Guid userId, string profileName)
+    {
+        var settings = await GetUserSettingsAsync(userId);
+        return ExplainProfile(settings, profileName, MoonfinPlugin.Instance?.Configuration?.DefaultUserSettings);
+    }
+
+    internal static SettingsExplanation ExplainProfile(
+        MoonfinUserSettings? settings,
+        string profileName,
+        MoonfinSettingsProfile? adminDefaults)
+    {
+        var global = settings?.Global;
+        var device = settings != null && !string.Equals(profileName, "global", StringComparison.OrdinalIgnoreCase)
+            ? settings.GetProfile(profileName)
+            : null;
+
+        var explanation = new SettingsExplanation
+        {
+            Profile = profileName.ToLowerInvariant(),
+            HasSettingsFile = settings != null,
+            LastUpdated = settings?.LastUpdated,
+            LastUpdatedBy = settings?.LastUpdatedBy
+        };
+
+        foreach (var prop in ProfileProps)
+        {
+            if (prop.Name is nameof(MoonfinSettingsProfile.HomeSections) or nameof(MoonfinSettingsProfile.HomeRowOrder))
+            {
+                continue;
+            }
+
+            explanation.Fields.Add(ExplainValue(
+                WireName(prop),
+                prop.Name.EndsWith("ApiKey", StringComparison.Ordinal),
+                device == null ? null : prop.GetValue(device),
+                global == null ? null : prop.GetValue(global),
+                adminDefaults == null ? null : prop.GetValue(adminDefaults)));
+        }
+
+        // The home rows resolve as one block: the first layer that has a layout wins whole.
+        // They're never flagged as a repeat, since the cleanup leaves them alone.
+        var layout = ExplainValue(
+            "homeLayout",
+            false,
+            HomeLayoutOf(device),
+            HomeLayoutOf(global),
+            HomeLayoutOf(adminDefaults));
+        layout.DeviceRedundant = false;
+        layout.GlobalRedundant = false;
+        explanation.Fields.Add(layout);
+
+        return explanation;
+    }
+
+    private static object? HomeLayoutOf(MoonfinSettingsProfile? profile)
+    {
+        if (profile == null || (profile.HomeSections == null && profile.HomeRowOrder == null))
+        {
+            return null;
+        }
+
+        return new { homeSections = profile.HomeSections, homeRowOrder = ResolveHomeRowOrder(profile) };
+    }
+
+    private static SettingExplanation ExplainValue(string name, bool secret, object? device, object? global, object? admin)
+    {
+        var deviceJson = device == null ? null : JsonSerializer.Serialize(device, ExplainJsonOptions);
+        var globalJson = global == null ? null : JsonSerializer.Serialize(global, ExplainJsonOptions);
+        var adminJson = admin == null ? null : JsonSerializer.Serialize(admin, ExplainJsonOptions);
+
+        return new SettingExplanation
+        {
+            Name = name,
+            Source = deviceJson != null ? "device" : globalJson != null ? "global" : adminJson != null ? "default" : "none",
+            Effective = Show(deviceJson ?? globalJson ?? adminJson, secret),
+            Device = Show(deviceJson, secret),
+            Global = Show(globalJson, secret),
+            Default = Show(adminJson, secret),
+            // A stored value equal to what the layers below give was not really chosen, most
+            // likely a client writing every field back. Removing it would change nothing today.
+            DeviceRedundant = deviceJson != null && deviceJson == (globalJson ?? adminJson),
+            GlobalRedundant = globalJson != null && globalJson == adminJson
+        };
+    }
+
+    private static string WireName(System.Reflection.PropertyInfo prop) =>
+        (prop.GetCustomAttributes(typeof(System.Text.Json.Serialization.JsonPropertyNameAttribute), false)
+            .FirstOrDefault() as System.Text.Json.Serialization.JsonPropertyNameAttribute)?.Name
+        ?? JsonNamingPolicy.CamelCase.ConvertName(prop.Name);
+
+    // Left out of the inherited value cleanup: the home layout, because custom rows are
+    // mirrored across profiles on every save, and the hidden items, which have their own
+    // merge rules.
+    private static readonly HashSet<string> NotDeduplicated = new(StringComparer.Ordinal)
+    {
+        nameof(MoonfinSettingsProfile.HomeSections),
+        nameof(MoonfinSettingsProfile.HomeRowOrder),
+        nameof(MoonfinSettingsProfile.HiddenContinueWatchingItems),
+        nameof(MoonfinSettingsProfile.HiddenNextUpSeries)
+    };
+
+    /// <summary>
+    /// Clears the values in <paramref name="profile"/> that only repeat what <paramref name="below"/>
+    /// or the admin defaults give. With <paramref name="onlySetIn"/>, only the settings set there
+    /// are looked at. Returns how many values were cleared.
+    /// </summary>
+    internal static int DropInheritedValues(
+        MoonfinSettingsProfile profile,
+        MoonfinSettingsProfile? below,
+        MoonfinSettingsProfile? adminDefaults,
+        MoonfinSettingsProfile? onlySetIn = null)
+    {
+        var dropped = 0;
+        foreach (var prop in ProfileProps)
+        {
+            if (NotDeduplicated.Contains(prop.Name) || (onlySetIn != null && prop.GetValue(onlySetIn) == null))
+            {
+                continue;
+            }
+
+            var value = prop.GetValue(profile);
+            var inherited = (below == null ? null : prop.GetValue(below))
+                ?? (adminDefaults == null ? null : prop.GetValue(adminDefaults));
+            if (value == null || inherited == null)
+            {
+                continue;
+            }
+
+            if (JsonSerializer.Serialize(value, ExplainJsonOptions) == JsonSerializer.Serialize(inherited, ExplainJsonOptions))
+            {
+                prop.SetValue(profile, null);
+                dropped++;
+            }
+        }
+
+        return dropped;
+    }
+
+    /// <summary>
+    /// Clears, in every profile of the user, the values that only repeat what the layers below
+    /// give. What the user gets doesn't change. Returns how many values were cleared.
+    /// </summary>
+    internal static int RemoveRepeatedValues(MoonfinUserSettings settings, MoonfinSettingsProfile? adminDefaults)
+    {
+        // Devices first, against the global profile as it stands, then global against the defaults.
+        var removed = 0;
+        foreach (var name in new[] { "desktop", "mobile", "tv" })
+        {
+            var device = settings.GetProfile(name);
+            if (device != null)
+            {
+                removed += DropInheritedValues(device, settings.Global, adminDefaults);
+            }
+        }
+
+        if (settings.Global != null)
+        {
+            removed += DropInheritedValues(settings.Global, null, adminDefaults);
+        }
+
+        return removed;
+    }
+
+    /// <summary>
+    /// For each user, how many settings each profile stores and how many of them only repeat
+    /// what the layers below give. Read-only, for the admin overview.
+    /// </summary>
+    public async Task<List<SettingsOverviewEntry>> GetSettingsOverviewAsync(IEnumerable<Guid> userIds)
+    {
+        var adminDefaults = MoonfinPlugin.Instance?.Configuration?.DefaultUserSettings;
+        var overview = new List<SettingsOverviewEntry>();
+        foreach (var userId in userIds.Distinct())
+        {
+            // A fresh read per user, so counting the repeats on it changes nothing stored.
+            var settings = await GetUserSettingsAsync(userId);
+            overview.Add(SummarizeSettings(userId, settings, adminDefaults));
+        }
+
+        return overview;
+    }
+
+    internal static SettingsOverviewEntry SummarizeSettings(Guid userId, MoonfinUserSettings? settings, MoonfinSettingsProfile? adminDefaults)
+    {
+        var entry = new SettingsOverviewEntry
+        {
+            UserId = userId,
+            HasSettingsFile = settings != null,
+            LastUpdated = settings?.LastUpdated,
+            LastUpdatedBy = settings?.LastUpdatedBy,
+            Desktop = CountStored(settings?.Desktop),
+            Mobile = CountStored(settings?.Mobile),
+            Tv = CountStored(settings?.Tv),
+            Global = CountStored(settings?.Global)
+        };
+
+        if (settings != null)
+        {
+            entry.Repeated = RemoveRepeatedValues(settings, adminDefaults);
+        }
+
+        return entry;
+    }
+
+    // Counted the way the preview lists them: the home rows and their order are one setting.
+    private static int CountStored(MoonfinSettingsProfile? profile)
+    {
+        if (profile == null)
+        {
+            return 0;
+        }
+
+        var count = ProfileProps.Count(p => p.Name is not (nameof(MoonfinSettingsProfile.HomeSections) or nameof(MoonfinSettingsProfile.HomeRowOrder))
+            && p.GetValue(profile) != null);
+        return HomeLayoutOf(profile) == null ? count : count + 1;
+    }
+
+    /// <summary>
+    /// Runs <see cref="RemoveRepeatedValues"/> over the given users' files. With
+    /// <paramref name="dryRun"/>, only counts. Returns the users and values affected.
+    /// </summary>
+    public async Task<(int Users, int Values)> RemoveRepeatedValuesAsync(IReadOnlyCollection<Guid> userIds, bool dryRun)
+    {
+        var adminDefaults = MoonfinPlugin.Instance?.Configuration?.DefaultUserSettings;
+        return await RewriteUserFilesAsync(userIds, dryRun, "admin-cleanup", notify: false,
+            settings => RemoveRepeatedValues(settings, adminDefaults));
+    }
+
+    /// <summary>
+    /// Removes the named settings from every profile of the given users, so they fall back to
+    /// the admin defaults. "homeLayout" stands for the home rows and their order.
+    /// </summary>
+    /// <exception cref="ArgumentException">A name isn't a setting that can be cleared.</exception>
+    public async Task<(int Users, int Values)> ClearSettingsAsync(IReadOnlyCollection<string> names, IReadOnlyCollection<Guid> userIds)
+    {
+        var props = new List<System.Reflection.PropertyInfo>();
+        foreach (var name in names.Distinct(StringComparer.Ordinal))
+        {
+            if (name == "homeLayout")
+            {
+                props.Add(typeof(MoonfinSettingsProfile).GetProperty(nameof(MoonfinSettingsProfile.HomeSections))!);
+                props.Add(typeof(MoonfinSettingsProfile).GetProperty(nameof(MoonfinSettingsProfile.HomeRowOrder))!);
+                continue;
+            }
+
+            var prop = ProfileProps.FirstOrDefault(p => WireName(p) == name);
+            if (prop == null
+                || prop.Name is nameof(MoonfinSettingsProfile.HiddenContinueWatchingItems) or nameof(MoonfinSettingsProfile.HiddenNextUpSeries))
+            {
+                throw new ArgumentException($"Unknown or protected setting: {name}");
+            }
+
+            props.Add(prop);
+        }
+
+        return await RewriteUserFilesAsync(userIds, dryRun: false, "admin-clear", notify: true, settings =>
+        {
+            var cleared = 0;
+            foreach (var profile in new[] { settings.Global, settings.Desktop, settings.Mobile, settings.Tv })
+            {
+                if (profile == null)
+                {
+                    continue;
+                }
+
+                foreach (var prop in props.Where(p => p.GetValue(profile) != null))
+                {
+                    prop.SetValue(profile, null);
+                    cleared++;
+                }
+            }
+
+            return cleared;
+        });
+    }
+
+    private async Task<(int Users, int Values)> RewriteUserFilesAsync(
+        IReadOnlyCollection<Guid> userIds,
+        bool dryRun,
+        string updatedBy,
+        bool notify,
+        Func<MoonfinUserSettings, int> rewrite)
+    {
+        EnsureDataDirectory();
+
+        var users = 0;
+        var values = 0;
+        foreach (var userId in userIds.Distinct())
+        {
+            var filePath = GetUserSettingsPath(userId);
+            if (!File.Exists(filePath))
+            {
+                continue;
+            }
+
+            var changed = 0;
+            await _lock.WaitAsync();
+            try
+            {
+                var settings = ReadSettingsWithRecovery(filePath);
+                if (settings != null && settings.NeedsMigration)
+                {
+                    settings = MigrateV1ToV2(settings);
+                }
+
+                changed = settings == null ? 0 : rewrite(settings);
+                if (changed > 0 && !dryRun)
+                {
+                    settings!.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    settings.LastUpdatedBy = updatedBy;
+                    AtomicFile.WriteAllText(filePath, JsonSerializer.Serialize(settings, _jsonOptions));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to rewrite the settings of user {UserId}", userId);
+                changed = 0;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+
+            if (changed == 0)
+            {
+                continue;
+            }
+
+            users++;
+            values += changed;
+            if (notify && !dryRun)
+            {
+                NotifySettingsChanged(userId);
+            }
+        }
+
+        return (users, values);
+    }
+
+    // API keys are shown as set or not, never in clear.
+    private static JsonNode? Show(string? json, bool secret) =>
+        json == null ? null : secret ? JsonValue.Create("(set)") : JsonNode.Parse(json);
+
     public async Task SaveUserSettingsAsync(Guid userId, MoonfinUserSettings settings, string? clientId = null, string mergeMode = "merge")
     {
         var filePath = GetUserSettingsPath(userId);
@@ -353,7 +705,8 @@ public class MoonfinSettingsService
           string profileName,
           MoonfinSettingsProfile profile,
           string? clientId = null,
-          bool notifySettingsChanged = true)
+          bool notifySettingsChanged = true,
+          bool dropInheritedValues = false)
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
@@ -408,6 +761,19 @@ public class MoonfinSettingsService
                 RemovedCustomHomeSections(
                     customSectionsBefore,
                     CustomHomeSectionIds(savedProfile)));
+
+            if (dropInheritedValues)
+            {
+                // A pushed value equal to what the user would inherit isn't a choice, so it
+                // is cleared and a later change to the defaults still reaches this user. It
+                // also covers switching a setting back to the default, which a merge alone
+                // can't express.
+                DropInheritedValues(
+                    savedProfile,
+                    profileName.ToLowerInvariant() == "global" ? null : settings.Global,
+                    MoonfinPlugin.Instance?.Configuration?.DefaultUserSettings,
+                    onlySetIn: profile);
+            }
 
             settingsChanged = SettingsDiffer(beforeComparisonJson, settings);
 

@@ -359,6 +359,120 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
+    /// Explains what a user gets on one device type, setting by setting, and which layer each
+    /// value comes from (admin only, read-only).
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="profile">global, desktop, mobile or tv.</param>
+    [HttpGet("Admin/Settings/Explain/{userId}")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<SettingsExplanation>> ExplainUserSettings(
+        [FromRoute] Guid userId,
+        [FromQuery] string profile = "global")
+    {
+        if (MoonfinPlugin.Instance?.Configuration?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "Settings sync is disabled" });
+        }
+
+        if (userId == Guid.Empty || !MoonfinUserSettings.ValidProfiles.Contains(profile.ToLowerInvariant()))
+        {
+            return BadRequest(new { Error = "A valid userId and a profile of global, desktop, mobile or tv are required" });
+        }
+
+        return Ok(await _settingsService.ExplainProfileAsync(userId, profile));
+    }
+
+    /// <summary>
+    /// For every user on the server, how many settings each profile stores and how many only
+    /// repeat what the layers below give (admin only, read-only).
+    /// </summary>
+    [HttpGet("Admin/Settings/Overview")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<List<SettingsOverviewEntry>>> GetSettingsOverview()
+    {
+        if (MoonfinPlugin.Instance?.Configuration?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "Settings sync is disabled" });
+        }
+
+        var userIds = GetAllServerUserIds();
+        if (userIds == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "User manager unavailable" });
+        }
+
+        return Ok(await _settingsService.GetSettingsOverviewAsync(userIds));
+    }
+
+    /// <summary>
+    /// Removes, for the given users, the stored values that only repeat what they would inherit
+    /// anyway (admin only). What users get doesn't change. With dryRun, only counts.
+    /// </summary>
+    [HttpPost("Admin/Settings/RemoveRepeated")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult> RemoveRepeatedSettings([FromBody] MoonfinSettingsUsersRequest request, [FromQuery] bool dryRun = true)
+    {
+        if (MoonfinPlugin.Instance?.Configuration?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "Settings sync is disabled" });
+        }
+
+        if (request.UserIds == null || request.UserIds.Count == 0)
+        {
+            return BadRequest(new { Error = "Pick at least one user" });
+        }
+
+        var (users, values) = await _settingsService.RemoveRepeatedValuesAsync(request.UserIds, dryRun);
+        return Ok(new { users, values, dryRun });
+    }
+
+    /// <summary>
+    /// Removes the named settings from one user's profiles, or every user's, so they fall back to
+    /// the admin defaults (admin only).
+    /// </summary>
+    [HttpPost("Admin/Settings/Clear")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult> ClearUserSettings([FromBody] MoonfinClearSettingsRequest request)
+    {
+        if (MoonfinPlugin.Instance?.Configuration?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = "Settings sync is disabled" });
+        }
+
+        if (request.Fields == null || request.Fields.Count == 0)
+        {
+            return BadRequest(new { Error = "Pick at least one setting to clear" });
+        }
+
+        if (request.UserIds == null || request.UserIds.Count == 0)
+        {
+            return BadRequest(new { Error = "Pick at least one user" });
+        }
+
+        try
+        {
+            var (users, values) = await _settingsService.ClearSettingsAsync(request.Fields, request.UserIds);
+            return Ok(new { users, values });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Saves settings for the current authenticated user.
     /// </summary>
     /// <param name="request">The settings save request.</param>
@@ -942,7 +1056,12 @@ public class MoonfinController : ControllerBase
 
         var existed = _settingsService.UserSettingsExist(userId.Value);
 
-        await _settingsService.SaveProfileAsync(userId.Value, profile, request.Profile, request.ClientId);
+        await _settingsService.SaveProfileAsync(
+            userId.Value,
+            profile,
+            request.Profile,
+            request.ClientId,
+            dropInheritedValues: true);
 
         return Ok(new MoonfinSaveResponse
         {
@@ -1644,6 +1763,22 @@ public class MoonfinProfileSaveRequest
 {
     public MoonfinSettingsProfile? Profile { get; set; }
     public string? ClientId { get; set; }
+}
+
+/// <summary>
+/// The users an admin settings action applies to.
+/// </summary>
+public class MoonfinSettingsUsersRequest
+{
+    public List<Guid>? UserIds { get; set; }
+}
+
+/// <summary>
+/// Settings for an admin to clear, and the users to clear them for.
+/// </summary>
+public class MoonfinClearSettingsRequest : MoonfinSettingsUsersRequest
+{
+    public List<string>? Fields { get; set; }
 }
 
 /// <summary>

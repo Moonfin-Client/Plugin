@@ -62,7 +62,8 @@
                 max-width: none;
             }
 
-            #MoonfinConfigPage .defaultsSubnavBar {
+            #MoonfinConfigPage .defaultsSubnavBar,
+            #MoonfinConfigPage .previewProfileTabs {
                 display: flex;
                 gap: 4px;
                 flex-wrap: wrap;
@@ -74,7 +75,8 @@
                 background: rgba(0, 0, 0, 0.22);
             }
 
-            #MoonfinConfigPage .defaultsSubtabBtn {
+            #MoonfinConfigPage .defaultsSubtabBtn,
+            #MoonfinConfigPage .previewProfileTab {
                 background: transparent;
                 border: 0;
                 color: rgba(255, 255, 255, 0.75);
@@ -86,12 +88,14 @@
                 transition: all 0.2s ease;
             }
 
-            #MoonfinConfigPage .defaultsSubtabBtn:hover {
+            #MoonfinConfigPage .defaultsSubtabBtn:hover,
+            #MoonfinConfigPage .previewProfileTab:hover {
                 background: rgba(255, 255, 255, 0.12);
                 color: #fff;
             }
 
-            #MoonfinConfigPage .defaultsSubtabBtn.active {
+            #MoonfinConfigPage .defaultsSubtabBtn.active,
+            #MoonfinConfigPage .previewProfileTab.active {
                 background: #00a4dc;
                 color: #fff;
                 font-weight: 600;
@@ -827,6 +831,57 @@
                                 <span class="moonfinLayerText"><span class="moonfinLayerTitle">Admin defaults</span><span class="moonfinLayerDesc">What you set for everyone under User defaults.</span></span>
                                 <button type="button" class="moonfinLinkButton" data-open-tab="defaults">Open User defaults</button>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection moonfinLayersCard">
+                        <h3 class="sectionTitle">See where users' settings come from</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            How many settings each user stores in each profile, and how many only repeat what the layers below already give.
+                            Tick users to act on them, click a name to see that user's settings one by one. Looking changes nothing.
+                        </div>
+                        <button is="emby-button" type="button" id="RefreshOverviewBtn" class="raised">
+                            <span>Refresh</span>
+                        </button>
+                        <div id="PreviewOverview" style="margin-top:0.8em; overflow-x:auto;"></div>
+
+                        <div id="PreviewSettingsActions" style="margin-top:1.2em;">
+                            <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                                <strong>Remove Repeated Values</strong> deletes the stored values that only repeat what the layers below give, for the ticked users.
+                                Nobody's settings change, but the Admin defaults reach those users again when you change them later.<br>
+                                <strong>Clear Selected Settings</strong> deletes the settings ticked in a user's table below from the ticked users' Device profiles and Global,
+                                so the Admin defaults apply instead. Set and save an Admin default for those settings first: where there is none,
+                                apps keep the value they already have.
+                            </div>
+                            <button is="emby-button" type="button" id="RemoveRepeatedBtn" class="raised">
+                                <span>Remove Repeated Values</span>
+                            </button>
+                            <button is="emby-button" type="button" id="ClearSelectedBtn" class="raised">
+                                <span>Clear Selected Settings</span>
+                            </button>
+                            <div id="PreviewActionResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+                        </div>
+
+                        <div id="PreviewDetail" style="display:none; margin-top:1.6em;">
+                            <h3 class="sectionTitle" id="PreviewDetailTitle"></h3>
+                            <div id="PreviewSettingsSummary" class="fieldDescription"></div>
+                            <div class="inputContainer" style="margin-top:0.8em;">
+                                <label class="inputLabel inputLabelUnfocused" for="PreviewFilter">Filter settings</label>
+                                <input type="text" id="PreviewFilter" is="emby-input" placeholder="e.g. calendar" />
+                            </div>
+                            <div class="checkboxContainer">
+                                <label class="emby-checkbox-label">
+                                    <input type="checkbox" id="PreviewStoredOnly" is="emby-checkbox" checked />
+                                    <span>Only show settings stored on the user</span>
+                                </label>
+                            </div>
+                            <div class="previewProfileTabs" id="PreviewProfileTabs">
+                                <button type="button" class="previewProfileTab" data-profile="desktop">Desktop</button>
+                                <button type="button" class="previewProfileTab active" data-profile="mobile">Mobile</button>
+                                <button type="button" class="previewProfileTab" data-profile="tv">TV</button>
+                                <button type="button" class="previewProfileTab" data-profile="global">Global</button>
+                            </div>
+                            <div id="PreviewSettingsTable" style="overflow-x:auto;"></div>
                         </div>
                     </div>
                     </section>
@@ -8629,6 +8684,409 @@
                             singleUserSelect.value = current;
                         }
                     });
+                }
+
+                var refreshOverviewBtn = document.querySelector('#RefreshOverviewBtn');
+                if (refreshOverviewBtn && !refreshOverviewBtn.dataset.bound) {
+                    refreshOverviewBtn.dataset.bound = 'true';
+
+                    var overviewData = [];
+                    var checkedUsers = {};
+                    var previewUserId = '';
+                    var previewData = null;
+                    var previewSelected = {};
+                    // The server refuses to clear these, they hold what the user hid themselves.
+                    var previewProtected = { hiddenContinueWatchingItems: true, hiddenNextUpSeries: true };
+
+                    var serverUrl = function() {
+                        return ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+                    };
+
+                    var postAdminSettings = function(path, body) {
+                        return fetch(serverUrl() + path, {
+                            method: 'POST',
+                            headers: getMoonfinAuthHeaders(),
+                            body: JSON.stringify(body || {})
+                        }).then(parseJsonResponse);
+                    };
+
+                    var previewActionResult = function(text, isError) {
+                        var result = document.querySelector('#PreviewActionResult');
+                        if (!result) return;
+                        result.style.display = '';
+                        result.style.color = isError ? '#d9534f' : '#52b54b';
+                        result.textContent = text;
+                    };
+
+                    var userName = function(userId) {
+                        var entry = overviewData.filter(function(e) { return e.userId === userId; })[0];
+                        return entry ? entry.name : 'this user';
+                    };
+
+                    var previewSourceLabel = function(source) {
+                        if (source === 'device') return 'Device profile';
+                        if (source === 'global') return 'Global';
+                        if (source === 'default') return 'Admin defaults';
+                        return 'App default';
+                    };
+
+                    var previewValueText = function(value) {
+                        if (value === null || value === undefined) return '';
+                        return typeof value === 'string' ? value : JSON.stringify(value);
+                    };
+
+                    // Values come from what users stored, so cells are filled with textContent, never as HTML.
+                    // Long values are cut to keep every column on screen. A click shows the whole value,
+                    // another one cuts it again.
+                    var previewCell = function(row, text, title, color) {
+                        var cell = document.createElement('td');
+                        cell.style.padding = '4px 8px';
+                        cell.style.verticalAlign = 'top';
+                        cell.style.whiteSpace = 'nowrap';
+                        cell.style.overflow = 'hidden';
+                        cell.style.textOverflow = 'ellipsis';
+                        cell.addEventListener('click', function() {
+                            var cut = cell.style.whiteSpace === 'nowrap';
+                            cell.style.whiteSpace = cut ? 'normal' : 'nowrap';
+                            cell.style.wordBreak = cut ? 'break-all' : '';
+                        });
+                        cell.textContent = text;
+                        if (title) cell.title = title;
+                        if (color) cell.style.color = color;
+                        row.appendChild(cell);
+                        return cell;
+                    };
+
+                    var previewTable = function(widths, labels, selectAll) {
+                        var table = document.createElement('table');
+                        table.style.width = '100%';
+                        table.style.borderCollapse = 'collapse';
+                        table.style.fontSize = '0.85em';
+                        table.style.tableLayout = 'fixed';
+
+                        var columns = document.createElement('colgroup');
+                        widths.forEach(function(width) {
+                            var col = document.createElement('col');
+                            col.style.width = width;
+                            columns.appendChild(col);
+                        });
+                        table.appendChild(columns);
+
+                        var head = document.createElement('tr');
+                        head.style.textAlign = 'left';
+                        head.style.color = 'rgba(255,255,255,0.5)';
+                        var boxCell = document.createElement('th');
+                        boxCell.style.padding = '4px 8px';
+                        if (selectAll) boxCell.appendChild(selectAll);
+                        head.appendChild(boxCell);
+                        labels.forEach(function(label) {
+                            var th = document.createElement('th');
+                            th.style.padding = '4px 8px';
+                            th.textContent = label;
+                            head.appendChild(th);
+                        });
+                        var thead = document.createElement('thead');
+                        thead.appendChild(head);
+                        table.appendChild(thead);
+                        return table;
+                    };
+
+                    var checkbox = function(checked, onChange, title) {
+                        var box = document.createElement('input');
+                        box.type = 'checkbox';
+                        box.checked = checked;
+                        if (title) box.title = title;
+                        box.addEventListener('change', function() { onChange(box.checked); });
+                        return box;
+                    };
+
+                    var renderOverview = function() {
+                        var container = document.querySelector('#PreviewOverview');
+                        if (!container) return;
+                        container.innerHTML = '';
+
+                        var selectAll = checkbox(
+                            overviewData.length > 0 && overviewData.every(function(e) { return checkedUsers[e.userId]; }),
+                            function(checked) {
+                                overviewData.forEach(function(e) {
+                                    if (checked) checkedUsers[e.userId] = true; else delete checkedUsers[e.userId];
+                                });
+                                renderOverview();
+                            },
+                            'Select every user');
+                        var table = previewTable(['2.2em', '22%', '9%', '9%', '9%', '9%', '10%', '30%'],
+                            ['User', 'Desktop', 'Mobile', 'TV', 'Global', 'Repeated', 'Last synced'], selectAll);
+
+                        var body = document.createElement('tbody');
+                        overviewData.forEach(function(e) {
+                            var row = document.createElement('tr');
+                            row.style.borderTop = '1px solid rgba(255,255,255,0.06)';
+                            if (e.userId === previewUserId) row.style.background = 'rgba(0,164,220,0.12)';
+
+                            var pick = previewCell(row, '');
+                            pick.appendChild(checkbox(!!checkedUsers[e.userId], function(checked) {
+                                if (checked) checkedUsers[e.userId] = true; else delete checkedUsers[e.userId];
+                                renderOverview();
+                            }));
+
+                            var name = previewCell(row, e.name, 'Show ' + e.name + '\'s settings', '#00a4dc');
+                            name.style.cursor = 'pointer';
+                            name.addEventListener('click', function() {
+                                previewUserId = e.userId;
+                                previewSelected = {};
+                                renderOverview();
+                                loadDetail();
+                            });
+
+                            var synced = e.hasSettingsFile;
+                            [e.desktop, e.mobile, e.tv, e.global].forEach(function(count) {
+                                previewCell(row, synced ? String(count) : '-');
+                            });
+                            previewCell(row, synced ? String(e.repeated) : '-', '', e.repeated > 0 ? '#e0a030' : '');
+                            previewCell(row, synced
+                                ? (e.lastUpdated ? new Date(e.lastUpdated).toLocaleString() : 'unknown') + ', ' + (e.lastUpdatedBy || 'unknown client')
+                                : 'Never');
+                            body.appendChild(row);
+                        });
+                        table.appendChild(body);
+                        container.appendChild(table);
+                    };
+
+                    var loadOverview = function() {
+                        var getUsers = ApiClient.getUsers ? ApiClient.getUsers() : Promise.resolve([]);
+                        var getOverview = fetch(serverUrl() + '/Moonfin/Admin/Settings/Overview', { headers: getMoonfinAuthHeaders() })
+                            .then(parseJsonResponse);
+                        return Promise.all([getUsers, getOverview])
+                            .then(function(results) {
+                                var names = {};
+                                (results[0] || []).forEach(function(user) { names[user.Id] = user.Name; });
+                                overviewData = (results[1] || []).map(function(e) {
+                                    e.name = names[e.userId] || names[(e.userId || '').replace(/-/g, '')] || e.userId;
+                                    return e;
+                                }).sort(function(a, b) { return a.name.localeCompare(b.name); });
+                                renderOverview();
+                            })
+                            .catch(function(error) {
+                                previewActionResult('Could not load the users: ' + error.message, true);
+                            });
+                    };
+
+                    var renderDetail = function() {
+                        var detail = document.querySelector('#PreviewDetail');
+                        var summary = document.querySelector('#PreviewSettingsSummary');
+                        var container = document.querySelector('#PreviewSettingsTable');
+                        if (!previewData || !detail || !summary || !container) return;
+                        detail.style.display = '';
+                        document.querySelector('#PreviewDetailTitle').textContent = userName(previewUserId) + '\'s settings';
+
+                        var fields = previewData.fields || [];
+                        var onDevice = fields.filter(function(f) { return f.device !== null && f.device !== undefined; }).length;
+                        var onGlobal = fields.filter(function(f) { return f.global !== null && f.global !== undefined; }).length;
+                        var repeats = fields.filter(function(f) { return f.deviceRedundant || f.globalRedundant; }).length;
+
+                        summary.innerHTML = '';
+                        if (!previewData.hasSettingsFile) {
+                            summary.textContent = 'This user never synced, so every setting comes from the Admin defaults or the app\'s own defaults.';
+                        } else {
+                            summary.appendChild(document.createTextNode('Last synced ' +
+                                (previewData.lastUpdated ? new Date(previewData.lastUpdated).toLocaleString() : 'at an unknown time') +
+                                ' by ' + (previewData.lastUpdatedBy || 'an unknown client') + ':'));
+                            var counts = document.createElement('ul');
+                            counts.style.margin = '0.3em 0 0';
+                            counts.style.paddingLeft = '1.4em';
+                            var profileName = previewData.profile === 'tv' ? 'TV' : previewData.profile.charAt(0).toUpperCase() + previewData.profile.slice(1);
+                            var lines = previewData.profile === 'global' ? [] : [profileName + ' Device profile: ' + onDevice];
+                            lines.push('Global: ' + onGlobal, 'Repeated stored values: ' + repeats);
+                            lines.forEach(function(line) {
+                                var item = document.createElement('li');
+                                item.textContent = line;
+                                counts.appendChild(item);
+                            });
+                            summary.appendChild(counts);
+                        }
+
+                        var storedOnly = !!(document.querySelector('#PreviewStoredOnly') || {}).checked;
+                        var filter = ((document.querySelector('#PreviewFilter') || {}).value || '').trim().toLowerCase();
+                        var shown = fields.filter(function(f) {
+                            if (storedOnly && f.source !== 'device' && f.source !== 'global') return false;
+                            return !filter || f.name.toLowerCase().indexOf(filter) !== -1;
+                        });
+                        var clearable = shown.filter(function(f) { return !previewProtected[f.name]; });
+
+                        container.innerHTML = '';
+                        var selectAll = checkbox(
+                            clearable.length > 0 && clearable.every(function(f) { return previewSelected[f.name]; }),
+                            function(checked) {
+                                clearable.forEach(function(f) {
+                                    if (checked) previewSelected[f.name] = true; else delete previewSelected[f.name];
+                                });
+                                renderDetail();
+                            },
+                            'Select every setting shown');
+                        var table = previewTable(['2.2em', '22%', '17%', '11%', '15%', '15%', '15%', '5em'],
+                            ['Setting', 'User gets', 'Comes from', 'Device profile', 'Global', 'Admin defaults', ''], selectAll);
+
+                        var body = document.createElement('tbody');
+                        shown.forEach(function(f) {
+                            var row = document.createElement('tr');
+                            row.style.borderTop = '1px solid rgba(255,255,255,0.06)';
+                            var pick = previewCell(row, '');
+                            if (previewProtected[f.name]) {
+                                pick.title = 'Hidden items can\'t be cleared here';
+                            } else {
+                                pick.appendChild(checkbox(!!previewSelected[f.name], function(checked) {
+                                    if (checked) previewSelected[f.name] = true; else delete previewSelected[f.name];
+                                }));
+                            }
+                            previewCell(row, f.name);
+                            previewCell(row, previewValueText(f.effective), JSON.stringify(f.effective));
+                            previewCell(row, previewSourceLabel(f.source));
+                            previewCell(row, previewValueText(f.device), JSON.stringify(f.device));
+                            previewCell(row, previewValueText(f.global), JSON.stringify(f.global));
+                            previewCell(row, previewValueText(f['default']), JSON.stringify(f['default']));
+                            previewCell(row, f.deviceRedundant || f.globalRedundant ? 'repeat' : '',
+                                f.deviceRedundant || f.globalRedundant ? 'Removing this stored value would change nothing for the user' : '',
+                                '#e0a030');
+                            body.appendChild(row);
+                        });
+                        table.appendChild(body);
+                        container.appendChild(table);
+
+                        if (shown.length === 0 && storedOnly) {
+                            var empty = document.createElement('div');
+                            empty.className = 'fieldDescription';
+                            empty.style.marginTop = '0.6em';
+                            empty.textContent = (filter ? 'None of the matching settings is' : 'No setting is') +
+                                ' stored on this user, so they all come from Global, the Admin defaults or the app. ' +
+                                'Untick "Only show settings stored on the user" to see where each one comes from.';
+                            container.appendChild(empty);
+                        }
+                    };
+
+                    var loadDetail = function() {
+                        if (!previewUserId) return Promise.resolve();
+                        var activeTab = document.querySelector('#PreviewProfileTabs .previewProfileTab.active');
+                        var profile = activeTab ? activeTab.getAttribute('data-profile') : 'mobile';
+                        Dashboard.showLoadingMsg();
+                        return fetch(serverUrl() + '/Moonfin/Admin/Settings/Explain/' + encodeURIComponent(previewUserId) + '?profile=' + encodeURIComponent(profile), {
+                            headers: getMoonfinAuthHeaders()
+                        })
+                            .then(parseJsonResponse)
+                            .then(function(data) {
+                                previewData = data;
+                                renderDetail();
+                            })
+                            .catch(function(error) {
+                                previewActionResult('Could not load ' + userName(previewUserId) + '\'s settings: ' + error.message, true);
+                            })
+                            .finally(function() {
+                                Dashboard.hideLoadingMsg();
+                            });
+                    };
+
+                    var refreshAll = function() {
+                        return loadOverview().then(loadDetail);
+                    };
+
+                    var checkedUserIds = function() {
+                        return Object.keys(checkedUsers);
+                    };
+
+                    var checkedUsersLabel = function(ids) {
+                        if (ids.length === 1) return userName(ids[0]);
+                        return ids.length + ' users';
+                    };
+
+                    refreshOverviewBtn.addEventListener('click', refreshAll);
+
+                    Array.prototype.forEach.call(document.querySelectorAll('#PreviewProfileTabs .previewProfileTab'), function(tab) {
+                        tab.addEventListener('click', function() {
+                            Array.prototype.forEach.call(document.querySelectorAll('#PreviewProfileTabs .previewProfileTab'), function(other) {
+                                other.classList.toggle('active', other === tab);
+                            });
+                            loadDetail();
+                        });
+                    });
+
+                    ['#PreviewFilter', '#PreviewStoredOnly'].forEach(function(selector) {
+                        var input = document.querySelector(selector);
+                        if (input) {
+                            input.addEventListener(selector === '#PreviewFilter' ? 'input' : 'change', renderDetail);
+                        }
+                    });
+
+                    var removeRepeatedBtn = document.querySelector('#RemoveRepeatedBtn');
+                    if (removeRepeatedBtn) {
+                        removeRepeatedBtn.addEventListener('click', function() {
+                            var ids = checkedUserIds();
+                            if (ids.length === 0) {
+                                previewActionResult('Tick at least one user in the list above.', true);
+                                return;
+                            }
+                            removeRepeatedBtn.disabled = true;
+                            postAdminSettings('/Moonfin/Admin/Settings/RemoveRepeated?dryRun=true', { userIds: ids })
+                                .then(function(count) {
+                                    if (!count.values) {
+                                        previewActionResult('Nothing to remove for ' + checkedUsersLabel(ids) + '.');
+                                        return null;
+                                    }
+                                    if (!window.confirm('Remove ' + count.values + ' repeated values for ' + count.users + ' user(s)?\n\nNobody\'s settings change.')) {
+                                        return null;
+                                    }
+                                    return postAdminSettings('/Moonfin/Admin/Settings/RemoveRepeated?dryRun=false', { userIds: ids })
+                                        .then(function(done) {
+                                            previewActionResult('Removed ' + done.values + ' repeated values for ' + done.users + ' user(s).');
+                                            return refreshAll();
+                                        });
+                                })
+                                .catch(function(error) {
+                                    previewActionResult('Could not remove the repeated values: ' + error.message, true);
+                                })
+                                .finally(function() {
+                                    removeRepeatedBtn.disabled = false;
+                                });
+                        });
+                    }
+
+                    var clearSelectedBtn = document.querySelector('#ClearSelectedBtn');
+                    if (clearSelectedBtn) {
+                        clearSelectedBtn.addEventListener('click', function() {
+                            var ids = checkedUserIds();
+                            var fields = Object.keys(previewSelected);
+                            if (ids.length === 0) {
+                                previewActionResult('Tick at least one user in the list above.', true);
+                                return;
+                            }
+                            if (fields.length === 0) {
+                                previewActionResult('Open a user and tick at least one setting in their table first.', true);
+                                return;
+                            }
+                            var listed = fields.slice(0, 10).join(', ') + (fields.length > 10 ? ' and ' + (fields.length - 10) + ' more' : '');
+                            if (!window.confirm('Clear ' + fields.length + ' setting(s) for ' + checkedUsersLabel(ids) + '?\n\n' + listed +
+                                '\n\nThe Admin defaults apply instead. Where there is none, apps keep the value they already have.')) {
+                                return;
+                            }
+                            clearSelectedBtn.disabled = true;
+                            postAdminSettings('/Moonfin/Admin/Settings/Clear', { fields: fields, userIds: ids })
+                                .then(function(done) {
+                                    previewSelected = {};
+                                    // The cleared settings aren't stored on the user any more, so show
+                                    // every setting, or they'd vanish instead of showing where they now come from.
+                                    var storedOnly = document.querySelector('#PreviewStoredOnly');
+                                    if (storedOnly) storedOnly.checked = false;
+                                    previewActionResult('Cleared ' + done.values + ' stored values for ' + done.users + ' user(s).');
+                                    return refreshAll();
+                                })
+                                .catch(function(error) {
+                                    previewActionResult('Could not clear the settings: ' + error.message, true);
+                                })
+                                .finally(function() {
+                                    clearSelectedBtn.disabled = false;
+                                });
+                        });
+                    }
+
+                    loadOverview();
                 }
 
                 var applySingleUserBtn = document.querySelector('#ApplySingleUserBtn');
