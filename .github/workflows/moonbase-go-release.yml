@@ -1,18 +1,18 @@
 name: Moonbase Go release
 
-# Pushing a tag like silo-3.0.1 or plex-3.0.1 tests and builds that version
-# and drafts a release titled Silo 3.0.1 or Plex 3.0.1. Nothing ships until
-# the draft is published:
-# - a Silo release becomes the one the catalog offers. The catalog is the
+# Pushing a tag like go-3.0.1 tests and builds that version of Moonbase for
+# Silo and Plex and drafts a release titled Silo and Plex 3.0.1. Nothing ships
+# until the draft is published, which:
+# - makes it the version the Silo catalog offers. The catalog is the
 #   moonbase-silo-catalog release, which Silo admins add once as a plugin
 #   repository and get updates from
-# - a Plex release pushes the moonbase-plex image to ghcr.io for amd64 and arm64
+# - pushes the moonbase-plex image to ghcr.io for amd64 and arm64
 # When publishing, untick "Set as the latest release" so the Jellyfin plugin's
 # release stays the latest.
 
 on:
   push:
-    tags: ['silo-*', 'plex-*']
+    tags: ['go-*']
   release:
     types: [published]
 
@@ -25,9 +25,9 @@ env:
   CATALOG_TAG: moonbase-silo-catalog
 
 jobs:
-  silo:
-    name: Draft the Silo release
-    if: github.event_name == 'push' && startsWith(github.ref_name, 'silo-')
+  draft:
+    name: Draft the release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,12 +46,12 @@ jobs:
           cache: false
 
       - name: Read the version from the tag
-        run: echo "VERSION=${GITHUB_REF_NAME#silo-}" >> "$GITHUB_ENV"
+        run: echo "VERSION=${GITHUB_REF_NAME#go-}" >> "$GITHUB_ENV"
 
       - name: Test
         run: make test
 
-      - name: Build the plugin and its catalog
+      - name: Build the Silo plugin and its catalog
         run: make silo-index VERSION="$VERSION" BASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
 
       # Silo reads the manifest by running the binary with "manifest", so this
@@ -59,23 +59,23 @@ jobs:
       - name: Check the manifest
         run: test "$("./dist/Moonbase.Silo-$VERSION-linux-amd64" manifest | jq -r .version)" = "$VERSION"
 
+      - name: Build the Plex image
+        run: make plex-image VERSION="$VERSION"
+
       - uses: softprops/action-gh-release@v2
         with:
           draft: true
-          name: Silo ${{ env.VERSION }}
+          name: Silo and Plex ${{ env.VERSION }}
           files: |
             Go/dist/Moonbase.Silo-*
             Go/dist/SHA256SUMS
             Go/dist/index.json
           generate_release_notes: true
 
-  plex:
-    name: Draft the Plex release
-    if: github.event_name == 'push' && startsWith(github.ref_name, 'plex-')
+  publish:
+    name: Ship the published release
+    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'go-')
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Go
 
     steps:
       - name: Checkout
@@ -83,59 +83,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: Go/go.mod
-          cache: false
-
       - name: Read the version from the tag
-        run: echo "VERSION=${GITHUB_REF_NAME#plex-}" >> "$GITHUB_ENV"
+        run: echo "VERSION=${GITHUB_REF_NAME#go-}" >> "$GITHUB_ENV"
 
-      - name: Test
-        run: make test
-
-      - name: Build the image
-        run: make plex-image VERSION="$VERSION"
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          name: Plex ${{ env.VERSION }}
-          generate_release_notes: true
-
-  silo-catalog:
-    name: Point the Silo catalog at the release
-    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'silo-')
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_REPO: ${{ github.repository }}
-      TAG: ${{ github.event.release.tag_name }}
-
-    steps:
-      - name: Update the catalog
+      - name: Point the Silo catalog at this release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release download "$TAG" --pattern index.json
+          gh release download "$GITHUB_REF_NAME" --pattern index.json
           if ! gh release view "$CATALOG_TAG" > /dev/null 2>&1; then
             gh release create "$CATALOG_TAG" --title "Moonbase for Silo catalog" --latest=false \
               --notes "Add https://github.com/$GITHUB_REPOSITORY/releases/download/$CATALOG_TAG/index.json as a plugin repository in Silo. It always lists the newest Moonbase for Silo."
           fi
           gh release upload "$CATALOG_TAG" index.json --clobber
-
-  plex-image:
-    name: Push the Plex image
-    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'plex-')
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Read the version from the tag
-        run: echo "VERSION=${GITHUB_REF_NAME#plex-}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -147,7 +107,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push the image
+      - name: Build and push the Plex image
         uses: docker/build-push-action@v6
         with:
           context: Go
