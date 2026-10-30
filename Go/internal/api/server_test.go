@@ -33,13 +33,14 @@ type caller struct {
 	profileID string
 	profile   string
 	name      string
+	primary   bool
 }
 
 var (
 	anon      = caller{}
 	adminMain = caller{user: 2, admin: true, profileID: "20", profile: "test"}
 	adminKid  = caller{user: 2, profileID: "21", profile: "Kid"}
-	userMain  = caller{user: 3, profileID: "30", profile: "Main", name: "pat"}
+	userMain  = caller{user: 3, profileID: "30", profile: "Main", name: "pat", primary: true}
 	userKids  = caller{user: 3, profileID: "31", profile: "Kids", name: "pat"}
 	other     = caller{user: 4, profileID: "40", profile: "Main"}
 )
@@ -51,6 +52,9 @@ func (c caller) headers() map[string]string {
 	}
 	h["X-Silo-User-Id"] = fmt.Sprint(c.user)
 	h["X-Silo-User-Role"] = "user"
+	if c.primary {
+		h["X-Silo-Profile-Primary"] = "true"
+	}
 	if c.admin {
 		h["X-Silo-User-Role"] = "admin"
 	}
@@ -79,6 +83,7 @@ func headerIdentity(r *http.Request) (Identity, error) {
 		UserName:    r.Header.Get("X-Silo-User-Name"),
 		ProfileID:   r.Header.Get("X-Silo-Profile-Id"),
 		ProfileName: r.Header.Get("X-Silo-Profile-Name"),
+		Primary:     r.Header.Get("X-Silo-Profile-Primary") == "true",
 	}, nil
 }
 
@@ -281,6 +286,92 @@ func TestDeviceDefaults(t *testing.T) {
 	}
 	if tv, mobile := resolved(other, "tv"), resolved(other, "mobile"); tv["style"] != "retro" || tv["size"] != "m" || mobile["style"] != "classic" || mobile["theme"] != nil {
 		t.Fatalf("a reset must keep each device on its own defaults: tv %v mobile %v", tv, mobile)
+	}
+}
+
+func TestWatchPartySubtitlesBelongToTheirHost(t *testing.T) {
+	s := newTestServer()
+	const path = "/Moonfin/WatchParty/31366623-4606-488f-b5c0-c837c80d0227"
+	if _, got := call(t, s, other, "GET", path, "", nil); len(got) != 0 {
+		t.Fatalf("an unknown room has no choice: %v", got)
+	}
+	if code, _ := call(t, s, userMain, "PUT", path, `{"subtitle":{"index":3,"language":"eng"}}`, nil); code != 200 {
+		t.Fatalf("the first writer sets it, got %d", code)
+	}
+	if _, got := call(t, s, other, "GET", path, "", nil); got["subtitle"].(map[string]any)["index"] != 3.0 {
+		t.Fatalf("members read the host's choice: %v", got)
+	}
+	if code, _ := call(t, s, other, "PUT", path, `{"subtitle":{"off":true}}`, nil); code != http.StatusForbidden {
+		t.Fatalf("only the room's owner may change it, got %d", code)
+	}
+	if code, _ := call(t, s, userKids, "PUT", path, `{"subtitle":null}`, nil); code != http.StatusForbidden {
+		t.Fatalf("another profile of the owner's account is not the owner, got %d", code)
+	}
+	if code, _ := call(t, s, userMain, "PUT", path, `{"subtitle":null}`, nil); code != 200 {
+		t.Fatalf("the owner clears it, got %d", code)
+	}
+	for _, bad := range []string{`{}`, `null`, `{"other":1}`, `{"subtitle":3}`} {
+		if code, _ := call(t, s, userMain, "PUT", path, bad, nil); code != 400 {
+			t.Fatalf("%s must be refused, got %d", bad, code)
+		}
+	}
+	if code, _ := call(t, s, userMain, "GET", "/Moonfin/WatchParty/not-a-room", "", nil); code != 400 {
+		t.Fatalf("a malformed room id is refused, got %d", code)
+	}
+}
+
+func TestWatchPartyAvatarsAreEachMembersOwn(t *testing.T) {
+	s := newTestServer()
+	const path = "/Moonfin/WatchParty/41366623-4606-488f-b5c0-c837c80d0227"
+	// A guest posting first doesn't make them the subtitles' owner.
+	if code, _ := call(t, s, other, "PUT", path+"/Avatar", `{"url":"/avatars/presets/fox.svg"}`, nil); code != 200 {
+		t.Fatalf("a member posts their avatar, got %d", code)
+	}
+	if code, _ := call(t, s, userMain, "PUT", path+"/Avatar", `{"url":"https://api.dicebear.com/9.x/x/svg?seed=a"}`, nil); code != 200 {
+		t.Fatalf("another member posts theirs, got %d", code)
+	}
+	if code, _ := call(t, s, userMain, "PUT", path, `{"subtitle":{"off":true}}`, nil); code != 200 {
+		t.Fatalf("the host still claims the subtitles, got %d", code)
+	}
+	_, got := call(t, s, userKids, "GET", path, "", nil)
+	avatars, _ := got["avatars"].(map[string]any)
+	if avatars["40"] != "/avatars/presets/fox.svg" || avatars["30"] == nil {
+		t.Fatalf("avatars by profile id: %v", got)
+	}
+	for _, bad := range []string{`{"url":"javascript:alert(1)"}`, `{"url":"avatars/x.svg"}`, `{"url":""}`} {
+		if code, _ := call(t, s, other, "PUT", path+"/Avatar", bad, nil); code != 400 {
+			t.Fatalf("%s must be refused, got %d", bad, code)
+		}
+	}
+}
+
+func TestAdminTargetsOneProfile(t *testing.T) {
+	s := newTestServer()
+	for _, c := range []caller{userMain, userKids} {
+		call(t, s, c, "POST", "/Moonfin/Settings/Profile/tv", `{"profile":{"a":1}}`, nil)
+	}
+	saveConfig(t, s, map[string]any{"DefaultUserSettings": map[string]any{"b": 2}})
+	body := readAll(t, serve(context.Background(), s, adminMain, "GET", "/Moonfin/Admin/Users", "", nil))
+	if !strings.Contains(string(body), `"Profiles":[{"Id":"3~30","Name":"Main","Primary":true},{"Id":"3~31","Name":"Kids","Primary":false}]`) {
+		t.Fatalf("users must list their profiles: %s", body)
+	}
+	if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/PushDefaults/3~31", "", map[string]any{"overwrite": "true"}); code != 200 {
+		t.Fatalf("push to one profile = %d", code)
+	}
+	if _, env := call(t, s, userKids, "GET", "/Moonfin/Settings", "", nil); env["tv"] != nil {
+		t.Fatalf("the picked profile must be reset: %v", env)
+	}
+	if _, env := call(t, s, userMain, "GET", "/Moonfin/Settings", "", nil); env["tv"] == nil {
+		t.Fatalf("the account's other profile must stay: %v", env)
+	}
+	if code, got := call(t, s, adminMain, "DELETE", "/Moonfin/Admin/Users/3~31", "", nil); code != 200 || got["profilesRemoved"] != 1.0 {
+		t.Fatalf("delete one profile = %d %v", code, got)
+	}
+	if code, _ := call(t, s, userMain, "GET", "/Moonfin/Settings", "", nil); code != 200 {
+		t.Fatal("the account's other profile must keep its settings")
+	}
+	if code, _ := call(t, s, adminMain, "DELETE", "/Moonfin/Admin/Users/x~31", "", nil); code != 400 {
+		t.Fatalf("a malformed target is refused, got %d", code)
 	}
 }
 
@@ -599,7 +690,8 @@ func theme(t *testing.T, id, name string) string {
 }
 
 func TestThemes(t *testing.T) {
-	s := newTestServer()
+	// Silo's store, where themes must stay out of the packed buckets.
+	s := NewServer("1.2.3", testHost(&store.Packed{KV: store.NewMemKV(), Pack: PerProfileKey}))
 	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Admin/Themes", theme(t, "dusk", "Dusk"), nil); code != http.StatusForbidden {
 		t.Fatalf("only an admin may upload, got %d", code)
 	}
@@ -685,5 +777,46 @@ func TestCollectionOrderIsKeptPerUser(t *testing.T) {
 	}
 	if code, _ := call(t, s, anon, "GET", "/Moonfin/Collections/42/Order", "", nil); code != 401 {
 		t.Fatal("orders need a signed-in caller")
+	}
+}
+
+func TestWatchPartyStoreKeepsLiveRooms(t *testing.T) {
+	s := newTestServer()
+	room := func(i int) string { return fmt.Sprintf("00000000-0000-4000-8000-%012d", i) }
+	avatar := `{"url":"/avatars/presets/fox.svg"}`
+	for i := 0; i < watchPartyRoomsPerAccount; i++ {
+		if code, _ := call(t, s, other, "PUT", "/Moonfin/WatchParty/"+room(i)+"/Avatar", avatar, nil); code != 200 {
+			t.Fatalf("room %d refused with %d", i, code)
+		}
+	}
+	if code, _ := call(t, s, other, "PUT", "/Moonfin/WatchParty/"+room(99)+"/Avatar", avatar, nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("an account past its share of rooms is refused, got %d", code)
+	}
+	if code, _ := call(t, s, other, "PUT", "/Moonfin/WatchParty/"+room(0), `{"subtitle":null}`, nil); code != 200 {
+		t.Fatalf("its existing rooms still take changes, got %d", code)
+	}
+	if code, _ := call(t, s, userMain, "PUT", "/Moonfin/WatchParty/"+room(0)+"/Avatar", avatar, nil); code != 200 {
+		t.Fatalf("other members join its rooms, got %d", code)
+	}
+	if code, _ := call(t, s, userMain, "PUT", "/Moonfin/WatchParty/"+room(99)+"/Avatar", avatar, nil); code != 200 {
+		t.Fatalf("another account starts its own room, got %d", code)
+	}
+	if _, got := call(t, s, other, "GET", "/Moonfin/WatchParty/"+room(0), "", nil); got["avatars"] == nil {
+		t.Fatalf("the oldest room is kept: %v", got)
+	}
+	if code, _ := call(t, s, other, "GET", "/Moonfin/WatchParty/"+strings.Repeat("-", 36), "", nil); code != 400 {
+		t.Fatalf("a room id that isn't a UUID is refused, got %d", code)
+	}
+}
+
+// A host without profiles (Plex) lists just the account, which is the whole
+// of its settings.
+func TestAdminUsersWithoutProfiles(t *testing.T) {
+	s := newTestServer()
+	plexUser := caller{user: 9, name: "al"}
+	call(t, s, plexUser, "POST", "/Moonfin/Settings/Profile/tv", `{"profile":{"a":1}}`, nil)
+	body := readAll(t, serve(context.Background(), s, adminMain, "GET", "/Moonfin/Admin/Users", "", nil))
+	if !strings.Contains(string(body), `"Id":"9","Name":"al","Policy":{"IsAdministrator":false},"Profiles":[]`) {
+		t.Fatalf("users = %s", body)
 	}
 }

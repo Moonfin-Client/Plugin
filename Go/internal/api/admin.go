@@ -166,12 +166,12 @@ func (s *Server) handlePostConfiguration(w http.ResponseWriter, r *http.Request)
 }
 
 // handleDeleteUser removes every profile's settings that an account has
-// stored, for an account deleted from the server or one that wants a fresh
-// start. Neither Silo nor Plex tells Moonbase when an account goes, so the
-// admin does this.
+// stored, or one profile's, for an account deleted from the server or one
+// that wants a fresh start. Neither Silo nor Plex tells Moonbase when an
+// account goes, so the admin does this.
 func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.Atoi(r.PathValue("userId"))
-	if err != nil || userID <= 0 {
+	userID, profile, ok := adminTarget(r.PathValue("userId"))
+	if !ok {
 		writeJSON(w, http.StatusBadRequest, M{"error": "A valid userId is required"})
 		return
 	}
@@ -186,7 +186,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	kept := index[:0:0]
 	removed := 0
 	for _, e := range index {
-		if e.UserID != userID {
+		if !e.isTarget(userID, profile) {
 			kept = append(kept, e)
 			continue
 		}
@@ -207,24 +207,42 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminUsers lists, in the shape Jellyfin's /Users has, the accounts
 // that have synced settings, since neither host lets Moonbase list accounts.
+// Profiles, which Jellyfin doesn't have, lists each account's profiles with
+// the ids the admin routes take for one of them, the account's own profile
+// marked Primary. Entries stored before Moonbase kept that flag count the
+// profile named after the account until it syncs again.
 func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	var index []indexEntry
 	if _, err := s.loadJSON(r.Context(), keyIndex, &index); err != nil {
 		storageFailed(w, r, err)
 		return
 	}
-	users := []M{}
-	seen := map[int]bool{}
+	// The name only stands in for an account none of whose entries says
+	// which profile is its own.
+	knowsPrimary := map[int]bool{}
 	for _, e := range index {
-		if seen[e.UserID] {
+		knowsPrimary[e.UserID] = knowsPrimary[e.UserID] || e.Primary
+	}
+	users := []M{}
+	byID := map[int]M{}
+	for _, e := range index {
+		id := strconv.Itoa(e.UserID)
+		user := byID[e.UserID]
+		if user == nil {
+			name := e.UserName
+			if name == "" {
+				name = "Account " + id
+			}
+			user = M{"Id": id, "Name": name, "Policy": M{"IsAdministrator": e.Admin}, "Profiles": []M{}}
+			byID[e.UserID] = user
+			users = append(users, user)
+		}
+		if e.profileKey() == "" {
+			// A host without profiles (Plex) has just the account.
 			continue
 		}
-		seen[e.UserID] = true
-		name := e.UserName
-		if name == "" {
-			name = "Account " + strconv.Itoa(e.UserID)
-		}
-		users = append(users, M{"Id": strconv.Itoa(e.UserID), "Name": name, "Policy": M{"IsAdministrator": e.Admin}})
+		primary := e.Primary || (!knowsPrimary[e.UserID] && strings.EqualFold(e.Profile, e.UserName))
+		user["Profiles"] = append(user["Profiles"].([]M), M{"Id": id + "~" + e.profileKey(), "Name": e.Profile, "Primary": primary})
 	}
 	writeJSON(w, http.StatusOK, users)
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/Silo-Server/silo-plugin-sdk/pkg/pluginsdk/runtime"
 
 	"github.com/Moonfin-Client/Plugin/Go/internal/api"
+	"github.com/Moonfin-Client/Plugin/Go/internal/store"
 )
 
 var ErrHostUnavailable = errors.New("silo host isn't connected yet")
@@ -29,7 +30,7 @@ type Plugin struct {
 func New(version string) *Plugin {
 	return &Plugin{Server: api.NewServer(version, api.Host{
 		Name:         "Silo",
-		KV:           hostKV{},
+		KV:           &store.Packed{KV: hostKV{}, Pack: api.PerProfileKey},
 		Catalog:      hostCatalog{},
 		Identify:     Identify,
 		AdminBackURL: "/admin/plugins",
@@ -96,6 +97,7 @@ func Identify(r *http.Request) (api.Identity, error) {
 		UserName:    r.Header.Get("X-Silo-User-Name"),
 		ProfileID:   r.Header.Get("X-Silo-Profile-Id"),
 		ProfileName: r.Header.Get("X-Silo-Profile-Name"),
+		Primary:     r.Header.Get("X-Silo-Profile-Primary") == "true",
 	}, nil
 }
 

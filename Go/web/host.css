@@ -390,3 +390,89 @@ h2.sectionTitle {
     opacity: 1;
     transform: none;
 }
+
+/* Parts of the Jellyfin page for features Silo doesn't have. */
+.moonbaseHidden {
+    display: none !important;
+}
+
+/* The single-user list on Actions, with each account's profiles. */
+.moonbaseUserPicker {
+    position: relative;
+}
+.moonbaseUserPickerButton {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+}
+.moonbaseUserMenu,
+.moonbaseUserSubmenu {
+    display: none;
+    position: absolute;
+    z-index: 20;
+    min-width: 16em;
+    padding: 0.3em 0;
+    background: #252525;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.3em;
+    box-shadow: 0 0.4em 1.2em rgba(0, 0, 0, 0.5);
+}
+.moonbaseUserMenu {
+    top: 100%;
+    left: 0;
+}
+.moonbaseUserPicker.is-open .moonbaseUserMenu {
+    display: block;
+}
+.moonbaseUserMenuItem {
+    position: relative;
+    display: flex;
+}
+.moonbaseUserSubmenu {
+    top: -0.3em;
+    left: 100%;
+}
+.moonbaseUserMenuItem:hover > .moonbaseUserSubmenu,
+.moonbaseUserMenuItem:focus-within > .moonbaseUserSubmenu {
+    display: block;
+}
+.moonbaseUserMenu button {
+    flex: 1;
+    display: block;
+    width: 100%;
+    padding: 0.6em 1em;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.moonbaseUserMenu .moonbaseUserMore {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 0.4em 0.6em;
+    display: flex;
+    align-items: center;
+}
+.moonbaseUserMenu button:hover,
+.moonbaseUserMenu button:focus-visible,
+.moonbaseUserMenuItem:hover > button {
+    background: rgba(255, 255, 255, 0.08);
+}
+.moonbaseUserMenu button.is-selected {
+    color: #00a4dc;
+}
+@media (max-width: 600px) {
+    /* No room beside the menu: profiles open under their account. */
+    .moonbaseUserMenuItem {
+        flex-wrap: wrap;
+    }
+    .moonbaseUserSubmenu {
+        position: static;
+        flex-basis: 100%;
+        padding-left: 1em;
+        border: 0;
+        box-shadow: none;
+    }
+}

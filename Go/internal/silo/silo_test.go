@@ -30,8 +30,9 @@ func TestIdentifyTrustsOnlySiloHeaders(t *testing.T) {
 	r.Header.Set("X-Silo-User-Role", "admin")
 	r.Header.Set("X-Silo-Profile-Id", "p7")
 	r.Header.Set("X-Silo-Profile-Name", "Main")
+	r.Header.Set("X-Silo-Profile-Primary", "true")
 	id, err := Identify(r)
-	if err != nil || id.UserID != 7 || !id.Admin || id.ProfileID != "p7" || id.ProfileName != "Main" {
+	if err != nil || id.UserID != 7 || !id.Admin || id.ProfileID != "p7" || id.ProfileName != "Main" || !id.Primary {
 		t.Fatalf("identity = %+v %v", id, err)
 	}
 }

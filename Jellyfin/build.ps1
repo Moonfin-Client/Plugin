@@ -3,7 +3,7 @@
 # Usage: .\build.ps1 [-Version "1.1.0.0"] [-TargetAbi "10.10.0"] [-SourceUrl "https://..."] [-SkipManifestUpdate]
 
 param(
-    [string]$Version = "2.5.0.0",
+    [string]$Version = "3.0.0.0",
     [string]$TargetAbi = "10.10.0",
     [string]$SourceUrl = "",
     [switch]$SkipManifestUpdate
@@ -147,7 +147,7 @@ if (-not $SkipManifestUpdate -and (Test-Path $ManifestFile)) {
     if (-not [string]::IsNullOrWhiteSpace($SourceUrl)) {
         $NewSourceUrl = $SourceUrl
     } else {
-        # Release tags are the three-part version, so 2.5.0.0 is published under the tag 2.5.0
+        # Release tags are the three-part version, so 3.0.0.0 is published under the tag 3.0.0
         $ReleaseTag = $Version -replace '\.[^.]+$', ''
         $UrlBase = $Manifest[0].versions[0].sourceUrl -replace '/download/[^/]+/[^/]+$', ''
         $NewSourceUrl = "$UrlBase/download/$ReleaseTag/$ZipName"

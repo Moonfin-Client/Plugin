@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Moonfin-Client/Plugin/Go/internal/settings"
+	"github.com/Moonfin-Client/Plugin/Go/internal/store"
 )
 
 type M = settings.M
@@ -29,6 +30,20 @@ func settingsKey(id Identity) string {
 	return fmt.Sprintf("s/%d/%x", id.UserID, h[:8])
 }
 
+// PerProfileKey reports whether key is one there's one of per profile: its
+// settings (settingsKey) or a collection order (orderKey). A host with a small
+// key budget can pack these together. Other keys under "s/" are kept apart;
+// themes are stored gzipped, not as JSON.
+func PerProfileKey(key string) bool {
+	switch {
+	case key == keyIndex, key == keyThemes:
+		return false
+	case strings.HasPrefix(key, "p/"), strings.HasPrefix(key, "s/"), strings.HasPrefix(key, "o/"):
+		return true
+	}
+	return false
+}
+
 // Instance state can't list its keys, so the stored profiles are indexed here
 // for the admin routes that walk every user. The account's name and role are
 // kept as last seen, since Silo gives plugins no list of accounts.
@@ -40,6 +55,7 @@ type indexEntry struct {
 	Profile   string `json:"profile"`
 	UserName  string `json:"userName,omitempty"`
 	Admin     bool   `json:"admin,omitempty"`
+	Primary   bool   `json:"primary,omitempty"`
 }
 
 func (e indexEntry) identity() Identity {
@@ -47,6 +63,27 @@ func (e indexEntry) identity() Identity {
 }
 
 func (e indexEntry) key() string { return settingsKey(e.identity()) }
+
+// profileKey names the profile in an admin target: its id, or its name on
+// Silo builds that kept settings by name.
+func (e indexEntry) profileKey() string {
+	if e.ProfileID != "" {
+		return e.ProfileID
+	}
+	return e.Profile
+}
+
+// adminTarget reads an admin route's {userId}: an account id for all of its
+// profiles, or "<account id>~<profile key>" for one of them.
+func adminTarget(raw string) (userID int, profile string, ok bool) {
+	id, profile, _ := strings.Cut(raw, "~")
+	userID, err := strconv.Atoi(id)
+	return userID, profile, err == nil && userID > 0
+}
+
+func (e indexEntry) isTarget(userID int, profile string) bool {
+	return e.UserID == userID && (profile == "" || e.profileKey() == profile)
+}
 
 func (s *Server) settingsRoutes() {
 	m := s.mux
@@ -128,7 +165,7 @@ func (s *Server) storeEnvelope(ctx context.Context, id Identity, env M) error {
 	if _, err := s.loadJSON(ctx, keyIndex, &index); err != nil {
 		return err
 	}
-	entry := indexEntry{UserID: id.UserID, ProfileID: id.ProfileID, Profile: id.ProfileName, UserName: id.UserName, Admin: id.Admin}
+	entry := indexEntry{UserID: id.UserID, ProfileID: id.ProfileID, Profile: id.ProfileName, UserName: id.UserName, Admin: id.Admin, Primary: id.Primary}
 	at := slices.IndexFunc(index, func(e indexEntry) bool { return e.key() == entry.key() })
 	if env == nil && at < 0 {
 		// Nothing stored, and writing an empty value would use up a key.
@@ -347,11 +384,10 @@ func (s *Server) handleGetDefaults(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePushDefaults(w http.ResponseWriter, r *http.Request) {
 	reset, _ := strconv.ParseBool(r.URL.Query().Get("overwrite"))
-	only := 0
+	only, onlyProfile := 0, ""
 	if raw := r.PathValue("userId"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			only = n
-		} else {
+		var ok bool
+		if only, onlyProfile, ok = adminTarget(raw); !ok {
 			writeJSON(w, http.StatusBadRequest, M{"error": "A valid userId is required"})
 			return
 		}
@@ -381,11 +417,26 @@ func (s *Server) handlePushDefaults(w http.ResponseWriter, r *http.Request) {
 	if only != 0 {
 		by = "admin-reset-user"
 	}
-	affected, failed := 0, 0
+	var targets []indexEntry
+	var keys []string
 	for _, e := range index {
-		if only != 0 && e.UserID != only {
-			continue
+		if only == 0 || e.isTarget(only, onlyProfile) {
+			targets = append(targets, e)
+			keys = append(keys, e.key())
 		}
+	}
+	// Settings are read and written all together, since Silo packs many
+	// profiles' settings into each stored key.
+	var current map[string][]byte
+	if !reset {
+		if current, err = store.GetMany(ctx, s.kv, keys); err != nil {
+			storageFailed(w, r, err)
+			return
+		}
+	}
+	writes := map[string][]byte{}
+	failed := 0
+	for _, e := range targets {
 		var env M
 		if reset {
 			global := clone(cfg.Defaults)
@@ -402,11 +453,13 @@ func (s *Server) handlePushDefaults(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else {
-			existing, err := s.loadEnvelope(ctx, e.identity())
-			if err != nil {
-				logError(r, "push defaults", err)
-				failed++
-				continue
+			var existing M
+			if raw := current[e.key()]; len(bytes.TrimSpace(raw)) > 0 {
+				if err := json.Unmarshal(raw, &existing); err != nil {
+					logError(r, "push defaults", fmt.Errorf("decode %s: %w", e.key(), err))
+					failed++
+					continue
+				}
 			}
 			if existing == nil {
 				continue
@@ -423,14 +476,21 @@ func (s *Server) handlePushDefaults(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		// Every entry is already in the index, so only its own key changes.
-		if err := s.saveJSON(ctx, e.key(), env); err != nil {
+		raw, err := json.Marshal(env)
+		if err != nil {
 			logError(r, "push defaults", err)
 			failed++
 			continue
 		}
-		affected++
+		writes[e.key()] = raw
 	}
+	// Every entry is already in the index, so only its own key changes.
+	notWritten, err := store.PutMany(ctx, s.kv, writes)
+	if err != nil {
+		logError(r, "push defaults", err)
+	}
+	failed += len(notWritten)
+	affected := len(writes) - len(notWritten)
 	if affected == 0 && failed > 0 {
 		storageFailed(w, r, fmt.Errorf("push defaults failed for %d profiles", failed))
 		return

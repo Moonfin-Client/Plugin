@@ -6,11 +6,11 @@
 
 set -e
 
-VERSION="${1:-2.5.0.0}"
+VERSION="${1:-3.0.0.0}"
 TARGET_ABI="${2:-10.10.0}"
 SOURCE_URL="${3:-}"
 BUILD_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-# Release tags are the three-part version, so 2.5.0.0 is published under the tag 2.5.0
+# Release tags are the three-part version, so 3.0.0.0 is published under the tag 3.0.0
 RELEASE_TAG="${VERSION%.*}"
 
 # Get repo root (where this script lives)

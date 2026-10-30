@@ -17,6 +17,8 @@ It covers the parts of Moonbase that Silo's plugin API can support:
 - MDBList ratings and the TMDB episode, season, next episode, person link, thumbnail, review, production company and title details routes. Studio logos link to TMDB rather than being served by the plugin, and details are in English.
 - Server messages from the admin.
 - Custom themes the admin uploads, up to 5 (see Settings).
+- Each user's own order for a collection.
+- Watch Party extras Silo's rooms don't keep: the host's subtitle choice for the room and each member's avatar (`/Moonfin/WatchParty/{roomId}`). Moonfin runs Watch Together on Silo's own Watch Party rooms and keeps these here, each for 24 hours.
 - The Moonbase admin settings, on the Moonbase page.
 
 The rest needs things Silo's plugin API doesn't offer. See Known limits below.
@@ -50,7 +52,14 @@ Uploading a newer file replaces the installed one and keeps its installation id 
 
 Moonbase is set up on the **Moonbase** page, which opens from the menu at the top right of Silo's plugin page (Integrations > Plugins > Moonbase) or from Plugin Apps in the admin menu. It has every setting, along with Messages, Apply Defaults To Users, Broadcast, the MDBList key test and the layout editors. It's for admins. Users change their own settings in the Moonfin app, which syncs them.
 
-The Moonbase page is the Jellyfin admin page itself, with the same tabs, fields, search and Save button, in Jellyfin's dark style. `web/host.js` stands in for the Jellyfin dashboard it expects. It says "Silo" where the Jellyfin copy says "Jellyfin", and sections for features Silo can't run say so at the top. Lists it would fill from the library stay empty, because Silo doesn't let plugins read library items, and the user picker lists accounts that have synced settings.
+The Moonbase page is the Jellyfin admin page itself, with the same tabs, fields, search and Save button, in Jellyfin's dark style. `web/host.js` stands in for the Jellyfin dashboard it expects, and adapts the page to each host from its `hosts` table. On Silo it says "Silo" where the Jellyfin copy says "Jellyfin", and:
+
+- hides the sections for things Silo does itself or will never use (hosting Moonfin web, Seerr, recommendations, Live TV, web plugin status, active downloads), and a tab left empty. Their settings still load and save unchanged.
+- notes at the top of sections Silo's plugin API can't support yet why they do nothing (IMDb charts, anime markers, games, the official MDBList lists, PINs).
+- calls Seerr "Requests" in the user defaults and the Home rows builder, since Moonfin uses Silo's own requests there.
+- adds a Silo tab to the Home rows builder with Silo's own Home rows (Recommended for you, Trending on this server, Seasonal picks and the rest). A row is saved by its section type as `type:<section_type>`, since Moonbase can't read a server's section ids, and Moonfin shows the profile's first Silo row of that type.
+
+Lists it would fill from the library stay empty, because Silo doesn't let plugins read library items. The user picker on Actions lists accounts that have synced settings: picking an account means its own profile, and hovering it (or tapping its arrow) offers its other profiles or all of them together.
 
 Earlier releases also put most settings on Silo's own plugin form. Silo keeps what was saved there, and Moonbase reads it until the Moonbase page is first saved, which keeps those values with the page's settings from then on.
 
@@ -81,8 +90,8 @@ These come from Silo's plugin API, not from the plugin.
 - **No library items.** Silo lets plugins list the libraries an account may see, but not the items in them. So similar items, the seasonal row and the media bar aren't available, and the Moonbase page's library pickers stay empty.
 - **No plugin icon.** Silo's plugin pages don't take icons from plugins, so Moonbase shows as "MO".
 - **Admin routes need the primary profile.** Silo marks a request as admin only for an admin account acting through its primary profile, the rule its own admin API uses.
-- **Storage is small.** Silo gives each plugin 256 keys of up to 256 KiB. Each profile with synced settings takes one key. The settings, messages, themes and a few indexes take the rest, so a server can hold settings for about 240 profiles.
-- **Deleted users leave their settings behind.** Silo doesn't tell plugins when an account or profile is deleted. Remove them with **Remove Selected User's Data** on the Moonbase page's Actions tab.
+- **Storage is small.** Silo gives each plugin 256 keys of up to 256 KiB, and a key can be emptied but never deleted. So Moonbase packs every profile's settings and collection orders into 32 gzipped keys (`pk/0` to `pk/31`), and keeps its settings, index, messages, themes and Watch Party extras under keys of their own. That holds a few thousand profiles: about 2,500 with settings of 11 KB each, the fullest key setting the limit, and the profile index runs out at about 2,900. Settings saved before packing stay under their own key until the profile next saves, which moves them into its packed key and empties the old one.
+- **Deleted users leave their settings behind.** Silo doesn't tell plugins when an account or profile is deleted. Remove an account's settings, or one profile's, with **Remove Selected User's Data** on the Moonbase page's Actions tab.
 
 ### Data, backups and removal
 
@@ -149,7 +158,7 @@ Routes are at the root: `http://<host>:32500/Moonfin/...`. Apps send the token t
 
 - Plex's remote access and relay only cover Plex itself. To use Moonbase away from home, open or proxy port 32500 the way you would any other service.
 - The Moonfin web app on HTTPS can't call Moonbase over plain HTTP. Put Moonbase behind a reverse proxy with HTTPS for that.
-- It covers what Moonbase for Silo does: settings sync, admin defaults, MDBList and TMDB, messages and uploaded themes. The routes that read the library (similar items, custom rows, curated MDBList rows, the seasonal row) and the Seerr proxy aren't available.
+- It covers what Moonbase for Silo does: settings sync, admin defaults, MDBList and TMDB, messages, uploaded themes and each user's collection order. The routes that read the library (similar items, custom rows, curated MDBList rows, the seasonal row) and the Seerr proxy aren't available.
 - No live updates. `Settings/Stream` answers 501, so a change reaches other devices at their next sync.
 
 ### Data
@@ -181,4 +190,4 @@ Push a tag named `moonbase-go-v<version>`, for example `moonbase-go-v0.7.0`. The
 
 None of these become the repository's latest release, which stays the Jellyfin plugin's. After the first release, make the `moonbase-plex` package public under the organization's Packages settings, or `docker pull` asks people to sign in.
 
-To pick up a newer Jellyfin admin page, copy `Jellyfin/backend/Pages/configPage.html` over `web/configPage.html` unchanged. If it calls a Jellyfin dashboard function or `ApiClient` method that `web/host.js` doesn't have yet, add it there.
+To pick up a newer Jellyfin admin page, copy `Jellyfin/backend/Pages/configPage.html` over `web/configPage.html` unchanged. If it calls a Jellyfin dashboard function or `ApiClient` method that `web/host.js` doesn't have yet, add it there. `web/host.js` finds sections by their titles and changes the Home rows builder through the page's globals (`HOME_SECTION_DEFINITIONS`, `HOME_LAYOUT_TABS`, `FIELD_DEPENDENCIES` and others), so check those still match.
