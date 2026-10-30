@@ -42,7 +42,7 @@ It's the same page as Moonbase on Jellyfin, with Silo's name in place of Jellyfi
 
 **Defaults.** A setting a user hasn't set comes from your default. The apps save every setting at their first sync, so changing a default later doesn't change it for users who already synced. **Apply Defaults To Users** on the Actions tab copies your defaults into everyone's settings, or resets them to your defaults with overwrite on. The **Defaults For** picker on the User defaults tab sets separate defaults for desktop, mobile and TV, which apply over the ones for all devices.
 
-**Staying signed in.** The page stays signed in for as long as your Silo login lasts. If Save fails anyway, the page says so and keeps your changes. Open Moonbase again in the same browser tab within an hour and they come back, ready to save.
+**Staying signed in.** The page stays signed in for as long as your Silo login lasts. If your login runs out anyway, Save says so and keeps your changes. Open Moonbase again in the same browser tab within an hour and they come back, ready to save. If Save fails for any other reason, leave the page open and try again.
 
 **Themes.** Upload them in the Themes section. Apps pick up a new or changed theme the next time they sign in.
 
@@ -124,8 +124,8 @@ Moonfin looks for Moonbase on port 32500 of your Plex server's address. If it ru
 
 ### Known limits
 
-- Plex's remote access only covers Plex itself. To use Moonbase away from home, open or proxy port 32500 the way you would for any other service.
-- The Moonfin web app on HTTPS can't reach Moonbase over plain HTTP. Put Moonbase behind a reverse proxy with HTTPS for that.
+- Plex's remote access only covers Plex itself. To use Moonbase away from home, put it behind a reverse proxy with HTTPS, or reach it over a VPN, and set that address in Moonfin. Don't forward port 32500 to the internet, since Moonfin sends your Plex token to Moonbase and plain HTTP would expose it.
+- The Moonfin web app on HTTPS can't reach Moonbase over plain HTTP, so it needs the HTTPS address too.
 - It does what Moonbase for Silo does: settings sync, admin defaults, MDBList and TMDB, messages, uploaded themes and each user's collection order. Similar items, custom rows, curated MDBList rows, the seasonal row and the Seerr proxy aren't available.
 - A settings change reaches other devices at their next sync.
 
