@@ -1,7 +1,6 @@
 name: Moonbase Go release
 
-# Pushing a tag like moonbase-go-v0.7.0 releases that version of the Go
-# backends:
+# Pushing a tag like go-3.0.0 releases that version of the Go backends:
 # - Moonbase for Silo's binaries on a GitHub release of the same name
 # - the Silo plugin catalog at the moonbase-silo-catalog release, which
 #   Silo admins add once as a plugin repository and get updates from
@@ -12,7 +11,7 @@ name: Moonbase Go release
 
 on:
   push:
-    tags: ['moonbase-go-v*']
+    tags: ['go-*']
 
 permissions:
   contents: write
@@ -43,7 +42,7 @@ jobs:
           cache: false
 
       - name: Read the version from the tag
-        run: echo "VERSION=${GITHUB_REF_NAME#moonbase-go-v}" >> "$GITHUB_ENV"
+        run: echo "VERSION=${GITHUB_REF_NAME#go-}" >> "$GITHUB_ENV"
 
       - name: Test
         run: make test
