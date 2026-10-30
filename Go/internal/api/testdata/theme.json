@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "id": "midnight-blue",
+  "displayName": "Midnight Blue",
+  "colors": {
+    "background": "#FF112233",
+    "onBackground": "#FF112233",
+    "surface": "#FF112233",
+    "onSurface": "#FF112233",
+    "surfaceVariant": "#FF112233",
+    "scrim": "#FF112233",
+    "accent": "#FF112233",
+    "onAccent": "#FF112233",
+    "buttonNormal": "#FF112233",
+    "buttonFocused": "#FF112233",
+    "buttonDisabled": "#FF112233",
+    "buttonActive": "#FF112233",
+    "onButtonNormal": "#FF112233",
+    "onButtonFocused": "#FF112233",
+    "onButtonDisabled": "#FF112233",
+    "inputBackground": "#FF112233",
+    "inputFocused": "#FF112233",
+    "inputBorder": "#FF112233",
+    "inputBorderFocused": "#FF112233",
+    "rangeTrack": "#FF112233",
+    "rangeProgress": "#FF112233",
+    "rangeThumb": "#FF112233",
+    "seekbarBuffered": "#FF112233",
+    "badgeBackground": "#FF112233",
+    "onBadge": "#FF112233",
+    "badgeUnplayed": "#FF112233",
+    "badgeWatched": "#FF112233",
+    "recordingActive": "#FF112233",
+    "recordingScheduled": "#FF112233"
+  },
+  "semantic": {
+    "statusAvailable": "#FF112233",
+    "statusRequested": "#FF112233",
+    "statusPending": "#FF112233",
+    "statusDownloading": "#FF112233",
+    "mediaTypeBadgeMovie": "#FF112233",
+    "mediaTypeBadgeShow": "#FF112233"
+  },
+  "book": {
+    "background": "#FF112233",
+    "accent": "#FF112233",
+    "mutedText": "#FF112233",
+    "primaryText": "#FF112233",
+    "sectionTitle": "#FF112233",
+    "divider": "#FF112233",
+    "placeholder": "#FF112233",
+    "shadow": "#FF112233",
+    "gradientTop": "#FF112233",
+    "gradientBottom": "#FF112233",
+    "inactiveChip": "#FF112233",
+    "placeholderPalette": [
+      "#FF112233"
+    ]
+  },
+  "borders": {
+    "cardBorder": {
+      "color": "#FF112233",
+      "width": 2
+    },
+    "chipBorder": {
+      "color": "#FF112233",
+      "width": 2
+    },
+    "focusBorder": {
+      "color": "#FF112233",
+      "width": 2
+    },
+    "cardRadius": 8,
+    "chipRadius": 4,
+    "chipBackground": "#FF112233",
+    "focusGlow": [
+      {
+        "color": "#FF112233",
+        "blurRadius": 4,
+        "offsetX": 0,
+        "offsetY": 1,
+        "spreadRadius": 2
+      }
+    ]
+  }
+}

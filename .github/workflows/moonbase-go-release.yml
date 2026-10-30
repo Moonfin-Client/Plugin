@@ -1,0 +1,92 @@
+name: Moonbase Go release
+
+# Pushing a tag like moonbase-go-v0.7.0 releases that version of the Go
+# backends:
+# - Moonbase for Silo's binaries on a GitHub release of the same name
+# - the Silo plugin catalog at the moonbase-silo-catalog release, which
+#   Silo admins add once as a plugin repository and get updates from
+# - the moonbase-plex image on ghcr.io for amd64 and arm64
+# The Jellyfin plugin's own releases stay the repository's latest. After the
+# first release, make the moonbase-plex package public in the organization's
+# package settings, or docker pull asks people to sign in.
+
+on:
+  push:
+    tags: ['moonbase-go-v*']
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE: ghcr.io/moonfin-client/moonbase-plex
+  CATALOG_TAG: moonbase-silo-catalog
+
+jobs:
+  release:
+    name: Release Moonbase for Silo and Plex
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Go
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: Go/go.mod
+          cache: false
+
+      - name: Read the version from the tag
+        run: echo "VERSION=${GITHUB_REF_NAME#moonbase-go-v}" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: make test
+
+      - name: Build the Silo plugin and its catalog
+        run: make silo-index VERSION="$VERSION" BASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+
+      # Silo reads the manifest by running the binary with "manifest", so this
+      # is the same check an install does.
+      - name: Check the manifest
+        run: test "$("./dist/Moonbase.Silo-$VERSION-linux-amd64" manifest | jq -r .version)" = "$VERSION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Sign in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the Plex image
+        uses: docker/build-push-action@v6
+        with:
+          context: Go
+          file: Go/cmd/plex/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ env.VERSION }}
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+
+      - name: Publish the release and the Silo catalog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/Moonbase.Silo-* dist/SHA256SUMS dist/index.json \
+            --title "Moonbase for Silo and Plex $VERSION" --latest=false \
+            --notes "Moonbase for Silo $VERSION and Moonbase for Plex $VERSION. Silo admins who added the catalog get this update on their own. Plex: docker pull $IMAGE:$VERSION. Setup steps are in Go/README.md."
+          if ! gh release view "$CATALOG_TAG" > /dev/null 2>&1; then
+            gh release create "$CATALOG_TAG" --title "Moonbase for Silo catalog" --latest=false \
+              --notes "Add https://github.com/$GITHUB_REPOSITORY/releases/download/$CATALOG_TAG/index.json as a plugin repository in Silo. It always lists the newest Moonbase for Silo."
+          fi
+          gh release upload "$CATALOG_TAG" dist/index.json --clobber

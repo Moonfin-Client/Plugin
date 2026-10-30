@@ -1,0 +1,71 @@
+name: Moonbase Go
+
+# Builds and tests the Go backends, Moonbase for Silo and the Plex companion.
+# The Jellyfin and Emby plugins have their own workflow and never read
+# anything under Go/.
+
+on:
+  push:
+    branches: [master]
+    paths: ['Go/**', '.github/workflows/moonbase-go.yml']
+  pull_request:
+    branches: [master]
+    paths: ['Go/**', '.github/workflows/moonbase-go.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Build Silo plugin and Plex companion
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Go
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: Go/go.mod
+          cache-dependency-path: Go/go.sum
+
+      - name: Use the published SDK only
+        run: |
+          if grep -q '^replace' go.mod || [ -n "$(go env GOWORK)" ]; then
+            echo "::error::Go/go.mod must build from the tagged silo-plugin-sdk, not a local replace or go.work."
+            exit 1
+          fi
+
+      - name: Format
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Run gofmt on: $unformatted"
+            exit 1
+          fi
+
+      - name: Test
+        run: make test
+
+      - name: Build
+        run: make dist
+
+      - name: Build the Plex image
+        run: make plex-image
+
+      # Silo reads the manifest by running the binary with "manifest", so this
+      # is the same check an install does.
+      - name: Check the manifest
+        run: for bin in dist/Moonbase.Silo-*-linux-amd64; do "./$bin" manifest > /dev/null; done
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Moonbase.Silo
+          path: Go/dist/

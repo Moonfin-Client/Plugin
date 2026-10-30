@@ -1,0 +1,69 @@
+{
+  "plugin_id": "moonfin.moonbase",
+  "version": "0.6.2",
+  "checksum": "__CHECKSUM__",
+  "silo_api_version": "v1",
+  "presentation": {
+    "display_name": "Moonbase",
+    "summary": "Server side of the Moonfin apps: settings sync across devices, extra ratings and admin defaults.",
+    "description_markdown": "Moonbase is the server plugin for Moonfin. It keeps each profile's Moonfin settings in sync across devices, lets an admin set defaults for everyone, and adds MDBList and TMDB ratings.",
+    "setup_markdown": "1. Install the plugin from a file.\n2. Set it up on the **Moonbase** page, in the menu at the top right of this page and under Plugin Apps.\n3. Sign in with a Moonfin app. It finds Moonbase on its own.",
+    "homepage_url": "https://moonfin.io",
+    "source_url": "https://github.com/Moonfin-Client/Plugin",
+    "support_url": "https://github.com/Moonfin-Client/Plugin/issues",
+    "changelog_url": "https://github.com/Moonfin-Client/Plugin/releases",
+    "publisher_name": "Moonfin",
+    "publisher_url": "https://github.com/Moonfin-Client",
+    "license_spdx": "GPL-3.0-only"
+  },
+  "supported_platforms": [
+    {
+      "os": "linux",
+      "arch": "amd64"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64"
+    }
+  ],
+  "capabilities": [
+    {
+      "type": "http_routes.v1",
+      "id": "moonfin",
+      "display_name": "Moonfin API",
+      "description": "The /Moonfin routes Moonfin apps call."
+    }
+  ],
+  "http_routes": [
+    {
+      "id": "moonfin",
+      "method": "*",
+      "path": "/Moonfin/*",
+      "access": "authenticated"
+    },
+    {
+      "id": "home",
+      "method": "GET",
+      "path": "/",
+      "access": "authenticated",
+      "navigable": true,
+      "navigation_label": "Moonfin",
+      "navigation_kind": "user"
+    },
+    {
+      "id": "admin",
+      "method": "GET",
+      "path": "/admin",
+      "access": "admin",
+      "navigable": true,
+      "navigation_label": "Moonbase",
+      "navigation_kind": "admin"
+    },
+    {
+      "id": "admin-assets",
+      "method": "GET",
+      "path": "/admin-assets/*",
+      "access": "admin"
+    }
+  ]
+}
