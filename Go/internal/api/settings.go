@@ -31,9 +31,9 @@ func settingsKey(id Identity) string {
 }
 
 // PerProfileKey reports whether key is one there's one of per profile: its
-// settings (settingsKey) or a collection order (orderKey). A host with a small
-// key budget can pack these together. Other keys under "s/" are kept apart;
-// themes are stored gzipped, not as JSON.
+// settings (settingsKey) or its collection orders (ordersKey). A host with a
+// small key budget can pack these together. Other keys under "s/" are kept
+// apart, and themes are stored gzipped, not as JSON.
 func PerProfileKey(key string) bool {
 	switch {
 	case key == keyIndex, key == keyThemes:

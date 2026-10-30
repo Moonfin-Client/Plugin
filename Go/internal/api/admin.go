@@ -194,6 +194,10 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 			storageFailed(w, r, err)
 			return
 		}
+		if err := s.saveJSON(ctx, ordersKey(e.identity()), nil); err != nil {
+			storageFailed(w, r, err)
+			return
+		}
 		removed++
 	}
 	if removed > 0 {

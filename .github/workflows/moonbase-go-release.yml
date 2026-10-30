@@ -6,7 +6,9 @@ name: Moonbase Go release
 # - the Silo plugin catalog at the moonbase-silo-catalog release, which
 #   Silo admins add once as a plugin repository and get updates from
 # - the moonbase-plex image on ghcr.io for amd64 and arm64
-# The Jellyfin plugin's own releases stay the repository's latest.
+# The Jellyfin plugin's own releases stay the repository's latest. After the
+# first release, make the moonbase-plex package public in the organization's
+# package settings, or docker pull asks people to sign in.
 
 on:
   push:
@@ -31,12 +33,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: Go/go.mod
-          cache-dependency-path: Go/go.sum
+          cache: false
 
       - name: Read the version from the tag
         run: echo "VERSION=${GITHUB_REF_NAME#moonbase-go-v}" >> "$GITHUB_ENV"
@@ -45,12 +49,12 @@ jobs:
         run: make test
 
       - name: Build the Silo plugin and its catalog
-        run: make silo-index VERSION="$VERSION" BASE_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+        run: make silo-index VERSION="$VERSION" BASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
 
       # Silo reads the manifest by running the binary with "manifest", so this
       # is the same check an install does.
       - name: Check the manifest
-        run: test "$(./dist/Moonbase.Silo-$VERSION-linux-amd64 manifest | jq -r .version)" = "$VERSION"
+        run: test "$("./dist/Moonbase.Silo-$VERSION-linux-amd64" manifest | jq -r .version)" = "$VERSION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -83,6 +87,6 @@ jobs:
             --notes "Moonbase for Silo $VERSION and Moonbase for Plex $VERSION. Silo admins who added the catalog get this update on their own. Plex: docker pull $IMAGE:$VERSION. Setup steps are in Go/README.md."
           if ! gh release view "$CATALOG_TAG" > /dev/null 2>&1; then
             gh release create "$CATALOG_TAG" --title "Moonbase for Silo catalog" --latest=false \
-              --notes "Add https://github.com/${{ github.repository }}/releases/download/$CATALOG_TAG/index.json as a plugin repository in Silo. It always lists the newest Moonbase for Silo."
+              --notes "Add https://github.com/$GITHUB_REPOSITORY/releases/download/$CATALOG_TAG/index.json as a plugin repository in Silo. It always lists the newest Moonbase for Silo."
           fi
           gh release upload "$CATALOG_TAG" dist/index.json --clobber

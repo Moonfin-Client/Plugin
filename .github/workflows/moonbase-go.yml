@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -60,7 +62,7 @@ jobs:
       # Silo reads the manifest by running the binary with "manifest", so this
       # is the same check an install does.
       - name: Check the manifest
-        run: ./dist/Moonbase.Silo-*-linux-amd64 manifest > /dev/null
+        run: for bin in dist/Moonbase.Silo-*-linux-amd64; do "./$bin" manifest > /dev/null; done
 
       - name: Upload
         uses: actions/upload-artifact@v4

@@ -157,6 +157,10 @@ func (s *Server) handleUploadTheme(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw = bytes.TrimSpace(raw)
+	if len(raw) > maxThemeBytes {
+		themeRejected(w, fmt.Sprintf("Theme JSON exceeds max size (%d bytes).", maxThemeBytes))
+		return
+	}
 	var theme M
 	if json.Unmarshal(raw, &theme) != nil || theme == nil {
 		writeJSON(w, http.StatusBadRequest, M{"error": "Theme payload must be a JSON object.",
@@ -170,9 +174,6 @@ func (s *Server) handleUploadTheme(w http.ResponseWriter, r *http.Request) {
 		return
 	case slices.Contains(reservedThemeIDs, id):
 		themeRejected(w, "id conflicts with a protected built-in theme.")
-		return
-	case len(raw) > maxThemeBytes:
-		themeRejected(w, fmt.Sprintf("Theme JSON exceeds max size (%d bytes).", maxThemeBytes))
 		return
 	}
 

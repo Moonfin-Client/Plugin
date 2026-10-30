@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -379,6 +380,7 @@ func TestDeleteUserRemovesEveryProfile(t *testing.T) {
 	s := newTestServer()
 	for _, c := range []caller{userMain, userKids, other} {
 		call(t, s, c, "POST", "/Moonfin/Settings/Profile/tv", `{"profile":{"a":1}}`, nil)
+		call(t, s, c, "POST", "/Moonfin/Collections/42/Order", `["a"]`, nil)
 	}
 	if code, _ := call(t, s, userMain, "DELETE", "/Moonfin/Admin/Users/3", "", nil); code != http.StatusForbidden {
 		t.Fatalf("only an admin may remove a user's data, got %d", code)
@@ -389,6 +391,9 @@ func TestDeleteUserRemovesEveryProfile(t *testing.T) {
 	for _, c := range []caller{userMain, userKids} {
 		if code, _ := call(t, s, c, "GET", "/Moonfin/Settings", "", nil); code != http.StatusNotFound {
 			t.Fatalf("%v kept settings", c)
+		}
+		if raw := readAll(t, serve(context.Background(), s, c, "GET", "/Moonfin/Collections/42/Order", "", nil)); string(bytes.TrimSpace(raw)) != "[]" {
+			t.Fatalf("%v kept a collection order: %s", c, raw)
 		}
 	}
 	if code, _ := call(t, s, other, "GET", "/Moonfin/Settings", "", nil); code != 200 {
@@ -701,6 +706,10 @@ func TestThemes(t *testing.T) {
 	if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/Themes", theme(t, "moonfin", "Mine"), nil); code != 400 {
 		t.Fatal("a built-in theme id must be refused")
 	}
+	big := `{"id":"big","displayName":"` + strings.Repeat("x", maxThemeBytes) + `"}`
+	if code, got := call(t, s, adminMain, "POST", "/Moonfin/Admin/Themes", big, nil); code != 400 || !strings.Contains(fmt.Sprint(got["errors"]), "exceeds max size") {
+		t.Fatalf("an oversized theme must say it's too big: %d %v", code, got)
+	}
 	for i, name := range []string{"Eve", "Dawn", "Cobalt", "Birch", "Amber"} {
 		if code, got := call(t, s, adminMain, "POST", "/Moonfin/Admin/Themes", theme(t, fmt.Sprintf("t%d", i), name), nil); code != 200 || got["success"] != true {
 			t.Fatalf("upload %s = %d %v", name, code, got)
@@ -769,8 +778,34 @@ func TestCollectionOrderIsKeptPerUser(t *testing.T) {
 	if code, _ := call(t, s, userKids, "POST", "/Moonfin/Collections/7/Order", `[]`, nil); code != 204 {
 		t.Fatal("clearing nothing must still succeed")
 	}
-	if _, found, _ := kv.Get(context.Background(), "o/"+settingsKey(Identity{UserID: 3, ProfileID: "31"})+"/7"); found {
+	if _, found, _ := kv.Get(context.Background(), ordersKey(Identity{UserID: 3, ProfileID: "31"})); found {
 		t.Fatal("clearing an order that was never saved must not use a key")
+	}
+	call(t, s, userMain, "POST", "/Moonfin/Collections/42/Order", `["a","b"]`, nil)
+	call(t, s, userMain, "POST", "/Moonfin/Collections/43/Order", `["c"]`, nil)
+	if got := order(userMain); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("a second collection's order changed the first: %v", got)
+	}
+	long := `["` + strings.Repeat("9", maxOrderItemID+1) + `","d"]`
+	call(t, s, userMain, "POST", "/Moonfin/Collections/42/Order", long, nil)
+	if got := order(userMain); !reflect.DeepEqual(got, []string{"d"}) {
+		t.Fatalf("an overlong item id must be dropped: %v", got)
+	}
+	ids := make([]string, 1500)
+	for i := range ids {
+		ids[i] = fmt.Sprintf(`"%019d"`, i)
+	}
+	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Collections/44/Order", "["+strings.Join(ids, ",")+"]", nil); code != 204 {
+		t.Fatalf("a large order within the cap = %d", code)
+	}
+	for c, code := 45, 0; code != http.StatusRequestEntityTooLarge; c++ {
+		if c > 60 {
+			t.Fatal("a profile's orders must have a size cap")
+		}
+		code, _ = call(t, s, userMain, "POST", fmt.Sprintf("/Moonfin/Collections/%d/Order", c), "["+strings.Join(ids, ",")+"]", nil)
+	}
+	if got := order(userMain); !reflect.DeepEqual(got, []string{"d"}) {
+		t.Fatalf("a refused order must leave the saved ones alone: %v", got)
 	}
 	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Collections/日本/Order", `["x"]`, nil); code != 400 {
 		t.Fatal("an id with no ASCII letters or digits must be refused")

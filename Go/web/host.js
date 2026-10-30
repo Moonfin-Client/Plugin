@@ -1,15 +1,15 @@
 // Stands in for the parts of Jellyfin's dashboard that configPage.html calls,
-// so the page from the Jellyfin plugin runs unchanged on Silo and on the Plex
-// companion.
+// so the page runs on Silo and on the Plex companion. configPage.html stays an
+// exact copy of Jellyfin/backend/Pages/configPage.html. This file finds its
+// sections by title and changes the Home rows builder through its globals, so
+// check both after copying in a newer page.
 (function () {
     'use strict';
 
     var hostName = (window.moonbaseHost && window.moonbaseHost.name) || 'Silo';
 
-    // What differs between hosts. Sections in hidden are for things the host
-    // does itself or will never use, and sections in unsupported get a note
-    // saying why they do nothing yet. Both still load and save their settings
-    // unchanged.
+    // Sections in hidden are left out and sections in unsupported get a note.
+    // Both still load and save their settings.
     var hosts = {
         Silo: {
             example: 'silo.example.com',
@@ -25,7 +25,6 @@
                 'Web Plugin Status',
                 'Active Downloads'
             ],
-            // Fields of the user defaults that only matter for those.
             hiddenFields: ['DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote'],
             unsupported: {
                 'IMDb Charts': 'Not supported on Silo yet: Silo doesn’t let plugins read its library, which the charts are matched against. These settings do nothing on Silo for now.',
@@ -35,8 +34,6 @@
                 'PINs': 'Not supported on Silo yet: Moonbase doesn’t keep PINs on Silo. Apps use the PIN stored on the device.',
                 'Uploaded Themes': 'Moonbase on Silo keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.'
             },
-            // Silo has no Live TV, takes requests itself rather than through
-            // Seerr, and curates Home rows of its own.
             liveTv: false,
             ownRequests: true,
             serverRows: true
@@ -69,9 +66,7 @@
     };
     var host = hosts[hostName] || hosts.Silo;
 
-    // The page is served at <base>/admin and every Moonbase route lives under
-    // <base>/Moonfin. On Silo <base> is this installation's plugin path, and on
-    // the Plex companion it's the root.
+    // The page is served at <base>/admin and the routes live under <base>/Moonfin.
     var base = location.origin + location.pathname.replace(/\/admin\/?$/, '');
     var draftKey = 'moonbaseConfigDraft:' + base;
 
@@ -224,11 +219,9 @@
     var lastConfig = null;
     var draftOffered = false;
 
-    // Admin defaults per device type, which only Moonbase for Silo and Plex
-    // have. The page edits
-    // DefaultUserSettings, so it's handed one layer at a time: the defaults
-    // for all devices, or one device's on top of them. A device keeps only
-    // what differs from all devices, in DefaultDeviceSettings.
+    // The page edits DefaultUserSettings, so it's handed one layer at a time:
+    // the defaults for all devices, or one device's on top of them. A device
+    // keeps only what differs from all devices, in DefaultDeviceSettings.
     var layerKey = 'moonbaseDefaultsLayer:' + base;
     var layerSwitch = null;
     try {
@@ -309,8 +302,7 @@
         return JSON.stringify(value == null ? null : value);
     }
 
-    // Uploaded themes join the App Theme default as "custom:<id>". The list
-    // is the one the configuration was loaded with.
+    // Uploaded themes join the App Theme default as "custom:<id>".
     function fillUploadedThemes(items) {
         var select = document.getElementById('DefaultVisualTheme');
         if (!select) return;
@@ -346,7 +338,7 @@
             + '<select id="MoonbaseDefaultsLayer" is="emby-select">'
             + '<option value="global">All devices</option><option value="desktop">Desktop</option>'
             + '<option value="mobile">Mobile</option><option value="tv">TV</option></select>'
-            + '<div class="fieldDescription">A device starts out showing your all-devices values. Anything you change there applies to that device only; set it back to the all-devices value, or to Not set, to follow all devices again. Changes are kept when you switch, and Save stores every device. A user’s own settings still come first, then your defaults for their device, then your defaults for all devices.</div>';
+            + '<div class="fieldDescription">A device starts out showing your all-devices values. Anything you change there applies to that device only. Set it back to the all-devices value, or to Not set, to follow all devices again. Changes are kept when you switch, and Save stores every device. A user’s own settings still come first, then your defaults for their device, then your defaults for all devices.</div>';
         bar.before(box);
         upgrade(box);
         var select = box.querySelector('select');
@@ -399,9 +391,13 @@
     function toast(text) {
         var el = document.createElement('div');
         el.className = 'moonbaseToast';
-        el.textContent = text;
+        el.setAttribute('role', 'status');
         document.body.appendChild(el);
-        setTimeout(function () { el.classList.add('is-visible'); }, 10);
+        // Filled once it's on the page, so screen readers announce it.
+        setTimeout(function () {
+            el.textContent = text;
+            el.classList.add('is-visible');
+        }, 10);
         setTimeout(function () {
             el.classList.remove('is-visible');
             setTimeout(function () { el.remove(); }, 300);
@@ -429,6 +425,7 @@
         if (!bar) return;
         var el = document.createElement('div');
         el.className = 'moonbaseHostNotice' + (warn ? ' is-warning' : '');
+        el.setAttribute('role', warn ? 'alert' : 'status');
         el.textContent = text;
         if (href) {
             var link = document.createElement('a');
@@ -520,7 +517,6 @@
             if (liveTvHeading && liveTvHeading.tagName === 'H4') liveTvHeading.classList.add('moonbaseHidden');
         }
 
-        // A tab left with nothing to show goes too.
         root.querySelectorAll('.moonfinTabPanel').forEach(function (panel) {
             if (panel.querySelector('.verticalSection:not(.moonbaseHidden)')) return;
             var tab = panel.getAttribute('data-tab');
@@ -554,10 +550,9 @@
         }
     }
 
-    // Silo's own Home rows, by section type. Moonbase can't read a server's
-    // section ids, so a row names its type and the app shows that profile's
-    // first Silo row of the type. Continue watching and next up are left out
-    // because Moonfin builds those rows itself.
+    // Silo's own Home rows by section type, since Moonbase can't read a
+    // server's section ids. Continue watching and next up are left out because
+    // Moonfin builds those itself.
     var siloRows = [
         ['next_in_series', 'Next in series'],
         ['watchlist', 'Watchlist'],
@@ -661,8 +656,7 @@
             console.error('Moonbase: adapting the Home rows builder failed', e);
         }
         addDefaultsLayerPicker(page);
-        // An upload or delete on the Themes tab redraws its list; the App
-        // Theme default follows it.
+        // The App Theme default follows uploads and deletes on the Themes tab.
         var renderThemes = window.renderAdminThemesList;
         window.renderAdminThemesList = function (items) {
             renderThemes(items);
@@ -676,11 +670,8 @@
         bindRemoveUserData();
     });
 
-    // The single-user list becomes a menu of accounts.
-    // An account picks its own profile; hovering it (or its arrow) shows its
-    // other profiles, and all of its profiles together. The page still reads
-    // the hidden select, so each choice is an option there too, whose text is
-    // what the page's messages name.
+    // The single-user list becomes a menu of accounts. The page still reads
+    // the hidden select, so each choice is an option there too.
     var listedUsers = [];
 
     function addProfileOptions(users) {
@@ -797,8 +788,6 @@
         showChoice();
     }
 
-    // Removes the stored settings of the account, or
-    // the one profile, picked in the page's single-user list.
     function bindRemoveUserData() {
         var select = document.getElementById('SingleUserSelect');
         var after = document.getElementById('ApplySingleUserResult');

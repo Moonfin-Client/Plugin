@@ -26,7 +26,7 @@ func main() {
 		os.Exit(1)
 	}
 	addr := envOr("MOONBASE_LISTEN", ":32500")
-	srv := &http.Server{Addr: addr, Handler: c, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+	srv := &http.Server{Addr: addr, Handler: c, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute}
 	slog.Info("Moonbase for Plex is listening", "addr", addr, "plex", pms, "version", version)
 	if err := srv.ListenAndServe(); err != nil {
 		slog.Error("serve", "error", err)
