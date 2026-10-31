@@ -196,6 +196,13 @@ namespace Emby.Plugins.Moonfin
         /// </summary>
         public List<string> DefaultHiddenLibraryIds { get; set; } = new List<string>();
 
+        /// <summary>
+        /// Libraries added only to the Latest exclude list, so they stay in navigation but leave the
+        /// recently added rows. Applied like <see cref="DefaultHiddenLibraryIds"/>, which already
+        /// covers both lists.
+        /// </summary>
+        public List<string> DefaultHiddenFromLatestLibraryIds { get; set; } = new List<string>();
+
         /// <summary>Metadata index for uploaded custom themes stored in the plugin data folder.</summary>
         public List<UploadedThemeEntry> UploadedThemes { get; set; } = new List<UploadedThemeEntry>();
 
