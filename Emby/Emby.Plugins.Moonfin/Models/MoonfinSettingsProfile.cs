@@ -157,6 +157,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("hideDetailsMediaDescription")] public bool? HideDetailsMediaDescription { get; set; }
         [JsonPropertyName("detailUseSeriesThumbnails")] public bool? DetailUseSeriesThumbnails { get; set; }
         [JsonPropertyName("hideHomeMediaDescription")] public bool? HideHomeMediaDescription { get; set; }
+        [JsonPropertyName("hideHomeWatchProgress")] public bool? HideHomeWatchProgress { get; set; }
+        [JsonPropertyName("hideHomeUnwatchedCount")] public bool? HideHomeUnwatchedCount { get; set; }
         [JsonPropertyName("recommendationSystemSource")] public string? RecommendationSystemSource { get; set; }
         [JsonPropertyName("recommendationsApplyParentalRatingCap")] public bool? RecommendationsApplyParentalRatingCap { get; set; }
 

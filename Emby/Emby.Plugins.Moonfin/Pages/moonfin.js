@@ -2979,6 +2979,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setNullableBoolSelect(view, '#DefaultPersonPageGroupItems', defaults.personPageGroupItems);
             setNullableBoolSelect(view, '#DefaultHomeRowsImageTypeOverride', defaults.homeRowsImageTypeOverride);
             setNullableBoolSelect(view, '#DefaultHideHomeMediaDescription', defaults.hideHomeMediaDescription);
+            setNullableBoolSelect(view, '#DefaultHideHomeWatchProgress', defaults.hideHomeWatchProgress);
+            setNullableBoolSelect(view, '#DefaultHideHomeUnwatchedCount', defaults.hideHomeUnwatchedCount);
             setNullableBoolSelect(view, '#DefaultCollectionsRowShowEpisodes', defaults.collectionsRowShowEpisodes);
             setNullableBoolSelect(view, '#DefaultPlaylistsRowShowEpisodes', defaults.playlistsRowShowEpisodes);
             setNullableBoolSelect(view, '#DefaultDisplayStudiosRows', defaults.displayStudiosRows);
@@ -3376,6 +3378,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             d.personPageGroupItems = getNullableBoolSelect(view, '#DefaultPersonPageGroupItems');
             d.homeRowsImageTypeOverride = getNullableBoolSelect(view, '#DefaultHomeRowsImageTypeOverride');
             d.hideHomeMediaDescription = getNullableBoolSelect(view, '#DefaultHideHomeMediaDescription');
+            d.hideHomeWatchProgress = getNullableBoolSelect(view, '#DefaultHideHomeWatchProgress');
+            d.hideHomeUnwatchedCount = getNullableBoolSelect(view, '#DefaultHideHomeUnwatchedCount');
             d.collectionsRowShowEpisodes = getNullableBoolSelect(view, '#DefaultCollectionsRowShowEpisodes');
             d.playlistsRowShowEpisodes = getNullableBoolSelect(view, '#DefaultPlaylistsRowShowEpisodes');
             d.displayStudiosRows = getNullableBoolSelect(view, '#DefaultDisplayStudiosRows');
