@@ -2765,6 +2765,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
 
             loadLibraryPicker(view, '#DefaultHiddenLibraryPicker', 'defaultHiddenLibraryCb', config.DefaultHiddenLibraryIds || []);
+            loadLibraryPicker(view, '#DefaultHiddenFromLatestLibraryPicker', 'defaultHiddenFromLatestLibraryCb', config.DefaultHiddenFromLatestLibraryIds || []);
 
             view.querySelector('#GamesEnabled').checked = config.GamesEnabled === true;
             loadGameLibraryPicker(view, config.GameLibraryIds || []);
@@ -3141,6 +3142,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             if (view.querySelector('.defaultHiddenLibraryCb') != null) {
                 config.DefaultHiddenLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.defaultHiddenLibraryCb:checked'))
+                    .map(function (cb) { return cb.getAttribute('data-id'); });
+            }
+
+            if (view.querySelector('.defaultHiddenFromLatestLibraryCb') != null) {
+                config.DefaultHiddenFromLatestLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.defaultHiddenFromLatestLibraryCb:checked'))
                     .map(function (cb) { return cb.getAttribute('data-id'); });
             }
 
