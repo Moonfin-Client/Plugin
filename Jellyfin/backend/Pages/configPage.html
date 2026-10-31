@@ -3391,8 +3391,98 @@
                                 <div class="fieldDescription">Play trailers in the system browser or YouTube app instead of inside Moonfin.</div>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescription">Hide Description</label>
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescription">Hide Description (Legacy)</label>
                                 <select id="DefaultHideDetailsMediaDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Media Description Visibility - Local</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionMovie">Hide Movie Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionMovie" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionShow">Hide Show Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionShow" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionSeason">Hide Season Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionSeason" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionEpisode">Hide Episode Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionEpisode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionBoxSet">Hide Collection Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionBoxSet" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionBook">Hide Book Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionBook" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionPerson">Hide Person Biography</label>
+                                <select id="DefaultHideDetailsMediaDescriptionPerson" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionMusic">Hide Music Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionMusic" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Media Description Visibility - Seerr</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionSeerrMovie">Hide Seerr Movie Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionSeerrMovie" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionSeerrShow">Hide Seerr Show Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionSeerrShow" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionSeerrCollection">Hide Seerr Collection Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionSeerrCollection" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
@@ -8009,6 +8099,17 @@
                     setSelectValue('#DefaultKeyboardStyle', defaults.keyboardStyle, 'Configured style');
                     setNullableBoolSelect('#DefaultUpdateNotificationsEnabled', defaults.updateNotificationsEnabled);
                     setNullableBoolSelect('#DefaultHideDetailsMediaDescription', defaults.hideDetailsMediaDescription);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionMovie', defaults.hideDetailsMediaDescriptionMovie);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionShow', defaults.hideDetailsMediaDescriptionShow);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionSeason', defaults.hideDetailsMediaDescriptionSeason);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionEpisode', defaults.hideDetailsMediaDescriptionEpisode);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionBoxSet', defaults.hideDetailsMediaDescriptionBoxSet);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionBook', defaults.hideDetailsMediaDescriptionBook);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionPerson', defaults.hideDetailsMediaDescriptionPerson);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionMusic', defaults.hideDetailsMediaDescriptionMusic);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionSeerrMovie', defaults.hideDetailsMediaDescriptionSeerrMovie);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionSeerrShow', defaults.hideDetailsMediaDescriptionSeerrShow);
+                    setNullableBoolSelect('#DefaultHideDetailsMediaDescriptionSeerrCollection', defaults.hideDetailsMediaDescriptionSeerrCollection);
                     setNullableBoolSelect('#DefaultDetailTrailersExternal', defaults.detailTrailersExternal);
                     setNullableBoolSelect('#DefaultDetailUseSeriesThumbnails', defaults.detailUseSeriesThumbnails);
                     setNullableBoolSelect('#DefaultPersonPageGroupItems', defaults.personPageGroupItems);
@@ -8968,6 +9069,17 @@
                         config.DefaultUserSettings.keyboardStyle = document.querySelector('#DefaultKeyboardStyle').value || null;
                         config.DefaultUserSettings.updateNotificationsEnabled = getNullableBoolSelect('#DefaultUpdateNotificationsEnabled');
                         config.DefaultUserSettings.hideDetailsMediaDescription = getNullableBoolSelect('#DefaultHideDetailsMediaDescription');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionMovie = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionMovie');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionShow = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionShow');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionSeason = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionSeason');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionEpisode = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionEpisode');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionBoxSet = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionBoxSet');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionBook = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionBook');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionPerson = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionPerson');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionMusic = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionMusic');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionSeerrMovie = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionSeerrMovie');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionSeerrShow = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionSeerrShow');
+                        config.DefaultUserSettings.hideDetailsMediaDescriptionSeerrCollection = getNullableBoolSelect('#DefaultHideDetailsMediaDescriptionSeerrCollection');
                         config.DefaultUserSettings.detailTrailersExternal = getNullableBoolSelect('#DefaultDetailTrailersExternal');
                         config.DefaultUserSettings.detailUseSeriesThumbnails = getNullableBoolSelect('#DefaultDetailUseSeriesThumbnails');
                         config.DefaultUserSettings.personPageGroupItems = getNullableBoolSelect('#DefaultPersonPageGroupItems');
