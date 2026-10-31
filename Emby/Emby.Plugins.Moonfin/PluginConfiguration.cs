@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using Emby.Plugins.Moonfin.Models;
 using MediaBrowser.Model.Plugins;
+using Moonfin.PosterBadges;
 
 namespace Emby.Plugins.Moonfin
 {
@@ -173,6 +174,12 @@ namespace Emby.Plugins.Moonfin
 
         /// <summary>Off by default for the same reason as manga canon.</summary>
         public bool AnimeMarkerShowAnimeCanon { get; set; }
+
+        /// <summary>
+        /// Labels Moonfin clients draw on posters, each shown when its conditions hold for the
+        /// item's file. Empty by default, so no poster gets a badge until the admin adds a rule.
+        /// </summary>
+        public List<PosterBadgeRule> PosterBadgeRules { get; set; } = new List<PosterBadgeRule>();
 
         /// <summary>Optional default server URL shown in the Moonfin web Add Server dialog.</summary>
         public string? WebDefaultServerUrl { get; set; }

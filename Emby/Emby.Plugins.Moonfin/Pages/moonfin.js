@@ -2767,6 +2767,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#AnimeMarkerMaxAgeDays').value = config.AnimeMarkerMaxAgeDays || 30;
             view.querySelector('#AnimeMarkerVerboseLogging').checked = config.AnimeMarkerVerboseLogging === true;
             loadLibraryPicker(view, '#AnimeMarkerLibraryPicker', 'animeMarkerLibraryCb', config.AnimeMarkerLibraryIds || []);
+            setPosterBadgeRules(view, config.PosterBadgeRules);
             view.querySelector('#FcmServiceAccountJson').value = config.FcmServiceAccountJson || '';
             view.querySelector('#FcmServiceAccountPath').value = config.FcmServiceAccountPath || '';
             view.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
@@ -3159,6 +3160,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 config.AnimeMarkerLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.animeMarkerLibraryCb:checked'))
                     .map(function (cb) { return cb.getAttribute('data-id'); });
             }
+            config.PosterBadgeRules = getPosterBadgeRules();
             config.FcmServiceAccountJson = view.querySelector('#FcmServiceAccountJson').value || null;
             config.FcmServiceAccountPath = view.querySelector('#FcmServiceAccountPath').value || null;
             config.PushRelayUrl = (view.querySelector('#PushRelayUrl').value || '').trim()
@@ -3977,6 +3979,190 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         var titleInput = view.querySelector('#MessageTitle');
         if (titleInput) titleInput.focus();
+    }
+
+    // Fields are the server's track properties by name, so another one only needs adding here.
+    var POSTER_BADGE_FIELDS = [
+        ['Path', 'File path'],
+        ['Audio.Language', 'Audio track: language'],
+        ['Audio.Title', 'Audio track: title'],
+        ['Audio.Codec', 'Audio track: codec'],
+        ['Audio.Profile', 'Audio track: profile'],
+        ['Audio.Channels', 'Audio track: channels'],
+        ['Video.Height', 'Video: height'],
+        ['Video.Width', 'Video: width'],
+        ['Video.Codec', 'Video: codec'],
+        ['Video.VideoRange', 'Video: HDR type'],
+        ['Subtitle.Language', 'Subtitle: language'],
+        ['Subtitle.Title', 'Subtitle: title']
+    ];
+
+    var POSTER_BADGE_OPERATORS = [['matches', 'matches'], ['notMatches', 'does not match'], ['atLeast', 'is at least']];
+
+    var POSTER_BADGE_DEFAULT_COLOR = '#2563eb';
+
+    var posterBadgeRules = [];
+
+    function newPosterBadgeCondition() {
+        return { Field: 'Audio.Title', Operator: 'matches', Value: '' };
+    }
+
+    // The stored rules can come back in either casing, depending on the server's serializer.
+    function posterBadgeValue(source, key) {
+        return source[key] !== undefined ? source[key] : source[key.charAt(0).toLowerCase() + key.slice(1)];
+    }
+
+    function setPosterBadgeRules(view, rules) {
+        posterBadgeRules = (rules || []).map(function(rule) {
+            var color = posterBadgeValue(rule, 'Color') || '';
+            return {
+                Label: posterBadgeValue(rule, 'Label') || '',
+                // The colour picker only takes #rrggbb.
+                Color: /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : POSTER_BADGE_DEFAULT_COLOR,
+                Enabled: posterBadgeValue(rule, 'Enabled') !== false,
+                Conditions: (posterBadgeValue(rule, 'Conditions') || []).map(function(condition) {
+                    return {
+                        Field: posterBadgeValue(condition, 'Field') || 'Path',
+                        Operator: posterBadgeValue(condition, 'Operator') || 'matches',
+                        Value: posterBadgeValue(condition, 'Value') || ''
+                    };
+                })
+            };
+        });
+        renderPosterBadgeRules(view);
+    }
+
+    function getPosterBadgeRules() {
+        return posterBadgeRules.map(function(rule) {
+            return {
+                Label: rule.Label.trim(),
+                Color: rule.Color,
+                Enabled: rule.Enabled,
+                Conditions: rule.Conditions.map(function(condition) {
+                    return { Field: condition.Field, Operator: condition.Operator, Value: condition.Value.trim() };
+                })
+            };
+        });
+    }
+
+    // Flutter's own cut-off for dark or light text over a colour, so the preview reads like the apps.
+    function posterBadgeTextColor(hex) {
+        var value = parseInt(String(hex || '').slice(1), 16) || 0;
+        var channel = function(c) {
+            c /= 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        };
+        var luminance = 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
+        return Math.pow(luminance + 0.05, 2) > 0.15 ? '#000000' : '#ffffff';
+    }
+
+    function posterBadgeOptions(options, selected) {
+        return options.map(function(option) {
+            return '<option value="' + esc(option[0]) + '"' + (option[0] === selected ? ' selected' : '') + '>' + esc(option[1]) + '</option>';
+        }).join('');
+    }
+
+    function renderPosterBadgeRules(view) {
+        var container = view.querySelector('#PosterBadgeRulesList');
+        if (!container) {
+            return;
+        }
+
+        if (posterBadgeRules.length === 0) {
+            container.innerHTML = '<div class="homeLayoutEmpty">No rules yet, so no poster gets a badge.</div>';
+            return;
+        }
+
+        container.innerHTML = posterBadgeRules.map(function(rule, ruleIndex) {
+            var conditions = rule.Conditions.map(function(condition, conditionIndex) {
+                return '<div class="posterBadgeCondition" data-condition="' + conditionIndex + '">'
+                    + '<select class="homeCustomListInput" data-key="Field" aria-label="Field">' + posterBadgeOptions(POSTER_BADGE_FIELDS, condition.Field) + '</select>'
+                    + '<select class="homeCustomListInput" data-key="Operator" aria-label="Test">' + posterBadgeOptions(POSTER_BADGE_OPERATORS, condition.Operator) + '</select>'
+                    + '<input type="text" class="homeCustomListInput" data-key="Value" aria-label="Value" placeholder="VFQ|Qu[ée]bec" value="' + esc(condition.Value) + '" />'
+                    + '<button type="button" class="homeLayoutIconButton" data-action="removeCondition" title="Remove condition" aria-label="Remove condition">&#x2715;</button>'
+                    + '</div>';
+            }).join('');
+
+            return '<div class="posterBadgeRule" data-rule="' + ruleIndex + '">'
+                + '<div class="posterBadgeRuleHead">'
+                + '<span class="posterBadgePill" style="background:' + esc(rule.Color) + ';color:' + posterBadgeTextColor(rule.Color) + ';">' + esc(rule.Label.trim()) + '</span>'
+                + '<input type="text" class="homeCustomListInput" data-key="Label" maxlength="16" aria-label="Label" placeholder="Label, such as VFQ" value="' + esc(rule.Label) + '" />'
+                + '<input type="color" class="posterBadgeColor" data-key="Color" aria-label="Colour" value="' + esc(rule.Color) + '" />'
+                + '<label class="homeCustomListCheckbox"><input type="checkbox" data-key="Enabled"' + (rule.Enabled ? ' checked' : '') + ' />On</label>'
+                + '<span>'
+                + '<button type="button" class="homeLayoutIconButton" data-action="moveUp" title="Move up" aria-label="Move up"' + (ruleIndex === 0 ? ' disabled' : '') + '>&#9650;</button> '
+                + '<button type="button" class="homeLayoutIconButton" data-action="moveDown" title="Move down" aria-label="Move down"' + (ruleIndex === posterBadgeRules.length - 1 ? ' disabled' : '') + '>&#9660;</button> '
+                + '<button type="button" class="homeLayoutIconButton" data-action="removeRule" title="Delete rule" aria-label="Delete rule">&#x2715;</button>'
+                + '</span>'
+                + '</div>'
+                + conditions
+                + '<button type="button" class="moonfinLinkButton" data-action="addCondition">+ Add condition</button>'
+                + '</div>';
+        }).join('');
+    }
+
+    function updatePosterBadgeField(target) {
+        var key = target.getAttribute('data-key');
+        var ruleElement = target.closest('[data-rule]');
+        if (!key || !ruleElement) {
+            return;
+        }
+
+        var rule = posterBadgeRules[Number(ruleElement.getAttribute('data-rule'))];
+        var conditionElement = target.closest('[data-condition]');
+        var owner = conditionElement ? rule.Conditions[Number(conditionElement.getAttribute('data-condition'))] : rule;
+        owner[key] = target.type === 'checkbox' ? target.checked : target.value;
+
+        if (key === 'Label' || key === 'Color') {
+            var pill = ruleElement.querySelector('.posterBadgePill');
+            pill.textContent = rule.Label.trim();
+            pill.style.background = rule.Color;
+            pill.style.color = posterBadgeTextColor(rule.Color);
+        }
+    }
+
+    function bindPosterBadgeEditor(view) {
+        var container = view.querySelector('#PosterBadgeRulesList');
+        var addButton = view.querySelector('#PosterBadgeAddRuleBtn');
+        if (!container || !addButton || container.dataset.bound) {
+            return;
+        }
+
+        container.dataset.bound = 'true';
+
+        addButton.addEventListener('click', function() {
+            posterBadgeRules.push({ Label: '', Color: POSTER_BADGE_DEFAULT_COLOR, Enabled: true, Conditions: [newPosterBadgeCondition()] });
+            renderPosterBadgeRules(view);
+        });
+
+        // Edits update the rule in place rather than redrawing, so the field keeps its focus.
+        container.addEventListener('input', function(e) { updatePosterBadgeField(e.target); });
+        container.addEventListener('change', function(e) { updatePosterBadgeField(e.target); });
+
+        container.addEventListener('click', function(e) {
+            var button = e.target.closest('[data-action]');
+            if (!button) {
+                return;
+            }
+
+            var ruleIndex = Number(button.closest('[data-rule]').getAttribute('data-rule'));
+            var rule = posterBadgeRules[ruleIndex];
+            var action = button.getAttribute('data-action');
+
+            if (action === 'removeRule') {
+                posterBadgeRules.splice(ruleIndex, 1);
+            } else if (action === 'moveUp' || action === 'moveDown') {
+                var other = action === 'moveUp' ? ruleIndex - 1 : ruleIndex + 1;
+                posterBadgeRules[ruleIndex] = posterBadgeRules[other];
+                posterBadgeRules[other] = rule;
+            } else if (action === 'addCondition') {
+                rule.Conditions.push(newPosterBadgeCondition());
+            } else if (action === 'removeCondition') {
+                rule.Conditions.splice(Number(button.closest('[data-condition]').getAttribute('data-condition')), 1);
+            }
+
+            renderPosterBadgeRules(view);
+        });
     }
 
     function renderMessagesList(view, items) {
@@ -5107,6 +5293,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         initializeAdminTabs(view);
         initializeDefaultsSubtabs(view);
+        bindPosterBadgeEditor(view);
 
         var form = view.querySelector('#MoonfinConfigForm');
         if (form) {
