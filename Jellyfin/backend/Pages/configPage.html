@@ -3062,6 +3062,14 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarHideDownloaded">Radarr: Hide Movies Already on the Server</label>
+                                <select id="DefaultRadarrCalendarHideDownloaded" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarShowDate">Sonarr: Show Air Date</label>
                                 <select id="DefaultSonarrCalendarShowDate" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -3072,6 +3080,14 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarShowEpisodeInfo">Sonarr: Show Episode Info</label>
                                 <select id="DefaultSonarrCalendarShowEpisodeInfo" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarHideDownloaded">Sonarr: Hide Episodes Already on the Server</label>
+                                <select id="DefaultSonarrCalendarHideDownloaded" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
@@ -4560,8 +4576,8 @@
             var FIELD_DEPENDENCIES = [
                 { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
-                { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
-                { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
+                { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
+                { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
                 { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
                 { parent: 'AnimeMarkersEnabled', fields: ['AnimeMarkerRecapLookup', 'AnimeMarkerShowFiller', 'AnimeMarkerMaxAgeDays'] },
@@ -8069,6 +8085,8 @@
                     setNullableBoolSelect('#DefaultRadarrCalendarShowDate', defaults.radarrCalendarShowDate);
                     setNullableBoolSelect('#DefaultSonarrCalendarShowDate', defaults.sonarrCalendarShowDate);
                     setNullableBoolSelect('#DefaultSonarrCalendarShowEpisodeInfo', defaults.sonarrCalendarShowEpisodeInfo);
+                    setNullableBoolSelect('#DefaultRadarrCalendarHideDownloaded', defaults.radarrCalendarHideDownloaded);
+                    setNullableBoolSelect('#DefaultSonarrCalendarHideDownloaded', defaults.sonarrCalendarHideDownloaded);
                     setSelectValue('#DefaultPersonalRatingStyle', defaults.personalRatingStyle, 'Configured style');
                     setSelectValue('#DefaultPersonPageSortOption', defaults.personPageSortOption, 'Configured sort');
                     setSelectValue('#DefaultShuffleContentType', defaults.shuffleContentType, 'Configured content');
@@ -9026,6 +9044,8 @@
                         config.DefaultUserSettings.radarrCalendarShowDate = getNullableBoolSelect('#DefaultRadarrCalendarShowDate');
                         config.DefaultUserSettings.sonarrCalendarShowDate = getNullableBoolSelect('#DefaultSonarrCalendarShowDate');
                         config.DefaultUserSettings.sonarrCalendarShowEpisodeInfo = getNullableBoolSelect('#DefaultSonarrCalendarShowEpisodeInfo');
+                        config.DefaultUserSettings.radarrCalendarHideDownloaded = getNullableBoolSelect('#DefaultRadarrCalendarHideDownloaded');
+                        config.DefaultUserSettings.sonarrCalendarHideDownloaded = getNullableBoolSelect('#DefaultSonarrCalendarHideDownloaded');
                         config.DefaultUserSettings.personalRatingStyle = document.querySelector('#DefaultPersonalRatingStyle').value || null;
                         config.DefaultUserSettings.personPageSortOption = document.querySelector('#DefaultPersonPageSortOption').value || null;
                         config.DefaultUserSettings.shuffleContentType = document.querySelector('#DefaultShuffleContentType').value || null;

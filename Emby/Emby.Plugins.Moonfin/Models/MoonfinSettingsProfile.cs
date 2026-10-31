@@ -302,9 +302,11 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("radarrCalendarShowDigital")] public bool? RadarrCalendarShowDigital { get; set; }
         [JsonPropertyName("radarrCalendarShowPhysical")] public bool? RadarrCalendarShowPhysical { get; set; }
         [JsonPropertyName("radarrCalendarShowDate")] public bool? RadarrCalendarShowDate { get; set; }
+        [JsonPropertyName("radarrCalendarHideDownloaded")] public bool? RadarrCalendarHideDownloaded { get; set; }
         [JsonPropertyName("enableSonarrCalendar")] public bool? EnableSonarrCalendar { get; set; }
         [JsonPropertyName("sonarrCalendarShowEpisodeInfo")] public bool? SonarrCalendarShowEpisodeInfo { get; set; }
         [JsonPropertyName("sonarrCalendarShowDate")] public bool? SonarrCalendarShowDate { get; set; }
+        [JsonPropertyName("sonarrCalendarHideDownloaded")] public bool? SonarrCalendarHideDownloaded { get; set; }
         [JsonPropertyName("libraryPosterSize")] public string? LibraryPosterSize { get; set; }
         [JsonPropertyName("playlistPosterSize")] public string? PlaylistPosterSize { get; set; }
         [JsonPropertyName("audioSortOption")] public string? AudioSortOption { get; set; }
