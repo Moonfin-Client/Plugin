@@ -33,7 +33,7 @@ public class ServerTimeController : ControllerBase
         var utc = now.ToUniversalTime();
         var local = TimeZoneInfo.ConvertTime(utc, zone);
 
-        return new ServerTimeResponse
+        var time = new ServerTimeResponse
         {
             UtcTime = utc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
             LocalTime = local.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture),
@@ -41,6 +41,66 @@ public class ServerTimeController : ControllerBase
             TimeZoneId = zone.Id,
             IsDaylightSavingTime = zone.IsDaylightSavingTime(utc),
         };
+
+        var change = NextOffsetChange(utc, zone);
+        if (change is { } next)
+        {
+            time.NextOffsetChangeUtc = next.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+            time.NextUtcOffsetSeconds = (int)zone.GetUtcOffset(next).TotalSeconds;
+        }
+
+        return time;
+    }
+
+    // Far enough to find the next change in any zone that has them, which come at most a year apart
+    private const int LookAheadDays = 400;
+
+    /// <summary>
+    /// The first instant after <paramref name="utc"/> at which the zone's offset differs from its
+    /// offset now, to the second, or null when it doesn't change within the look-ahead. Found by
+    /// stepping a day at a time and then halving the day, so it relies only on GetUtcOffset and
+    /// not on how the zone's adjustment rules are written.
+    /// </summary>
+    internal static DateTimeOffset? NextOffsetChange(DateTimeOffset utc, TimeZoneInfo zone)
+    {
+        var start = utc.ToUniversalTime();
+        var offset = zone.GetUtcOffset(start);
+        var before = start;
+        DateTimeOffset? after = null;
+
+        for (var day = 1; day <= LookAheadDays; day++)
+        {
+            var probe = start.AddDays(day);
+            if (zone.GetUtcOffset(probe) != offset)
+            {
+                after = probe;
+                break;
+            }
+
+            before = probe;
+        }
+
+        if (after is not { } high)
+        {
+            return null;
+        }
+
+        // The offset is the old one at before and the new one at high; close in to the second
+        var low = before;
+        while ((high - low).TotalSeconds > 1)
+        {
+            var middle = low.AddTicks((high - low).Ticks / 2);
+            if (zone.GetUtcOffset(middle) == offset)
+            {
+                low = middle;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        return new DateTimeOffset(high.UtcTicks - (high.UtcTicks % TimeSpan.TicksPerSecond), TimeSpan.Zero);
     }
 }
 
@@ -64,4 +124,16 @@ public class ServerTimeResponse
 
     [JsonPropertyName("isDaylightSavingTime")]
     public bool IsDaylightSavingTime { get; set; }
+
+    /// <summary>
+    /// When the server's offset next changes, as ISO 8601 UTC with a trailing Z, or null when it
+    /// doesn't within about a year. A client turning a future time on the server's wall clock into
+    /// an instant uses <see cref="NextUtcOffsetSeconds"/> from here on.
+    /// </summary>
+    [JsonPropertyName("nextOffsetChangeUtc")]
+    public string? NextOffsetChangeUtc { get; set; }
+
+    /// <summary>The server's offset from UTC after that change, in seconds, east positive, or null with it.</summary>
+    [JsonPropertyName("nextUtcOffsetSeconds")]
+    public int? NextUtcOffsetSeconds { get; set; }
 }

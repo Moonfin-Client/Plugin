@@ -59,9 +59,85 @@ public sealed class ServerTimeTests
     {
         var json = JsonSerializer.Serialize(ServerTimeController.Describe(DateTimeOffset.UtcNow, TimeZoneInfo.Utc));
 
-        foreach (var key in new[] { "utcTime", "localTime", "utcOffsetSeconds", "timeZoneId", "isDaylightSavingTime" })
+        foreach (var key in new[] { "utcTime", "localTime", "utcOffsetSeconds", "timeZoneId", "isDaylightSavingTime", "nextOffsetChangeUtc", "nextUtcOffsetSeconds" })
         {
             Assert.Contains($"\"{key}\"", json);
         }
+    }
+
+    private static TimeZoneInfo? Named(string id)
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(id);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    [Fact]
+    public void Describe_AFixedOffsetHasNoNextChange()
+    {
+        var time = ServerTimeController.Describe(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero), Zone("05:30"));
+
+        Assert.Null(time.NextOffsetChangeUtc);
+        Assert.Null(time.NextUtcOffsetSeconds);
+    }
+
+    // The night US daylight saving ended in 2026: 02:00 EDT became 01:00 EST at 06:00 UTC
+    [Fact]
+    public void Describe_NamesTheNextChangeToTheSecond()
+    {
+        if (Named("America/New_York") is not { } zone)
+        {
+            return;
+        }
+
+        var time = ServerTimeController.Describe(new DateTimeOffset(2026, 11, 1, 5, 16, 4, TimeSpan.Zero), zone);
+
+        Assert.Equal(-14400, time.UtcOffsetSeconds);
+        Assert.Equal("2026-11-01T06:00:00Z", time.NextOffsetChangeUtc);
+        Assert.Equal(-18000, time.NextUtcOffsetSeconds);
+    }
+
+    [Fact]
+    public void Describe_LooksMonthsAhead()
+    {
+        if (Named("America/New_York") is not { } zone)
+        {
+            return;
+        }
+
+        var summer = ServerTimeController.Describe(new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero), zone);
+        var winter = ServerTimeController.Describe(new DateTimeOffset(2026, 12, 15, 12, 0, 0, TimeSpan.Zero), zone);
+
+        Assert.Equal("2026-11-01T06:00:00Z", summer.NextOffsetChangeUtc);
+        Assert.Equal(-18000, summer.NextUtcOffsetSeconds);
+        Assert.Equal("2027-03-14T07:00:00Z", winter.NextOffsetChangeUtc);
+        Assert.Equal(-14400, winter.NextUtcOffsetSeconds);
+    }
+
+    // Southern hemisphere: Sydney leaves daylight saving in April, 03:00 AEDT back to 02:00 AEST
+    [Fact]
+    public void Describe_FollowsASouthernZone()
+    {
+        if (Named("Australia/Sydney") is not { } zone)
+        {
+            return;
+        }
+
+        var time = ServerTimeController.Describe(new DateTimeOffset(2027, 1, 10, 0, 0, 0, TimeSpan.Zero), zone);
+
+        Assert.Equal(39600, time.UtcOffsetSeconds);
+        Assert.Equal("2027-04-03T16:00:00Z", time.NextOffsetChangeUtc);
+        Assert.Equal(36000, time.NextUtcOffsetSeconds);
+    }
+
+    [Fact]
+    public void NextOffsetChange_IsNullWithoutChanges()
+    {
+        Assert.Null(ServerTimeController.NextOffsetChange(DateTimeOffset.UtcNow, TimeZoneInfo.Utc));
     }
 }
