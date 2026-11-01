@@ -133,12 +133,14 @@ public class ServerTimeResponse
     /// When the server's offset next changes, as ISO 8601 UTC with a trailing Z. Left out of the
     /// response when it doesn't change within about a year, as it is by plugins that predate it, so
     /// clients treat a missing key as no change. A client turning a future time on the server's
-    /// wall clock into an instant uses <see cref="NextUtcOffsetSeconds"/> from here on.
+    /// wall clock into an instant uses <see cref="NextUtcOffsetSeconds"/> from this change until
+    /// the one after it, which this response doesn't describe: for times past that, ask again
+    /// after this change.
     /// </summary>
     [JsonPropertyName("nextOffsetChangeUtc")]
     public string? NextOffsetChangeUtc { get; set; }
 
-    /// <summary>The server's offset from UTC after that change, in seconds, east positive. Left out along with it.</summary>
+    /// <summary>The server's offset from UTC after that change, in seconds, east positive, until the change after it. Left out along with it.</summary>
     [JsonPropertyName("nextUtcOffsetSeconds")]
     public int? NextUtcOffsetSeconds { get; set; }
 }
