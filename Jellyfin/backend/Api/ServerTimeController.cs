@@ -130,14 +130,15 @@ public class ServerTimeResponse
     public bool IsDaylightSavingTime { get; set; }
 
     /// <summary>
-    /// When the server's offset next changes, as ISO 8601 UTC with a trailing Z, or null when it
-    /// doesn't within about a year. A client turning a future time on the server's wall clock into
-    /// an instant uses <see cref="NextUtcOffsetSeconds"/> from here on.
+    /// When the server's offset next changes, as ISO 8601 UTC with a trailing Z. Left out of the
+    /// response when it doesn't change within about a year, as it is by plugins that predate it, so
+    /// clients treat a missing key as no change. A client turning a future time on the server's
+    /// wall clock into an instant uses <see cref="NextUtcOffsetSeconds"/> from here on.
     /// </summary>
     [JsonPropertyName("nextOffsetChangeUtc")]
     public string? NextOffsetChangeUtc { get; set; }
 
-    /// <summary>The server's offset from UTC after that change, in seconds, east positive, or null with it.</summary>
+    /// <summary>The server's offset from UTC after that change, in seconds, east positive. Left out along with it.</summary>
     [JsonPropertyName("nextUtcOffsetSeconds")]
     public int? NextUtcOffsetSeconds { get; set; }
 }
