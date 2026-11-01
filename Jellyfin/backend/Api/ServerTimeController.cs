@@ -18,8 +18,12 @@ namespace Moonfin.Server.Api;
 public class ServerTimeController : ControllerBase
 {
     /// <summary>The server's current time, its UTC offset and its time zone.</summary>
+    /// <remarks>
+    /// Skips the access-schedule check: a user outside their hours is exactly the one whose client
+    /// needs the server clock to say when the account next opens.
+    /// </remarks>
     [HttpGet("Time")]
-    [Authorize]
+    [Authorize(Policy = "IgnoreParentalControl")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<ServerTimeResponse> GetTime()

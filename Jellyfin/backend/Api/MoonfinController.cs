@@ -116,8 +116,12 @@ public class MoonfinController : ControllerBase
     /// Ping endpoint to check if Moonfin plugin is installed.
     /// </summary>
     /// <returns>Plugin status information including admin defaults.</returns>
+    /// <remarks>
+    /// Skips the access-schedule check so a client outside its user's hours can still find out
+    /// the plugin is there and whether it can ask for the server time.
+    /// </remarks>
     [HttpGet("Ping")]
-    [Authorize]
+    [Authorize(Policy = "IgnoreParentalControl")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<MoonfinPingResponse> Ping()
     {

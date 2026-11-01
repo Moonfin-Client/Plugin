@@ -1,4 +1,6 @@
+using System.Reflection;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Moonfin.Server.Api;
 using Xunit;
 
@@ -139,5 +141,18 @@ public sealed class ServerTimeTests
     public void NextOffsetChange_IsNullWithoutChanges()
     {
         Assert.Null(ServerTimeController.NextOffsetChange(DateTimeOffset.UtcNow, TimeZoneInfo.Utc));
+    }
+
+    // Jellyfin's default policy refuses a user outside their access schedule, which is when the
+    // client most needs the server clock and the Ping flag that says it can ask for it.
+    [Theory]
+    [InlineData(typeof(ServerTimeController), nameof(ServerTimeController.GetTime))]
+    [InlineData(typeof(MoonfinController), nameof(MoonfinController.Ping))]
+    public void Endpoint_IsReachableOutsideTheAccessSchedule(Type controller, string action)
+    {
+        var authorize = controller.GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>();
+
+        Assert.NotNull(authorize);
+        Assert.Equal("IgnoreParentalControl", authorize!.Policy);
     }
 }
