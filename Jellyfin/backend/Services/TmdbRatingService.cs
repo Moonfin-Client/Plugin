@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using MediaBrowser.Controller.Configuration;
 using Microsoft.Extensions.Logging;
+using Moonfin.Seerr;
 
 namespace Moonfin.Server.Services;
 
@@ -101,6 +102,46 @@ public class TmdbRatingService
     /// </summary>
     public Task FlushAsync() =>
         Interlocked.Exchange(ref _unsaved, 0) == 0 ? Task.CompletedTask : _cache.FlushAsync();
+
+    /// <summary>
+    /// The verdict a limited user's Seerr titles are held to, or null for a user without a limit.
+    /// Without a TMDB key nothing can be judged, so nothing passes, the same rule the custom rows
+    /// follow. A lookup that fails is a title that can't be placed, and goes the same way.
+    /// </summary>
+    public async Task<SeerrParentalFilter.Verdict?> SeerrVerdictForAsync(
+        ServerRatingLimitService limits,
+        MoonfinSettingsService settings,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var limit = limits.ForUser(userId);
+        if (!limit.HasLimit)
+        {
+            return null;
+        }
+
+        var apiKey = await TmdbApiKeys.ResolveAsync(settings, userId).ConfigureAwait(false);
+        return async (mediaType, tmdbId) =>
+        {
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                return false;
+            }
+
+            try
+            {
+                return limit.IsAllowed(await GetCertificationAsync(mediaType, tmdbId, apiKey!, cancellationToken).ConfigureAwait(false));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        };
+    }
 
     public async Task<string?> GetCertificationAsync(string mediaType, long tmdbId, string apiKey, CancellationToken cancellationToken)
     {

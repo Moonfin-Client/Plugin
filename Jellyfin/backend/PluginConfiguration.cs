@@ -95,6 +95,19 @@ public class PluginConfiguration : BasePluginConfiguration
     public int StudioLogosMaxAgeDays { get; set; } = 30;
 
     /// <summary>
+    /// Plain sentence search for clients ("90s movie about a kid pulled into a board game"). Off
+    /// by default: turning it on downloads a small model and indexes the library and, with the
+    /// TMDB key above, the most popular TMDB titles for Seerr.
+    /// </summary>
+    public bool SmartSearchEnabled { get; set; }
+
+    /// <summary>
+    /// "english" for the small model, or "multilingual" for one that understands searches in about
+    /// 100 languages at the cost of a bigger download and a slower first build.
+    /// </summary>
+    public string SmartSearchModel { get; set; } = "english";
+
+    /// <summary>
     /// Watches Live TV recordings and tags the ones that come out incomplete. The other Live TV
     /// recording settings only act while this is on.
     /// </summary>

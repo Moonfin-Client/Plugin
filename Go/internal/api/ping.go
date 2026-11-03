@@ -24,6 +24,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"messagesSupported":        true,
 		"recommendationsSupported": false,
 		"clientLogSupported":       false,
+		"smartSearchEnabled":       false, // Smart search only runs in the Jellyfin and Emby plugins.
 		"defaultSettings":          pingDefaults(cfg, r.URL.Query().Get("profile")),
 	})
 }

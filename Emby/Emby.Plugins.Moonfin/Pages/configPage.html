@@ -1555,6 +1555,10 @@
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6h-7.59l3.29-3.29L16 2l-4 4-4-4-.71.71L10.59 6H3c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.11-.9-2-2-2zm0 14H3V8h18v12zM9 10v8l7-4z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Live TV</span><span class="moonfinNavSub">Recordings</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="smartSearch">
+                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9H2V7h5v2zm0 3H2v2h5v-2zm13.59 7l-3.83-3.83c-.8.52-1.74.83-2.76.83-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5c0 1.02-.31 1.96-.83 2.75L22 17.59 20.59 19zM17 11c0-1.65-1.35-3-3-3s-3 1.35-3 3 1.35 3 3 3 3-1.35 3-3zM2 19h10v-2H2v2z"/></svg>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Smart Search</span><span class="moonfinNavSub">Search with plain sentences</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="defaults">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
@@ -4633,6 +4637,36 @@
                         </div>
                     </div>
 
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="smartSearch">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Smart Search</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="SmartSearchEnabled" is="emby-checkbox" />
+                                <span>Enable smart search</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Lets Moonfin apps search with plain sentences like "90s movie about a kid pulled into a board game" or "electronic music duo from the 90s".
+                                Searches run on this server's CPU with a small model, so what people type never leaves the server. Turning it on downloads the model
+                                and indexes movies, shows, people, music and books with the Moonfin Smart Search Index task, which starts on its own with the first search.
+                                With the TMDB key on the Integrations tab it also indexes the most popular TMDB titles, so titles you don't have show up as Seerr suggestions.
+                                The first run takes 15 to 30 minutes on a desktop CPU and an hour or more on a Raspberry Pi, using half the cores. After that only changes are indexed. See the Smart Search page in the wiki.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="SmartSearchModel">Search model</label>
+                            <select is="emby-select" id="SmartSearchModel">
+                                <option value="english">English</option>
+                                <option value="multilingual">Multilingual</option>
+                            </select>
+                            <div class="fieldDescription">
+                                English is the small, fast model: a 91 MB download that keeps about 120 MB in memory. Multilingual understands searches in about 100 languages
+                                and still does well in English, but it's a 488 MB download, keeps about 175 MB in memory, and its first build takes about two and a half times as long.
+                                After that, nightly updates only index what changed and searches are about as fast with either model. Changing this rebuilds the index, which starts with the next search.
+                            </div>
+                        </div>
+                    </div>
                     </section>
                     <section class="moonfinTabPanel" data-tab="messages">
                     <div class="verticalSection">

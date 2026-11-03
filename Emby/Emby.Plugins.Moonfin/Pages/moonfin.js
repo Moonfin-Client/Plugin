@@ -564,6 +564,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
         { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
         { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
+        { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
         { parent: 'AnimeMarkersEnabled', fields: ['AnimeMarkerRecapLookup', 'AnimeMarkerShowFiller', 'AnimeMarkerMaxAgeDays'] },
         { parent: 'AnimeAudioMarkersEnabled', fields: ['AnimeAudioMarkersMovies', 'AnimeAudioSeparateDualAudio', 'AnimeAudioLabelStyle'] },
         { parent: ['AnimeMarkersEnabled', 'AnimeAudioMarkersEnabled'], fields: ['AnimeMarkerLibraryPicker', 'AnimeAudioTrustSelectedLibraries', 'AnimeMarkerPlacement', 'AnimeMarkerDiagBtn', 'AnimeMarkerPreviewName', 'AnimeMarkerVerboseLogging', 'AnimeMarkerLogBtn'] },
@@ -2774,6 +2775,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#WebEnableWebRtcScan').checked = config.WebEnableWebRtcScan !== false;
             view.querySelector('#EnableClientLogUpload').checked = config.EnableClientLogUpload !== false;
             view.querySelector('#LiveTvDetectIncompleteRecordings').checked = config.LiveTvDetectIncompleteRecordings !== false;
+            view.querySelector('#SmartSearchEnabled').checked = config.SmartSearchEnabled === true;
+            view.querySelector('#SmartSearchModel').value = config.SmartSearchModel || 'english';
             view.querySelector('#LiveTvAutoRecordCompleteShowing').checked = config.LiveTvAutoRecordCompleteShowing === true;
             view.querySelector('#LiveTvIncompleteThresholdPercent').value = config.LiveTvIncompleteThresholdPercent || 90;
             view.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
@@ -3161,6 +3164,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.WebEnableWebRtcScan = view.querySelector('#WebEnableWebRtcScan').checked;
             config.EnableClientLogUpload = view.querySelector('#EnableClientLogUpload').checked;
             config.LiveTvDetectIncompleteRecordings = view.querySelector('#LiveTvDetectIncompleteRecordings').checked;
+            config.SmartSearchEnabled = view.querySelector('#SmartSearchEnabled').checked;
+            config.SmartSearchModel = view.querySelector('#SmartSearchModel').value || 'english';
             config.LiveTvAutoRecordCompleteShowing = view.querySelector('#LiveTvAutoRecordCompleteShowing').checked;
             config.LiveTvIncompleteThresholdPercent = Math.min(100, Math.max(50, parseInt(view.querySelector('#LiveTvIncompleteThresholdPercent').value, 10) || 90));
             config.LiveTvDeleteIncompleteCopies = view.querySelector('#LiveTvDeleteIncompleteCopies').checked;

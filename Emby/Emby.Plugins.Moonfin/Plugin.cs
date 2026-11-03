@@ -63,6 +63,7 @@ namespace Emby.Plugins.Moonfin
         public AnimeRecapFetchService? AnimeRecapFetch { get; private set; }
         public AnimeMarkerResolver? AnimeMarkerResolver { get; private set; }
         public PinService? Pins { get; private set; }
+        public SmartSearchIndexService? SmartSearch { get; private set; }
 
         public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogManager logManager)
             : base(applicationPaths, xmlSerializer)
@@ -214,6 +215,7 @@ namespace Emby.Plugins.Moonfin
             SeerrWebhook = new SeerrWebhookService(SeerrService, SettingsService, NotificationStore, PushDelivery, notifyLogger);
             SeerrProvisioning = new SeerrProvisioningService(SeerrService, appHost, notifyLogger);
             Pins = new PinService(new FilePinStore(Path.Combine(DataFolderPath, "pins"), logManager.GetLogger("MoonfinPins")));
+            SmartSearch = new SmartSearchIndexService(appHost.Resolve<ILibraryManager>(), DataFolderPath, logManager.GetLogger("MoonfinSmartSearch"));
 
             // Ensure a webhook secret exists before provisioning tries to publish it.
             if (Configuration.EnsureWebhookSecret())

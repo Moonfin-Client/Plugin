@@ -144,6 +144,7 @@ public class MoonfinController : ControllerBase
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             ExtendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
+            SmartSearchEnabled = config?.SmartSearchEnabled ?? false,
             DefaultSettings = _settingsService.AdminDefaultsFor(profile)
         });
     }
@@ -1693,6 +1694,12 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("pinSupported")]
     public bool? PinSupported { get; set; }
+
+    /// <summary>
+    /// True when the admin turned on smart search, so clients can call /Moonfin/SmartSearch.
+    /// </summary>
+    [JsonPropertyName("smartSearchEnabled")]
+    public bool? SmartSearchEnabled { get; set; }
 
     /// <summary>
     /// True when this plugin has the incomplete Live TV recordings endpoints and the admin left

@@ -207,7 +207,7 @@ namespace Emby.Plugins.Moonfin.Api
         /// Without a TMDB key nothing can be judged, so nothing passes: the same rule the custom
         /// rows follow. A lookup that fails is a title that cannot be placed, and goes the same way.
         /// </summary>
-        private static async Task<SeerrParentalFilter.Verdict?> VerdictFor(User user)
+        internal static async Task<SeerrParentalFilter.Verdict?> VerdictFor(User user)
         {
             var limit = Plugin.Instance?.RatingLimits?.ForUser(user) ?? RatingLimit.None;
             if (!limit.HasLimit) return null;

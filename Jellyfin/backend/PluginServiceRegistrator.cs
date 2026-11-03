@@ -93,6 +93,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<GameThumbService>();
         serviceCollection.AddSingleton<LaunchBoxService>();
         serviceCollection.AddSingleton<UserBookmarksService>();
+        serviceCollection.AddSingleton<SmartSearchService>();
         serviceCollection.AddHttpClient();
 
         // The custom row scrapes need a browser user agent to get a normal page back, and a
