@@ -297,6 +297,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("tmdbTrendingTvDailyEnabled")] public bool? TmdbTrendingTvDailyEnabled { get; set; }
         [JsonPropertyName("tmdbTrendingTvWeeklyEnabled")] public bool? TmdbTrendingTvWeeklyEnabled { get; set; }
         [JsonPropertyName("tmdbTrendingAllWeeklyEnabled")] public bool? TmdbTrendingAllWeeklyEnabled { get; set; }
+        [JsonPropertyName("mdblistWatchingNowEnabled")] public bool? MdblistWatchingNowEnabled { get; set; }
         [JsonPropertyName("mergeRadarrSonarrCalendars")] public bool? MergeRadarrSonarrCalendars { get; set; }
         [JsonPropertyName("enableRadarrCalendar")] public bool? EnableRadarrCalendar { get; set; }
         [JsonPropertyName("radarrCalendarShowCinema")] public bool? RadarrCalendarShowCinema { get; set; }

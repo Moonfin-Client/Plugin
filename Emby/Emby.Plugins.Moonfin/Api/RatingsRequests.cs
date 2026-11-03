@@ -14,6 +14,13 @@ namespace Emby.Plugins.Moonfin.Api
         public string? Profile { get; set; }
     }
 
+    [Route("/Moonfin/MdbList/WatchingNow", "GET")]
+    [Authenticated]
+    public class GetMdbListWatchingNowRequest : IReturn<object>
+    {
+        public string? Profile { get; set; }
+    }
+
     [Route("/Moonfin/MdbList/KeyInfo", "GET")]
     [Authenticated(Roles = "Admin")]
     public class GetMdbListKeyInfoRequest : IReturn<object>

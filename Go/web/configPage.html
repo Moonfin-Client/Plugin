@@ -5730,6 +5730,7 @@
                 { type: 'tmdb_trending_tv_daily', label: 'TMDB Trending TV (Daily)' },
                 { type: 'tmdb_trending_tv_weekly', label: 'TMDB Trending TV (Weekly)' },
                 { type: 'tmdb_trending_all_weekly', label: 'TMDB Trending All (Weekly)' },
+                { type: 'mdblist_watching_now', label: 'Watching on MDBList' },
                 { type: 'radarr_calendar', label: 'Radarr Upcoming' },
                 { type: 'sonarr_calendar', label: 'Sonarr Upcoming' }
             ];
@@ -6318,7 +6319,7 @@
                 + '<option value="banner">Banner</option>';
 
             // Continue Watching has its own setting above, and Library Buttons has no artwork to pick.
-            var HOME_ROW_IMAGE_TYPE_SKIPPED = { resume: true, librarybuttons: true };
+            var HOME_ROW_IMAGE_TYPE_SKIPPED = { resume: true, librarybuttons: true, mdblist_watching_now: true };
 
             function loadHomeRowImageTypes(raw) {
                 var stored = {};
@@ -6502,7 +6503,8 @@
                 tmdb_trending_movie_weekly: true,
                 tmdb_trending_tv_daily: true,
                 tmdb_trending_tv_weekly: true,
-                tmdb_trending_all_weekly: true
+                tmdb_trending_all_weekly: true,
+                mdblist_watching_now: true
             };
 
             function isSeerrHomeSectionType(type) {

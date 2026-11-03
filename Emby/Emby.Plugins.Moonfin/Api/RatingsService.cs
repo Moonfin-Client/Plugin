@@ -37,6 +37,10 @@ namespace Emby.Plugins.Moonfin.Api
         private static readonly TimeSpan FlushDebounce = TimeSpan.FromSeconds(30);
         private static DateTimeOffset _lastFlushRequest = DateTimeOffset.MinValue;
 
+        private static (DateTimeOffset CachedAt, object Data)? _watchingNowCache;
+        private static readonly TimeSpan WatchingNowCacheTtl = TimeSpan.FromMinutes(4.5);
+        private static readonly SemaphoreSlim _watchingNowLock = new SemaphoreSlim(1, 1);
+
         private static readonly string[] DefaultRatingSources = { "imdb", "tmdb", "tomatoes", "metacritic" };
 
         private static readonly JsonSerializerOptions JsonOpts = MdbListApiHelper.JsonOptions;
@@ -159,6 +163,74 @@ namespace Emby.Plugins.Moonfin.Api
         /// Admin-only, used by the "Test key" button on the plugin config page.
         /// Pass Key to test an unsaved key, otherwise the server-wide key is used.
         /// </summary>
+        public async Task<object?> Get(GetMdbListWatchingNowRequest request)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (_watchingNowCache.HasValue && now - _watchingNowCache.Value.CachedAt < WatchingNowCacheTtl)
+            {
+                return Json(_watchingNowCache.Value.Data);
+            }
+
+            await _watchingNowLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                now = DateTimeOffset.UtcNow;
+                if (_watchingNowCache.HasValue && now - _watchingNowCache.Value.CachedAt < WatchingNowCacheTtl)
+                {
+                    return Json(_watchingNowCache.Value.Data);
+                }
+
+                var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
+                string? apiKey = null;
+                if (userId != null)
+                {
+                    var resolved = await Settings.GetResolvedProfileAsync(userId.Value, NormalizeProfileName(request.Profile)).ConfigureAwait(false);
+                    apiKey = resolved?.MdblistApiKey;
+                }
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    apiKey = Plugin.Instance?.Configuration?.MdblistApiKey;
+                }
+
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    return Json(new { error = "No MDBList API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key." });
+                }
+
+                var url = "https://api.mdblist.com/watching/now?apikey=" + Uri.EscapeDataString(apiKey);
+                using (var client = MoonfinHttp.CreateClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(15);
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
+
+                    using (var response = await client.GetAsync(url).ConfigureAwait(false))
+                    {
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            var errBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            return Json(new { error = "MDBList API returned " + (int)response.StatusCode + ": " + errBody });
+                        }
+
+                        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        using (var doc = JsonDocument.Parse(json))
+                        {
+                            var cloned = doc.RootElement.Clone();
+                            _watchingNowCache = (DateTimeOffset.UtcNow, cloned);
+                            return Json(cloned);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return Json(new { error = ex.Message });
+            }
+            finally
+            {
+                _watchingNowLock.Release();
+            }
+        }
+
         public async Task<object?> Get(GetMdbListKeyInfoRequest request)
         {
             var apiKey = string.IsNullOrWhiteSpace(request.Key)
