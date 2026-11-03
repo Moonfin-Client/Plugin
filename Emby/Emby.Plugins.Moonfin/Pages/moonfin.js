@@ -558,7 +558,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
     // has to come after the rule that hides its parent.
     var FIELD_DEPENDENCIES = [
-        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
+        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
         { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
         { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
         { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
@@ -571,6 +571,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultNavbarPosition', off: ['top', 'left'], fields: ['DefaultBottomNavbarStyle', 'DefaultBottomNavbarTab1'] },
         { parent: 'DefaultNavbarPosition', off: ['bottom'], fields: ['DefaultNavbarAlwaysExpanded'] },
         { parent: 'DefaultShowShuffleButton', fields: ['DefaultShuffleContentType'] },
+        { parent: 'DefaultShowSeerrAvailabilityBadges', fields: ['DefaultSeerrBadgeStyle'] },
         { parent: 'DefaultSeasonalSurprise', off: ['none'], fields: ['DefaultSeasonalDensity', 'DefaultSeasonalFollower'] },
         { parent: 'DefaultLoadingAnimationImage', off: ['none'], fields: ['DefaultLoadingAnimationPosition', 'DefaultLoadingAnimationSize', 'DefaultLoadingAnimationSpeed', 'DefaultShowLoadingAnimationText'] },
         { parent: 'DefaultScreensaverComponent', off: ['none'], fields: ['DefaultScreensaverMovement', 'DefaultScreensaverSize'] },
@@ -2992,6 +2993,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
         setNullableBoolSelect(view, '#DefaultSeerrShowMissingCollectionItems', defaults.seerrShowMissingCollectionItems);
         setNullableBoolSelect(view, '#DefaultShowSeerrAvailabilityBadges', defaults.showSeerrAvailabilityBadges);
+        setSelectValue(view, '#DefaultSeerrBadgeStyle', defaults.seerrBadgeStyle, 'Configured style');
         fillExternalRowSortSelect(view, '#DefaultSeerrRowsSortBy');
         setSelectValue(view, '#DefaultSeerrRowsSortBy', defaults.seerrRowsSortBy, 'Configured sort');
         setSelectValue(view, '#DefaultSeerrRowsSortOrder', defaults.seerrRowsSortOrder, 'Configured direction');
@@ -3408,6 +3410,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.seerrBlockNsfw = getNullableBoolSelect(view, '#DefaultSeerrBlockNsfw');
         d.seerrShowMissingCollectionItems = getNullableBoolSelect(view, '#DefaultSeerrShowMissingCollectionItems');
         d.showSeerrAvailabilityBadges = getNullableBoolSelect(view, '#DefaultShowSeerrAvailabilityBadges');
+        d.seerrBadgeStyle = view.querySelector('#DefaultSeerrBadgeStyle').value || null;
         // seerrRows carries more than the ordering, so merge rather than replace.
         var seerrRows = Object.assign({}, d.seerrRows || {});
         seerrRows.rowOrder = getSeerrDiscoveryRowOrder(view);

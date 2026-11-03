@@ -4397,6 +4397,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrBadgeStyle">Seerr Badge Style</label>
+                                <select id="DefaultSeerrBadgeStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="badge">Badge</option>
+                                    <option value="banner">Banner</option>
+                                </select>
+                                <div class="fieldDescription">Badge puts Seerr's dot in a corner. Banner runs the status across the top of the poster.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrRowsSortBy">Seerr Rows Sorting</label>
                                 <select id="DefaultSeerrRowsSortBy" is="emby-select"></select>
                             </div>
@@ -5281,7 +5290,7 @@
             // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
             // has to come after the rule that hides its parent.
             var FIELD_DEPENDENCIES = [
-                { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
+                { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
                 { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
@@ -5294,6 +5303,7 @@
                 { parent: 'DefaultNavbarPosition', off: ['top', 'left'], fields: ['DefaultBottomNavbarStyle', 'DefaultBottomNavbarTab1'] },
                 { parent: 'DefaultNavbarPosition', off: ['bottom'], fields: ['DefaultNavbarAlwaysExpanded'] },
                 { parent: 'DefaultShowShuffleButton', fields: ['DefaultShuffleContentType'] },
+                { parent: 'DefaultShowSeerrAvailabilityBadges', fields: ['DefaultSeerrBadgeStyle'] },
                 { parent: 'DefaultSeasonalSurprise', off: ['none'], fields: ['DefaultSeasonalDensity', 'DefaultSeasonalFollower'] },
                 { parent: 'DefaultLoadingAnimationImage', off: ['none'], fields: ['DefaultLoadingAnimationPosition', 'DefaultLoadingAnimationSize', 'DefaultLoadingAnimationSpeed', 'DefaultShowLoadingAnimationText'] },
                 { parent: 'DefaultScreensaverComponent', off: ['none'], fields: ['DefaultScreensaverMovement', 'DefaultScreensaverSize'] },
@@ -9069,6 +9079,7 @@
                     setNullableBoolSelect('#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
                     setNullableBoolSelect('#DefaultSeerrShowMissingCollectionItems', defaults.seerrShowMissingCollectionItems);
                     setNullableBoolSelect('#DefaultShowSeerrAvailabilityBadges', defaults.showSeerrAvailabilityBadges);
+                    setSelectValue('#DefaultSeerrBadgeStyle', defaults.seerrBadgeStyle, 'Configured style');
                     fillExternalRowSortSelect('#DefaultSeerrRowsSortBy');
                     setSelectValue('#DefaultSeerrRowsSortBy', defaults.seerrRowsSortBy, 'Configured sort');
                     setSelectValue('#DefaultSeerrRowsSortOrder', defaults.seerrRowsSortOrder, 'Configured direction');
@@ -10059,6 +10070,7 @@
                     ds.seerrBlockNsfw = getNullableBoolSelect('#DefaultSeerrBlockNsfw');
                     ds.seerrShowMissingCollectionItems = getNullableBoolSelect('#DefaultSeerrShowMissingCollectionItems');
                     ds.showSeerrAvailabilityBadges = getNullableBoolSelect('#DefaultShowSeerrAvailabilityBadges');
+                    ds.seerrBadgeStyle = document.querySelector('#DefaultSeerrBadgeStyle').value || null;
                     // seerrRows carries more than the ordering, so merge rather than replace.
                     var seerrRows = Object.assign({}, ds.seerrRows || {});
                     seerrRows.rowOrder = getSeerrDiscoveryRowOrder();
