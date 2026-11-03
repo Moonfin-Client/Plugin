@@ -38,7 +38,19 @@ namespace Emby.Plugins.Moonfin.Api
         private static readonly TimeSpan FlushDebounce = TimeSpan.FromSeconds(30);
         private static DateTimeOffset _lastFlushRequest = DateTimeOffset.MinValue;
 
-        private static (DateTimeOffset CachedAt, object Data)? _watchingNowCache;
+        private sealed class WatchingNowCacheEntry
+        {
+            public DateTimeOffset CachedAt { get; }
+            public object Data { get; }
+
+            public WatchingNowCacheEntry(DateTimeOffset cachedAt, object data)
+            {
+                CachedAt = cachedAt;
+                Data = data;
+            }
+        }
+
+        private static WatchingNowCacheEntry? _watchingNowCache;
         private static readonly TimeSpan WatchingNowCacheTtl = TimeSpan.FromMinutes(4.5);
         private static readonly SemaphoreSlim _watchingNowLock = new SemaphoreSlim(1, 1);
 
@@ -166,56 +178,88 @@ namespace Emby.Plugins.Moonfin.Api
         /// </summary>
         public async Task<object?> Get(GetMdbListWatchingNowRequest request)
         {
-            var now = DateTimeOffset.UtcNow;
-            if (_watchingNowCache.HasValue && now - _watchingNowCache.Value.CachedAt < WatchingNowCacheTtl)
+            var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
+            string? apiKey = null;
+            if (userId != null)
             {
-                return Json(_watchingNowCache.Value.Data);
+                var resolved = await Settings.GetResolvedProfileAsync(userId.Value, NormalizeProfileName(request.Profile)).ConfigureAwait(false);
+                apiKey = resolved?.MdblistApiKey;
+            }
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                apiKey = Plugin.Instance?.Configuration?.MdblistApiKey;
+            }
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                return Json(new { error = "No MDBList API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key." });
+            }
+
+            var snapshot = Volatile.Read(ref _watchingNowCache);
+            if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CachedAt < WatchingNowCacheTtl)
+            {
+                return Json(snapshot.Data);
+            }
+
+            var negKey = "watching_now:" + apiKey.Trim();
+            if (_negativeCache.TryGetValue(negKey, out var negative))
+            {
+                if (DateTimeOffset.UtcNow - negative.At < NegativeCacheTtl)
+                {
+                    return Json(new { error = negative.Error });
+                }
+                _negativeCache.TryRemove(negKey, out _);
             }
 
             await _watchingNowLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                now = DateTimeOffset.UtcNow;
-                if (_watchingNowCache.HasValue && now - _watchingNowCache.Value.CachedAt < WatchingNowCacheTtl)
+                snapshot = Volatile.Read(ref _watchingNowCache);
+                if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CachedAt < WatchingNowCacheTtl)
                 {
-                    return Json(_watchingNowCache.Value.Data);
+                    return Json(snapshot.Data);
                 }
 
-                var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
-                string? apiKey = null;
-                if (userId != null)
+                if (_negativeCache.TryGetValue(negKey, out negative))
                 {
-                    var resolved = await Settings.GetResolvedProfileAsync(userId.Value, NormalizeProfileName(request.Profile)).ConfigureAwait(false);
-                    apiKey = resolved?.MdblistApiKey;
-                }
-                if (string.IsNullOrWhiteSpace(apiKey))
-                {
-                    apiKey = Plugin.Instance?.Configuration?.MdblistApiKey;
-                }
-
-                if (string.IsNullOrWhiteSpace(apiKey))
-                {
-                    return Json(new { error = "No MDBList API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key." });
+                    if (DateTimeOffset.UtcNow - negative.At < NegativeCacheTtl)
+                    {
+                        return Json(new { error = negative.Error });
+                    }
+                    _negativeCache.TryRemove(negKey, out _);
                 }
 
                 var url = "https://api.mdblist.com/watching/now?apikey=" + Uri.EscapeDataString(apiKey);
                 using (var client = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(15), "Moonfin/1.0"))
                 {
-
                     using (var response = await client.GetAsync(url).ConfigureAwait(false))
                     {
                         if (!response.IsSuccessStatusCode)
                         {
                             var errBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                            return Json(new { error = "MDBList API returned " + (int)response.StatusCode + ": " + errBody });
+                            var statusCode = (int)response.StatusCode;
+                            var err = "MDBList API returned " + statusCode + ": " + errBody;
+                            if (statusCode == 429 || statusCode >= 500)
+                            {
+                                _negativeCache[negKey] = (DateTimeOffset.UtcNow, err);
+                            }
+                            return Json(new { error = err });
                         }
 
                         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                         using (var doc = JsonDocument.Parse(json))
                         {
-                            var cloned = doc.RootElement.Clone();
-                            _watchingNowCache = (DateTimeOffset.UtcNow, cloned);
-                            return Json(cloned);
+                            if (doc.RootElement.TryGetProperty("items", out var items) && items.GetArrayLength() > 0)
+                            {
+                                var cloned = doc.RootElement.Clone();
+                                Volatile.Write(ref _watchingNowCache, new WatchingNowCacheEntry(DateTimeOffset.UtcNow, cloned));
+                                return Json(cloned);
+                            }
+                            if (doc.RootElement.TryGetProperty("error", out _))
+                            {
+                                return Json(doc.RootElement.Clone());
+                            }
+                            return Json(new { error = "Failed to deserialize MDBList response." });
                         }
                     }
                 }
