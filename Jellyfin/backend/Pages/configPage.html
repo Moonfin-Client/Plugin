@@ -3061,6 +3061,9 @@
                                     <option value="">Not set (user decides)</option>
                                     <option value="library">Library (Random)</option>
                                     <option value="collection">Collections / Playlists</option>
+                                    <option value="recentlyAdded">Recently Added</option>
+                                    <option value="recentlyReleased">Recently Released</option>
+                                    <option value="newReleases">New Seasons &amp; Episodes</option>
                                 </select>
                             </div>
                             <div id="DefaultLibraryPickerSection" style="display:none;">
@@ -3076,6 +3079,27 @@
                                     <label class="inputLabel inputLabelUnfocused">Default Collections / Playlists</label>
                                     <div id="DefaultCollectionPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
                                 </div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseBanner">New Release Banner</label>
+                                <select id="DefaultMediaBarNewReleaseBanner" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Flag series in the media bar with a new season or new episodes that aired recently.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseDays">New Release Window</label>
+                                <select id="DefaultMediaBarNewReleaseDays" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="7">7 days</option>
+                                    <option value="14">14 days</option>
+                                    <option value="30">30 days</option>
+                                    <option value="60">60 days</option>
+                                    <option value="90">90 days</option>
+                                </select>
+                                <div class="fieldDescription">How long after an episode airs it still counts as new, for the banner and the New Seasons &amp; Episodes source.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Excluded Genres</label>
@@ -5308,7 +5332,7 @@
                 { parent: 'DefaultDisplaySinceYouWatchedRows', fields: ['DefaultSinceYouWatchedSource', 'DefaultSinceYouWatchedSourceType', 'DefaultSinceYouWatchedSourceItem', 'DefaultSinceYouWatched1Enabled', 'DefaultSinceYouWatched2Enabled', 'DefaultSinceYouWatched3Enabled', 'DefaultSinceYouWatched4Enabled', 'DefaultSinceYouWatched5Enabled'] },
                 { parent: 'DefaultSinceYouWatchedSource', off: ['online'], fields: ['DefaultSinceYouWatchedIncludeWatched'] },
                 { parent: 'DefaultDisplayStudiosRows', fields: ['DefaultStudiosRowSortBy', 'DefaultStudiosRowSortOrder'] },
-                { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
+                { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
                 { parent: 'DefaultMediaBarMode', off: ['off', 'bookshelf', 'aya'], fields: ['DefaultMediaBarRatingsHeading', 'DefaultMediaBarMdblistEnabled', 'DefaultMediaBarMdblistRatingSourcesList', 'DefaultMediaBarMdblistShowRatingNames', 'DefaultMediaBarMdblistShowRatingBadges'] },
                 { parent: 'DefaultMediaBarAutoAdvance', fields: ['DefaultMediaBarIntervalMs'] },
                 { parent: 'DefaultMediaBarTrailerPreview', fields: ['DefaultMediaBarTrailerAudio', 'DefaultTrailerVolume', 'DefaultMediaBarTrailerCaptions'] },
@@ -8953,6 +8977,8 @@
                     setNullableBoolSelect('#DefaultMediaBarAutoAdvance', defaults.mediaBarAutoAdvance);
                     setSelectValue('#DefaultMediaBarIntervalMs', defaults.mediaBarIntervalMs, 'Configured interval');
                     setNullableBoolSelect('#DefaultMediaBarRowPeek', defaults.mediaBarRowPeek);
+                    setNullableBoolSelect('#DefaultMediaBarNewReleaseBanner', defaults.mediaBarNewReleaseBanner);
+                    setSelectValue('#DefaultMediaBarNewReleaseDays', defaults.mediaBarNewReleaseDays, 'Configured window');
                     setNullableBoolSelect('#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
                     setNullableBoolSelect('#DefaultMediaBarTrailerAudio', defaults.mediaBarTrailerAudio);
                     bindNullableRangeInput('#DefaultTrailerVolume', '%');
@@ -9178,7 +9204,7 @@
                     var libraryPickerSection = document.querySelector('#DefaultLibraryPickerSection');
                     function togglePickerVisibility() {
                         var isCollection = sourceSelect.value === 'collection';
-                        var isLibrary = sourceSelect.value === 'library';
+                        var isLibrary = ['library', 'recentlyAdded', 'recentlyReleased', 'newReleases'].indexOf(sourceSelect.value) !== -1;
                         collectionPickerSection.style.display = isCollection ? '' : 'none';
                         libraryPickerSection.style.display = isLibrary ? '' : 'none';
                         if (isCollection) {
@@ -9922,6 +9948,8 @@
                     ds.mediaBarAutoAdvance = getNullableBoolSelect('#DefaultMediaBarAutoAdvance');
                     ds.mediaBarIntervalMs = getNullableIntInput('#DefaultMediaBarIntervalMs');
                     ds.mediaBarRowPeek = getNullableBoolSelect('#DefaultMediaBarRowPeek');
+                    ds.mediaBarNewReleaseBanner = getNullableBoolSelect('#DefaultMediaBarNewReleaseBanner');
+                    ds.mediaBarNewReleaseDays = getNullableIntInput('#DefaultMediaBarNewReleaseDays');
                     ds.mediaBarTrailerPreview = getNullableBoolSelect('#DefaultMediaBarTrailerPreview');
                     ds.mediaBarTrailerAudio = getNullableBoolSelect('#DefaultMediaBarTrailerAudio');
                     ds.trailerVolume = getNullableRangeInput('#DefaultTrailerVolume');
