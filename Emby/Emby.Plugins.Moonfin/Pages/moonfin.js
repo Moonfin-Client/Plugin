@@ -3101,16 +3101,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var sourceSelect = view.querySelector('#DefaultMediaBarSourceType');
         var collectionPickerSection = view.querySelector('#DefaultCollectionPickerSection');
         var libraryPickerSection = view.querySelector('#DefaultLibraryPickerSection');
-        function togglePickerVisibility() {
+        function togglePickerVisibility(keepPicks) {
             var isCollection = sourceSelect.value === 'collection';
             var isLibrary = ['library', 'recentlyAdded', 'recentlyReleased', 'newReleases'].indexOf(sourceSelect.value) !== -1;
+            // Switching between two library sources keeps the unsaved picks.
+            var keepLibraryPicks = keepPicks === true && libraryPickerSection.style.display !== 'none';
             collectionPickerSection.style.display = isCollection ? '' : 'none';
             libraryPickerSection.style.display = isLibrary ? '' : 'none';
             if (isCollection) loadAdminCollectionPicker(view, defaults.mediaBarCollectionIds || []);
-            if (isLibrary) loadAdminLibraryPicker(view, defaults.mediaBarLibraryIds || []);
+            if (isLibrary && !keepLibraryPicks) loadAdminLibraryPicker(view, defaults.mediaBarLibraryIds || []);
         }
         // Assigned rather than added, so a refill doesn't stack one handler per profile.
-        sourceSelect.onchange = togglePickerVisibility;
+        sourceSelect.onchange = function () { togglePickerVisibility(true); };
         togglePickerVisibility();
         applyFieldDependencies(view);
         afterDefaultsPopulated(view, defaults);

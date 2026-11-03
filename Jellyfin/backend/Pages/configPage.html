@@ -9202,20 +9202,22 @@
                     var sourceSelect = document.querySelector('#DefaultMediaBarSourceType');
                     var collectionPickerSection = document.querySelector('#DefaultCollectionPickerSection');
                     var libraryPickerSection = document.querySelector('#DefaultLibraryPickerSection');
-                    function togglePickerVisibility() {
+                    function togglePickerVisibility(keepPicks) {
                         var isCollection = sourceSelect.value === 'collection';
                         var isLibrary = ['library', 'recentlyAdded', 'recentlyReleased', 'newReleases'].indexOf(sourceSelect.value) !== -1;
+                        // Switching between two library sources keeps the unsaved picks.
+                        var keepLibraryPicks = keepPicks === true && libraryPickerSection.style.display !== 'none';
                         collectionPickerSection.style.display = isCollection ? '' : 'none';
                         libraryPickerSection.style.display = isLibrary ? '' : 'none';
                         if (isCollection) {
                             loadAdminCollectionPicker(defaults.mediaBarCollectionIds || []);
                         }
-                        if (isLibrary) {
+                        if (isLibrary && !keepLibraryPicks) {
                             loadAdminLibraryPicker(defaults.mediaBarLibraryIds || []);
                         }
                     }
                     // Assigned rather than added, so a refill doesn't stack one handler per profile.
-                    sourceSelect.onchange = togglePickerVisibility;
+                    sourceSelect.onchange = function () { togglePickerVisibility(true); };
                     togglePickerVisibility();
                     applyFieldDependencies();
                     afterDefaultsPopulated(defaults);
