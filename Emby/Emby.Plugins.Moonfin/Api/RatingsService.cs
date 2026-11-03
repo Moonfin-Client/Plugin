@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Emby.Plugins.Moonfin.Models;
 using Emby.Plugins.Moonfin.Services;
@@ -198,10 +199,8 @@ namespace Emby.Plugins.Moonfin.Api
                 }
 
                 var url = "https://api.mdblist.com/watching/now?apikey=" + Uri.EscapeDataString(apiKey);
-                using (var client = MoonfinHttp.CreateClient())
+                using (var client = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(15), "Moonfin/1.0"))
                 {
-                    client.Timeout = TimeSpan.FromSeconds(15);
-                    client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
 
                     using (var response = await client.GetAsync(url).ConfigureAwait(false))
                     {
