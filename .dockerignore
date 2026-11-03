@@ -1,0 +1,7 @@
+# Only the Plex image is built from here, and it needs just these.
+*
+!Go/
+!shared/SmartSearch/
+Go/dist/
+Go/smartsearch/bin/
+Go/smartsearch/obj/

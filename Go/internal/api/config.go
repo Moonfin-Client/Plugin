@@ -16,6 +16,9 @@ type Config struct {
 	MdblistAPIKey      string
 	TmdbAPIKey         string
 	SeerrDisplayName   string
+	SmartSearchEnabled bool
+	// SmartSearchModel is "english" or "multilingual".
+	SmartSearchModel string
 	// Defaults is DefaultUserSettings, the admin's defaults for every profile.
 	Defaults M
 	// DeviceDefaults is DefaultDeviceSettings, the admin's defaults for the
@@ -94,6 +97,8 @@ func configFrom(c M) Config {
 	cfg.MdblistAPIKey = strings.TrimSpace(str(c["MdblistApiKey"]))
 	cfg.TmdbAPIKey = strings.TrimSpace(str(c["TmdbApiKey"]))
 	cfg.SeerrDisplayName = strings.TrimSpace(str(c["SeerrDisplayName"]))
+	cfg.SmartSearchEnabled, _ = c["SmartSearchEnabled"].(bool)
+	cfg.SmartSearchModel = str(c["SmartSearchModel"])
 	cfg.Defaults, _ = c["DefaultUserSettings"].(M)
 	cfg.DeviceDefaults, _ = c["DefaultDeviceSettings"].(M)
 	return cfg

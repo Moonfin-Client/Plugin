@@ -7,10 +7,10 @@ name: Moonbase Go
 on:
   push:
     branches: [master]
-    paths: ['Go/**', '.github/workflows/moonbase-go.yml']
+    paths: ['Go/**', 'shared/SmartSearch/**', '.github/workflows/moonbase-go.yml']
   pull_request:
     branches: [master]
-    paths: ['Go/**', '.github/workflows/moonbase-go.yml']
+    paths: ['Go/**', 'shared/SmartSearch/**', '.github/workflows/moonbase-go.yml']
 
 permissions:
   contents: read

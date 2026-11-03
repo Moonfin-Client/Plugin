@@ -216,16 +216,18 @@ public static class TmdbCatalog
         return null;
     }
 
+    // Read and written as JSON nodes rather than serialized types, so the trimmed helper the Go
+    // hosts run can't lose the properties.
     private static ConcurrentDictionary<string, TitleDetails> LoadDetails(string path)
     {
+        var cache = new ConcurrentDictionary<string, TitleDetails>(StringComparer.Ordinal);
         try
         {
-            if (File.Exists(path))
+            if (File.Exists(path) && JsonNode.Parse(File.ReadAllText(path)) is JsonObject saved)
             {
-                var loaded = JsonSerializer.Deserialize<Dictionary<string, TitleDetails>>(File.ReadAllText(path));
-                if (loaded != null)
+                foreach (var pair in saved)
                 {
-                    return new ConcurrentDictionary<string, TitleDetails>(loaded, StringComparer.Ordinal);
+                    cache[pair.Key] = new TitleDetails { Keywords = Strings(pair.Value?["Keywords"]), Cast = Strings(pair.Value?["Cast"]) };
                 }
             }
         }
@@ -233,17 +235,28 @@ public static class TmdbCatalog
         {
         }
 
-        return new ConcurrentDictionary<string, TitleDetails>(StringComparer.Ordinal);
+        return cache;
     }
 
     /// <summary>Only keeps titles still in the catalog, so the file doesn't grow forever.</summary>
     private static void SaveDetails(string path, IEnumerable<KeyValuePair<string, TitleDetails>> details)
     {
+        var saved = new JsonObject();
+        foreach (var pair in details)
+        {
+            saved[pair.Key] = new JsonObject { ["Keywords"] = JsonList(pair.Value.Keywords), ["Cast"] = JsonList(pair.Value.Cast) };
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(details.ToDictionary(p => p.Key, p => p.Value)));
+        File.WriteAllText(path, saved.ToJsonString());
     }
 
-    public sealed class TitleDetails
+    private static string[] Strings(JsonNode? node) =>
+        (node as JsonArray)?.Select(v => (string?)v).Where(v => !string.IsNullOrEmpty(v)).Select(v => v!).ToArray() ?? Array.Empty<string>();
+
+    private static JsonArray JsonList(string[] values) => new JsonArray(values.Select(v => (JsonNode?)v).ToArray());
+
+    private sealed class TitleDetails
     {
         public string[] Keywords { get; set; } = Array.Empty<string>();
 
