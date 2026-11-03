@@ -924,6 +924,603 @@
             display: none;
         }
 
+        #MoonfinConfigPage [hidden] {
+            display: none !important;
+        }
+
+        #MoonfinConfigPage .moonfinProfileSwitch {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 0 0 10px;
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn {
+            flex: 1 1 150px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 60px;
+            padding: 10px 14px;
+            border: 1px solid rgba(128, 128, 128, 0.22);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.04);
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn:hover {
+            background: rgba(128, 128, 128, 0.11);
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn.is-active {
+            border-color: #00a4dc;
+            background: rgba(0, 164, 220, 0.12);
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn svg {
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+            fill: currentColor;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn.is-active svg {
+            color: #37d3e6;
+        }
+
+        #MoonfinConfigPage .moonfinProfileText,
+        #MoonfinConfigPage .moonfinProfileChipText,
+        #MoonfinConfigPage .moonfinModeText,
+        #MoonfinConfigPage .moonfinPickedText {
+            display: flex;
+            flex: 1 1 auto;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        #MoonfinConfigPage .moonfinProfileLabel,
+        #MoonfinConfigPage .moonfinProfileChipLabel,
+        #MoonfinConfigPage .moonfinModeTitle,
+        #MoonfinConfigPage .moonfinPickedHeadline {
+            font-weight: 600;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinProfileSub,
+        #MoonfinConfigPage .moonfinProfileChipSub,
+        #MoonfinConfigPage .moonfinModeDesc,
+        #MoonfinConfigPage .moonfinPickedPreview {
+            font-size: 0.85em;
+            color: inherit;
+            opacity: 0.7;
+        }
+
+        #MoonfinConfigPage .moonfinProfileCount {
+            flex-shrink: 0;
+            padding: 2px 9px;
+            border-radius: 999px;
+            background: rgba(0, 164, 220, 0.2);
+            color: inherit;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+
+        #MoonfinConfigPage .moonfinProfileHint {
+            margin: 0 0 4px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        #MoonfinConfigPage .moonfinActionRow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 24px;
+            padding: 16px 0;
+            border-top: 1px solid rgba(128, 128, 128, 0.15);
+        }
+
+        #MoonfinConfigPage .moonfinActionLabel {
+            flex: 0 0 120px;
+            padding-top: 8px;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinActionBody {
+            display: flex;
+            flex: 1 1 360px;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        #MoonfinConfigPage .moonfinActionBody > select {
+            max-width: 360px;
+        }
+
+        #MoonfinConfigPage .moonfinSeg {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 4px;
+            border: 1px solid rgba(128, 128, 128, 0.18);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.12);
+        }
+
+        #MoonfinConfigPage .moonfinSegBtn {
+            padding: 8px 14px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinSegBtn.is-active {
+            background: rgba(0, 164, 220, 0.22);
+            box-shadow: inset 0 0 0 1px #00a4dc;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinUserChips,
+        #MoonfinConfigPage .moonfinProfileChips {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .moonfinUserChip {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            height: 36px;
+            padding: 0 2px 0 14px;
+            border: 1px solid rgba(0, 164, 220, 0.35);
+            border-radius: 999px;
+            background: rgba(0, 164, 220, 0.1);
+            font-size: 0.9em;
+        }
+
+        #MoonfinConfigPage .moonfinUserChip button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinUserChip svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        #MoonfinConfigPage .moonfinAddUser {
+            height: 36px;
+            padding: 0 10px;
+            border: 1px dashed rgba(128, 128, 128, 0.6);
+            border-radius: 999px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 0.9em;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 140px;
+            min-height: 52px;
+            padding: 8px 16px 8px 12px;
+            border: 1px solid rgba(128, 128, 128, 0.26);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.04);
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip.is-on {
+            border-color: #00a4dc;
+            background: rgba(0, 164, 220, 0.12);
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip[disabled] {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChipBox {
+            display: flex;
+            flex-shrink: 0;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            box-sizing: border-box;
+            border: 1.5px solid rgba(128, 128, 128, 0.6);
+            border-radius: 6px;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChipBox svg {
+            visibility: hidden;
+            width: 15px;
+            height: 15px;
+            fill: #fff;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip.is-on .moonfinProfileChipBox {
+            border-color: #00a4dc;
+            background: #0079a8;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip.is-on .moonfinProfileChipBox svg {
+            visibility: visible;
+        }
+
+        #MoonfinConfigPage .moonfinPickedBox {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 16px;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 720px;
+            padding: 10px 10px 10px 16px;
+            border: 1px solid rgba(0, 164, 220, 0.3);
+            border-radius: 12px;
+            background: rgba(0, 164, 220, 0.08);
+        }
+
+        #MoonfinConfigPage .moonfinPickedEdit,
+        #MoonfinConfigPage .moonfinPickerCancel,
+        #MoonfinConfigPage .moonfinPickerBulk {
+            min-height: 36px;
+            padding: 0 14px;
+            border: 1px solid rgba(128, 128, 128, 0.4);
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.13);
+            color: inherit;
+            font: inherit;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinModeCards {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: stretch;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard {
+            display: flex;
+            flex: 1 1 260px;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            border: 1px solid rgba(128, 128, 128, 0.22);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.04);
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard input {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            margin: 2px 0 0;
+            accent-color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard:has(input:checked) {
+            border-color: #00a4dc;
+            background: rgba(0, 164, 220, 0.1);
+        }
+
+        #MoonfinConfigPage .moonfinModeCard.is-danger .moonfinModeTitle {
+            color: #d97706;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard.is-danger input {
+            accent-color: #f59e0b;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard.is-danger:has(input:checked) {
+            border-color: rgba(245, 158, 11, 0.7);
+            background: rgba(245, 158, 11, 0.08);
+        }
+
+        #MoonfinConfigPage .moonfinModeCard.is-disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        #MoonfinConfigPage .moonfinModeOnlyAll {
+            margin-top: 4px;
+            font-size: 0.85em;
+        }
+
+        #MoonfinConfigPage .moonfinActionFoot {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(128, 128, 128, 0.15);
+        }
+
+        #MoonfinConfigPage .moonfinActionSummary {
+            flex: 1 1 320px;
+            margin: 0;
+        }
+
+        #MoonfinConfigPage .moonfinActionSummary.is-danger {
+            color: #d97706;
+        }
+
+        #MoonfinConfigPage .moonfinActionSummary.is-muted {
+            opacity: 0.65;
+        }
+
+        #MoonfinConfigPage .moonfinTabPanel .moonfinActionGo {
+            width: auto;
+            margin: 0;
+        }
+
+        #MoonfinConfigPage .moonfinTabPanel .moonfinActionGo.is-danger {
+            background: #b45309;
+        }
+
+        #MoonfinConfigPage .moonfinPickerBackdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.6);
+        }
+
+        #MoonfinConfigPage .moonfinPicker {
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 720px;
+            max-height: calc(100vh - 32px);
+            border: 1px solid rgba(128, 128, 128, 0.22);
+            border-radius: 16px;
+            background: #1c1c1e;
+            color: inherit;
+            overflow: hidden;
+        }
+
+        #MoonfinConfigPage .moonfinPickerHead {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 20px 16px 0 22px;
+        }
+
+        #MoonfinConfigPage .moonfinPickerHead > div {
+            flex: 1 1 auto;
+        }
+
+        #MoonfinConfigPage .moonfinPickerTitle {
+            margin: 0 0 4px;
+            font-size: 1.2em;
+        }
+
+        #MoonfinConfigPage .moonfinPickerSub,
+        #MoonfinConfigPage .moonfinPickerNote {
+            margin: 0;
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        #MoonfinConfigPage .moonfinPickerNote {
+            margin: 12px 22px 0;
+            padding: 10px 14px;
+            border: 1px solid rgba(0, 164, 220, 0.3);
+            border-radius: 10px;
+            background: rgba(0, 164, 220, 0.08);
+            opacity: 1;
+        }
+
+        #MoonfinConfigPage .moonfinPickerClose svg {
+            width: 22px;
+            height: 22px;
+            fill: currentColor;
+        }
+
+        #MoonfinConfigPage .moonfinPickerClose {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerSearch {
+            box-sizing: border-box;
+            margin: 12px 22px 0;
+            width: calc(100% - 44px);
+            height: 40px;
+            padding: 0 12px;
+            border: 1px solid rgba(128, 128, 128, 0.31);
+            border-radius: 10px;
+            background: rgba(128, 128, 128, 0.1);
+            color: inherit;
+            font: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinPickerTools {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px 8px;
+            margin: 8px 22px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        #MoonfinConfigPage .moonfinPickerCount {
+            margin-right: 6px;
+            font-weight: 600;
+        }
+
+        #MoonfinConfigPage .moonfinPickerTool {
+            min-height: 36px;
+            padding: 0 10px;
+            border: 0;
+            background: transparent;
+            color: #37d3e6;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerOnlyLabel {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerList {
+            flex: 1 1 auto;
+            min-height: 120px;
+            padding: 4px 14px 10px;
+            overflow-y: auto;
+        }
+
+        #MoonfinConfigPage .moonfinPickerGroup {
+            position: relative;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.13);
+        }
+
+        #MoonfinConfigPage .moonfinPickerGroup > summary {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 44px;
+            padding: 0 90px 0 8px;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerGroupName {
+            font-weight: 600;
+        }
+
+        #MoonfinConfigPage .moonfinPickerGroupCount {
+            font-size: 0.85em;
+            opacity: 0.7;
+        }
+
+        #MoonfinConfigPage .moonfinPickerBulk {
+            position: absolute;
+            top: 8px;
+            right: 6px;
+        }
+
+        #MoonfinConfigPage .moonfinPickerRow {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 44px;
+            padding: 4px 10px 4px 26px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerRow.is-picked {
+            background: rgba(0, 164, 220, 0.07);
+        }
+
+        #MoonfinConfigPage .moonfinPickerRow input {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            accent-color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .moonfinPickerLabel {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        #MoonfinConfigPage .moonfinPickerValue {
+            flex-shrink: 1;
+            max-width: 45%;
+            font-size: 0.85em;
+            text-align: right;
+            opacity: 0.75;
+        }
+
+        #MoonfinConfigPage .moonfinPickerEmpty {
+            margin: 40px 0;
+            text-align: center;
+            opacity: 0.6;
+        }
+
+        #MoonfinConfigPage .moonfinPickerFoot {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 12px 18px;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+            background: rgba(128, 128, 128, 0.08);
+        }
+
+        #MoonfinConfigPage .moonfinPickerUse {
+            width: auto;
+            min-height: 40px;
+            margin: 0;
+            padding: 0 20px;
+            border: 0;
+            border-radius: 8px;
+            background: #00a4dc;
+            color: #fff;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerUse[disabled] {
+            background: rgba(128, 128, 128, 0.22);
+            color: inherit;
+            cursor: not-allowed;
+        }
+
     </style>
         <div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
             <div class="content-primary">
@@ -1579,8 +2176,32 @@
 
                         <div style="background-color: rgba(0, 164, 220, 0.1); border: 1px solid rgba(0, 164, 220, 0.3); border-radius: 10px; padding: 0.8em 1.2em; margin-bottom: 1.2em; font-size: 0.9em;">
                             <strong>How it works:</strong> These are the lowest-priority fallback. Resolution order:
-                            User's device profile &rarr; User's global settings &rarr; <strong>These admin defaults</strong> &rarr; Built-in defaults.
+                            User's device profile &gt; User's global settings &gt; <strong>These admin defaults</strong>, the device's own before Global &gt; Built-in defaults.
                         </div>
+
+                        <div id="DefaultsProfileSwitch" class="moonfinProfileSwitch" role="group" aria-label="Which defaults to edit">
+                            <button type="button" class="moonfinProfileBtn is-active" data-profile="global" aria-pressed="true">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                                <span class="moonfinProfileText"><span class="moonfinProfileLabel">Global</span><span class="moonfinProfileSub">Every device</span></span>
+                                <span class="moonfinProfileCount"></span>
+                            </button>
+                            <button type="button" class="moonfinProfileBtn" data-profile="tv" aria-pressed="false">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3H3c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.11-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+                                <span class="moonfinProfileText"><span class="moonfinProfileLabel">TV</span><span class="moonfinProfileSub">TV apps</span></span>
+                                <span class="moonfinProfileCount"></span>
+                            </button>
+                            <button type="button" class="moonfinProfileBtn" data-profile="desktop" aria-pressed="false">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H3V4h18v12z"/></svg>
+                                <span class="moonfinProfileText"><span class="moonfinProfileLabel">Desktop</span><span class="moonfinProfileSub">Computers</span></span>
+                                <span class="moonfinProfileCount"></span>
+                            </button>
+                            <button type="button" class="moonfinProfileBtn" data-profile="mobile" aria-pressed="false">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+                                <span class="moonfinProfileText"><span class="moonfinProfileLabel">Mobile</span><span class="moonfinProfileSub">Phones and tablets</span></span>
+                                <span class="moonfinProfileCount"></span>
+                            </button>
+                        </div>
+                        <div id="DefaultsProfileHint" class="moonfinProfileHint"></div>
 
                         <div style="background-color: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 10px; padding: 0.8em 1.2em; margin-bottom: 1.2em; font-size: 0.9em;">
                             <strong>Important:</strong> New nullable settings use <strong>Not set / Yes / No</strong> style inputs.
@@ -3450,6 +4071,10 @@
                                     <option value="spotlight">Spotlight</option>
                                     <option value="nouveau">Nouveau</option>
                                     <option value="minimalist">Minimalist</option>
+                                    <option value="stage">Stage</option>
+                                    <option value="premiere">Premiere</option>
+                                    <option value="quickLook">Quick Look</option>
+                                    <option value="frost">Frost</option>
                                 </select>
                                 <div class="fieldDescription">Default layout for item detail pages. Keep Not set to let users choose.</div>
                             </div>
@@ -4128,20 +4753,133 @@
 
                     </section>
                     <section class="moonfinTabPanel" data-tab="actions">
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">Push Defaults To Existing Users</h3>
+                    <div class="verticalSection" id="ApplyDefaultsSection">
+                        <h3 class="sectionTitle">Apply Defaults To Users</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            Apply the configured defaults above to every existing user now.
-                            Only fields that are set (not "Not set") will be merged into each user's global and device settings.
-                            Save your default settings first if you made changes.
+                            New users and users who never synced pick up the defaults on their own once you Save. Use this
+                            to also write them over settings users already have. Applying saves your changes first.
                         </div>
-                        <div style="background-color: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 10px; padding: 0.8em 1.2em; margin-bottom: 1em; font-size: 0.9em;">
-                            <strong>Warning:</strong> This action updates existing user profiles immediately for all set fields.
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Users</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinSeg" role="group" aria-label="Which users">
+                                    <button type="button" class="moonfinSegBtn is-active" data-seg="applyUsers" data-value="all" aria-pressed="true">All users</button>
+                                    <button type="button" class="moonfinSegBtn" data-seg="applyUsers" data-value="pick" aria-pressed="false">Pick users</button>
+                                </div>
+                                <div id="ApplyUserChips" class="moonfinUserChips" hidden></div>
+                            </div>
                         </div>
-                        <button is="emby-button" type="button" id="PushDefaultsBtn" class="raised">
-                            <span>Apply Defaults To All Users Now</span>
-                        </button>
-                        <div id="PushDefaultsResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Profiles</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinProfileChips" role="group" aria-label="Which default profiles to apply"></div>
+                                <div class="fieldDescription">
+                                    Each profile's defaults go into the same profile on every user. Global defaults also land in
+                                    any device profile a user already has, except where that device has its own default.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Settings</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinSeg" role="group" aria-label="Which settings">
+                                    <button type="button" class="moonfinSegBtn is-active" data-seg="applySettings" data-value="all" aria-pressed="true">Every set default</button>
+                                    <button type="button" class="moonfinSegBtn" data-seg="applySettings" data-value="pick" aria-pressed="false">Pick settings</button>
+                                </div>
+                                <div class="moonfinPickedBox" hidden>
+                                    <span class="moonfinPickedText"><span class="moonfinPickedHeadline"></span><span class="moonfinPickedPreview"></span></span>
+                                    <button type="button" class="moonfinPickedEdit" data-choose="apply">Choose settings</button>
+                                </div>
+                                <div class="fieldDescription moonfinAllNote">Only settings that have a default get pushed. Anything left on Not set is skipped.</div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">How</div>
+                            <div class="moonfinActionBody moonfinModeCards">
+                                <label class="moonfinModeCard">
+                                    <input type="radio" name="ApplyMode" value="merge" checked />
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Merge</span><span class="moonfinModeDesc">The pushed settings replace the user's own. Everything else they chose stays.</span></span>
+                                </label>
+                                <label class="moonfinModeCard is-danger">
+                                    <input type="radio" name="ApplyMode" value="reset" />
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Full reset</span><span class="moonfinModeDesc">Erases each user's settings, device profiles included, and starts them over from the defaults. For all users it also removes settings left behind by deleted users.</span><span class="moonfinModeOnlyAll" hidden>Only works with every set default, not a pick.</span></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionFoot">
+                            <p class="moonfinActionSummary" role="status"></p>
+                            <button is="emby-button" type="button" id="ApplyDefaultsBtn" class="raised button-submit moonfinActionGo">Apply Defaults</button>
+                        </div>
+                        <div id="ApplyDefaultsResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+                    </div>
+
+                    <div class="verticalSection" id="CopySettingsSection">
+                        <h3 class="sectionTitle">Copy A User's Settings</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            Start someone off with a setup you already like. Only Moonfin settings are copied. API keys and
+                            hidden Continue Watching and Next Up items stay with each user.
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <label class="moonfinActionLabel" for="CopyFromUser">From</label>
+                            <div class="moonfinActionBody">
+                                <select id="CopyFromUser" is="emby-select"></select>
+                                <div id="CopyFromProfiles" class="fieldDescription"></div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">To</div>
+                            <div class="moonfinActionBody">
+                                <div id="CopyToChips" class="moonfinUserChips"></div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Profiles</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinProfileChips" role="group" aria-label="Which profiles to copy"></div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Settings</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinSeg" role="group" aria-label="Which settings to copy">
+                                    <button type="button" class="moonfinSegBtn is-active" data-seg="copySettings" data-value="all" aria-pressed="true">Everything they saved</button>
+                                    <button type="button" class="moonfinSegBtn" data-seg="copySettings" data-value="pick" aria-pressed="false">Pick settings</button>
+                                </div>
+                                <div class="moonfinPickedBox" hidden>
+                                    <span class="moonfinPickedText"><span class="moonfinPickedHeadline"></span><span class="moonfinPickedPreview"></span></span>
+                                    <button type="button" class="moonfinPickedEdit" data-choose="copy">Choose settings</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">How</div>
+                            <div class="moonfinActionBody moonfinModeCards">
+                                <label class="moonfinModeCard">
+                                    <input type="radio" name="CopyMode" value="merge" checked />
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Merge into theirs</span><span class="moonfinModeDesc">The copied settings replace theirs. Anything the copy leaves out stays as they had it.</span></span>
+                                </label>
+                                <label class="moonfinModeCard is-danger">
+                                    <input type="radio" name="CopyMode" value="reset" />
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Replace theirs</span><span class="moonfinModeDesc">Each picked profile becomes an exact copy. Their own changes in those profiles are lost.</span><span class="moonfinModeOnlyAll" hidden>Only works when copying everything, not a pick.</span></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionFoot">
+                            <p class="moonfinActionSummary" role="status"></p>
+                            <button is="emby-button" type="button" id="CopySettingsBtn" class="raised button-submit moonfinActionGo">Copy Settings</button>
+                        </div>
+                        <div id="CopySettingsResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
                     </div>
 
                     <div class="verticalSection">
@@ -4216,6 +4954,29 @@
                     </div>
                     </div>
                 </form>
+                <div id="MoonfinSettingsPicker" class="moonfinPickerBackdrop" hidden>
+                    <div class="moonfinPicker" role="dialog" aria-modal="true" aria-labelledby="MoonfinPickerTitle">
+                        <div class="moonfinPickerHead">
+                            <div>
+                                <h3 id="MoonfinPickerTitle" class="moonfinPickerTitle"></h3>
+                                <p class="moonfinPickerSub"></p>
+                            </div>
+                            <button type="button" class="moonfinPickerClose" data-picker="cancel" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.4L17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg></button>
+                        </div>
+                        <p class="moonfinPickerNote"></p>
+                        <input type="search" class="moonfinPickerSearch" placeholder="Filter settings" aria-label="Filter settings" autocomplete="off" />
+                        <div class="moonfinPickerTools">
+                            <span class="moonfinPickerCount" role="status"></span>
+                            <button type="button" class="moonfinPickerTool" data-picker="all">Select all</button>
+                            <button type="button" class="moonfinPickerTool" data-picker="none">Clear</button>
+                            <label class="moonfinPickerOnlyLabel"><input type="checkbox" class="moonfinPickerOnly" /> Only show picked</label>
+                        </div>
+                        <div class="moonfinPickerList"></div>
+                        <div class="moonfinPickerFoot">
+                            <button type="button" class="moonfinPickerCancel" data-picker="cancel">Cancel</button>
+                            <button type="button" class="raised button-submit moonfinPickerUse" data-picker="use">Use settings</button>
+                        </div>
+                    </div>
             </div>
         </div>
     </div>

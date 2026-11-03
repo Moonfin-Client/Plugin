@@ -95,7 +95,7 @@ namespace Emby.Plugins.Moonfin.Api
                 incompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
                 extendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
                 clientLogSupported = config?.EnableClientLogUpload ?? false,
-                defaultSettings = config?.DefaultUserSettings
+                defaultSettings = MoonfinSettingsService.AdminDefaultsFor(request.Profile, config)
             });
         }
 
@@ -195,7 +195,7 @@ namespace Emby.Plugins.Moonfin.Api
             var resolved = await Settings.GetResolvedProfileAsync(userId.Value, profile).ConfigureAwait(false);
             if (resolved == null)
             {
-                var adminDefaults = config.DefaultUserSettings;
+                var adminDefaults = Settings.AdminDefaultsFor(profile);
                 if (adminDefaults != null) return Json(adminDefaults);
                 return Json(404, new { Error = "No settings found" });
             }
@@ -242,7 +242,7 @@ namespace Emby.Plugins.Moonfin.Api
 
             var profileName = string.IsNullOrWhiteSpace(request.Profile) ? "global" : request.Profile.ToLowerInvariant();
             var resolved = await Settings.GetResolvedProfileAsync(userId.Value, profileName).ConfigureAwait(false)
-                ?? Plugin.Instance?.Configuration?.DefaultUserSettings
+                ?? Settings.AdminDefaultsFor(profileName)
                 ?? new MoonfinSettingsProfile();
             var blur = Math.Max(0, Math.Min(MaxDetailsBackdropBlur, ResolveBackdropBlur(resolved)));
             return Json(new { Profile = profileName, DetailsScreenBlur = blur.ToString() });
@@ -272,7 +272,7 @@ namespace Emby.Plugins.Moonfin.Api
 
             var profileName = string.IsNullOrWhiteSpace(request.Profile) ? "global" : request.Profile.ToLowerInvariant();
             var resolved = await Settings.GetResolvedProfileAsync(userId.Value, profileName).ConfigureAwait(false)
-                ?? Plugin.Instance?.Configuration?.DefaultUserSettings
+                ?? Settings.AdminDefaultsFor(profileName)
                 ?? new MoonfinSettingsProfile();
             var opacity = Math.Max(0, Math.Min(100, resolved.DetailsBackdropOpacity ?? 90));
             return Json(new { Profile = profileName, DetailsScreenOpacity = opacity });
@@ -300,55 +300,131 @@ namespace Emby.Plugins.Moonfin.Api
             return Json(Plugin.Instance?.Configuration?.DefaultUserSettings ?? (object)new MoonfinSettingsProfile());
         }
 
-        public async Task<object> Post(PushDefaultsRequest request)
+        // The two PushDefaults routes stay for older callers, the admin page posts to Admin/ApplyDefaults.
+        public Task<object> Post(PushDefaultsRequest request)
+            => ApplyDefaultsAsync(request.Overwrite || ReadBoolQuery("overwrite"), null, null, null);
+
+        public Task<object> Post(PushDefaultsToUserRequest request)
         {
-            if (Plugin.Instance?.Configuration?.EnableSettingsSync != true)
+            if (!Guid.TryParse(request.UserId, out var userId) || userId == Guid.Empty)
+                return Task.FromResult(Json(400, new { error = "A valid userId is required" }));
+            return ApplyDefaultsAsync(request.Overwrite || ReadBoolQuery("overwrite"), new List<Guid> { userId }, null, null);
+        }
+
+        public async Task<object> Post(ApplyDefaultsRequest request)
+        {
+            var body = await MoonfinJson.ReadBodyAsync<ApplyDefaultsBody>(request.RequestStream).ConfigureAwait(false);
+            if (body == null) return Json(400, new { error = "A request body is required" });
+
+            List<Guid>? userIds = null;
+            if (body.UserIds != null)
+            {
+                userIds = new List<Guid>();
+                foreach (var raw in body.UserIds)
+                {
+                    if (!Guid.TryParse(raw, out var id) || id == Guid.Empty)
+                        return Json(400, new { error = "A valid userId is required" });
+                    userIds.Add(id);
+                }
+                if (userIds.Count == 0) return Json(400, new { error = "A valid userId is required" });
+            }
+
+            return await ApplyDefaultsAsync(body.Overwrite, userIds, body.Profiles, body.Keys).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Pushes the admin defaults onto users' existing settings. Merge writes the set defaults of
+        /// the chosen profiles, optionally only some keys, and keeps everything else a user chose.
+        /// Overwrite resets each user to a clean file holding only those defaults, and for all users
+        /// also removes the files of users that no longer exist.
+        /// </summary>
+        private async Task<object> ApplyDefaultsAsync(bool overwrite, List<Guid>? userIds, List<string>? requestedProfiles, List<string>? keys)
+        {
+            var config = Plugin.Instance?.Configuration;
+            if (config?.EnableSettingsSync != true)
                 return Json(503, new { error = "Settings sync is disabled" });
 
-            var defaults = Plugin.Instance?.Configuration?.DefaultUserSettings;
-            if (defaults == null) return Json(400, new { error = "No default user settings configured" });
+            var profiles = ProfilesOrAll(requestedProfiles);
+            if (profiles == null) return Json(400, new { error = UnknownProfileError });
+            if (profiles.All(p => config.GetDefaultsFor(p) == null))
+                return Json(400, new { error = "No default user settings configured" });
 
-            var overwrite = request.Overwrite || ReadBoolQuery("overwrite");
+            if (overwrite && keys != null)
+                return Json(400, new { error = "A full reset applies every default, so it can't take a list of settings" });
 
             int usersAffected;
             var orphansDeleted = 0;
 
             if (overwrite)
             {
-                var serverUserIds = AuthHelpers.GetAllServerUserIds();
-                if (serverUserIds == null)
+                var targets = (IReadOnlyCollection<Guid>?)userIds ?? AuthHelpers.GetAllServerUserIds();
+                if (targets == null)
                     return Json(503, new { error = "User manager unavailable" });
 
-                (usersAffected, orphansDeleted) = await Settings.ResetAllUsersToDefaultsAsync(defaults, serverUserIds, deleteOrphans: true).ConfigureAwait(false);
+                (usersAffected, orphansDeleted) = await Settings.ResetUsersToDefaultsAsync(config, profiles, targets, deleteOrphans: userIds == null).ConfigureAwait(false);
             }
             else
             {
-                usersAffected = await Settings.MergeDefaultsToAllUsersAsync(defaults).ConfigureAwait(false);
+                usersAffected = await Settings.MergeDefaultsAsync(config, profiles, keys, userIds).ConfigureAwait(false);
             }
 
-            PluginServices.HiddenLibraries?.ApplyToAll();
-            var liveRefreshDeliveries = Settings.BroadcastSystemEvent("settingsUpdated");
+            // Hidden libraries are part of the defaults as a whole, not a setting someone can pick.
+            if (keys == null)
+            {
+                if (userIds == null) PluginServices.HiddenLibraries?.ApplyToAll();
+                else foreach (var userId in userIds) PluginServices.HiddenLibraries?.ApplyTo(userId);
+            }
+
+            var liveRefreshDeliveries = 0;
+            if (userIds == null) liveRefreshDeliveries = Settings.BroadcastSystemEvent("settingsUpdated");
+            else foreach (var userId in userIds) Settings.NotifySettingsChanged(userId);
+
             return Json(new { success = true, overwrite, usersAffected, orphansDeleted, liveRefreshDeliveries });
         }
 
-        public async Task<object> Post(PushDefaultsToUserRequest request)
+        /// <summary>
+        /// Copies one user's saved Moonfin settings onto other users. Merge keeps each target's values
+        /// for whatever the copy leaves out, replace makes every copied profile an exact copy. API keys
+        /// and hidden items always stay with their owner.
+        /// </summary>
+        public async Task<object> Post(CopySettingsRequest request)
         {
             if (Plugin.Instance?.Configuration?.EnableSettingsSync != true)
                 return Json(503, new { error = "Settings sync is disabled" });
 
-            var defaults = Plugin.Instance?.Configuration?.DefaultUserSettings;
-            if (defaults == null) return Json(400, new { error = "No default user settings configured" });
-            if (!Guid.TryParse(request.UserId, out var userId) || userId == Guid.Empty)
-                return Json(400, new { error = "A valid userId is required" });
+            var body = await MoonfinJson.ReadBodyAsync<CopySettingsBody>(request.RequestStream).ConfigureAwait(false);
+            if (body == null) return Json(400, new { error = "A request body is required" });
 
-            var overwrite = request.Overwrite || ReadBoolQuery("overwrite");
-            if (overwrite)
-                await Settings.ResetUserToDefaultsAsync(userId, defaults).ConfigureAwait(false);
-            else
-                await Settings.MergeDefaultsToUserAsync(userId, defaults).ConfigureAwait(false);
+            Guid.TryParse(body.FromUserId, out var fromUserId);
+            var targets = new List<Guid>();
+            foreach (var raw in body.ToUserIds ?? new List<string>())
+            {
+                if (Guid.TryParse(raw, out var id) && id != Guid.Empty && id != fromUserId && !targets.Contains(id)) targets.Add(id);
+            }
+            if (fromUserId == Guid.Empty || targets.Count == 0)
+                return Json(400, new { error = "A user to copy from and at least one other user to copy to are required" });
 
-            PluginServices.HiddenLibraries?.ApplyTo(userId);
-            return Json(new { success = true, overwrite });
+            var profiles = ProfilesOrAll(body.Profiles);
+            if (profiles == null) return Json(400, new { error = UnknownProfileError });
+
+            if (body.Replace && body.Keys != null)
+                return Json(400, new { error = "Replace copies whole profiles, so it can't take a list of settings" });
+
+            if (await Settings.GetUserSettingsAsync(fromUserId).ConfigureAwait(false) == null)
+                return Json(404, new { error = "That user has no saved Moonfin settings" });
+
+            var usersAffected = await Settings.CopySettingsAsync(fromUserId, targets, profiles, body.Keys, body.Replace).ConfigureAwait(false);
+            return Json(new { success = true, replace = body.Replace, usersAffected });
+        }
+
+        private static readonly string UnknownProfileError =
+            "Unknown profile. Valid profiles: " + string.Join(", ", MoonfinUserSettings.ValidProfiles);
+
+        // The requested profile names, every profile when none were given, or null when one isn't valid.
+        private static List<string>? ProfilesOrAll(List<string>? requested)
+        {
+            if (requested == null || requested.Count == 0) return MoonfinUserSettings.ValidProfiles.ToList();
+            return requested.All(p => Array.Exists(MoonfinUserSettings.ValidProfiles, v => string.Equals(v, p, StringComparison.OrdinalIgnoreCase))) ? requested : null;
         }
 
         public async Task<object> Post(BroadcastRequest request)
@@ -482,7 +558,7 @@ namespace Emby.Plugins.Moonfin.Api
             var profile = request.Profile ?? "global";
             var resolved = await Settings.GetResolvedProfileAsync(user.Id, profile).ConfigureAwait(false);
             var isFallback = resolved == null;
-            var settings = resolved ?? Plugin.Instance?.Configuration?.DefaultUserSettings ?? new MoonfinSettingsProfile();
+            var settings = resolved ?? Settings.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 
             var sourceType = isFallback ? "library" : (settings.MediaBarSourceType ?? "library");
             var limit = isFallback ? 5 : (settings.MediaBarItemCount ?? 10);

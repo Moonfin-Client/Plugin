@@ -119,7 +119,7 @@ public class MoonfinController : ControllerBase
     [HttpGet("Ping")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<MoonfinPingResponse> Ping()
+    public ActionResult<MoonfinPingResponse> Ping([FromQuery] string? profile = null)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
 
@@ -144,7 +144,7 @@ public class MoonfinController : ControllerBase
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             ExtendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
-            DefaultSettings = config?.DefaultUserSettings
+            DefaultSettings = _settingsService.AdminDefaultsFor(profile)
         });
     }
 
@@ -450,71 +450,41 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
-    /// Applies the configured admin defaults to all users (admin only).
-    /// When <paramref name="overwrite"/> is false, the set defaults are merged into each existing
-    /// user's global and device profiles, keeping their values for the rest. When true,
-    /// every server user is reset to a clean global-only profile equal to the defaults
-    /// (including users with no file), and orphaned files for deleted users are removed.
+    /// Applies every profile's admin defaults to all users (admin only). Kept for callers of the
+    /// old route, the admin page uses <see cref="ApplyDefaults"/>.
     /// </summary>
     [HttpPost("Admin/PushDefaults")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult> ApplyDefaultsToAllUsers([FromQuery] bool overwrite = false)
-    {
-        var config = MoonfinPlugin.Instance?.Configuration;
-
-        if (config?.EnableSettingsSync != true)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Settings sync is disabled" });
-        }
-
-        var defaults = config.DefaultUserSettings;
-        if (defaults == null)
-        {
-            return BadRequest(new { error = "No default user settings configured" });
-        }
-
-        int usersAffected;
-        var orphansDeleted = 0;
-
-        if (overwrite)
-        {
-            var serverUserIds = GetAllServerUserIds();
-            if (serverUserIds == null)
-            {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "User manager unavailable" });
-            }
-
-            (usersAffected, orphansDeleted) = await _settingsService.ResetAllUsersToDefaultsAsync(
-                defaults,
-                serverUserIds,
-                deleteOrphans: true);
-        }
-        else
-        {
-            usersAffected = await _settingsService.MergeDefaultsToAllUsersAsync(defaults);
-        }
-
-        await _hiddenLibraries.ApplyAsync(GetAllServerUserIds() ?? new List<Guid>());
-        var liveRefreshDeliveries = _settingsService.BroadcastSystemEvent("settingsUpdated");
-
-        return Ok(new { success = true, overwrite, usersAffected, orphansDeleted, liveRefreshDeliveries });
-    }
+    public Task<ActionResult> ApplyDefaultsToAllUsers([FromQuery] bool overwrite = false)
+        => ApplyDefaults(new MoonfinApplyDefaultsRequest { Overwrite = overwrite });
 
     /// <summary>
-    /// Applies the configured admin defaults to a single user (admin only).
-    /// When <paramref name="overwrite"/> is false, the set defaults are merged into the user's
-    /// global and device profiles, keeping their values for the rest. When true, the
-    /// user is reset to a clean global-only profile equal to the defaults.
+    /// Applies every profile's admin defaults to a single user (admin only). Kept for callers of
+    /// the old route, the admin page uses <see cref="ApplyDefaults"/>.
     /// </summary>
     [HttpPost("Admin/PushDefaults/{userId}")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult> ApplyDefaultsToUser([FromRoute] Guid userId, [FromQuery] bool overwrite = false)
+    public Task<ActionResult> ApplyDefaultsToUser([FromRoute] Guid userId, [FromQuery] bool overwrite = false)
+        => ApplyDefaults(new MoonfinApplyDefaultsRequest { Overwrite = overwrite, UserIds = [userId] });
+
+    /// <summary>
+    /// Pushes the admin defaults onto users' existing settings (admin only). Merge writes the set
+    /// defaults of the chosen profiles, optionally only some keys, and keeps everything else a user
+    /// chose. Overwrite resets each user to a clean file holding only those defaults, and for all
+    /// users also removes the files of users that no longer exist.
+    /// </summary>
+    [HttpPost("Admin/ApplyDefaults")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult> ApplyDefaults([FromBody] MoonfinApplyDefaultsRequest request)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
 
@@ -523,28 +493,130 @@ public class MoonfinController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Settings sync is disabled" });
         }
 
-        var defaults = config.DefaultUserSettings;
-        if (defaults == null)
+        var profiles = ProfilesOrAll(request.Profiles);
+        if (profiles == null)
+        {
+            return BadRequest(new { error = UnknownProfileError });
+        }
+
+        if (profiles.All(p => config.GetDefaultsFor(p) == null))
         {
             return BadRequest(new { error = "No default user settings configured" });
         }
 
-        if (userId == Guid.Empty)
+        if (request.Overwrite && request.Keys != null)
+        {
+            return BadRequest(new { error = "A full reset applies every default, so it can't take a list of settings" });
+        }
+
+        if (request.UserIds != null && (request.UserIds.Count == 0 || request.UserIds.Contains(Guid.Empty)))
         {
             return BadRequest(new { error = "A valid userId is required" });
         }
 
-        if (overwrite)
+        var serverUserIds = request.UserIds == null ? GetAllServerUserIds() : null;
+        int usersAffected;
+        var orphansDeleted = 0;
+
+        if (request.Overwrite)
         {
-            await _settingsService.ResetUserToDefaultsAsync(userId, defaults);
+            var targets = request.UserIds ?? serverUserIds;
+            if (targets == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "User manager unavailable" });
+            }
+
+            (usersAffected, orphansDeleted) = await _settingsService.ResetUsersToDefaultsAsync(
+                config,
+                profiles,
+                targets,
+                deleteOrphans: request.UserIds == null);
         }
         else
         {
-            await _settingsService.MergeDefaultsToUserAsync(userId, defaults);
+            usersAffected = await _settingsService.MergeDefaultsAsync(config, profiles, request.Keys, request.UserIds);
         }
 
-        await _hiddenLibraries.ApplyAsync([userId]);
-        return Ok(new { success = true, overwrite });
+        // Hidden libraries are part of the defaults as a whole, not a setting someone can pick.
+        if (request.Keys == null)
+        {
+            await _hiddenLibraries.ApplyAsync(request.UserIds ?? serverUserIds ?? new List<Guid>());
+        }
+
+        var liveRefreshDeliveries = 0;
+        if (request.UserIds == null)
+        {
+            liveRefreshDeliveries = _settingsService.BroadcastSystemEvent("settingsUpdated");
+        }
+        else
+        {
+            foreach (var userId in request.UserIds)
+            {
+                _settingsService.NotifySettingsChanged(userId);
+            }
+        }
+
+        return Ok(new { success = true, overwrite = request.Overwrite, usersAffected, orphansDeleted, liveRefreshDeliveries });
+    }
+
+    /// <summary>
+    /// Copies one user's saved Moonfin settings onto other users (admin only). Merge keeps each
+    /// target's values for whatever the copy leaves out, replace makes every copied profile an exact
+    /// copy. API keys and hidden items always stay with their owner.
+    /// </summary>
+    [HttpPost("Admin/CopySettings")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult> CopySettings([FromBody] MoonfinCopySettingsRequest request)
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+
+        if (config?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Settings sync is disabled" });
+        }
+
+        var targets = (request.ToUserIds ?? new List<Guid>()).Where(id => id != Guid.Empty && id != request.FromUserId).Distinct().ToList();
+        if (request.FromUserId == Guid.Empty || targets.Count == 0)
+        {
+            return BadRequest(new { error = "A user to copy from and at least one other user to copy to are required" });
+        }
+
+        var profiles = ProfilesOrAll(request.Profiles);
+        if (profiles == null)
+        {
+            return BadRequest(new { error = UnknownProfileError });
+        }
+
+        if (request.Replace && request.Keys != null)
+        {
+            return BadRequest(new { error = "Replace copies whole profiles, so it can't take a list of settings" });
+        }
+
+        if (await _settingsService.GetUserSettingsAsync(request.FromUserId) == null)
+        {
+            return NotFound(new { error = "That user has no saved Moonfin settings" });
+        }
+
+        var usersAffected = await _settingsService.CopySettingsAsync(request.FromUserId, targets, profiles, request.Keys, request.Replace);
+        return Ok(new { success = true, replace = request.Replace, usersAffected });
+    }
+
+    private static readonly string UnknownProfileError =
+        "Unknown profile. Valid profiles: " + string.Join(", ", MoonfinUserSettings.ValidProfiles);
+
+    /// <summary>The requested profile names, every profile when none were given, or null when one isn't valid.</summary>
+    private static List<string>? ProfilesOrAll(List<string>? requested)
+    {
+        if (requested is not { Count: > 0 })
+        {
+            return MoonfinUserSettings.ValidProfiles.ToList();
+        }
+
+        return requested.All(p => MoonfinUserSettings.ValidProfiles.Contains(p.ToLowerInvariant())) ? requested : null;
     }
 
     [HttpPost("Broadcast")]
@@ -664,8 +736,7 @@ public class MoonfinController : ControllerBase
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
         if (resolved == null)
         {
-            // No user settings at all; return admin defaults if available.
-            var adminDefaults = config?.DefaultUserSettings;
+            var adminDefaults = _settingsService.AdminDefaultsFor(profile);
             return adminDefaults != null ? Ok(adminDefaults) : NotFound(new { Error = "No settings found" });
         }
 
@@ -707,7 +778,7 @@ public class MoonfinController : ControllerBase
         }
 
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, resolvedProfileName)
-            ?? config?.DefaultUserSettings
+            ?? _settingsService.AdminDefaultsFor(resolvedProfileName)
             ?? new MoonfinSettingsProfile();
 
         var blur = Math.Clamp(ResolveBackdropBlur(resolved), 0, MaxDetailsBackdropBlur);
@@ -815,7 +886,7 @@ public class MoonfinController : ControllerBase
         }
 
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, resolvedProfileName)
-            ?? config?.DefaultUserSettings
+            ?? _settingsService.AdminDefaultsFor(resolvedProfileName)
             ?? new MoonfinSettingsProfile();
 
         var opacity = Math.Clamp(resolved.DetailsBackdropOpacity ?? 90, 0, 100);
@@ -1160,10 +1231,9 @@ public class MoonfinController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        // Resolve settings: device profile → global → admin defaults
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
         var isFallback = resolved == null;
-        var settings = resolved ?? MoonfinPlugin.Instance?.Configuration?.DefaultUserSettings ?? new MoonfinSettingsProfile();
+        var settings = resolved ?? _settingsService.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 
         var sourceType = isFallback ? "library" : (settings.MediaBarSourceType ?? "library");
         var limit = isFallback ? 5 : (settings.MediaBarItemCount ?? 10);
@@ -1518,6 +1588,37 @@ public class MoonfinController : ControllerBase
             UserEnabled = userSeerrEnabled
         });
     }
+}
+
+public class MoonfinApplyDefaultsRequest
+{
+    /// <summary>Reset each user to a clean file holding only the defaults, instead of merging.</summary>
+    public bool Overwrite { get; set; }
+
+    /// <summary>The users to apply to. Null means all of them.</summary>
+    public List<Guid>? UserIds { get; set; }
+
+    /// <summary>The profiles whose defaults are applied: global, tv, desktop, mobile. Empty means all.</summary>
+    public List<string>? Profiles { get; set; }
+
+    /// <summary>The settings to push, by JSON key. Null means every set default.</summary>
+    public List<string>? Keys { get; set; }
+}
+
+public class MoonfinCopySettingsRequest
+{
+    public Guid FromUserId { get; set; }
+
+    public List<Guid>? ToUserIds { get; set; }
+
+    /// <summary>The profiles to copy: global, tv, desktop, mobile. Empty means all the source has.</summary>
+    public List<string>? Profiles { get; set; }
+
+    /// <summary>The settings to copy, by JSON key. Null means everything the source saved.</summary>
+    public List<string>? Keys { get; set; }
+
+    /// <summary>Make each copied profile an exact copy instead of merging into the target's.</summary>
+    public bool Replace { get; set; }
 }
 
 /// <summary>

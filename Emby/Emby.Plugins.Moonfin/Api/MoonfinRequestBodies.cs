@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Emby.Plugins.Moonfin.Models;
 
@@ -28,6 +29,23 @@ namespace Emby.Plugins.Moonfin.Api
         [JsonPropertyName("profile")] public string? Profile { get; set; }
         [JsonPropertyName("detailsScreenOpacity")] public int? DetailsScreenOpacity { get; set; }
         [JsonPropertyName("clientId")] public string? ClientId { get; set; }
+    }
+
+    internal class ApplyDefaultsBody
+    {
+        [JsonPropertyName("overwrite")] public bool Overwrite { get; set; }
+        [JsonPropertyName("userIds")] public List<string>? UserIds { get; set; }
+        [JsonPropertyName("profiles")] public List<string>? Profiles { get; set; }
+        [JsonPropertyName("keys")] public List<string>? Keys { get; set; }
+    }
+
+    internal class CopySettingsBody
+    {
+        [JsonPropertyName("fromUserId")] public string? FromUserId { get; set; }
+        [JsonPropertyName("toUserIds")] public List<string>? ToUserIds { get; set; }
+        [JsonPropertyName("profiles")] public List<string>? Profiles { get; set; }
+        [JsonPropertyName("keys")] public List<string>? Keys { get; set; }
+        [JsonPropertyName("replace")] public bool Replace { get; set; }
     }
 
     internal class BroadcastBody

@@ -40,7 +40,7 @@ It's the same page as Moonbase on Jellyfin, with Silo's name in place of Jellyfi
 - Seerr is called Requests, because Moonfin uses Silo's own requests.
 - The Home rows builder has a Silo tab with Silo's own rows, like Recommended for you, Trending on this server and Seasonal picks.
 
-**Defaults.** A setting a user hasn't set comes from your default. The apps save every setting at their first sync, so changing a default later doesn't change it for users who already synced. **Apply Defaults To Users** on the Actions tab copies your defaults into everyone's settings, or resets them to your defaults with overwrite on. The **Defaults For** picker on the User defaults tab sets separate defaults for desktop, mobile and TV, which apply over the ones for all devices.
+**Defaults.** A setting a user hasn't set comes from your default. The apps save every setting at their first sync, so changing a default later doesn't change it for users who already synced. The **Global**, **TV**, **Desktop** and **Mobile** buttons on the User defaults tab pick which defaults you're editing, and a device's defaults apply over the Global ones. **Apply Defaults To Users** on the Actions tab copies your defaults into users' settings, for everyone or the accounts and profiles you pick, and for every set default or only the settings you pick. **Full reset** starts them over from your defaults instead. **Copy A User's Settings** copies one profile's settings onto others.
 
 **Staying signed in.** The page stays signed in for as long as your Silo login lasts. If your login runs out anyway, Save says so and keeps your changes. Open Moonbase again in the same browser tab within an hour and they come back, ready to save. If Save fails for any other reason, leave the page open and try again.
 
@@ -48,7 +48,7 @@ It's the same page as Moonbase on Jellyfin, with Silo's name in place of Jellyfi
 
 **API keys.** The MDBList and TMDB keys reach every signed-in user, the same as on Jellyfin, since Moonfin calls TMDB directly for some rows. Don't use keys you wouldn't hand to your users.
 
-**Removing a user.** Silo doesn't tell Moonbase when an account or profile is deleted. Pick it on the Actions tab and use **Remove Selected User's Data** to remove what Moonbase kept for it.
+**Removing a user.** Silo doesn't tell Moonbase when an account or profile is deleted. Pick it under **Remove A User's Data** on the Actions tab and use **Remove Selected User's Data** to remove what Moonbase kept for it.
 
 ### Known limits
 

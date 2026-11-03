@@ -1,8 +1,9 @@
 // Stands in for the parts of Jellyfin's dashboard that configPage.html calls,
 // so the page runs on Silo and on the Plex companion. configPage.html stays an
 // exact copy of Jellyfin/backend/Pages/configPage.html. This file finds its
-// sections by title and changes the Home rows builder through its globals, so
-// check both after copying in a newer page.
+// sections by title, changes the Home rows builder through its globals, and
+// adds a card after Copy Settings that updates the Actions user lists, so
+// check those after copying in a newer page.
 (function () {
     'use strict';
 
@@ -134,27 +135,24 @@
             // Saving reads the configuration again, so only the first read
             // after opening the page may take the draft. It stays stored
             // until a save goes through.
-            var draft = draftOffered ? null : (layerSwitch && layerSwitch.config) || readDraft();
-            if (draft && !draftOffered && !layerSwitch) {
+            var draft = draftOffered ? null : readDraft();
+            if (draft) {
                 notice(host.restored);
             }
             draftOffered = true;
             if (draft) {
                 lastConfig = draft;
-                return Promise.resolve(layerView(draft));
+                return Promise.resolve(themeView(draft));
             }
             return this.getJSON(getUrl('Moonfin/Admin/Configuration')).then(function (config) {
                 lastConfig = config;
-                return layerView(config);
+                return themeView(config);
             }, function (error) {
                 // Saving reads the configuration first. Once the launch cookie
                 // has run out, carry on from the copy already loaded so the
                 // save fails on its own request and keeps the changes.
                 var status = error && error.status;
-                if (status === 401 && lastConfig) return layerView(lastConfig);
-                // The device switch is dropped with the save, or the next
-                // Save would only reload.
-                switchTo = null;
+                if (status === 401 && lastConfig) return themeView(lastConfig);
                 // The page has no failure handler of its own, so its loading
                 // overlay would stay up over the settings.
                 Dashboard.hideLoadingMsg();
@@ -163,21 +161,7 @@
             });
         },
         updatePluginConfiguration: function (id, config) {
-            config = layersOf(config);
-            if (switchTo) {
-                // A device picked in the defaults: the page fills its form
-                // only when it loads, so it loads again with this copy.
-                try {
-                    sessionStorage.setItem(layerKey, JSON.stringify({ layer: switchTo, config: config }));
-                    location.reload();
-                    return new Promise(function () { /* the page reloads */ });
-                } catch (e) {
-                    switchTo = null;
-                    Dashboard.hideLoadingMsg();
-                    toast('Save first, then pick the device.');
-                    return Promise.reject(e);
-                }
-            }
+            config = themeStore(config);
             return send('POST', getUrl('Moonfin/Admin/Configuration'), JSON.stringify(config), 'application/json').then(function () {
                 clearDraft();
             }, function (error) {
@@ -195,8 +179,8 @@
         // that have used Moonfin with this server.
         getUsers: function () {
             return this.getJSON(getUrl('Moonfin/Admin/Users')).then(function (users) {
-                // After the page has filled its single-user list from them.
-                setTimeout(function () { addProfileOptions(users); });
+                listedUsers = users || [];
+                fillRemoveUserOptions();
                 return users;
             });
         },
@@ -219,87 +203,35 @@
     var lastConfig = null;
     var draftOffered = false;
 
-    // The page edits DefaultUserSettings, so it's handed one layer at a time:
-    // the defaults for all devices, or one device's on top of them. A device
-    // keeps only what differs from all devices, in DefaultDeviceSettings.
-    var layerKey = 'moonbaseDefaultsLayer:' + base;
-    var layerSwitch = null;
-    try {
-        layerSwitch = JSON.parse(sessionStorage.getItem(layerKey) || 'null');
-        sessionStorage.removeItem(layerKey);
-    } catch (e) { /* starts on all devices */ }
-    var devices = ['desktop', 'mobile', 'tv'];
-    var layer = layerSwitch ? layerSwitch.layer : 'global';
-    var switchTo = null;
-    var layers = null;
-
-    function defaultsFor(name) {
-        var all = layers.global;
-        if (name === 'global') return all;
-        var own = layers[name];
-        var view = Object.assign({}, all);
-        // A device's home layout replaces the shared one whole, as on the server.
-        if (own.homeSections != null || own.homeRowOrder != null) {
-            delete view.homeSections;
-            delete view.homeRowOrder;
-        }
-        return Object.assign(view, own);
-    }
-
-    // The configuration as the page sees it: the layer picked in the
-    // defaults, with an uploaded default theme as "custom:<id>".
-    function layerView(config) {
-        if (!layers) {
-            var saved = config.DefaultDeviceSettings || {};
-            layers = { global: config.DefaultUserSettings || {} };
-            devices.forEach(function (d) { layers[d] = saved[d] || {}; });
-        }
+    // An uploaded default theme is stored as customThemeId and shown in the App
+    // Theme list as "custom:<id>", in the shared defaults and in each device's.
+    function themeView(config) {
         var view = clone(config);
-        var defaults = view.DefaultUserSettings = clone(defaultsFor(layer));
-        if (defaults.customThemeId) defaults.visualTheme = 'custom:' + defaults.customThemeId;
+        [view.DefaultUserSettings].concat(Object.values(view.DefaultDeviceSettings || {})).forEach(function (defaults) {
+            if (defaults && defaults.customThemeId) defaults.visualTheme = 'custom:' + defaults.customThemeId;
+        });
         fillUploadedThemes(config.UploadedThemes);
         return view;
     }
 
-    // Takes the page's DefaultUserSettings back into the layer it showed and
-    // returns the configuration to store.
-    function layersOf(config) {
-        var shown = config.DefaultUserSettings || {};
-        var theme = shown.visualTheme || '';
-        var custom = theme.indexOf('custom:') === 0;
-        shown.customThemeId = custom ? theme.slice(7) : null;
-        if (custom) shown.visualTheme = null;
-        if (layer === 'global') {
-            layers.global = shown;
-        } else {
-            var own = {};
-            Object.keys(shown).forEach(function (k) {
-                if (shown[k] != null && canonicalJson(shown[k]) !== canonicalJson(layers.global[k])) own[k] = shown[k];
-            });
-            if (own.homeSections != null || own.homeRowOrder != null) {
-                own.homeSections = shown.homeSections;
-                own.homeRowOrder = shown.homeRowOrder;
-            }
-            // A built-in theme for this device has to clear the uploaded one
-            // set for all devices, or that one would still win.
-            if (own.visualTheme && layers.global.customThemeId) own.customThemeId = '';
-            layers[layer] = own;
-        }
-        config.DefaultUserSettings = layers.global;
-        config.DefaultDeviceSettings = {};
-        devices.forEach(function (d) { config.DefaultDeviceSettings[d] = layers[d]; });
+    function themeStore(config) {
+        var global = config.DefaultUserSettings || {};
+        storeTheme(global, null);
+        var devices = config.DefaultDeviceSettings || {};
+        Object.keys(devices).forEach(function (d) {
+            if (devices[d]) storeTheme(devices[d], global);
+        });
         return config;
     }
 
-    // Server JSON comes back with sorted keys, so compare that way.
-    function canonicalJson(value) {
-        if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
-        if (value && typeof value === 'object') {
-            return '{' + Object.keys(value).sort().map(function (k) {
-                return JSON.stringify(k) + ':' + canonicalJson(value[k]);
-            }).join(',') + '}';
-        }
-        return JSON.stringify(value == null ? null : value);
+    function storeTheme(defaults, global) {
+        var theme = defaults.visualTheme || '';
+        var custom = theme.indexOf('custom:') === 0;
+        defaults.customThemeId = custom ? theme.slice(7) : null;
+        if (custom) defaults.visualTheme = null;
+        // A built-in theme for a device has to clear the uploaded one set for
+        // all devices, or that one would still win.
+        if (global && theme && !custom && global.customThemeId) defaults.customThemeId = '';
     }
 
     // Uploaded themes join the App Theme default as "custom:<id>".
@@ -326,30 +258,6 @@
         });
         group.hidden = !group.children.length;
         select.value = current;
-    }
-
-    function addDefaultsLayerPicker(page) {
-        var bar = page.querySelector('.moonfinTabPanel[data-tab="defaults"] .defaultsSubnavBar');
-        var form = document.getElementById('MoonfinConfigForm');
-        if (!bar || !form) return;
-        var box = document.createElement('div');
-        box.className = 'inputContainer';
-        box.innerHTML = '<label class="inputLabel inputLabelUnfocused" for="MoonbaseDefaultsLayer">Defaults For</label>'
-            + '<select id="MoonbaseDefaultsLayer" is="emby-select">'
-            + '<option value="global">All devices</option><option value="desktop">Desktop</option>'
-            + '<option value="mobile">Mobile</option><option value="tv">TV</option></select>'
-            + '<div class="fieldDescription">A device starts out showing your all-devices values. Anything you change there applies to that device only. Set it back to the all-devices value, or to Not set, to follow all devices again. Changes are kept when you switch, and Save stores every device. A user’s own settings still come first, then your defaults for their device, then your defaults for all devices.</div>';
-        bar.before(box);
-        upgrade(box);
-        var select = box.querySelector('select');
-        select.value = layer;
-        select.addEventListener('change', function () {
-            var next = select.value;
-            select.value = layer;
-            if (!form.reportValidity()) return;
-            switchTo = next;
-            form.requestSubmit();
-        });
     }
 
     function clone(value) {
@@ -655,7 +563,6 @@
             // The page's globals changed: the builder keeps the Jellyfin rows.
             console.error('Moonbase: adapting the Home rows builder failed', e);
         }
-        addDefaultsLayerPicker(page);
         // The App Theme default follows uploads and deletes on the Themes tab.
         var renderThemes = window.renderAdminThemesList;
         window.renderAdminThemesList = function (items) {
@@ -666,144 +573,29 @@
             records.forEach(function (record) { upgrade(record.target); });
         }).observe(page, { childList: true, subtree: true });
 
+        addRemoveUserCard(page);
         page.dispatchEvent(new CustomEvent('pageshow', { bubbles: true }));
-        bindRemoveUserData();
     });
 
-    // The single-user list becomes a menu of accounts. The page still reads
-    // the hidden select, so each choice is an option there too.
+    // Neither host tells Moonbase when an account or profile is deleted, so the
+    // Actions tab gets a way to remove what Moonbase kept for one.
     var listedUsers = [];
 
-    function addProfileOptions(users) {
-        var select = document.getElementById('SingleUserSelect');
-        if (!select) return;
-        listedUsers = users || [];
-        var current = select.value;
-        select.querySelectorAll('option[data-profile]').forEach(function (o) { o.remove(); });
-        function addOption(value, text) {
-            var option = document.createElement('option');
-            option.value = value;
-            option.dataset.profile = 'true';
-            option.textContent = text;
-            select.appendChild(option);
-        }
-        var entries = [];
-        listedUsers.forEach(function (user) {
-            var account = Array.prototype.find.call(select.options, function (o) { return o.value === user.Id; });
-            if (!account) return;
-            var profiles = user.Profiles || [];
-            var primary = profiles.filter(function (p) { return p.Primary; })[0];
-            var others = profiles.filter(function (p) { return p !== primary; });
-            var entry = { label: user.Name, value: user.Id, choices: [] };
-            account.textContent = user.Name;
-            if (others.length && primary) {
-                account.textContent = user.Name + ' (all profiles)';
-                addOption(primary.Id, user.Name);
-                entry.value = primary.Id;
-                entry.choices.push({ label: 'All profiles', value: user.Id });
-            }
-            others.forEach(function (p) {
-                addOption(p.Id, user.Name + ' \u203a ' + p.Name);
-                entry.choices.push({ label: p.Name, value: p.Id });
-            });
-            entries.push(entry);
-        });
-        if (current) select.value = current;
-        renderUserMenu(select, entries);
-    }
-
-    function renderUserMenu(select, entries) {
-        var picker = document.getElementById('MoonbaseUserPicker');
-        if (!picker) {
-            picker = document.createElement('div');
-            picker.id = 'MoonbaseUserPicker';
-            picker.className = 'moonbaseUserPicker';
-            picker.innerHTML = '<button type="button" class="emby-select moonbaseUserPickerButton" aria-haspopup="menu" aria-expanded="false"></button><div class="moonbaseUserMenu" role="menu"></div>';
-            select.after(picker);
-            select.classList.add('moonbaseHidden');
-            var button = picker.firstChild;
-            button.addEventListener('click', function () {
-                var open = picker.classList.toggle('is-open');
-                button.setAttribute('aria-expanded', String(open));
-            });
-            picker.addEventListener('click', function (e) {
-                var choice = e.target.closest('[data-value]');
-                if (!choice) return;
-                select.value = choice.getAttribute('data-value');
-                select.dispatchEvent(new Event('change', { bubbles: true }));
-                close();
-                showChoice();
-            });
-            document.addEventListener('click', function (e) {
-                if (!picker.contains(e.target)) close();
-            });
-            picker.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape') { close(); button.focus(); }
-            });
-        }
-        function close() {
-            picker.classList.remove('is-open');
-            picker.firstChild.setAttribute('aria-expanded', 'false');
-        }
-        function showChoice() {
-            var option = select.selectedOptions[0];
-            picker.firstChild.textContent = option ? option.textContent : 'Select a user';
-            picker.querySelectorAll('[data-value]').forEach(function (b) {
-                b.classList.toggle('is-selected', b.getAttribute('data-value') === select.value);
-            });
-        }
-        var menu = picker.querySelector('.moonbaseUserMenu');
-        menu.innerHTML = '';
-        entries.forEach(function (entry) {
-            var item = document.createElement('div');
-            item.className = 'moonbaseUserMenuItem';
-            var main = document.createElement('button');
-            main.type = 'button';
-            main.setAttribute('role', 'menuitem');
-            main.setAttribute('data-value', entry.value);
-            main.textContent = entry.label;
-            item.appendChild(main);
-            if (entry.choices.length) {
-                var more = document.createElement('button');
-                more.type = 'button';
-                more.className = 'moonbaseUserMore';
-                more.setAttribute('aria-label', 'Profiles of ' + entry.label);
-                more.innerHTML = '<span class="material-icons" aria-hidden="true">chevron_right</span>';
-                item.appendChild(more);
-                var sub = document.createElement('div');
-                sub.className = 'moonbaseUserSubmenu';
-                sub.setAttribute('role', 'menu');
-                entry.choices.forEach(function (choice) {
-                    var b = document.createElement('button');
-                    b.type = 'button';
-                    b.setAttribute('role', 'menuitem');
-                    b.setAttribute('data-value', choice.value);
-                    b.textContent = choice.label;
-                    sub.appendChild(b);
-                });
-                item.appendChild(sub);
-            }
-            menu.appendChild(item);
-        });
-        showChoice();
-    }
-
-    function bindRemoveUserData() {
-        var select = document.getElementById('SingleUserSelect');
-        var after = document.getElementById('ApplySingleUserResult');
-        if (!select || !after) return;
-        var help = document.createElement('div');
-        help.className = 'fieldDescription';
-        help.style.margin = '1.6em 0 0.4em';
-        help.textContent = 'Or remove everything Moonbase keeps for the selected user, on every profile, or for just the selected profile. Use it for an account or profile deleted from ' + hostName + ', since ' + hostName + ' doesn’t tell Moonbase about that. If they sign in again, they start from the defaults.';
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'raised emby-button';
-        button.innerHTML = '<span>Remove Selected User’s Data</span>';
-        var result = document.createElement('div');
-        result.className = 'fieldDescription';
-        result.style.cssText = 'display:none; margin-top:0.8em;';
-        after.after(help, button, result);
+    function addRemoveUserCard(page) {
+        var after = page.querySelector('#CopySettingsSection');
+        if (!after) return;
+        var card = document.createElement('div');
+        card.className = 'verticalSection';
+        card.innerHTML = '<h3 class="sectionTitle">Remove A User’s Data</h3>'
+            + '<div class="fieldDescription" style="margin-bottom:0.8em;"></div>'
+            + '<div class="selectContainer"><label class="selectLabel" for="MoonbaseRemoveUser">User</label><select is="emby-select" id="MoonbaseRemoveUser"></select></div>'
+            + '<button is="emby-button" type="button" class="raised"><span>Remove Selected User’s Data</span></button>'
+            + '<div class="fieldDescription" style="display:none; margin-top:0.8em;"></div>';
+        card.querySelector('.fieldDescription').textContent = 'Remove everything Moonbase keeps for an account, on every profile, or for one profile. Use it for an account or profile deleted from ' + hostName + ', since ' + hostName + ' doesn’t tell Moonbase about that. If they sign in again, they start from the defaults.';
+        after.after(card);
+        var select = card.querySelector('select');
+        var button = card.querySelector('button');
+        var result = card.lastElementChild;
         function show(text, failed) {
             result.style.display = '';
             result.style.color = failed ? '#d9534f' : '#52b54b';
@@ -812,29 +604,26 @@
         button.addEventListener('click', function () {
             var option = select.selectedOptions[0];
             if (!option || !select.value) {
-                show('Select a user first.', true);
+                show('Pick a user first.', true);
                 return;
             }
             var name = option.textContent;
             var target = select.value;
-            var oneProfile = !!option.dataset.profile;
+            var oneProfile = target.indexOf('~') !== -1;
             if (!window.confirm('Remove all Moonbase data for ' + name + '?\n\nThis permanently erases their synced settings ' + (oneProfile ? 'on this profile.' : 'on every profile.'))) return;
             button.disabled = true;
             send('DELETE', getUrl('Moonfin/Admin/Users/' + encodeURIComponent(target))).then(json).then(function (body) {
-                if (oneProfile) {
-                    listedUsers.forEach(function (user) {
-                        var before = (user.Profiles || []).length;
-                        user.Profiles = (user.Profiles || []).filter(function (p) { return p.Id !== target; });
-                        // Its last profile gone, the account has nothing left.
-                        if (before && !user.Profiles.length) {
-                            var account = Array.prototype.find.call(select.options, function (o) { return o.value === user.Id; });
-                            if (account) account.remove();
-                        }
-                    });
-                } else {
-                    option.remove();
-                }
-                addProfileOptions(listedUsers);
+                listedUsers = listedUsers.filter(function (user) {
+                    if (!oneProfile) return user.Id !== target;
+                    var before = (user.Profiles || []).length;
+                    user.Profiles = (user.Profiles || []).filter(function (p) { return p.Id !== target; });
+                    // Its last profile gone, the account has nothing left.
+                    return !before || user.Profiles.length > 0;
+                });
+                fillRemoveUserOptions();
+                // The page's own user lists offer the same accounts.
+                actionsState.users = listedUsers;
+                actionsState.targets = actionTargets(listedUsers);
                 show('Removed ' + name + ' (' + body.profilesRemoved + ' profile' + (body.profilesRemoved === 1 ? '' : 's') + ').');
             }, function (error) {
                 show('Moonbase didn’t remove the data' + (error && error.status ? ' (status ' + error.status + ').' : '.'), true);
@@ -842,5 +631,21 @@
                 button.disabled = false;
             });
         });
+    }
+
+    // Listed the way the page lists them on Apply and Copy: an account with
+    // several profiles once for all of them and once for each.
+    function fillRemoveUserOptions() {
+        var select = document.getElementById('MoonbaseRemoveUser');
+        if (!select) return;
+        var current = select.value;
+        select.innerHTML = '<option value="">Pick a user</option>';
+        actionTargets(listedUsers).forEach(function (target) {
+            var option = document.createElement('option');
+            option.value = target.Id;
+            option.textContent = target.Name;
+            select.appendChild(option);
+        });
+        select.value = current;
     }
 })();

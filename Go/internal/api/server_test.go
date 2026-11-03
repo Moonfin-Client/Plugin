@@ -855,3 +855,119 @@ func TestAdminUsersWithoutProfiles(t *testing.T) {
 		t.Fatalf("users = %s", body)
 	}
 }
+
+func TestApplyDefaultsPicksProfilesTargetsAndKeys(t *testing.T) {
+	s := newTestServer()
+	call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/tv", `{"profile":{"clockBehavior":"inMenus"}}`, nil)
+	call(t, s, userKids, "POST", "/Moonfin/Settings/Profile/global", `{"profile":{"theme":"dark"}}`, nil)
+	call(t, s, other, "POST", "/Moonfin/Settings/Profile/global", `{"profile":{"theme":"dark"}}`, nil)
+	saveConfig(t, s, map[string]any{
+		"DefaultUserSettings":   map[string]any{"clockBehavior": "always", "use24HourClock": true},
+		"DefaultDeviceSettings": map[string]any{"tv": map[string]any{"clockBehavior": "never", "keyboardStyle": "docked"}},
+	})
+	env := func(c caller) map[string]any {
+		_, got := call(t, s, c, "GET", "/Moonfin/Settings", "", nil)
+		return got
+	}
+	profile := func(env map[string]any, name string) map[string]any {
+		p, _ := env[name].(map[string]any)
+		return p
+	}
+
+	code, got := call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults", `{"profiles":["tv"],"userIds":["3~31"],"keys":["keyboardStyle"]}`, nil)
+	if code != 200 || got["usersAffected"] != 1.0 {
+		t.Fatalf("apply = %d %v", code, got)
+	}
+	if tv := profile(env(userKids), "tv"); !reflect.DeepEqual(tv, map[string]any{"keyboardStyle": "docked"}) {
+		t.Fatalf("a device's own defaults must create its profile with only the picked keys: %v", tv)
+	}
+	if tv := profile(env(userMain), "tv"); tv["keyboardStyle"] != nil {
+		t.Fatalf("a profile that wasn't picked must stay as it was: %v", tv)
+	}
+
+	if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults", `{"profiles":["global"],"userIds":["3"]}`, nil); code != 200 {
+		t.Fatalf("apply to an account = %d", code)
+	}
+	main := env(userMain)
+	if profile(main, "global")["clockBehavior"] != "always" || profile(env(userKids), "global")["clockBehavior"] != "always" {
+		t.Fatalf("an account target must reach each of its profiles: %v", main)
+	}
+	if tv := profile(main, "tv"); tv["clockBehavior"] != "inMenus" || tv["use24HourClock"] != true {
+		t.Fatalf("global defaults must skip what the tv defaults set in the tv profile: %v", tv)
+	}
+	if theme := profile(env(other), "global")["clockBehavior"]; theme != nil {
+		t.Fatalf("an account that wasn't picked must stay as it was: %v", theme)
+	}
+
+	for _, body := range []string{`{"overwrite":true,"keys":["a"]}`, `{"profiles":["phone"]}`, `{"userIds":[]}`, `{"userIds":["x~1"]}`, `{"profiles":["mobile"]}`} {
+		if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults", body, nil); code != 400 {
+			t.Errorf("%s must be refused, got %d", body, code)
+		}
+	}
+	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Admin/ApplyDefaults", `{}`, nil); code != 403 {
+		t.Errorf("a user must not apply defaults, got %d", code)
+	}
+}
+
+func TestCopySettingsBetweenProfiles(t *testing.T) {
+	s := newTestServer()
+	call(t, s, adminMain, "POST", "/Moonfin/Settings/Profile/global", `{"profile":{"keyboardStyle":"glass","tmdbApiKey":"admin-key","hiddenNextUpSeries":"{\"admin-series\":\"1\"}"}}`, nil)
+	call(t, s, adminMain, "POST", "/Moonfin/Settings/Profile/tv", `{"profile":{"subtitleMode":"always"}}`, nil)
+	call(t, s, other, "POST", "/Moonfin/Settings/Profile/global", `{"profile":{"use24HourClock":true,"tmdbApiKey":"own-key"}}`, nil)
+	call(t, s, other, "POST", "/Moonfin/Settings/Profile/tv", `{"profile":{"keyboardStyle":"classic"}}`, nil)
+	for _, c := range []caller{userMain, userKids} {
+		call(t, s, c, "POST", "/Moonfin/Settings/Profile/global", `{"profile":{"a":1}}`, nil)
+	}
+
+	if code, got := call(t, s, adminMain, "GET", "/Moonfin/Settings/2~20", "", nil); code != 200 || got["global"].(map[string]any)["keyboardStyle"] != "glass" {
+		t.Fatalf("an admin must read one profile's settings: %d %v", code, got)
+	}
+	if code, _ := call(t, s, adminMain, "GET", "/Moonfin/Settings/3", "", nil); code != 400 {
+		t.Errorf("an account with two profiles must ask for one of them, got %d", code)
+	}
+	if code, _ := call(t, s, userMain, "GET", "/Moonfin/Settings/2~20", "", nil); code != 403 {
+		t.Errorf("a user must not read someone else's settings, got %d", code)
+	}
+
+	code, got := call(t, s, adminMain, "POST", "/Moonfin/Admin/CopySettings", `{"fromUserId":"2~20","toUserIds":["4"],"profiles":["global"],"keys":["keyboardStyle","tmdbApiKey","hiddenNextUpSeries"]}`, nil)
+	if code != 200 || got["usersAffected"] != 1.0 {
+		t.Fatalf("copy = %d %v", code, got)
+	}
+	_, env := call(t, s, other, "GET", "/Moonfin/Settings", "", nil)
+	global := env["global"].(map[string]any)
+	if global["keyboardStyle"] != "glass" || global["use24HourClock"] != true || global["tmdbApiKey"] != "own-key" || global["hiddenNextUpSeries"] != nil {
+		t.Fatalf("copy must merge the picked preferences and leave personal data behind: %v", global)
+	}
+
+	if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/CopySettings", `{"fromUserId":"2~20","toUserIds":["4"],"profiles":["tv"],"replace":true}`, nil); code != 200 {
+		t.Fatalf("replace = %d", code)
+	}
+	_, env = call(t, s, other, "GET", "/Moonfin/Settings", "", nil)
+	if !reflect.DeepEqual(env["tv"], map[string]any{"subtitleMode": "always"}) {
+		t.Fatalf("replace must make the profile an exact copy: %v", env["tv"])
+	}
+
+	for body, want := range map[string]int{
+		`{"fromUserId":"3","toUserIds":["4"]}`:                             400,
+		`{"fromUserId":"9","toUserIds":["4"]}`:                             404,
+		`{"fromUserId":"2~20","toUserIds":[]}`:                             400,
+		`{"fromUserId":"2~20","toUserIds":["4"],"keys":[],"replace":true}`: 400,
+	} {
+		if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/CopySettings", body, nil); code != want {
+			t.Errorf("%s = %d, want %d", body, code, want)
+		}
+	}
+}
+
+func TestPingCarriesADevicesDefaults(t *testing.T) {
+	s := newTestServer()
+	saveConfig(t, s, map[string]any{
+		"DefaultUserSettings":   map[string]any{"a": 1, "b": 1},
+		"DefaultDeviceSettings": map[string]any{"tv": map[string]any{"a": 2}},
+	})
+	_, tv := call(t, s, userMain, "GET", "/Moonfin/Ping", "", map[string]any{"profile": "tv"})
+	_, shared := call(t, s, userMain, "GET", "/Moonfin/Ping", "", nil)
+	if !reflect.DeepEqual(tv["defaultSettings"], map[string]any{"a": 2.0, "b": 1.0}) || shared["defaultSettings"].(map[string]any)["a"] != 1.0 {
+		t.Fatalf("ping must lay the device's defaults over the shared ones: tv %v shared %v", tv["defaultSettings"], shared["defaultSettings"])
+	}
+}

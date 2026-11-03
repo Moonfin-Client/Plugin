@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json.Serialization;
 using MediaBrowser.Model.Plugins;
 using Moonfin.Server.Models;
 
@@ -325,6 +326,21 @@ public class PluginConfiguration : BasePluginConfiguration
     public MoonfinSettingsProfile? DefaultUserSettings { get; set; }
 
     /// <summary>
+    /// Admin defaults for desktop, mobile and TV devices. Each set value wins over
+    /// <see cref="DefaultUserSettings"/> on that kind of device.
+    /// </summary>
+    public MoonfinDeviceDefaults? DefaultDeviceSettings { get; set; }
+
+    /// <summary>The admin defaults stored for one profile name, global or a device.</summary>
+    public MoonfinSettingsProfile? GetDefaultsFor(string? profileName) => profileName?.ToLowerInvariant() switch
+    {
+        "tv" => DefaultDeviceSettings?.Tv,
+        "desktop" => DefaultDeviceSettings?.Desktop,
+        "mobile" => DefaultDeviceSettings?.Mobile,
+        _ => DefaultUserSettings
+    };
+
+    /// <summary>
     /// Libraries added to each new user's My Media and Latest exclude lists, and to existing users'
     /// when the admin applies the defaults to them.
     /// </summary>
@@ -489,6 +505,22 @@ public class PluginConfiguration : BasePluginConfiguration
 /// <summary>
 /// Metadata for an uploaded custom theme JSON file.
 /// </summary>
+/// <summary>
+/// The per-device admin defaults. A class rather than a dictionary, since the plugin configuration
+/// is stored as XML, and its JSON matches DefaultDeviceSettings on Moonbase for Silo and Plex.
+/// </summary>
+public class MoonfinDeviceDefaults
+{
+    [JsonPropertyName("desktop")]
+    public MoonfinSettingsProfile? Desktop { get; set; }
+
+    [JsonPropertyName("mobile")]
+    public MoonfinSettingsProfile? Mobile { get; set; }
+
+    [JsonPropertyName("tv")]
+    public MoonfinSettingsProfile? Tv { get; set; }
+}
+
 public class UploadedThemeEntry
 {
     public string Id { get; set; } = string.Empty;

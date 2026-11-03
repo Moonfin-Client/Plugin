@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json.Serialization;
 using Emby.Plugins.Moonfin.Models;
 using MediaBrowser.Model.Plugins;
 
@@ -189,6 +190,21 @@ namespace Emby.Plugins.Moonfin
         /// <summary>Admin-configured default settings. Users who haven't customized a setting inherit this value.</summary>
         public MoonfinSettingsProfile? DefaultUserSettings { get; set; }
 
+        /// <summary>Admin defaults for desktop, mobile and TV devices. Each set value wins over DefaultUserSettings there.</summary>
+        public MoonfinDeviceDefaults? DefaultDeviceSettings { get; set; }
+
+        /// <summary>The admin defaults stored for one profile name, global or a device.</summary>
+        public MoonfinSettingsProfile? GetDefaultsFor(string? profileName)
+        {
+            switch (profileName?.ToLowerInvariant())
+            {
+                case "tv": return DefaultDeviceSettings?.Tv;
+                case "desktop": return DefaultDeviceSettings?.Desktop;
+                case "mobile": return DefaultDeviceSettings?.Mobile;
+                default: return DefaultUserSettings;
+            }
+        }
+
         /// <summary>
         /// Libraries added to each new user's My Media and Latest exclude lists, and to existing users'
         /// when the admin applies the defaults to them. Kept as Emby's numeric ids, which Moonfin
@@ -256,6 +272,17 @@ namespace Emby.Plugins.Moonfin
 
             return value;
         }
+    }
+
+    /// <summary>
+    /// The per-device admin defaults. A class rather than a dictionary, since the plugin configuration
+    /// is stored as XML, and its JSON matches DefaultDeviceSettings on Moonbase for Silo and Plex.
+    /// </summary>
+    public class MoonfinDeviceDefaults
+    {
+        [JsonPropertyName("desktop")] public MoonfinSettingsProfile? Desktop { get; set; }
+        [JsonPropertyName("mobile")] public MoonfinSettingsProfile? Mobile { get; set; }
+        [JsonPropertyName("tv")] public MoonfinSettingsProfile? Tv { get; set; }
     }
 
     public class UploadedThemeEntry
