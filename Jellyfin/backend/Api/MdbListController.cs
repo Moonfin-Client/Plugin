@@ -32,6 +32,10 @@ public class MdbListController : ControllerBase
     private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromMinutes(10);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTimeOffset At, string Error)> _negativeCache = new();
 
+    // A dropped connection or timeout usually clears within the minute, so Watching Now
+    // remembers it only briefly, which still spares the requests queued behind it.
+    private static readonly TimeSpan ConnectionFailureTtl = TimeSpan.FromSeconds(30);
+
     // Debounced disk flush for on-demand cache writes (the batch task also flushes).
     private static readonly TimeSpan FlushDebounce = TimeSpan.FromSeconds(30);
     private static DateTimeOffset _lastFlushRequest = DateTimeOffset.MinValue;
@@ -447,6 +451,12 @@ public class MdbListController : ControllerBase
         }
         catch (Exception ex)
         {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                // Dated so it lapses after ConnectionFailureTtl rather than the full window.
+                _negativeCache[negKey] = (DateTimeOffset.UtcNow - NegativeCacheTtl + ConnectionFailureTtl, ex.Message);
+            }
+
             return Ok(new MdbListWatchingNowResponse
             {
                 Error = ex.Message

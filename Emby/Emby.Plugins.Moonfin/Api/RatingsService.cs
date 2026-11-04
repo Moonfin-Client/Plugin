@@ -54,6 +54,10 @@ namespace Emby.Plugins.Moonfin.Api
         private static readonly TimeSpan WatchingNowCacheTtl = TimeSpan.FromMinutes(4.5);
         private static readonly SemaphoreSlim _watchingNowLock = new SemaphoreSlim(1, 1);
 
+        // A dropped connection or timeout usually clears within the minute, so Watching Now
+        // remembers it only briefly, which still spares the requests queued behind it.
+        private static readonly TimeSpan ConnectionFailureTtl = TimeSpan.FromSeconds(30);
+
         private static readonly string[] DefaultRatingSources = { "imdb", "tmdb", "tomatoes", "metacritic" };
 
         private static readonly JsonSerializerOptions JsonOpts = MdbListApiHelper.JsonOptions;
@@ -266,6 +270,8 @@ namespace Emby.Plugins.Moonfin.Api
             }
             catch (Exception ex)
             {
+                // Dated so it lapses after ConnectionFailureTtl rather than the full window.
+                _negativeCache[negKey] = (DateTimeOffset.UtcNow - NegativeCacheTtl + ConnectionFailureTtl, ex.Message);
                 return Json(new { error = ex.Message });
             }
             finally

@@ -29,6 +29,9 @@ type external struct {
 	mdblistBase string
 	tmdbBase    string
 	cache       ttlCache
+	// watchingNow lets one caller fetch the shared feed while the rest wait for
+	// its answer, since every fetch counts against the MDBList key's quota.
+	watchingNow sync.Mutex
 }
 
 func newExternal() external {
@@ -253,13 +256,31 @@ func (s *Server) handleMdbListWatchingNow(w http.ResponseWriter, r *http.Request
 	}
 
 	const cacheKey = "mdblist:watching-now"
-	if v, ok := s.ext.cache.get(cacheKey, 270*time.Second); ok {
-		writeJSON(w, http.StatusOK, v)
+	failKey := "mdblist-fail:watching-now:" + key
+	netFailKey := "mdblist-netfail:watching-now:" + key
+	answered := func() bool {
+		if v, ok := s.ext.cache.get(cacheKey, 270*time.Second); ok {
+			writeJSON(w, http.StatusOK, v)
+			return true
+		}
+		// MDBList answering with an error is remembered longer than a dropped
+		// connection, which usually comes back within the minute.
+		if msg, failed := s.ext.cache.get(failKey, 10*time.Minute); failed {
+			writeJSON(w, http.StatusOK, M{"error": msg, "items": []any{}})
+			return true
+		}
+		if msg, failed := s.ext.cache.get(netFailKey, 30*time.Second); failed {
+			writeJSON(w, http.StatusOK, M{"error": msg, "items": []any{}})
+			return true
+		}
+		return false
+	}
+	if answered() {
 		return
 	}
-	failKey := "mdblist-fail:watching-now:" + key
-	if msg, failed := s.ext.cache.get(failKey, 10*time.Minute); failed {
-		writeJSON(w, http.StatusOK, M{"error": msg, "items": []any{}})
+	s.ext.watchingNow.Lock()
+	defer s.ext.watchingNow.Unlock()
+	if answered() {
 		return
 	}
 	var body M
@@ -268,7 +289,11 @@ func (s *Server) handleMdbListWatchingNow(w http.ResponseWriter, r *http.Request
 		msg := providerError("MDBList", status, err)
 		// A canceled call says nothing about MDBList.
 		if r.Context().Err() == nil {
-			s.ext.cache.set(failKey, msg)
+			if err != nil {
+				s.ext.cache.set(netFailKey, msg)
+			} else {
+				s.ext.cache.set(failKey, msg)
+			}
 		}
 		writeJSON(w, http.StatusOK, M{"error": msg, "items": []any{}})
 		return

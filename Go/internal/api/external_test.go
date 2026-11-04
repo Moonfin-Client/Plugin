@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func withKeys(t *testing.T, s *Server, mdblist, tmdb string) {
@@ -129,6 +131,60 @@ func TestMdbListWatchingNow(t *testing.T) {
 	}
 	if hits.Load() != 2 {
 		t.Fatalf("a failure must be cached briefly, provider saw %d requests", hits.Load())
+	}
+}
+
+func TestMdbListWatchingNowFetchesOnceForABurst(t *testing.T) {
+	var hits atomic.Int32
+	srv := provider(t, &hits)
+	s := newTestServer()
+	s.ext.mdblistBase = srv.URL
+	withKeys(t, s, "mdb-key", "")
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			serve(context.Background(), s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil)
+		}()
+	}
+	wg.Wait()
+	if hits.Load() != 1 {
+		t.Fatalf("callers waiting on the fetch must share it, provider saw %d requests", hits.Load())
+	}
+}
+
+func TestMdbListWatchingNowRetriesSoonAfterADroppedConnection(t *testing.T) {
+	var hits atomic.Int32
+	dropping := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		conn.Close()
+	}))
+	t.Cleanup(dropping.Close)
+	s := newTestServer()
+	s.ext.mdblistBase = dropping.URL
+	withKeys(t, s, "mdb-key", "")
+	for range 2 {
+		if _, got := call(t, s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil); got["error"] == nil {
+			t.Fatalf("a dropped connection must answer with an error: %v", got)
+		}
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("a dropped connection must be remembered briefly, provider saw %d requests", hits.Load())
+	}
+	// Half a minute later the failure is forgotten and MDBList is asked again.
+	s.ext.cache.mu.Lock()
+	for k, e := range s.ext.cache.m {
+		if strings.HasPrefix(k, "mdblist-netfail:") {
+			e.at = e.at.Add(-31 * time.Second)
+			s.ext.cache.m[k] = e
+		}
+	}
+	s.ext.cache.mu.Unlock()
+	call(t, s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil)
+	if hits.Load() != 2 {
+		t.Fatalf("a dropped connection must not be kept like an error answer, provider saw %d requests", hits.Load())
 	}
 }
 
