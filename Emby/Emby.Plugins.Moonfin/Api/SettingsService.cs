@@ -668,7 +668,7 @@ namespace Emby.Plugins.Moonfin.Api
             }
 
             var items = lm.GetItemsResult(query).Items
-                .Where(i => i.IsVisible(user))
+                .Where(i => i.IsVisible(user) && HasBackdropImage(i))
                 .ToList();
 
             IEnumerable<BaseItem> seq = items;
@@ -721,14 +721,22 @@ namespace Emby.Plugins.Moonfin.Api
 
             var seen = new HashSet<long>();
             var series = new List<BaseItem>();
-            foreach (var episode in lm.GetItemsResult(query).Items.OfType<Episode>())
+            // Hidden or excluded series, or ones without a backdrop, can use up a whole page of episodes, so a few more pages are read before giving up.
+            for (var page = 0; page < 3 && series.Count < limit; page++)
             {
-                if (!seen.Add(episode.SeriesId)) continue;
-                var item = lm.GetItemById(episode.SeriesId);
-                if (item == null || !item.IsVisible(user)) continue;
-                if (excludedNames != null && item.Genres != null && item.Genres.Any(excludedNames.Contains)) continue;
-                series.Add(item);
-                if (series.Count >= limit) break;
+                query.StartIndex = page * 300;
+                var episodes = lm.GetItemsResult(query).Items;
+                foreach (var episode in episodes.OfType<Episode>())
+                {
+                    if (!seen.Add(episode.SeriesId)) continue;
+                    var item = lm.GetItemById(episode.SeriesId);
+                    if (item == null || !item.IsVisible(user) || !HasBackdropImage(item)) continue;
+                    if (excludedNames != null && item.Genres != null && item.Genres.Any(excludedNames.Contains)) continue;
+                    series.Add(item);
+                    if (series.Count >= limit) break;
+                }
+
+                if (episodes.Length < 300) break;
             }
 
             return series;

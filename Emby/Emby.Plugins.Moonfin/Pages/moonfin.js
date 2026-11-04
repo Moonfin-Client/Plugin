@@ -3111,12 +3111,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         function togglePickerVisibility(keepPicks) {
             var isCollection = sourceSelect.value === 'collection';
             var isLibrary = ['library', 'recentlyAdded', 'recentlyReleased', 'newReleases'].indexOf(sourceSelect.value) !== -1;
-            // Changing the source keeps library picks that aren't saved yet, even by way of Collections.
-            var keepLibraryPicks = keepPicks === true && view.querySelector('#DefaultLibraryPicker .adminLibraryCb') !== null;
             collectionPickerSection.style.display = isCollection ? '' : 'none';
             libraryPickerSection.style.display = isLibrary ? '' : 'none';
             if (isCollection) loadAdminCollectionPicker(view, defaults.mediaBarCollectionIds || []);
-            if (isLibrary && !keepLibraryPicks) loadAdminLibraryPicker(view, defaults.mediaBarLibraryIds || []);
+            // The library picks load with the profile, even while hidden, so changing the source keeps any that aren't saved yet.
+            if (keepPicks !== true) loadAdminLibraryPicker(view, defaults.mediaBarLibraryIds || []);
         }
         // Assigned rather than added, so a refill doesn't stack one handler per profile.
         sourceSelect.onchange = function () { togglePickerVisibility(true); };

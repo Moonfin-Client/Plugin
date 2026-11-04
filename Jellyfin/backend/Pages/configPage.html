@@ -9264,14 +9264,13 @@
                     function togglePickerVisibility(keepPicks) {
                         var isCollection = sourceSelect.value === 'collection';
                         var isLibrary = ['library', 'recentlyAdded', 'recentlyReleased', 'newReleases'].indexOf(sourceSelect.value) !== -1;
-                        // Changing the source keeps library picks that aren't saved yet, even by way of Collections.
-                        var keepLibraryPicks = keepPicks === true && document.querySelector('#DefaultLibraryPicker .adminLibraryCb') !== null;
                         collectionPickerSection.style.display = isCollection ? '' : 'none';
                         libraryPickerSection.style.display = isLibrary ? '' : 'none';
                         if (isCollection) {
                             loadAdminCollectionPicker(defaults.mediaBarCollectionIds || []);
                         }
-                        if (isLibrary && !keepLibraryPicks) {
+                        // The library picks load with the profile, even while hidden, so changing the source keeps any that aren't saved yet.
+                        if (keepPicks !== true) {
                             loadAdminLibraryPicker(defaults.mediaBarLibraryIds || []);
                         }
                     }

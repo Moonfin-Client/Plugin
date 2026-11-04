@@ -1422,12 +1422,15 @@ public class MoonfinController : ControllerBase
 
         if (includedGenreIds is { Length: 0 }) return [];
 
+        // Titles without a backdrop are left off the bar, so a newest-first list reads further ahead to still fill it.
+        var fetchLimit = order == ItemSortBy.Random ? limit : Math.Max(limit * 4, 50);
+
         if (libraryIds is not { Count: > 0 })
         {
             var query = new InternalItemsQuery
             {
                 IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                Limit = limit,
+                Limit = fetchLimit,
                 Recursive = true
             };
 
@@ -1437,7 +1440,8 @@ public class MoonfinController : ControllerBase
 
             SetMediaBarOrder(query, order);
             return _libraryManager.GetItemsResult(query).Items
-                .Where(item => UserReflection.IsVisibleTo(item, queryUser))
+                .Where(item => UserReflection.IsVisibleTo(item, queryUser) && HasBackdropImage(item))
+                .Take(limit)
                 .ToList();
         }
 
@@ -1447,7 +1451,7 @@ public class MoonfinController : ControllerBase
         var allItems = new List<BaseItem>();
         var seenIds = new HashSet<Guid>();
         // Newest first has to compare every library's newest, so each gives the full count.
-        var perLibraryLimit = order == ItemSortBy.Random ? Math.Max(1, limit / allowedLibraryIds.Count + 1) : limit;
+        var perLibraryLimit = order == ItemSortBy.Random ? Math.Max(1, limit / allowedLibraryIds.Count + 1) : fetchLimit;
 
         foreach (var parentGuid in allowedLibraryIds)
         {
@@ -1476,6 +1480,7 @@ public class MoonfinController : ControllerBase
         if (order != ItemSortBy.Random)
         {
             return allItems
+                .Where(HasBackdropImage)
                 .OrderByDescending(item => order == ItemSortBy.DateCreated ? item.DateCreated : item.PremiereDate ?? DateTime.MinValue)
                 .Take(limit)
                 .ToList();
@@ -1516,8 +1521,7 @@ public class MoonfinController : ControllerBase
     /// </summary>
     private List<BaseItem> GetNewReleaseSeries(List<string>? libraryIds, int days, int limit, object queryUser, List<string>? excludedGenreIds = null)
     {
-        var includedGenreIds = GetIncludedGenreIds(excludedGenreIds, queryUser);
-        if (includedGenreIds is { Length: 0 }) return [];
+        var excludedNames = ResolveExcludedGenreNames(excludedGenreIds);
 
         // The window comes from synced settings, so keep it to the 7 to 90 days the apps offer.
         days = Math.Clamp(days, 7, 90);
@@ -1542,30 +1546,41 @@ public class MoonfinController : ControllerBase
         if (!UserReflection.ApplyUser(episodeQuery, queryUser)) return [];
         SetOrder(episodeQuery, ItemSortBy.PremiereDate, descending: true);
 
-        var seriesIds = _libraryManager.GetItemsResult(episodeQuery).Items
-            .OfType<Episode>()
-            .Select(episode => episode.SeriesId)
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
-        if (seriesIds.Length == 0) return [];
-
-        var seriesQuery = new InternalItemsQuery
+        var seen = new HashSet<Guid>();
+        var series = new List<BaseItem>();
+        // Hidden or excluded series, or ones without a backdrop, can use up a whole page of episodes, so a few more pages are read before giving up.
+        for (var page = 0; page < 3 && series.Count < limit; page++)
         {
-            IncludeItemTypes = [BaseItemKind.Series],
-            ItemIds = seriesIds,
-            Recursive = true
-        };
+            episodeQuery.StartIndex = page * 300;
+            var episodes = _libraryManager.GetItemsResult(episodeQuery).Items;
+            var seriesIds = episodes
+                .OfType<Episode>()
+                .Select(episode => episode.SeriesId)
+                .Where(id => id != Guid.Empty && seen.Add(id))
+                .ToArray();
 
-        if (includedGenreIds != null) seriesQuery.GenreIds = includedGenreIds;
-        if (!UserReflection.ApplyUser(seriesQuery, queryUser)) return [];
+            if (seriesIds.Length > 0)
+            {
+                var seriesQuery = new InternalItemsQuery
+                {
+                    IncludeItemTypes = [BaseItemKind.Series],
+                    ItemIds = seriesIds,
+                    Recursive = true
+                };
 
-        var rank = seriesIds.Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index);
-        return _libraryManager.GetItemsResult(seriesQuery).Items
-            .Where(item => UserReflection.IsVisibleTo(item, queryUser))
-            .OrderBy(item => rank[item.Id])
-            .Take(limit)
-            .ToList();
+                if (!UserReflection.ApplyUser(seriesQuery, queryUser)) return [];
+
+                var rank = seriesIds.Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index);
+                series.AddRange(_libraryManager.GetItemsResult(seriesQuery).Items
+                    .Where(item => UserReflection.IsVisibleTo(item, queryUser) && HasBackdropImage(item))
+                    .Where(item => excludedNames == null || !item.Genres.Any(g => excludedNames.Contains(g)))
+                    .OrderBy(item => rank[item.Id]));
+            }
+
+            if (episodes.Count < 300) break;
+        }
+
+        return series.Take(limit).ToList();
     }
 
     /// <summary>
