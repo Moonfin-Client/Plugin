@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -140,17 +141,25 @@ func TestMdbListWatchingNowFetchesOnceForABurst(t *testing.T) {
 	s := newTestServer()
 	s.ext.mdblistBase = srv.URL
 	withKeys(t, s, "mdb-key", "")
+	answers := make([]map[string]any, 8)
 	var wg sync.WaitGroup
-	for range 8 {
+	for i := range answers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			serve(context.Background(), s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil)
+			resp := serve(context.Background(), s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil)
+			defer resp.Body.Close()
+			json.NewDecoder(resp.Body).Decode(&answers[i])
 		}()
 	}
 	wg.Wait()
 	if hits.Load() != 1 {
 		t.Fatalf("callers waiting on the fetch must share it, provider saw %d requests", hits.Load())
+	}
+	for i, got := range answers {
+		if items, _ := got["items"].([]any); got["error"] != nil || len(items) != 2 {
+			t.Errorf("caller %d must get the feed the first one fetched: %v", i, got)
+		}
 	}
 }
 
