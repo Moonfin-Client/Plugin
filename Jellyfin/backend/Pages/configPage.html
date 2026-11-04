@@ -1330,6 +1330,10 @@
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">live_tv</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Live TV</span><span class="moonfinNavSub">Recordings</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="smartSearch">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">manage_search</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Smart Search</span><span class="moonfinNavSub">Search with plain sentences</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="defaults">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">tune</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
@@ -2013,6 +2017,36 @@
                             <input type="number" id="LiveTvIncompleteThresholdPercent" is="emby-input" min="50" max="100" step="1" />
                             <div class="fieldDescription">
                                 Recordings shorter than this share of their scheduled time are incomplete. Default 90.
+                            </div>
+                        </div>
+                    </div>
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="smartSearch">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Smart Search</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="SmartSearchEnabled" is="emby-checkbox" />
+                                <span>Enable smart search</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Lets Moonfin apps search with plain sentences like "90s movie about a kid pulled into a board game" or "electronic music duo from the 90s".
+                                Searches run on this server's CPU with a small model, so what people type never leaves the server. Turning it on downloads the model
+                                and indexes movies, shows, people, music and books with the Moonfin Smart Search Index task, which starts on its own with the first search.
+                                With the TMDB key on the Integrations tab it also indexes the most popular TMDB titles, so titles you don't have show up as Seerr suggestions.
+                                The first run takes 15 to 30 minutes on a desktop CPU and an hour or more on a Raspberry Pi, using half the cores. After that only changes are indexed. See the Smart Search page in the wiki.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="SmartSearchModel">Search model</label>
+                            <select is="emby-select" id="SmartSearchModel">
+                                <option value="english">English</option>
+                                <option value="multilingual">Multilingual</option>
+                            </select>
+                            <div class="fieldDescription">
+                                English is the small, fast model: a 91 MB download that keeps about 120 MB in memory. Multilingual understands searches in about 100 languages
+                                and still does well in English, but it's a 488 MB download, keeps about 175 MB in memory, and its first build takes about two and a half times as long.
+                                After that, nightly updates only index what changed and searches are about as fast with either model. Changing this rebuilds the index, which starts with the next search.
                             </div>
                         </div>
                     </div>
@@ -4421,6 +4455,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrBadgeStyle">Seerr Badge Style</label>
+                                <select id="DefaultSeerrBadgeStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="badge">Badge</option>
+                                    <option value="banner">Banner</option>
+                                </select>
+                                <div class="fieldDescription">Badge puts Seerr's dot in a corner. Banner runs the status across the top of the poster.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrRowsSortBy">Seerr Rows Sorting</label>
                                 <select id="DefaultSeerrRowsSortBy" is="emby-select"></select>
                             </div>
@@ -5305,11 +5348,12 @@
             // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
             // has to come after the rule that hides its parent.
             var FIELD_DEPENDENCIES = [
-                { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
+                { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
                 { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
+                { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
                 { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
                 { parent: 'AnimeMarkersEnabled', fields: ['AnimeMarkerRecapLookup', 'AnimeMarkerShowFiller', 'AnimeMarkerMaxAgeDays'] },
                 { parent: 'AnimeAudioMarkersEnabled', fields: ['AnimeAudioMarkersMovies', 'AnimeAudioSeparateDualAudio', 'AnimeAudioLabelStyle'] },
@@ -5318,6 +5362,7 @@
                 { parent: 'DefaultNavbarPosition', off: ['top', 'left'], fields: ['DefaultBottomNavbarStyle', 'DefaultBottomNavbarTab1'] },
                 { parent: 'DefaultNavbarPosition', off: ['bottom'], fields: ['DefaultNavbarAlwaysExpanded'] },
                 { parent: 'DefaultShowShuffleButton', fields: ['DefaultShuffleContentType'] },
+                { parent: 'DefaultShowSeerrAvailabilityBadges', fields: ['DefaultSeerrBadgeStyle'] },
                 { parent: 'DefaultSeasonalSurprise', off: ['none'], fields: ['DefaultSeasonalDensity', 'DefaultSeasonalFollower'] },
                 { parent: 'DefaultLoadingAnimationImage', off: ['none'], fields: ['DefaultLoadingAnimationPosition', 'DefaultLoadingAnimationSize', 'DefaultLoadingAnimationSpeed', 'DefaultShowLoadingAnimationText'] },
                 { parent: 'DefaultScreensaverComponent', off: ['none'], fields: ['DefaultScreensaverMovement', 'DefaultScreensaverSize'] },
@@ -8854,6 +8899,8 @@
                     document.querySelector('#StudioLogosEnabled').checked = config.StudioLogosEnabled !== false;
                     document.querySelector('#StudioLogosMaxAgeDays').value = config.StudioLogosMaxAgeDays || 30;
                     document.querySelector('#LiveTvDetectIncompleteRecordings').checked = config.LiveTvDetectIncompleteRecordings !== false;
+                    document.querySelector('#SmartSearchEnabled').checked = config.SmartSearchEnabled === true;
+                    document.querySelector('#SmartSearchModel').value = config.SmartSearchModel || 'english';
                     document.querySelector('#LiveTvAutoRecordCompleteShowing').checked = config.LiveTvAutoRecordCompleteShowing === true;
                     document.querySelector('#LiveTvIncompleteThresholdPercent').value = config.LiveTvIncompleteThresholdPercent || 90;
                     document.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
@@ -9095,6 +9142,7 @@
                     setNullableBoolSelect('#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
                     setNullableBoolSelect('#DefaultSeerrShowMissingCollectionItems', defaults.seerrShowMissingCollectionItems);
                     setNullableBoolSelect('#DefaultShowSeerrAvailabilityBadges', defaults.showSeerrAvailabilityBadges);
+                    setSelectValue('#DefaultSeerrBadgeStyle', defaults.seerrBadgeStyle, 'Configured style');
                     fillExternalRowSortSelect('#DefaultSeerrRowsSortBy');
                     setSelectValue('#DefaultSeerrRowsSortBy', defaults.seerrRowsSortBy, 'Configured sort');
                     setSelectValue('#DefaultSeerrRowsSortOrder', defaults.seerrRowsSortOrder, 'Configured direction');
@@ -9773,6 +9821,8 @@
                         config.StudioLogosEnabled = document.querySelector('#StudioLogosEnabled').checked;
                         config.StudioLogosMaxAgeDays = parseInt(document.querySelector('#StudioLogosMaxAgeDays').value, 10) || 30;
                         config.LiveTvDetectIncompleteRecordings = document.querySelector('#LiveTvDetectIncompleteRecordings').checked;
+                        config.SmartSearchEnabled = document.querySelector('#SmartSearchEnabled').checked;
+                        config.SmartSearchModel = document.querySelector('#SmartSearchModel').value || 'english';
                         config.LiveTvAutoRecordCompleteShowing = document.querySelector('#LiveTvAutoRecordCompleteShowing').checked;
                         config.LiveTvIncompleteThresholdPercent = Math.min(100, Math.max(50, parseInt(document.querySelector('#LiveTvIncompleteThresholdPercent').value, 10) || 90));
                         config.LiveTvDeleteIncompleteCopies = document.querySelector('#LiveTvDeleteIncompleteCopies').checked;
@@ -10089,6 +10139,7 @@
                     ds.seerrBlockNsfw = getNullableBoolSelect('#DefaultSeerrBlockNsfw');
                     ds.seerrShowMissingCollectionItems = getNullableBoolSelect('#DefaultSeerrShowMissingCollectionItems');
                     ds.showSeerrAvailabilityBadges = getNullableBoolSelect('#DefaultShowSeerrAvailabilityBadges');
+                    ds.seerrBadgeStyle = document.querySelector('#DefaultSeerrBadgeStyle').value || null;
                     // seerrRows carries more than the ordering, so merge rather than replace.
                     var seerrRows = Object.assign({}, ds.seerrRows || {});
                     seerrRows.rowOrder = getSeerrDiscoveryRowOrder();

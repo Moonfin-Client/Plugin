@@ -33,7 +33,8 @@
                 'Retro Games (EmulatorJS)': 'Not supported on Silo yet: Silo doesn’t let plugins read game files. These settings do nothing on Silo for now.',
                 'MDBList Integration': 'Ratings work on Silo. The official MDBList lists aren’t supported on Silo yet, because Silo doesn’t let plugins read its library.',
                 'PINs': 'Not supported on Silo yet: Moonbase doesn’t keep PINs on Silo. Apps use the PIN stored on the device.',
-                'Uploaded Themes': 'Moonbase on Silo keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.'
+                'Uploaded Themes': 'Moonbase on Silo keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.',
+                'Smart Search': 'Not supported on Silo yet: Silo doesn’t let plugins read its library. These settings do nothing on Silo for now.'
             },
             liveTv: false,
             ownRequests: true,
@@ -58,7 +59,8 @@
                 'Uploaded Themes': 'Moonbase for Plex keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.',
                 'Web Plugin Status': 'Plex Web can’t load Moonfin add-ons, so this doesn’t apply on Plex.',
                 'Active Downloads': 'Not available on Plex.',
-                'MDBList Integration': 'Ratings work on Plex. The official MDBList lists don’t.'
+                'MDBList Integration': 'Ratings work on Plex. The official MDBList lists don’t.',
+                'Smart Search': 'Works on Plex for your library. Titles you don’t have don’t show up, since the Seerr proxy isn’t part of Moonbase for Plex. The index rebuilds a minute after Moonbase starts and every night at 3:00.'
             },
             liveTv: true,
             ownRequests: false,

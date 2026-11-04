@@ -127,8 +127,9 @@ Moonfin looks for Moonbase on port 32500 of your Plex server's address. If it ru
 - Plex's remote access only covers Plex itself. To use Moonbase away from home, put it behind a reverse proxy with HTTPS, or reach it over a VPN, and set that address in Moonfin. Don't forward port 32500 to the internet, since Moonfin sends your Plex token to Moonbase and plain HTTP would expose it.
 - The Moonfin web app on HTTPS can't reach Moonbase over plain HTTP, so it needs the HTTPS address too.
 - It does what Moonbase for Silo does: settings sync, admin defaults, MDBList and TMDB, messages, uploaded themes and each user's collection order. Similar items, custom rows, curated MDBList rows, the seasonal row and the Seerr proxy aren't available.
+- Smart search works on Plex too, turned on in the Smart Search tab, and covers your movies, shows, the people credited on them, and music. Each person sees only what Plex lets them open. Titles you don't have don't show up, since there's no Seerr proxy. It runs the same engine as the Jellyfin plugin, which is why the image carries a small .NET helper next to Moonbase. The index rebuilds a minute after the container starts and every night at 3:00.
 - A settings change reaches other devices at their next sync.
 
 ### Data
 
-`/config` holds Moonbase's data and `owner-token`, the server owner's Plex token from the admin sign-in. Treat `owner-token` like a password. Removing the volume removes everything. Signing out the "Moonbase" device in your Plex account's authorized devices revokes the token.
+`/config` holds Moonbase's data and `owner-token`, the server owner's Plex token from the admin sign-in. With smart search on, `smart-search/` in it holds the model and the index, about 135 MB with the English model or 535 MB with Multilingual. Treat `owner-token` like a password. Removing the volume removes everything. Signing out the "Moonbase" device in your Plex account's authorized devices revokes the token.

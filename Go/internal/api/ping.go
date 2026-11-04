@@ -24,6 +24,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"messagesSupported":        true,
 		"recommendationsSupported": false,
 		"clientLogSupported":       false,
+		"smartSearchEnabled":       s.smartSearchOn(cfg),
 		"defaultSettings":          pingDefaults(cfg, r.URL.Query().Get("profile")),
 	})
 }

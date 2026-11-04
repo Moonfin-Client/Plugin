@@ -11,6 +11,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("seerrBlockNsfw")] public bool? SeerrBlockNsfw { get; set; }
         [JsonPropertyName("seerrShowMissingCollectionItems")] public bool? SeerrShowMissingCollectionItems { get; set; }
         [JsonPropertyName("showSeerrAvailabilityBadges")] public bool? ShowSeerrAvailabilityBadges { get; set; }
+        [JsonPropertyName("seerrBadgeStyle")] public string? SeerrBadgeStyle { get; set; }
         [JsonPropertyName("showBookDiscoverTab")] public bool? ShowBookDiscoverTab { get; set; }
         [JsonPropertyName("seerrRows")] public SeerrRowsConfig? SeerrRows { get; set; }
         [JsonPropertyName("mdblistEnabled")] public bool? MdblistEnabled { get; set; }

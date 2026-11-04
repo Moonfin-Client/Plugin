@@ -409,7 +409,9 @@ public class SeerrProxyController : ControllerBase
         // A user with a parental limit gets Seerr held to it: lists lose the titles above it,
         // a details page above it is refused, and so is a request for one. Everyone else, and
         // every other call, is passed through as it was.
-        var verdict = SeerrParentalFilter.IsJudged(method.Method, path) ? await VerdictFor(userId.Value).ConfigureAwait(false) : null;
+        var verdict = SeerrParentalFilter.IsJudged(method.Method, path)
+            ? await _ratings.SeerrVerdictForAsync(_ratingLimits, _settings, userId.Value, HttpContext.RequestAborted).ConfigureAwait(false)
+            : null;
         if (verdict != null && method == HttpMethod.Post && SeerrParentalFilter.IsRequestPath(path))
         {
             var target = SeerrParentalFilter.RequestTarget(body);
@@ -458,43 +460,6 @@ public class SeerrProxyController : ControllerBase
 
         Response.StatusCode = result.StatusCode;
         return File(result.Body, responseContentType);
-    }
-
-    /// <summary>
-    /// The verdict a limited user's titles are held to, or null for a user without a limit.
-    /// Without a TMDB key nothing can be judged, so nothing passes: the same rule the custom rows
-    /// follow. A lookup that fails is a title that cannot be placed, and goes the same way.
-    /// </summary>
-    private async Task<SeerrParentalFilter.Verdict?> VerdictFor(Guid userId)
-    {
-        var limit = _ratingLimits.ForUser(userId);
-        if (!limit.HasLimit)
-        {
-            return null;
-        }
-
-        var apiKey = await TmdbApiKeys.ResolveAsync(_settings, userId).ConfigureAwait(false);
-        return async (mediaType, tmdbId) =>
-        {
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                return false;
-            }
-
-            try
-            {
-                var certification = await _ratings.GetCertificationAsync(mediaType, tmdbId, apiKey!, HttpContext.RequestAborted).ConfigureAwait(false);
-                return limit.IsAllowed(certification);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        };
     }
 
     private static bool IsJson(string? contentType) =>

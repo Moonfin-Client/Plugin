@@ -259,4 +259,5 @@ var formFields = []formField{
 	{Entry: "defaultsIntegrations", Field: "seerrBlockNsfw", Key: "seerrBlockNsfw", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsIntegrations", Field: "seerrShowMissingCollectionItems", Key: "seerrShowMissingCollectionItems", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsIntegrations", Field: "showSeerrAvailabilityBadges", Key: "showSeerrAvailabilityBadges", Defaults: true, Kind: kindTribool},
+	{Entry: "defaultsIntegrations", Field: "seerrBadgeStyle", Key: "seerrBadgeStyle", Defaults: true, Kind: kindString},
 }

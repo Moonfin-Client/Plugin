@@ -558,12 +558,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
     // has to come after the rule that hides its parent.
     var FIELD_DEPENDENCIES = [
-        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
+        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
         { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
         { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
         { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
         { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
         { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
+        { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
         { parent: 'AnimeMarkersEnabled', fields: ['AnimeMarkerRecapLookup', 'AnimeMarkerShowFiller', 'AnimeMarkerMaxAgeDays'] },
         { parent: 'AnimeAudioMarkersEnabled', fields: ['AnimeAudioMarkersMovies', 'AnimeAudioSeparateDualAudio', 'AnimeAudioLabelStyle'] },
         { parent: ['AnimeMarkersEnabled', 'AnimeAudioMarkersEnabled'], fields: ['AnimeMarkerLibraryPicker', 'AnimeAudioTrustSelectedLibraries', 'AnimeMarkerPlacement', 'AnimeMarkerDiagBtn', 'AnimeMarkerPreviewName', 'AnimeMarkerVerboseLogging', 'AnimeMarkerLogBtn'] },
@@ -571,6 +572,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultNavbarPosition', off: ['top', 'left'], fields: ['DefaultBottomNavbarStyle', 'DefaultBottomNavbarTab1'] },
         { parent: 'DefaultNavbarPosition', off: ['bottom'], fields: ['DefaultNavbarAlwaysExpanded'] },
         { parent: 'DefaultShowShuffleButton', fields: ['DefaultShuffleContentType'] },
+        { parent: 'DefaultShowSeerrAvailabilityBadges', fields: ['DefaultSeerrBadgeStyle'] },
         { parent: 'DefaultSeasonalSurprise', off: ['none'], fields: ['DefaultSeasonalDensity', 'DefaultSeasonalFollower'] },
         { parent: 'DefaultLoadingAnimationImage', off: ['none'], fields: ['DefaultLoadingAnimationPosition', 'DefaultLoadingAnimationSize', 'DefaultLoadingAnimationSpeed', 'DefaultShowLoadingAnimationText'] },
         { parent: 'DefaultScreensaverComponent', off: ['none'], fields: ['DefaultScreensaverMovement', 'DefaultScreensaverSize'] },
@@ -2773,6 +2775,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#WebEnableWebRtcScan').checked = config.WebEnableWebRtcScan !== false;
             view.querySelector('#EnableClientLogUpload').checked = config.EnableClientLogUpload !== false;
             view.querySelector('#LiveTvDetectIncompleteRecordings').checked = config.LiveTvDetectIncompleteRecordings !== false;
+            view.querySelector('#SmartSearchEnabled').checked = config.SmartSearchEnabled === true;
+            view.querySelector('#SmartSearchModel').value = config.SmartSearchModel || 'english';
             view.querySelector('#LiveTvAutoRecordCompleteShowing').checked = config.LiveTvAutoRecordCompleteShowing === true;
             view.querySelector('#LiveTvIncompleteThresholdPercent').value = config.LiveTvIncompleteThresholdPercent || 90;
             view.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
@@ -2994,6 +2998,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultSeerrBlockNsfw', defaults.seerrBlockNsfw);
         setNullableBoolSelect(view, '#DefaultSeerrShowMissingCollectionItems', defaults.seerrShowMissingCollectionItems);
         setNullableBoolSelect(view, '#DefaultShowSeerrAvailabilityBadges', defaults.showSeerrAvailabilityBadges);
+        setSelectValue(view, '#DefaultSeerrBadgeStyle', defaults.seerrBadgeStyle, 'Configured style');
         fillExternalRowSortSelect(view, '#DefaultSeerrRowsSortBy');
         setSelectValue(view, '#DefaultSeerrRowsSortBy', defaults.seerrRowsSortBy, 'Configured sort');
         setSelectValue(view, '#DefaultSeerrRowsSortOrder', defaults.seerrRowsSortOrder, 'Configured direction');
@@ -3163,6 +3168,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.WebEnableWebRtcScan = view.querySelector('#WebEnableWebRtcScan').checked;
             config.EnableClientLogUpload = view.querySelector('#EnableClientLogUpload').checked;
             config.LiveTvDetectIncompleteRecordings = view.querySelector('#LiveTvDetectIncompleteRecordings').checked;
+            config.SmartSearchEnabled = view.querySelector('#SmartSearchEnabled').checked;
+            config.SmartSearchModel = view.querySelector('#SmartSearchModel').value || 'english';
             config.LiveTvAutoRecordCompleteShowing = view.querySelector('#LiveTvAutoRecordCompleteShowing').checked;
             config.LiveTvIncompleteThresholdPercent = Math.min(100, Math.max(50, parseInt(view.querySelector('#LiveTvIncompleteThresholdPercent').value, 10) || 90));
             config.LiveTvDeleteIncompleteCopies = view.querySelector('#LiveTvDeleteIncompleteCopies').checked;
@@ -3414,6 +3421,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.seerrBlockNsfw = getNullableBoolSelect(view, '#DefaultSeerrBlockNsfw');
         d.seerrShowMissingCollectionItems = getNullableBoolSelect(view, '#DefaultSeerrShowMissingCollectionItems');
         d.showSeerrAvailabilityBadges = getNullableBoolSelect(view, '#DefaultShowSeerrAvailabilityBadges');
+        d.seerrBadgeStyle = view.querySelector('#DefaultSeerrBadgeStyle').value || null;
         // seerrRows carries more than the ordering, so merge rather than replace.
         var seerrRows = Object.assign({}, d.seerrRows || {});
         seerrRows.rowOrder = getSeerrDiscoveryRowOrder(view);

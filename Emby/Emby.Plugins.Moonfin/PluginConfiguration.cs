@@ -117,6 +117,19 @@ namespace Emby.Plugins.Moonfin
         /// <summary>How long a cached studio logo stays fresh before the sync refetches it.</summary>
         public int StudioLogosMaxAgeDays { get; set; } = 30;
 
+        /// <summary>
+        /// Plain sentence search for clients ("90s movie about a kid pulled into a board game"). Off
+        /// by default: turning it on downloads a small model and indexes the library and, with the
+        /// TMDB key above, the most popular TMDB titles for Seerr.
+        /// </summary>
+        public bool SmartSearchEnabled { get; set; }
+
+        /// <summary>
+        /// "english" for the small model, or "multilingual" for one that understands searches in about
+        /// 100 languages at the cost of a bigger download and a slower first build.
+        /// </summary>
+        public string SmartSearchModel { get; set; } = "english";
+
         /// <summary>Classifies anime episodes as canon, mixed or filler from animefillerlist.com, which needs no account or key.</summary>
         public bool AnimeMarkersEnabled { get; set; }
 
