@@ -587,7 +587,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultDisplaySinceYouWatchedRows', fields: ['DefaultSinceYouWatchedSource', 'DefaultSinceYouWatchedSourceType', 'DefaultSinceYouWatchedSourceItem', 'DefaultSinceYouWatched1Enabled', 'DefaultSinceYouWatched2Enabled', 'DefaultSinceYouWatched3Enabled', 'DefaultSinceYouWatched4Enabled', 'DefaultSinceYouWatched5Enabled'] },
         { parent: 'DefaultSinceYouWatchedSource', off: ['online'], fields: ['DefaultSinceYouWatchedIncludeWatched'] },
         { parent: 'DefaultDisplayStudiosRows', fields: ['DefaultStudiosRowSortBy', 'DefaultStudiosRowSortOrder'] },
-        { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
+        { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
         { parent: 'DefaultMediaBarMode', off: ['off', 'bookshelf', 'aya'], fields: ['DefaultMediaBarRatingsHeading', 'DefaultMediaBarMdblistEnabled', 'DefaultMediaBarMdblistRatingSourcesList', 'DefaultMediaBarMdblistShowRatingNames', 'DefaultMediaBarMdblistShowRatingBadges'] },
         { parent: 'DefaultMediaBarAutoAdvance', fields: ['DefaultMediaBarIntervalMs'] },
         { parent: 'DefaultMediaBarTrailerPreview', fields: ['DefaultMediaBarTrailerAudio', 'DefaultTrailerVolume', 'DefaultMediaBarTrailerCaptions'] },
@@ -2881,6 +2881,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultMediaBarAutoAdvance', defaults.mediaBarAutoAdvance);
         setSelectValue(view, '#DefaultMediaBarIntervalMs', defaults.mediaBarIntervalMs, 'Configured interval');
         setNullableBoolSelect(view, '#DefaultMediaBarRowPeek', defaults.mediaBarRowPeek);
+        setNullableBoolSelect(view, '#DefaultMediaBarNewReleaseBanner', defaults.mediaBarNewReleaseBanner);
+        setSelectValue(view, '#DefaultMediaBarNewReleaseDays', defaults.mediaBarNewReleaseDays, 'Configured window');
         setNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
         setNullableBoolSelect(view, '#DefaultMediaBarTrailerAudio', defaults.mediaBarTrailerAudio);
         bindNullableRangeInput(view, '#DefaultTrailerVolume', '%');
@@ -3106,16 +3108,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var sourceSelect = view.querySelector('#DefaultMediaBarSourceType');
         var collectionPickerSection = view.querySelector('#DefaultCollectionPickerSection');
         var libraryPickerSection = view.querySelector('#DefaultLibraryPickerSection');
-        function togglePickerVisibility() {
+        function togglePickerVisibility(keepPicks) {
             var isCollection = sourceSelect.value === 'collection';
-            var isLibrary = sourceSelect.value === 'library';
+            var isLibrary = ['library', 'recentlyAdded', 'recentlyReleased', 'newReleases'].indexOf(sourceSelect.value) !== -1;
+            // Changing the source keeps library picks that aren't saved yet, even by way of Collections.
+            var keepLibraryPicks = keepPicks === true && view.querySelector('#DefaultLibraryPicker .adminLibraryCb') !== null;
             collectionPickerSection.style.display = isCollection ? '' : 'none';
             libraryPickerSection.style.display = isLibrary ? '' : 'none';
             if (isCollection) loadAdminCollectionPicker(view, defaults.mediaBarCollectionIds || []);
-            if (isLibrary) loadAdminLibraryPicker(view, defaults.mediaBarLibraryIds || []);
+            if (isLibrary && !keepLibraryPicks) loadAdminLibraryPicker(view, defaults.mediaBarLibraryIds || []);
         }
         // Assigned rather than added, so a refill doesn't stack one handler per profile.
-        sourceSelect.onchange = togglePickerVisibility;
+        sourceSelect.onchange = function () { togglePickerVisibility(true); };
         togglePickerVisibility();
         applyFieldDependencies(view);
         afterDefaultsPopulated(view, defaults);
@@ -3298,6 +3302,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.mediaBarAutoAdvance = getNullableBoolSelect(view, '#DefaultMediaBarAutoAdvance');
         d.mediaBarIntervalMs = getNullableIntInput(view, '#DefaultMediaBarIntervalMs');
         d.mediaBarRowPeek = getNullableBoolSelect(view, '#DefaultMediaBarRowPeek');
+        d.mediaBarNewReleaseBanner = getNullableBoolSelect(view, '#DefaultMediaBarNewReleaseBanner');
+        d.mediaBarNewReleaseDays = getNullableIntInput(view, '#DefaultMediaBarNewReleaseDays');
         d.mediaBarTrailerPreview = getNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview');
         d.mediaBarTrailerAudio = getNullableBoolSelect(view, '#DefaultMediaBarTrailerAudio');
         d.trailerVolume = getNullableRangeInput(view, '#DefaultTrailerVolume');

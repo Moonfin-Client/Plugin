@@ -7,9 +7,11 @@ using Emby.Plugins.Moonfin.Models;
 using Emby.Plugins.Moonfin.Services;
 using MediaBrowser.Common;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Services;
 
 namespace Emby.Plugins.Moonfin.Api
@@ -569,10 +571,21 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(new { Items = Array.Empty<object>(), TotalRecordCount = 0 });
 
             List<BaseItem> items;
+            var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
             if (sourceType == "collection" && settings.MediaBarCollectionIds != null && settings.MediaBarCollectionIds.Count > 0)
                 items = QueryItems(settings.MediaBarCollectionIds, limit, user, excludedNames);
+            else if (sourceType == "recentlyAdded")
+                items = QueryItems(libraryIds, limit, user, excludedNames, ItemSortBy.DateCreated);
+            else if (sourceType == "recentlyReleased")
+                items = QueryItems(libraryIds, limit, user, excludedNames, ItemSortBy.PremiereDate);
+            else if (sourceType == "newReleases")
+                items = QueryNewReleaseSeries(libraryIds, settings.MediaBarNewReleaseDays ?? 30, limit, user, excludedNames);
             else
-                items = QueryItems(isFallback ? null : settings.MediaBarLibraryIds, limit, user, excludedNames);
+                items = QueryItems(libraryIds, limit, user, excludedNames);
+
+            // When nothing that aired in the window has a backdrop, the bar shows random titles instead, the way the app does.
+            if (sourceType == "newReleases" && !items.Any(HasBackdropImage))
+                items = QueryItems(libraryIds, limit, user, excludedNames);
 
             var dtos = items.Where(HasBackdropImage).Select(i => MapItemToDto(i, user)).ToList();
             return Json(new { Items = dtos, TotalRecordCount = dtos.Count });
@@ -618,11 +631,19 @@ namespace Emby.Plugins.Moonfin.Api
         }
 
 
-        /// <summary>Queries random visible Movies/Series, optionally constrained to the given container GUIDs, with genre-name exclusion.</summary>
-        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames)
+        /// <summary>
+        /// Queries visible Movies/Series, optionally constrained to the given container GUIDs, with
+        /// genre-name exclusion. Shuffled, or newest first by <paramref name="orderBy"/>. A release date
+        /// still to come isn't recently released.
+        /// </summary>
+        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null)
         {
             var lm = LibraryManager;
             if (lm == null) return new List<BaseItem>();
+
+            var candidates = Math.Max(limit * 4, 50);
+            // Excluded genres are dropped after the query, so a newest-first list reads further ahead to still fill up.
+            if (orderBy != null && excludedNames != null) candidates *= 5;
 
             var query = new InternalItemsQuery
             {
@@ -630,7 +651,7 @@ namespace Emby.Plugins.Moonfin.Api
                 Recursive = true,
                 IsVirtualItem = false,
                 User = user,
-                Limit = Math.Max(limit * 4, 50)
+                Limit = candidates
             };
 
             if (containerGuids != null && containerGuids.Count > 0)
@@ -638,6 +659,12 @@ namespace Emby.Plugins.Moonfin.Api
                 var ancestorIds = ResolveInternalIds(containerGuids, user);
                 if (ancestorIds.Length == 0) return new List<BaseItem>();
                 query.AncestorIds = ancestorIds;
+            }
+
+            if (orderBy != null)
+            {
+                query.OrderBy = new[] { (orderBy, SortOrder.Descending) };
+                if (orderBy == ItemSortBy.PremiereDate) query.MaxPremiereDate = DateTimeOffset.UtcNow;
             }
 
             var items = lm.GetItemsResult(query).Items
@@ -649,6 +676,8 @@ namespace Emby.Plugins.Moonfin.Api
                 seq = seq.Where(i => i.Genres == null || !i.Genres.Any(excludedNames.Contains));
 
             var list = seq.ToList();
+            if (orderBy != null) return list.Take(limit).ToList();
+
             var rng = new Random();
             for (var i = list.Count - 1; i > 0; i--)
             {
@@ -656,6 +685,53 @@ namespace Emby.Plugins.Moonfin.Api
                 var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
             }
             return list.Take(limit).ToList();
+        }
+
+        /// <summary>
+        /// Series with an episode on the server that aired within the last <paramref name="days"/> days,
+        /// newest first. A series' own premiere date is its first season's, so the episodes are queried
+        /// and brought back to their series.
+        /// </summary>
+        private List<BaseItem> QueryNewReleaseSeries(List<string>? libraryGuids, int days, int limit, User user, HashSet<string>? excludedNames)
+        {
+            var lm = LibraryManager;
+            if (lm == null) return new List<BaseItem>();
+
+            // The window comes from synced settings, so keep it to the 7 to 90 days the apps offer.
+            days = Math.Clamp(days, 7, 90);
+            var now = DateTimeOffset.UtcNow;
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Episode" },
+                Recursive = true,
+                IsVirtualItem = false,
+                User = user,
+                MinPremiereDate = now.AddDays(-days),
+                MaxPremiereDate = now,
+                OrderBy = new[] { (ItemSortBy.PremiereDate, SortOrder.Descending) },
+                Limit = 300
+            };
+
+            if (libraryGuids != null && libraryGuids.Count > 0)
+            {
+                var ancestorIds = ResolveInternalIds(libraryGuids, user);
+                if (ancestorIds.Length == 0) return new List<BaseItem>();
+                query.AncestorIds = ancestorIds;
+            }
+
+            var seen = new HashSet<long>();
+            var series = new List<BaseItem>();
+            foreach (var episode in lm.GetItemsResult(query).Items.OfType<Episode>())
+            {
+                if (!seen.Add(episode.SeriesId)) continue;
+                var item = lm.GetItemById(episode.SeriesId);
+                if (item == null || !item.IsVisible(user)) continue;
+                if (excludedNames != null && item.Genres != null && item.Genres.Any(excludedNames.Contains)) continue;
+                series.Add(item);
+                if (series.Count >= limit) break;
+            }
+
+            return series;
         }
 
         /// <summary>Resolves client GUID strings to Emby internal (long) ids, dropping items the user can't see.</summary>
