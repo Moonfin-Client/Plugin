@@ -93,6 +93,7 @@ func (c *ttlCache) set(key string, v any) {
 func (s *Server) externalRoutes() {
 	m := s.mux
 	m.HandleFunc("GET /Moonfin/MdbList/Ratings", s.user(s.handleMdbListRatings))
+	m.HandleFunc("GET /Moonfin/MdbList/WatchingNow", s.user(s.handleMdbListWatchingNow))
 	m.HandleFunc("GET /Moonfin/Tmdb/EpisodeRating", s.user(s.handleTmdbEpisode))
 	m.HandleFunc("GET /Moonfin/Tmdb/SeasonRatings", s.user(s.handleTmdbSeason))
 	m.HandleFunc("GET /Moonfin/Tmdb/NextEpisode", s.user(s.handleTmdbNextEpisode))
@@ -167,6 +168,15 @@ func num(v any) (float64, bool) {
 
 var defaultRatingSources = []any{"imdb", "tmdb", "tomatoes", "metacritic"}
 
+// requestProfile is the device profile a request names, or global.
+func requestProfile(r *http.Request) string {
+	profile := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("profile")))
+	if profile != "desktop" && profile != "mobile" && profile != "tv" {
+		return "global"
+	}
+	return profile
+}
+
 func (s *Server) handleMdbListRatings(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	typ, tmdbID := strings.ToLower(strings.TrimSpace(q.Get("type"))), strings.TrimSpace(q.Get("tmdbId"))
@@ -182,11 +192,7 @@ func (s *Server) handleMdbListRatings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Invalid tmdbId")
 		return
 	}
-	profile := strings.ToLower(strings.TrimSpace(q.Get("profile")))
-	if profile != "desktop" && profile != "mobile" && profile != "tv" {
-		profile = "global"
-	}
-	resolved, err := s.resolve(r, profile, false)
+	resolved, err := s.resolve(r, requestProfile(r), false)
 	if err != nil {
 		storageFailed(w, r, err)
 		return
@@ -226,6 +232,108 @@ func (s *Server) handleMdbListRatings(w http.ResponseWriter, r *http.Request) {
 		sources = defaultRatingSources
 	}
 	writeJSON(w, http.StatusOK, M{"success": true, "ratings": filterRatings(ratings.([]M), sources)})
+}
+
+// handleMdbListWatchingNow passes on what MDBList's users are watching right
+// now, in the shape the Jellyfin plugin answers with. The feed is the same for
+// everyone, so one copy serves every caller for a little under the five
+// minutes the apps refresh at. A failure is kept per key, so one bad key
+// doesn't hold back the others.
+func (s *Server) handleMdbListWatchingNow(w http.ResponseWriter, r *http.Request) {
+	resolved, err := s.resolve(r, requestProfile(r), false)
+	if err != nil {
+		storageFailed(w, r, err)
+		return
+	}
+	key, _ := resolved["mdblistApiKey"].(string)
+	key = strings.TrimSpace(key)
+	if key == "" {
+		writeJSON(w, http.StatusOK, M{"error": noMdblistKey, "items": []any{}})
+		return
+	}
+
+	const cacheKey = "mdblist:watching-now"
+	if v, ok := s.ext.cache.get(cacheKey, 270*time.Second); ok {
+		writeJSON(w, http.StatusOK, v)
+		return
+	}
+	failKey := "mdblist-fail:watching-now:" + key
+	if msg, failed := s.ext.cache.get(failKey, 10*time.Minute); failed {
+		writeJSON(w, http.StatusOK, M{"error": msg, "items": []any{}})
+		return
+	}
+	var body M
+	status, err := s.getJSON(r.Context(), s.ext.mdblistBase+"/watching/now?apikey="+url.QueryEscape(key), "", &body)
+	if err != nil || status/100 != 2 {
+		msg := providerError("MDBList", status, err)
+		// A canceled call says nothing about MDBList.
+		if r.Context().Err() == nil {
+			s.ext.cache.set(failKey, msg)
+		}
+		writeJSON(w, http.StatusOK, M{"error": msg, "items": []any{}})
+		return
+	}
+	feed := watchingNowFeed(body)
+	if len(feed["items"].([]M)) == 0 {
+		writeJSON(w, http.StatusOK, M{"error": "MDBList sent no titles.", "items": []any{}})
+		return
+	}
+	s.ext.cache.set(cacheKey, feed)
+	writeJSON(w, http.StatusOK, feed)
+}
+
+// watchingNowFeed keeps the fields the apps read, typed the way the Jellyfin
+// plugin's model types them. MDBList can send false for a missing image.
+func watchingNowFeed(body M) M {
+	count := func(v any) int {
+		n, _ := num(v)
+		return int(n)
+	}
+	text := func(v any) any {
+		switch t := v.(type) {
+		case string:
+			return t
+		case float64:
+			return strconv.FormatFloat(t, 'f', -1, 64)
+		}
+		return nil
+	}
+	items := []M{}
+	list, _ := body["items"].([]any)
+	for _, raw := range list {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		mediaType, _ := item["media_type"].(string)
+		title, _ := item["title"].(string)
+		entry := M{
+			"public_id":  text(item["public_id"]),
+			"tmdb_id":    nil,
+			"imdb_id":    text(item["imdb_id"]),
+			"media_type": mediaType,
+			"title":      title,
+			"year":       nil,
+			"backdrop":   text(item["backdrop"]),
+			"logo":       text(item["logo"]),
+			"watchers":   count(item["watchers"]),
+		}
+		if id, ok := num(item["tmdb_id"]); ok {
+			entry["tmdb_id"] = int64(id)
+		}
+		if year, ok := num(item["year"]); ok {
+			entry["year"] = int(year)
+		}
+		items = append(items, entry)
+	}
+	return M{
+		"built_at": text(body["built_at"]),
+		"mode":     text(body["mode"]),
+		"users":    count(body["users"]),
+		"movies":   count(body["movies"]),
+		"shows":    count(body["shows"]),
+		"items":    items,
+	}
 }
 
 // filterRatings keeps the caller's chosen sources in their order. MDBList

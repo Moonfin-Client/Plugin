@@ -3531,6 +3531,14 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMdblistWatchingNowEnabled">Watching on MDBList</label>
+                                <select id="DefaultMdblistWatchingNowEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbRowsSortBy">TMDB Rows Sorting</label>
                                 <select id="DefaultTmdbRowsSortBy" is="emby-select"></select>
                             </div>
@@ -9190,6 +9198,7 @@
                     setNullableBoolSelect('#DefaultImdbMostPopularTvShowsEnabled', defaults.imdbMostPopularTvShowsEnabled);
                     setNullableBoolSelect('#DefaultImdbTopEnglishMoviesEnabled', defaults.imdbTopEnglishMoviesEnabled);
                     setNullableBoolSelect('#DefaultImdbLowestRatedMoviesEnabled', defaults.imdbLowestRatedMoviesEnabled);
+                    setNullableBoolSelect('#DefaultMdblistWatchingNowEnabled', defaults.mdblistWatchingNowEnabled);
                     fillExternalRowSortSelect('#DefaultTmdbRowsSortBy');
                     setSelectValue('#DefaultTmdbRowsSortBy', defaults.tmdbRowsSortBy, 'Configured sort');
                     setSelectValue('#DefaultTmdbRowsSortOrder', defaults.tmdbRowsSortOrder, 'Configured direction');
@@ -10187,6 +10196,7 @@
                     ds.imdbMostPopularTvShowsEnabled = getNullableBoolSelect('#DefaultImdbMostPopularTvShowsEnabled');
                     ds.imdbTopEnglishMoviesEnabled = getNullableBoolSelect('#DefaultImdbTopEnglishMoviesEnabled');
                     ds.imdbLowestRatedMoviesEnabled = getNullableBoolSelect('#DefaultImdbLowestRatedMoviesEnabled');
+                    ds.mdblistWatchingNowEnabled = getNullableBoolSelect('#DefaultMdblistWatchingNowEnabled');
                     ds.tmdbRowsSortBy = document.querySelector('#DefaultTmdbRowsSortBy').value || null;
                     ds.tmdbRowsSortOrder = document.querySelector('#DefaultTmdbRowsSortOrder').value || null;
                     ds.tmdbTrendingAllWeeklyEnabled = getNullableBoolSelect('#DefaultTmdbTrendingAllWeeklyEnabled');
