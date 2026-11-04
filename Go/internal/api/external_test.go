@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func withKeys(t *testing.T, s *Server, mdblist, tmdb string) {
@@ -26,6 +29,10 @@ func provider(t *testing.T, hits *atomic.Int32) *httptest.Server {
 				{"source":"imdb","value":8.7,"score":87,"url":"tt0133093"},
 				{"source":"popcorn","score":85},
 				{"source":"letterboxd","value":8.4,"score":84}]}`))
+		case r.URL.Path == "/watching/now" && r.URL.Query().Get("apikey") == "mdb-key":
+			w.Write([]byte(`{"built_at":"2026-11-03T20:00:00Z","mode":"live","users":1200,"movies":700,"shows":500,"items":[
+				{"public_id":"m1","tmdb_id":603,"imdb_id":"tt0133093","media_type":"movie","title":"The Matrix","year":1999,"backdrop":"https://img/603.jpg","logo":false,"watchers":42},
+				{"public_id":77,"media_type":"show","title":"Severance","backdrop":null,"logo":"https://img/logo.png","watchers":"9"}]}`))
 		case r.URL.Path == "/3/tv/1399/season/1/episode/2" && r.Header.Get("Authorization") == "Bearer eyJtoken":
 			w.Write([]byte(`{"vote_average":8.1,"vote_count":20,"name":"The Kingsroad","air_date":"2011-04-24","season_number":1,"episode_number":2,"still_path":null}`))
 		case r.URL.Path == "/3/find/tt0133093" && r.URL.Query().Get("api_key") == "v3key":
@@ -89,6 +96,107 @@ func TestMdbListRatings(t *testing.T) {
 	}
 }
 
+func TestMdbListWatchingNow(t *testing.T) {
+	var hits atomic.Int32
+	srv := provider(t, &hits)
+	s := newTestServer()
+	s.ext.mdblistBase = srv.URL
+	if _, got := call(t, s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil); got["error"] != noMdblistKey || hits.Load() != 0 {
+		t.Fatalf("no key must answer with the error without calling out: %v", got)
+	}
+	withKeys(t, s, "mdb-key", "")
+	_, got := call(t, s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", map[string]any{"profile": "tv"})
+	items, _ := got["items"].([]any)
+	if got["users"] != 1200.0 || got["mode"] != "live" || len(items) != 2 {
+		t.Fatalf("feed = %v", got)
+	}
+	matrix, severance := items[0].(map[string]any), items[1].(map[string]any)
+	if matrix["tmdb_id"] != 603.0 || matrix["year"] != 1999.0 || matrix["backdrop"] != "https://img/603.jpg" || matrix["logo"] != nil || matrix["watchers"] != 42.0 {
+		t.Errorf("a false logo must read as none: %v", matrix)
+	}
+	if severance["public_id"] != "77" || severance["tmdb_id"] != nil || severance["backdrop"] != nil || severance["watchers"] != 9.0 {
+		t.Errorf("numbers and missing fields must come out typed: %v", severance)
+	}
+	call(t, s, userKids, "GET", "/Moonfin/MdbList/WatchingNow", "", nil)
+	if hits.Load() != 1 {
+		t.Fatalf("the feed is the same for everyone, so a second caller must be served from cache, provider saw %d requests", hits.Load())
+	}
+
+	failing := newTestServer()
+	failing.ext.mdblistBase = srv.URL
+	withKeys(t, failing, "spent-key", "")
+	for range 2 {
+		if _, got := call(t, failing, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil); got["error"] != "MDBList rate limit reached. Try again later." {
+			t.Fatalf("rate limit = %v", got)
+		}
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("a failure must be cached briefly, provider saw %d requests", hits.Load())
+	}
+}
+
+func TestMdbListWatchingNowFetchesOnceForABurst(t *testing.T) {
+	var hits atomic.Int32
+	srv := provider(t, &hits)
+	s := newTestServer()
+	s.ext.mdblistBase = srv.URL
+	withKeys(t, s, "mdb-key", "")
+	answers := make([]map[string]any, 8)
+	var wg sync.WaitGroup
+	for i := range answers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp := serve(context.Background(), s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil)
+			defer resp.Body.Close()
+			json.NewDecoder(resp.Body).Decode(&answers[i])
+		}()
+	}
+	wg.Wait()
+	if hits.Load() != 1 {
+		t.Fatalf("callers waiting on the fetch must share it, provider saw %d requests", hits.Load())
+	}
+	for i, got := range answers {
+		if items, _ := got["items"].([]any); got["error"] != nil || len(items) != 2 {
+			t.Errorf("caller %d must get the feed the first one fetched: %v", i, got)
+		}
+	}
+}
+
+func TestMdbListWatchingNowRetriesSoonAfterADroppedConnection(t *testing.T) {
+	var hits atomic.Int32
+	dropping := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		conn.Close()
+	}))
+	t.Cleanup(dropping.Close)
+	s := newTestServer()
+	s.ext.mdblistBase = dropping.URL
+	withKeys(t, s, "mdb-key", "")
+	for range 2 {
+		if _, got := call(t, s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil); got["error"] == nil {
+			t.Fatalf("a dropped connection must answer with an error: %v", got)
+		}
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("a dropped connection must be remembered briefly, provider saw %d requests", hits.Load())
+	}
+	// Half a minute later the failure is forgotten and MDBList is asked again.
+	s.ext.cache.mu.Lock()
+	for k, e := range s.ext.cache.m {
+		if strings.HasPrefix(k, "mdblist-netfail:") {
+			e.at = e.at.Add(-31 * time.Second)
+			s.ext.cache.m[k] = e
+		}
+	}
+	s.ext.cache.mu.Unlock()
+	call(t, s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil)
+	if hits.Load() != 2 {
+		t.Fatalf("a dropped connection must not be kept like an error answer, provider saw %d requests", hits.Load())
+	}
+}
+
 func TestTmdbRoutes(t *testing.T) {
 	var hits atomic.Int32
 	srv := provider(t, &hits)
@@ -126,6 +234,10 @@ func TestProviderErrorsNeverShowTheKey(t *testing.T) {
 		if got["success"] != false || msg == "" || strings.Contains(msg, "secret") {
 			t.Fatalf("%s error = %q", path, msg)
 		}
+	}
+	_, got := call(t, s, userMain, "GET", "/Moonfin/MdbList/WatchingNow", "", nil)
+	if msg, _ := got["error"].(string); msg == "" || strings.Contains(msg, "secret") {
+		t.Fatalf("watching now error = %q", msg)
 	}
 }
 

@@ -1365,7 +1365,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         + '<option value="banner">Banner</option>';
 
     // Continue Watching has its own setting above, and Library Buttons has no artwork to pick.
-    var HOME_ROW_IMAGE_TYPE_SKIPPED = { resume: true, librarybuttons: true };
+    var HOME_ROW_IMAGE_TYPE_SKIPPED = { resume: true, librarybuttons: true, mdblist_watching_now: true };
 
     function loadHomeRowImageTypes(view, raw) {
         var stored = {};
@@ -1571,7 +1571,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { type: 'tmdb_trending_tv_weekly', label: 'TMDB Trending TV (Weekly)' },
         { type: 'tmdb_trending_all_weekly', label: 'TMDB Trending All (Weekly)' },
         { type: 'radarr_calendar', label: 'Radarr Upcoming' },
-        { type: 'sonarr_calendar', label: 'Sonarr Upcoming' }
+        { type: 'sonarr_calendar', label: 'Sonarr Upcoming' },
+        { type: 'mdblist_watching_now', label: 'Watching on MDBList' }
     ];
 
     var HOME_LAYOUT_TABS = [
@@ -1607,7 +1608,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function isExternalHomeSectionType(type) {
-        return /^(imdb|tmdb)_/.test(type);
+        return /^(imdb|tmdb)_/.test(type) || type === 'mdblist_watching_now';
     }
 
     function getHomeLayoutState(view) {
@@ -3044,6 +3045,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultImdbMostPopularTvShowsEnabled', defaults.imdbMostPopularTvShowsEnabled);
         setNullableBoolSelect(view, '#DefaultImdbTopEnglishMoviesEnabled', defaults.imdbTopEnglishMoviesEnabled);
         setNullableBoolSelect(view, '#DefaultImdbLowestRatedMoviesEnabled', defaults.imdbLowestRatedMoviesEnabled);
+        setNullableBoolSelect(view, '#DefaultMdblistWatchingNowEnabled', defaults.mdblistWatchingNowEnabled);
         fillExternalRowSortSelect(view, '#DefaultTmdbRowsSortBy');
         setSelectValue(view, '#DefaultTmdbRowsSortBy', defaults.tmdbRowsSortBy, 'Configured sort');
         setSelectValue(view, '#DefaultTmdbRowsSortOrder', defaults.tmdbRowsSortOrder, 'Configured direction');
@@ -3467,6 +3469,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.imdbMostPopularTvShowsEnabled = getNullableBoolSelect(view, '#DefaultImdbMostPopularTvShowsEnabled');
         d.imdbTopEnglishMoviesEnabled = getNullableBoolSelect(view, '#DefaultImdbTopEnglishMoviesEnabled');
         d.imdbLowestRatedMoviesEnabled = getNullableBoolSelect(view, '#DefaultImdbLowestRatedMoviesEnabled');
+        d.mdblistWatchingNowEnabled = getNullableBoolSelect(view, '#DefaultMdblistWatchingNowEnabled');
         d.tmdbRowsSortBy = view.querySelector('#DefaultTmdbRowsSortBy').value || null;
         d.tmdbRowsSortOrder = view.querySelector('#DefaultTmdbRowsSortOrder').value || null;
         d.tmdbTrendingAllWeeklyEnabled = getNullableBoolSelect(view, '#DefaultTmdbTrendingAllWeeklyEnabled');

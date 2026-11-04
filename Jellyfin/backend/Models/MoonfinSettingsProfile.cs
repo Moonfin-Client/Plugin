@@ -858,6 +858,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("tmdbTrendingAllWeeklyEnabled")]
     public bool? TmdbTrendingAllWeeklyEnabled { get; set; }
 
+    [JsonPropertyName("mdblistWatchingNowEnabled")]
+    public bool? MdblistWatchingNowEnabled { get; set; }
+
     [JsonPropertyName("mergeRadarrSonarrCalendars")]
     public bool? MergeRadarrSonarrCalendars { get; set; }
 
