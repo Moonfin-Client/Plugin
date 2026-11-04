@@ -239,6 +239,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mediaBarSourceType")]
     public string? MediaBarSourceType { get; set; }
 
+    [JsonPropertyName("mediaBarNewReleaseBanner")]
+    public bool? MediaBarNewReleaseBanner { get; set; }
+
+    [JsonPropertyName("mediaBarNewReleaseDays")]
+    public int? MediaBarNewReleaseDays { get; set; }
+
     [JsonPropertyName("mediaBarCollectionIds")]
     public List<string>? MediaBarCollectionIds { get; set; }
 
