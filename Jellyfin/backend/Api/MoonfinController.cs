@@ -1268,8 +1268,8 @@ public class MoonfinController : ControllerBase
                 _ => GetLibraryItems(libraryIds, limit, queryUser, excludedGenres)
             };
 
-            // A window where nothing aired shows random titles, the way the app does.
-            if (items.Count == 0 && sourceType == "newReleases")
+            // When nothing that aired in the window has a backdrop, the bar shows random titles instead, the way the app does.
+            if (sourceType == "newReleases" && !items.Any(HasBackdropImage))
             {
                 items = GetLibraryItems(libraryIds, limit, queryUser, excludedGenres);
             }
@@ -1519,6 +1519,8 @@ public class MoonfinController : ControllerBase
         var includedGenreIds = GetIncludedGenreIds(excludedGenreIds, queryUser);
         if (includedGenreIds is { Length: 0 }) return [];
 
+        // The window comes from synced settings, so keep it to the 7 to 90 days the apps offer.
+        days = Math.Clamp(days, 7, 90);
         var now = DateTime.UtcNow;
         var episodeQuery = new InternalItemsQuery
         {

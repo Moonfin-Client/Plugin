@@ -583,8 +583,8 @@ namespace Emby.Plugins.Moonfin.Api
             else
                 items = QueryItems(libraryIds, limit, user, excludedNames);
 
-            // A window where nothing aired shows random titles, the way the app does.
-            if (items.Count == 0 && sourceType == "newReleases")
+            // When nothing that aired in the window has a backdrop, the bar shows random titles instead, the way the app does.
+            if (sourceType == "newReleases" && !items.Any(HasBackdropImage))
                 items = QueryItems(libraryIds, limit, user, excludedNames);
 
             var dtos = items.Where(HasBackdropImage).Select(i => MapItemToDto(i, user)).ToList();
@@ -641,13 +641,17 @@ namespace Emby.Plugins.Moonfin.Api
             var lm = LibraryManager;
             if (lm == null) return new List<BaseItem>();
 
+            var candidates = Math.Max(limit * 4, 50);
+            // Excluded genres are dropped after the query, so a newest-first list reads further ahead to still fill up.
+            if (orderBy != null && excludedNames != null) candidates *= 5;
+
             var query = new InternalItemsQuery
             {
                 IncludeItemTypes = new[] { "Movie", "Series" },
                 Recursive = true,
                 IsVirtualItem = false,
                 User = user,
-                Limit = Math.Max(limit * 4, 50)
+                Limit = candidates
             };
 
             if (containerGuids != null && containerGuids.Count > 0)
@@ -693,6 +697,8 @@ namespace Emby.Plugins.Moonfin.Api
             var lm = LibraryManager;
             if (lm == null) return new List<BaseItem>();
 
+            // The window comes from synced settings, so keep it to the 7 to 90 days the apps offer.
+            days = Math.Clamp(days, 7, 90);
             var now = DateTimeOffset.UtcNow;
             var query = new InternalItemsQuery
             {
