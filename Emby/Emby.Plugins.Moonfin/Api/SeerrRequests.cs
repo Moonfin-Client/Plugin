@@ -30,6 +30,7 @@ namespace Emby.Plugins.Moonfin.Api
     {
         public string? Start { get; set; }
         public string? End { get; set; }
+        public string? Unmonitored { get; set; }
     }
 
     [Route("/Moonfin/Seerr/Sonarr/Calendar", "GET")]
@@ -38,6 +39,7 @@ namespace Emby.Plugins.Moonfin.Api
     {
         public string? Start { get; set; }
         public string? End { get; set; }
+        public string? Unmonitored { get; set; }
     }
 
     [Route("/Moonfin/Seerr/Api/{Path*}", "GET")]

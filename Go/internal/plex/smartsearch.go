@@ -83,7 +83,7 @@ func (c *Companion) SmartLibrary(ctx context.Context) (api.SmartLibrary, error) 
 				}
 			}
 		case "artist":
-			albums, err := c.sectionItems(ctx, token, s.Key, "9")
+			albums, err := c.sectionItems(ctx, token, s.Key, "9", false)
 			if err != nil {
 				return lib, err
 			}
@@ -91,7 +91,7 @@ func (c *Companion) SmartLibrary(ctx context.Context) (api.SmartLibrary, error) 
 				lib.Albums = append(lib.Albums, api.SmartAlbum{ID: a.RatingKey, Title: a.Title, Year: a.Year,
 					Artists: []string{a.ParentTitle}, Genres: tags(a.Genre), Overview: a.Summary})
 			}
-			artists, err := c.sectionItems(ctx, token, s.Key, "8")
+			artists, err := c.sectionItems(ctx, token, s.Key, "8", false)
 			if err != nil {
 				return lib, err
 			}
@@ -174,8 +174,11 @@ func collect(body []byte, out map[string]json.RawMessage) error {
 }
 
 type section struct {
-	Key  string `json:"key"`
-	Type string `json:"type"`
+	Key      string `json:"key"`
+	Type     string `json:"type"`
+	Location []struct {
+		Path string `json:"path"`
+	} `json:"Location"`
 }
 
 func (c *Companion) sections(ctx context.Context, token string) ([]section, error) {
@@ -188,7 +191,7 @@ func (c *Companion) sections(ctx context.Context, token string) ([]section, erro
 }
 
 // sectionItems lists one type of item in a library a page at a time.
-func (c *Companion) sectionItems(ctx context.Context, token, sectionKey, itemType string) ([]plexItem, error) {
+func (c *Companion) sectionItems(ctx context.Context, token, sectionKey, itemType string, guids bool) ([]plexItem, error) {
 	const page = 500
 	var all []plexItem
 	for start := 0; ; start += page {
@@ -198,6 +201,9 @@ func (c *Companion) sectionItems(ctx context.Context, token, sectionKey, itemTyp
 			} `json:"MediaContainer"`
 		}
 		q := url.Values{"type": {itemType}, "X-Plex-Container-Start": {strconv.Itoa(start)}, "X-Plex-Container-Size": {strconv.Itoa(page)}}
+		if guids {
+			q.Set("includeGuids", "1")
+		}
 		if err := c.getJSON(ctx, c.cfg.PMS+"/library/sections/"+url.PathEscape(sectionKey)+"/all?"+q.Encode(), token, &v); err != nil {
 			return nil, err
 		}
@@ -209,7 +215,7 @@ func (c *Companion) sectionItems(ctx context.Context, token, sectionKey, itemTyp
 }
 
 func (c *Companion) sectionKeys(ctx context.Context, token, sectionKey, itemType string) ([]string, error) {
-	items, err := c.sectionItems(ctx, token, sectionKey, itemType)
+	items, err := c.sectionItems(ctx, token, sectionKey, itemType, false)
 	keys := make([]string, 0, len(items))
 	for _, it := range items {
 		keys = append(keys, it.RatingKey)

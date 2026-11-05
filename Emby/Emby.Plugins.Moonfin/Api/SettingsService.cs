@@ -13,6 +13,7 @@ using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Services;
+using Moonfin.Calendar;
 
 namespace Emby.Plugins.Moonfin.Api
 {
@@ -98,6 +99,12 @@ namespace Emby.Plugins.Moonfin.Api
                 incompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
                 extendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
                 clientLogSupported = config?.EnableClientLogUpload ?? false,
+                calendarAvailable = seerrEnabled
+                    && !string.IsNullOrEmpty(config?.GetEffectiveSeerrUrl())
+                    && ArrCalendarWindow.Refusal(config?.CalendarAdminsOnly == true, AuthHelpers.IsCurrentUserAdmin(Request, _authContext)) == null,
+                calendarDaysBack = Math.Max(0, config?.CalendarDaysBack ?? 14),
+                calendarDaysAhead = Math.Max(0, config?.CalendarDaysAhead ?? 90),
+                calendarReminders = true,
                 defaultSettings = MoonfinSettingsService.AdminDefaultsFor(request.Profile, config)
             });
         }

@@ -123,6 +123,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         ['genres', 'Genres'],
         ['liveTv', 'Live TV'],
         ['discover', 'Discover (Seerr)'],
+        ['calendar', 'Calendar'],
         ['folders', 'Folders']
     ];
 
@@ -560,6 +561,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     var FIELD_DEPENDENCIES = [
         { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
         { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
+        { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
         { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
         { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
         { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
@@ -836,8 +838,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         picker.innerHTML = html;
     }
 
-    function loadScreensaverLibraryPicker(view, selectedIds) {
-        var picker = view.querySelector('#DefaultScreensaverLibraryPicker');
+    function loadMediaLibraryPicker(view, pickerSelector, checkboxClass, selectedIds) {
+        var picker = view.querySelector(pickerSelector);
         if (!picker) return;
         picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">Loading...</div>';
         var generation = defaultsState.generation;
@@ -852,7 +854,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 picker.innerHTML = '<div style="padding:8px;color:rgba(128,128,128,0.5);font-size:0.9em;">No media libraries found.</div>';
                 return;
             }
-            renderScreensaverPickerRows(picker, 'screensaverLibraryCb', items.map(function (item) {
+            renderScreensaverPickerRows(picker, checkboxClass, items.map(function (item) {
                 return { value: item.Id, label: item.Name || 'Untitled' };
             }), selectedIds);
         });
@@ -2744,6 +2746,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#SeerrUrl').value = config.SeerrUrl || '';
             view.querySelector('#SeerrDisplayName').value = config.SeerrDisplayName || '';
             view.querySelector('#PublicServerUrl').value = config.PublicServerUrl || '';
+            view.querySelector('#CalendarAdminsOnly').value = config.CalendarAdminsOnly === true ? 'true' : 'false';
+            view.querySelector('#CalendarDaysBack').value = config.CalendarDaysBack != null ? config.CalendarDaysBack : 14;
+            view.querySelector('#CalendarDaysAhead').value = config.CalendarDaysAhead != null ? config.CalendarDaysAhead : 90;
+            view.querySelector('#CalendarCacheMinutes').value = config.CalendarCacheMinutes != null ? config.CalendarCacheMinutes : 5;
             view.querySelector('#MdblistApiKey').value = config.MdblistApiKey || '';
             view.querySelector('#MdblistOfficialListsEnabled').checked = config.MdblistOfficialListsEnabled !== false;
             view.querySelector('#MdblistOfficialListsMaxItems').value = config.MdblistOfficialListsMaxItems || 250;
@@ -2851,7 +2857,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultScreensaverPosition', defaults.screensaverPosition, 'Configured position');
         setSelectValue(view, '#DefaultScreensaverSize', defaults.screensaverSize, 'Configured size');
         setSelectValue(view, '#DefaultScreensaverContentType', defaults.screensaverContentType, 'Configured content type');
-        loadScreensaverLibraryPicker(view, defaults.screensaverLibraryIds || []);
+        loadMediaLibraryPicker(view, '#DefaultScreensaverLibraryPicker', 'screensaverLibraryCb', defaults.screensaverLibraryIds || []);
         loadScreensaverCollectionPicker(view, defaults.screensaverCollectionIds || []);
         loadScreensaverGenrePicker(view, defaults.screensaverExcludedGenres || []);
         setSelectValue(view, '#DefaultLoadingAnimationImage', defaults.loadingAnimationImage, 'Configured image');
@@ -2870,6 +2876,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultEnableFolderView', defaults.enableFolderView);
         setNullableBoolSelect(view, '#DefaultShowSeerrButton', defaults.showSeerrButton);
         setNullableBoolSelect(view, '#DefaultShowLiveTvButton', defaults.showLiveTvButton);
+        setNullableBoolSelect(view, '#DefaultShowCalendarButton', defaults.showCalendarButton);
         setNullableBoolSelect(view, '#DefaultShowDownloadsButton', defaults.showDownloadsButton);
         setNullableBoolSelect(view, '#DefaultShowServerMessagesButton', defaults.showServerMessagesButton);
 
@@ -3005,6 +3012,23 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultSeerrRowsSortOrder', defaults.seerrRowsSortOrder, 'Configured direction');
         var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
         loadSeerrDiscoveryPicker(view, seerrPicker.order, seerrPicker.hidden);
+        setSelectValue(view, '#DefaultCalendarStyle', defaults.calendarStyle, 'Configured value');
+        setSelectValue(view, '#DefaultCalendarWeekStart', defaults.calendarWeekStart, 'Configured value');
+        setSelectValue(view, '#DefaultCalendarScope', defaults.calendarScope, 'Configured value');
+        setNullableBoolSelect(view, '#DefaultCalendarShowEpisodes', defaults.calendarShowEpisodes);
+        setNullableBoolSelect(view, '#DefaultCalendarShowMovies', defaults.calendarShowMovies);
+        loadMediaLibraryPicker(view, '#DefaultCalendarLibraryPicker', 'calendarLibraryCb', defaults.calendarLibraryIds || []);
+        setNullableBoolSelect(view, '#DefaultCalendarIncludeUnmonitored', defaults.calendarIncludeUnmonitored);
+        setNullableBoolSelect(view, '#DefaultCalendarShowSpecials', defaults.calendarShowSpecials);
+        setNullableBoolSelect(view, '#DefaultCalendarShowBadges', defaults.calendarShowBadges);
+        setSelectValue(view, '#DefaultCalendarColorBy', defaults.calendarColorBy, 'Configured value');
+        setSelectValue(view, '#DefaultCalendarImageType', defaults.calendarImageType, 'Configured value');
+        setNullableBoolSelect(view, '#DefaultCalendarSpoilerSafe', defaults.calendarSpoilerSafe);
+        setSelectValue(view, '#DefaultCalendarSelectAction', defaults.calendarSelectAction, 'Configured value');
+        setNullableBoolSelect(view, '#DefaultCalendarRequestButton', defaults.calendarRequestButton);
+        setNullableBoolSelect(view, '#DefaultCalendarReminders', defaults.calendarReminders);
+        setNullableBoolSelect(view, '#DefaultCalendarRowSeeAll', defaults.calendarRowSeeAll);
+        setNullableBoolSelect(view, '#DefaultShowNextAirDate', defaults.showNextAirDate);
 
         setNullableBoolSelect(view, '#DefaultConfirmExit', defaults.confirmExit);
         setSelectValue(view, '#DefaultKeyboardStyle', defaults.keyboardStyle, 'Configured style');
@@ -3124,6 +3148,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         afterDefaultsPopulated(view, defaults);
     }
 
+    // A blank or broken number falls back, and 0 stays 0.
+    function wholeNumberIn(raw, min, max, fallback) {
+        var value = parseInt(raw, 10);
+        return isNaN(value) ? fallback : Math.min(max, Math.max(min, value));
+    }
+
     function saveConfig(view) {
         loading.show();
         return ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
@@ -3132,6 +3162,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.SeerrUrl = view.querySelector('#SeerrUrl').value || null;
             config.SeerrDisplayName = view.querySelector('#SeerrDisplayName').value || null;
             config.PublicServerUrl = view.querySelector('#PublicServerUrl').value || null;
+            config.CalendarAdminsOnly = view.querySelector('#CalendarAdminsOnly').value === 'true';
+            config.CalendarDaysBack = wholeNumberIn(view.querySelector('#CalendarDaysBack').value, 0, 365, 14);
+            config.CalendarDaysAhead = wholeNumberIn(view.querySelector('#CalendarDaysAhead').value, 0, 730, 90);
+            config.CalendarCacheMinutes = wholeNumberIn(view.querySelector('#CalendarCacheMinutes').value, 0, 1440, 5);
             config.MdblistApiKey = (view.querySelector('#MdblistApiKey').value || '').trim() || null;
             config.MdblistOfficialListsEnabled = view.querySelector('#MdblistOfficialListsEnabled').checked;
             config.MdblistOfficialListsMaxItems = parseInt(view.querySelector('#MdblistOfficialListsMaxItems').value, 10) || 250;
@@ -3287,6 +3321,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.enableFolderView = getNullableBoolSelect(view, '#DefaultEnableFolderView');
         d.showSeerrButton = getNullableBoolSelect(view, '#DefaultShowSeerrButton');
         d.showLiveTvButton = getNullableBoolSelect(view, '#DefaultShowLiveTvButton');
+        d.showCalendarButton = getNullableBoolSelect(view, '#DefaultShowCalendarButton');
         d.showDownloadsButton = getNullableBoolSelect(view, '#DefaultShowDownloadsButton');
         d.showServerMessagesButton = getNullableBoolSelect(view, '#DefaultShowServerMessagesButton');
 
@@ -3429,6 +3464,26 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.seerrRows = seerrRows;
         d.seerrRowsSortBy = view.querySelector('#DefaultSeerrRowsSortBy').value || null;
         d.seerrRowsSortOrder = view.querySelector('#DefaultSeerrRowsSortOrder').value || null;
+        d.calendarStyle = view.querySelector('#DefaultCalendarStyle').value || null;
+        d.calendarWeekStart = view.querySelector('#DefaultCalendarWeekStart').value || null;
+        d.calendarScope = view.querySelector('#DefaultCalendarScope').value || null;
+        d.calendarShowEpisodes = getNullableBoolSelect(view, '#DefaultCalendarShowEpisodes');
+        d.calendarShowMovies = getNullableBoolSelect(view, '#DefaultCalendarShowMovies');
+        if (view.querySelector('#DefaultCalendarLibraryPicker .calendarLibraryCb') != null) {
+            var calendarLibraryIds = Array.prototype.slice.call(view.querySelectorAll('#DefaultCalendarLibraryPicker .calendarLibraryCb:checked')).map(function (cb) { return cb.dataset.value; });
+            d.calendarLibraryIds = calendarLibraryIds.length > 0 ? calendarLibraryIds : null;
+        }
+        d.calendarIncludeUnmonitored = getNullableBoolSelect(view, '#DefaultCalendarIncludeUnmonitored');
+        d.calendarShowSpecials = getNullableBoolSelect(view, '#DefaultCalendarShowSpecials');
+        d.calendarShowBadges = getNullableBoolSelect(view, '#DefaultCalendarShowBadges');
+        d.calendarColorBy = view.querySelector('#DefaultCalendarColorBy').value || null;
+        d.calendarImageType = view.querySelector('#DefaultCalendarImageType').value || null;
+        d.calendarSpoilerSafe = getNullableBoolSelect(view, '#DefaultCalendarSpoilerSafe');
+        d.calendarSelectAction = view.querySelector('#DefaultCalendarSelectAction').value || null;
+        d.calendarRequestButton = getNullableBoolSelect(view, '#DefaultCalendarRequestButton');
+        d.calendarReminders = getNullableBoolSelect(view, '#DefaultCalendarReminders');
+        d.calendarRowSeeAll = getNullableBoolSelect(view, '#DefaultCalendarRowSeeAll');
+        d.showNextAirDate = getNullableBoolSelect(view, '#DefaultShowNextAirDate');
 
         d.confirmExit = getNullableBoolSelect(view, '#DefaultConfirmExit');
         d.keyboardStyle = view.querySelector('#DefaultKeyboardStyle').value || null;
@@ -4448,6 +4503,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         mediaBarLibraryIds: 'DefaultLibraryPicker',
         mediaBarCollectionIds: 'DefaultCollectionPicker',
         screensaverLibraryIds: 'DefaultScreensaverLibraryPicker',
+        calendarLibraryIds: 'DefaultCalendarLibraryPicker',
         screensaverCollectionIds: 'DefaultScreensaverCollectionPicker',
         screensaverExcludedGenres: 'DefaultScreensaverGenrePicker',
         mdblistRatingSources: 'DefaultMdblistRatingSourcesList',

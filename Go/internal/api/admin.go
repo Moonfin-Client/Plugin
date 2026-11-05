@@ -107,6 +107,12 @@ func (s *Server) handleIcon(w http.ResponseWriter, r *http.Request) {
 // or works out, so a save never stores them.
 var derivedConfigKeys = []string{"Messages", "UploadedThemes", "HasServiceAccount", "PushEnabled"}
 
+// secretConfigKeys never go back to the page. It gets secretMask in place of
+// a saved one, and a save that sends the mask back keeps the saved value.
+var secretConfigKeys = []string{"SonarrApiKey", "RadarrApiKey"}
+
+const secretMask = "********"
+
 func (s *Server) handleGetConfiguration(w http.ResponseWriter, r *http.Request) {
 	out, err := s.fullConfig(r.Context())
 	if err != nil {
@@ -122,6 +128,11 @@ func (s *Server) handleGetConfiguration(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		storageFailed(w, r, err)
 		return
+	}
+	for _, k := range secretConfigKeys {
+		if str(out[k]) != "" {
+			out[k] = secretMask
+		}
 	}
 	out["Messages"] = messages
 	out["UploadedThemes"] = sortedThemes(themes.Items)
@@ -157,6 +168,16 @@ func (s *Server) handlePostConfiguration(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	saved, err := s.loadPageConfig(ctx)
+	if err != nil {
+		storageFailed(w, r, err)
+		return
+	}
+	for _, k := range secretConfigKeys {
+		if body[k] == secretMask {
+			body[k] = saved[k]
+		}
+	}
 	body[keyFormMoved] = true
 	if err := s.saveJSON(ctx, keyConfig, body); err != nil {
 		storageFailed(w, r, err)

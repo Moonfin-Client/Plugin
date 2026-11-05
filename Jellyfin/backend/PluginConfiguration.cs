@@ -46,6 +46,26 @@ public class PluginConfiguration : BasePluginConfiguration
     public string? PublicServerUrl { get; set; }
 
     /// <summary>
+    /// Keeps the Sonarr and Radarr calendar to server admins.
+    /// </summary>
+    public bool CalendarAdminsOnly { get; set; }
+
+    /// <summary>
+    /// How many days before today the calendar can reach.
+    /// </summary>
+    public int CalendarDaysBack { get; set; } = 14;
+
+    /// <summary>
+    /// How many days after today the calendar can reach.
+    /// </summary>
+    public int CalendarDaysAhead { get; set; } = 90;
+
+    /// <summary>
+    /// How long an arr calendar answer is reused before the arr is asked again. 0 asks every time.
+    /// </summary>
+    public int CalendarCacheMinutes { get; set; } = 5;
+
+    /// <summary>
     /// Server-wide MDBList API key shared with all users.
     /// Users who set their own key will use that instead.
     /// </summary>
