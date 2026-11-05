@@ -95,6 +95,19 @@ namespace Emby.Plugins.Moonfin.Services
             return keys;
         }
 
+        /// <summary>Every cached company and network that has a logo, so a client can match a studio by name.</summary>
+        public List<StudioCompanyInfo> GetCompaniesWithLogos()
+        {
+            var index = EnsureLoaded();
+            lock (_indexGate)
+            {
+                return index.Companies.Values
+                    .Where(c => c.HasLogo && !string.IsNullOrEmpty(c.Name))
+                    .Select(c => new StudioCompanyInfo { Id = c.Id, Name = c.Name, HasLogo = true })
+                    .ToList();
+            }
+        }
+
         public bool HasImage(int companyId) => File.Exists(GetImagePath(companyId));
 
         /// <summary>Networks are cached under a negated id, written as n123.png so no

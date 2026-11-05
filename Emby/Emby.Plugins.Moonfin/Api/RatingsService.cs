@@ -675,6 +675,9 @@ namespace Emby.Plugins.Moonfin.Api
             }
         }
 
+        public object Get(GetStudioLogosRequest request) =>
+            Json(new { success = true, companies = StudioLogoCache.GetCompaniesWithLogos() });
+
         public async Task<object?> Get(GetStudioImageRequest request)
         {
             var ensured = await StudioLogoFetch.EnsureImageAsync(request.CompanyId, System.Threading.CancellationToken.None).ConfigureAwait(false);

@@ -616,6 +616,18 @@ public class TmdbController : ControllerBase
     }
 
     /// <summary>
+    /// Lists every cached studio and network that has a logo. A studio item carries
+    /// no TMDB id, so clients match it to an entry here by name.
+    /// </summary>
+    [HttpGet("StudioLogos")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<StudioCompaniesResponse> GetStudioLogos()
+    {
+        return Ok(new StudioCompaniesResponse { Success = true, Companies = _studioCache.GetCompaniesWithLogos() });
+    }
+
+    /// <summary>
     /// Serves a cached studio logo PNG, re-downloading from TMDB if the file was
     /// evicted but the company is still known.
     /// </summary>

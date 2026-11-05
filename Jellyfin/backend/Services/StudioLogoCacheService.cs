@@ -18,6 +18,7 @@ public class StudioLogoCacheService
     private readonly string _indexFilePath;
     private readonly ILogger<StudioLogoCacheService> _logger;
     private readonly SemaphoreSlim _fileLock = new(1, 1);
+    private readonly object _indexGate = new();
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -65,15 +66,31 @@ public class StudioLogoCacheService
     public void SetItem(string type, string tmdbId, List<StudioCompanyEntry> companies)
     {
         var index = EnsureLoaded();
-        foreach (var company in companies)
+        lock (_indexGate)
         {
-            index.Companies[company.Id.ToString()] = company;
+            foreach (var company in companies)
+            {
+                index.Companies[company.Id.ToString()] = company;
+            }
+            index.Items[ItemKey(type, tmdbId)] = new StudioItemEntry
+            {
+                CompanyIds = companies.Select(c => c.Id).ToList(),
+                CachedAt = DateTimeOffset.UtcNow
+            };
         }
-        index.Items[ItemKey(type, tmdbId)] = new StudioItemEntry
+    }
+
+    /// <summary>Every cached company and network that has a logo, so a client can match a studio by name.</summary>
+    public List<StudioCompanyInfo> GetCompaniesWithLogos()
+    {
+        var index = EnsureLoaded();
+        lock (_indexGate)
         {
-            CompanyIds = companies.Select(c => c.Id).ToList(),
-            CachedAt = DateTimeOffset.UtcNow
-        };
+            return index.Companies.Values
+                .Where(c => c.HasLogo && !string.IsNullOrEmpty(c.Name))
+                .Select(c => new StudioCompanyInfo { Id = c.Id, Name = c.Name, HasLogo = true })
+                .ToList();
+        }
     }
 
     public HashSet<string> GetFreshItemKeys(TimeSpan maxAge)
