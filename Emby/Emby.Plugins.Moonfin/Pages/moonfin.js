@@ -459,12 +459,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             });
         });
 
-        Array.prototype.slice.call(view.querySelectorAll('[data-open-tab]')).forEach(function (button) {
-            button.addEventListener('click', function () {
-                selectTab(button.getAttribute('data-open-tab'));
-            });
-        });
-
         var syncToggle = view.querySelector('#EnableSettingsSync');
         if (syncToggle) {
             syncToggle.addEventListener('change', function () { updateSyncStatus(view); });
@@ -473,7 +467,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var saved = null;
         try { saved = window.localStorage.getItem('moonfinAdminActiveTab'); } catch (e) {}
         var validSaved = saved && panels.some(function (p) { return p.getAttribute('data-tab') === saved; });
-        selectTab(validSaved ? saved : 'settingsSync');
+        selectTab(validSaved ? saved : 'defaults');
 
         initializeDefaultsCategories(view);
         initializeSettingsSearch(view);
@@ -4125,7 +4119,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var navItem = view.querySelector('.moonfinNavItem[data-tab="' + tabId + '"]');
         navItem.hidden = !visible;
         if (!visible && navItem.classList.contains('is-active')) {
-            view.querySelector('.moonfinNavItem[data-tab="settingsSync"]').click();
+            view.querySelector('.moonfinNavItem[data-tab="defaults"]').click();
         }
     }
 

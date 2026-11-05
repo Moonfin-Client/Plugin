@@ -831,96 +831,8 @@
             font-size: 0.85em;
         }
 
-        #MoonfinConfigPage .moonfinLayers {
-            display: flex;
-            flex-direction: column;
-            margin-top: 14px;
-        }
-
-        #MoonfinConfigPage .moonfinLayer {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 14px;
-            padding: 14px 16px;
-            border: 1px solid rgba(128, 128, 128, 0.18);
-            border-radius: 12px;
-            background: rgba(128, 128, 128, 0.06);
-        }
-
-        #MoonfinConfigPage .moonfinLayer.is-first {
-            border-color: rgba(0, 164, 220, 0.3);
-            background: rgba(0, 164, 220, 0.1);
-        }
-
-        #MoonfinConfigPage .moonfinLayerStep {
-            display: flex;
-            flex-shrink: 0;
-            align-items: center;
-            justify-content: center;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: rgba(128, 128, 128, 0.24);
-            font-size: 0.9em;
-            font-weight: 700;
-        }
-
-        #MoonfinConfigPage .moonfinLayer.is-first .moonfinLayerStep {
-            background: #00a4dc;
-            color: #fff;
-        }
-
-        #MoonfinConfigPage .moonfinLayerText {
-            display: flex;
-            flex: 1 1 260px;
-            flex-direction: column;
-            gap: 2px;
-            min-width: 0;
-        }
-
-        #MoonfinConfigPage .moonfinLayerTitle {
-            font-weight: 600;
-        }
-
-        #MoonfinConfigPage .moonfinLayerDesc {
-            font-size: 0.92em;
-            line-height: 1.45;
-            opacity: 0.7;
-        }
-
-        #MoonfinConfigPage .moonfinLayerGap {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 0 4px 29px;
-            font-size: 0.85em;
-            opacity: 0.55;
-        }
-
-        #MoonfinConfigPage .moonfinLayerGapIcon {
-            width: 16px;
-            height: 16px;
-            fill: currentColor;
-        }
-
-        #MoonfinConfigPage .moonfinLinkButton {
-            padding: 8px 4px;
-            border: 0;
-            background: transparent;
-            color: #00a4dc;
-            font: inherit;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        #MoonfinConfigPage .moonfinLinkButton:hover {
-            text-decoration: underline;
-        }
-
         #MoonfinConfigPage.moonfin-searching .moonfinPageHead,
-        #MoonfinConfigPage.moonfin-searching .moonfinSyncDeps,
-        #MoonfinConfigPage.moonfin-searching .moonfinLayersCard {
+        #MoonfinConfigPage.moonfin-searching .moonfinSyncDeps {
             display: none;
         }
 
@@ -1535,9 +1447,9 @@
                             <img id="MoonfinBrandLogo" class="moonfinNavLogo" alt="Moonfin" />
                             <span class="moonfinNavBrandText">Moonfin</span>
                         </div>
-                        <button type="button" class="moonfinNavItem is-active" data-tab="settingsSync">
-                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
-                            <span class="moonfinNavText"><span class="moonfinNavLabel">Settings Sync</span><span class="moonfinNavSub">Profiles and devices</span></span>
+                        <button type="button" class="moonfinNavItem is-active" data-tab="defaults">
+                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
                         </button>
                         <button type="button" class="moonfinNavItem" data-tab="webClient">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/></svg>
@@ -1558,10 +1470,6 @@
                         <button type="button" class="moonfinNavItem" data-tab="smartSearch">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9H2V7h5v2zm0 3H2v2h5v-2zm13.59 7l-3.83-3.83c-.8.52-1.74.83-2.76.83-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5c0 1.02-.31 1.96-.83 2.75L22 17.59 20.59 19zM17 11c0-1.65-1.35-3-3-3s-3 1.35-3 3 1.35 3 3 3 3-1.35 3-3zM2 19h10v-2H2v2z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Smart Search</span><span class="moonfinNavSub">Search with plain sentences</span></span>
-                        </button>
-                        <button type="button" class="moonfinNavItem" data-tab="defaults">
-                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
-                            <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
                         </button>
                         <button type="button" class="moonfinNavItem" data-tab="themes">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
@@ -1593,58 +1501,6 @@
                         <svg class="moonfinSearchIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
                         <input type="search" id="MoonfinSettingsSearch" class="moonfinSearchInput" placeholder="Search settings" autocomplete="off" />
                     </div>
-                    <section class="moonfinTabPanel is-active" data-tab="settingsSync">
-                    <div class="moonfinPageHead">
-                        <h3 class="moonfinPageTitle">Settings Sync</h3>
-                        <p class="moonfinPageLead">Moonfin apps save each user's settings here and pick them up on every device that user signs in to.</p>
-                    </div>
-
-                    <div class="verticalSection moonfinSyncCard is-off" id="MoonfinSyncStatusCard">
-                        <div class="checkboxContainer moonfinSyncStatus">
-                            <svg class="moonfinSyncIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
-                                <span><span class="moonfinSyncLines">
-                                    <span class="moonfinSyncTitle">Moonbase Sync</span>
-                                    <span class="moonfinSyncState"><span class="moonfinSyncDot" aria-hidden="true"></span><span class="moonfinSyncOnText">On for every user on this server</span><span class="moonfinSyncOffText">Off, so Moonfin apps keep their settings on each device</span></span>
-                                </span></span>
-                            </label>
-                        </div>
-                        <div class="moonfinSyncDeps">
-                            <span class="moonfinEyebrow">Also relies on sync</span>
-                            <div class="moonfinChips">
-                                <span class="moonfinChip">Seerr requests</span>
-                                <span class="moonfinChip">MDBList ratings</span>
-                                <span class="moonfinChip">TMDB ratings</span>
-                            </div>
-                            <div class="fieldDescription">Moonfin apps treat the plugin as missing while sync is off, so these stop working too.</div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection moonfinLayersCard">
-                        <h3 class="sectionTitle">Where a setting comes from</h3>
-                        <div class="fieldDescription">Each setting comes from the first layer that has it.</div>
-                        <div class="moonfinLayers">
-                            <div class="moonfinLayer is-first">
-                                <span class="moonfinLayerStep" aria-hidden="true">1</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Device profile</span><span class="moonfinLayerDesc">A device follows its own kind until the user picks another profile in the app.</span></span>
-                                <span class="moonfinChips"><span class="moonfinChip">Desktop</span><span class="moonfinChip">Mobile</span><span class="moonfinChip">TV</span></span>
-                            </div>
-                            <div class="moonfinLayerGap"><svg class="moonfinLayerGapIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>falls back to</div>
-                            <div class="moonfinLayer">
-                                <span class="moonfinLayerStep" aria-hidden="true">2</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Global</span><span class="moonfinLayerDesc">Shared by every device the user has.</span></span>
-                            </div>
-                            <div class="moonfinLayerGap"><svg class="moonfinLayerGapIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>falls back to</div>
-                            <div class="moonfinLayer">
-                                <span class="moonfinLayerStep" aria-hidden="true">3</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Admin defaults</span><span class="moonfinLayerDesc">What you set for everyone under User defaults.</span></span>
-                                <button type="button" class="moonfinLinkButton" data-open-tab="defaults">Open User defaults</button>
-                            </div>
-                        </div>
-                    </div>
-                    </section>
-
                     <section class="moonfinTabPanel" data-tab="webClient">
                     <div class="moonfinPageHead">
                         <h3 class="moonfinPageTitle">Web Client</h3>
@@ -2200,7 +2056,29 @@
                     </div>
 
                     </section>
-                    <section class="moonfinTabPanel" data-tab="defaults">
+                    <section class="moonfinTabPanel is-active" data-tab="defaults">
+                    <div class="verticalSection moonfinSyncCard is-off" id="MoonfinSyncStatusCard">
+                        <div class="checkboxContainer moonfinSyncStatus">
+                            <svg class="moonfinSyncIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
+                                <span><span class="moonfinSyncLines">
+                                    <span class="moonfinSyncTitle">Moonbase Sync</span>
+                                    <span class="moonfinSyncState"><span class="moonfinSyncDot" aria-hidden="true"></span><span class="moonfinSyncOnText">On for every user on this server</span><span class="moonfinSyncOffText">Off, so Moonfin apps keep their settings on each device</span></span>
+                                </span></span>
+                            </label>
+                        </div>
+                        <div class="moonfinSyncDeps">
+                            <span class="moonfinEyebrow">Also relies on sync</span>
+                            <div class="moonfinChips">
+                                <span class="moonfinChip">Seerr requests</span>
+                                <span class="moonfinChip">MDBList ratings</span>
+                                <span class="moonfinChip">TMDB ratings</span>
+                            </div>
+                            <div class="fieldDescription">Moonfin apps treat the plugin as missing while sync is off, so these stop working too.</div>
+                        </div>
+                    </div>
+
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Default User Settings</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
