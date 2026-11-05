@@ -51,6 +51,12 @@ public class StudioLogoSyncTask : IScheduledTask
             return;
         }
 
+        // Logos cached before their tone was recorded get checked once, which needs no TMDB key
+        if (_cacheService.ToneUncheckedLogos() > 0)
+        {
+            await _cacheService.FlushAsync().ConfigureAwait(false);
+        }
+
         var apiKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {

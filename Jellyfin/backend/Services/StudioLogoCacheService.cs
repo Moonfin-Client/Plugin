@@ -56,7 +56,7 @@ public class StudioLogoCacheService
         {
             if (index.Companies.TryGetValue(id.ToString(), out var c))
             {
-                companies.Add(new StudioCompanyInfo { Id = c.Id, Name = c.Name, HasLogo = c.HasLogo });
+                companies.Add(c.ToInfo());
             }
         }
         return companies;
@@ -88,9 +88,43 @@ public class StudioLogoCacheService
         {
             return index.Companies.Values
                 .Where(c => c.HasLogo && !string.IsNullOrEmpty(c.Name))
-                .Select(c => new StudioCompanyInfo { Id = c.Id, Name = c.Name, HasLogo = true })
+                .Select(c => c.ToInfo())
                 .ToList();
         }
+    }
+
+    /// <summary>Works out whether each logo cached before tones were recorded is a dark one.
+    /// Returns how many it settled.</summary>
+    public int ToneUncheckedLogos()
+    {
+        var index = EnsureLoaded();
+        List<StudioCompanyEntry> pending;
+        lock (_indexGate)
+        {
+            pending = index.Companies.Values.Where(c => c.HasLogo && c.DarkLogo == null).ToList();
+        }
+
+        var settled = 0;
+        foreach (var company in pending)
+        {
+            byte[] bytes;
+            try
+            {
+                bytes = File.ReadAllBytes(GetImagePath(company.Id));
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+
+            var dark = StudioLogoTone.IsDark(bytes);
+            lock (_indexGate)
+            {
+                company.DarkLogo = dark;
+            }
+            settled++;
+        }
+        return settled;
     }
 
     public HashSet<string> GetFreshItemKeys(TimeSpan maxAge)
@@ -204,6 +238,10 @@ public class StudioCompanyInfo
 
     [JsonPropertyName("hasLogo")]
     public bool HasLogo { get; set; }
+
+    /// <summary>The TMDB image, turned white when the logo is a dark one.</summary>
+    [JsonPropertyName("logoUrl")]
+    public string? LogoUrl { get; set; }
 }
 
 internal class StudioIndex
@@ -236,6 +274,18 @@ public class StudioCompanyEntry
 
     [JsonPropertyName("hasLogo")]
     public bool HasLogo { get; set; }
+
+    /// <summary>Whether the logo is dark and colorless, or null when it hasn't been checked.</summary>
+    [JsonPropertyName("darkLogo")]
+    public bool? DarkLogo { get; set; }
+
+    public StudioCompanyInfo ToInfo() => new()
+    {
+        Id = Id,
+        Name = Name,
+        HasLogo = HasLogo,
+        LogoUrl = HasLogo && !string.IsNullOrEmpty(LogoPath) ? StudioLogoTone.LogoUrl(LogoPath, DarkLogo == true) : null
+    };
 }
 
 internal class StudioItemEntry

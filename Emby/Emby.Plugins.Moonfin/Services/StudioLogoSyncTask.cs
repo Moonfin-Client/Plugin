@@ -69,6 +69,10 @@ namespace Emby.Plugins.Moonfin.Services
                 return;
             }
 
+            // Logos cached before their tone was recorded get checked once
+            if (CacheService.ToneUncheckedLogos() > 0)
+                await CacheService.FlushAsync().ConfigureAwait(false);
+
             progress.Report(0);
 
             var cacheMaxAge = TimeSpan.FromDays(config?.StudioLogosMaxAgeDays ?? 30);
