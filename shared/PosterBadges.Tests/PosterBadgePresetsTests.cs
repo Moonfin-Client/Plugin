@@ -101,6 +101,16 @@ public class PosterBadgePresetsTests
     }
 
     [Fact]
+    public void ReleaseTagsAreFoundBetweenUnderscores()
+    {
+        var found = Detect("/films/Movie_2025_IMAX_REMUX_2160p.mkv", Video(3840, 2160));
+        Assert.Contains("remux", found);
+        Assert.Contains("imax", found);
+        Assert.DoesNotContain("remux", Detect("/films/Movie_REMUXED_2160p.mkv", Video(3840, 2160)));
+        Assert.DoesNotContain("imax", Detect("/films/Movie_NON_IMAX.mkv", Video(3840, 2160)));
+    }
+
+    [Fact]
     public void NonImaxIsNotImax()
     {
         Assert.Contains("imax", Detect("/films/Dune.2021.IMAX.2160p.REMUX.mkv", Video(3840, 2160)));

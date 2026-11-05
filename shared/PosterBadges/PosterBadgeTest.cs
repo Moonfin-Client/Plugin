@@ -49,8 +49,8 @@ public static class PosterBadgeTest
             return results;
         }
 
-        var tracks = Tracks(streams);
-        var presets = PosterBadgePresets.Detect(path, tracks);
+        var tracks = PosterBadgeMatcher.ReadTracks(streams);
+        var presets = PosterBadgePresets.Detect(path, tracks ?? new List<object>());
         var shown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; i < rules.Count; i++)

@@ -30,10 +30,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'recentlyreleased', label: 'Recently Released' }
     ];
 
+    // This declaration wins over the one above. Quotes too, since the result also goes into
+    // attributes.
     function esc(s) {
         var d = document.createElement('div');
         d.textContent = s;
-        return d.innerHTML;
+        return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     // Inline SVG icons for the Active Downloads cards. Emby's dashboard doesn't load the Material
@@ -4016,19 +4018,24 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             : [['any', 'Any'], ['none', 'No'], ['every', 'Every']];
     }
 
-    function labelOperatorChoices(field) {
-        return LABEL_NUMBER_FIELDS.indexOf(field) !== -1 ? LABEL_NUMBER_OPERATORS : LABEL_TEXT_OPERATORS;
+    // The tests for the field. A stored test from the other list stays offered, so a
+    // saved rule like "Video: height matches 2160" isn't changed behind the admin's back.
+    function labelOperatorChoices(field, keep) {
+        var list = LABEL_NUMBER_FIELDS.indexOf(field) !== -1 ? LABEL_NUMBER_OPERATORS : LABEL_TEXT_OPERATORS;
+        var kept = LABEL_TEXT_OPERATORS.concat(LABEL_NUMBER_OPERATORS).filter(function(choice) { return choice[0] === keep; })[0];
+        return kept && list.indexOf(kept) === -1 ? list.concat([kept]) : list;
     }
 
-    // Keeps the test and the tracks valid for the field, after the field changes or for
-    // a rule saved by the first version, whose "does not match" is now "No" with a pattern.
-    function normalizeLabelCondition(condition) {
+    // Keeps the test and the tracks valid for the field. On load, a rule saved by the first
+    // version has its "does not match" turned into "No" with a pattern, and any test the
+    // server knows is kept. When the admin picks another field, the test follows it.
+    function normalizeLabelCondition(condition, fieldChanged) {
         if (condition.Operator === 'notMatches') {
             condition.Operator = 'matches';
             condition.Match = 'none';
         }
 
-        var operators = labelOperatorChoices(condition.Field);
+        var operators = labelOperatorChoices(condition.Field, fieldChanged ? null : condition.Operator);
         if (!operators.some(function(choice) { return choice[0] === condition.Operator; })) {
             condition.Operator = operators[0][0];
         }
@@ -4425,6 +4432,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return source[key] !== undefined ? source[key] : source[key.charAt(0).toLowerCase() + key.slice(1)];
     }
 
+    // The server reads user ids as guids, dashed or not, so the page compares them the same way.
+    function labelUserId(id) {
+        return String(id || '').replace(/-/g, '').toLowerCase();
+    }
+
     function labelHex(value, fallback) {
         return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : fallback;
     }
@@ -4447,7 +4459,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             MaxPerCorner: max >= 1 && max <= 5 ? max : 2
         };
 
-        posterBadgeRules = (rules || []).map(function(rule) {
+        posterBadgeRules = (rules || []).filter(Boolean).map(function(rule) {
             var ruleOpacity = posterBadgeValue(rule, 'Opacity');
             return {
                 Label: posterBadgeValue(rule, 'Label') || '',
@@ -4462,9 +4474,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 Size: labelChoice('Size', posterBadgeValue(rule, 'Size'), ''),
                 Corner: labelChoice('Corner', posterBadgeValue(rule, 'Corner'), ''),
                 Opacity: ruleOpacity === null || ruleOpacity === undefined ? null : Number(ruleOpacity),
-                UserIds: (posterBadgeValue(rule, 'UserIds') || []).slice(),
+                UserIds: (posterBadgeValue(rule, 'UserIds') || []).map(labelUserId).filter(function(id, i, all) { return id && all.indexOf(id) === i; }),
                 Profiles: (posterBadgeValue(rule, 'Profiles') || []).slice(),
-                Conditions: (posterBadgeValue(rule, 'Conditions') || []).map(function(condition) {
+                Conditions: (posterBadgeValue(rule, 'Conditions') || []).filter(Boolean).map(function(condition) {
                     return normalizeLabelCondition({
                         Field: posterBadgeValue(condition, 'Field') || 'Path',
                         Match: posterBadgeValue(condition, 'Match') || 'any',
@@ -4703,7 +4715,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     return '<div class="labelsCondition" data-condition="' + conditionIndex + '">'
                         + '<select class="homeCustomListInput" data-key="Match" aria-label="Which tracks">' + posterBadgeOptions(labelMatchChoices(condition.Field), condition.Match) + '</select>'
                         + '<select class="homeCustomListInput" data-key="Field" aria-label="Field">' + posterBadgeOptions(POSTER_BADGE_FIELDS, condition.Field) + '</select>'
-                        + '<select class="homeCustomListInput" data-key="Operator" aria-label="Test">' + posterBadgeOptions(labelOperatorChoices(condition.Field), condition.Operator) + '</select>'
+                        + '<select class="homeCustomListInput" data-key="Operator" aria-label="Test">' + posterBadgeOptions(labelOperatorChoices(condition.Field, condition.Operator), condition.Operator) + '</select>'
                         + '<input type="text" class="homeCustomListInput" data-key="Value" aria-label="Value"' + (number ? ' inputmode="decimal"' : '') + ' value="' + esc(condition.Value) + '" />'
                         + '<button type="button" class="homeLayoutIconButton" data-action="removeCondition" title="Remove condition" aria-label="Remove condition"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>'
                         + '</div>';
@@ -4819,7 +4831,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // Stacks labels in their corners, once per text and as many per corner as the apps draw.
     function drawLabelCorners(poster, entries) {
         var corners = {};
-        var shown = {};
+        var shown = Object.create(null);
         entries.forEach(function(entry) {
             // An icon alone is a label too, keyed by its icon.
             var key = entry.label ? entry.label.toLowerCase() : (entry.look.icon ? 'icon:' + entry.look.icon : '');
@@ -5055,7 +5067,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         if (ApiClient.getUsers) {
             ApiClient.getUsers().then(function(users) {
-                labelUsers = (users || []).map(function(user) { return { Id: user.Id, Name: user.Name }; });
+                labelUsers = (users || []).map(function(user) { return { Id: labelUserId(user.Id), Name: user.Name }; });
                 renderPosterBadgeRules(view);
             }).catch(function() {});
         }
@@ -5097,7 +5109,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         // the focus goes back to the same control.
         if (conditionElement && key === 'Field' && owner.Field !== target.value) {
             owner.Field = target.value;
-            normalizeLabelCondition(owner);
+            normalizeLabelCondition(owner, true);
             renderPosterBadgeRules(view);
             var again = view.querySelector('#PosterBadgeRulesList [data-rule="' + ruleElement.getAttribute('data-rule') + '"] [data-condition="' + conditionElement.getAttribute('data-condition') + '"] [data-key="Field"]');
             if (again) {
@@ -5179,11 +5191,17 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             renderLabelPresets(view);
             renderPosterBadgeRules(view);
             renderLabelPreview(view);
+            if (labelTestItem) {
+                scheduleLabelTest(view);
+            }
         });
 
         page.querySelector('#LabelsMaxPerCorner').addEventListener('change', function(e) {
             posterBadgeDefaults.MaxPerCorner = Number(e.target.value);
             renderLabelPreview(view);
+            if (labelTestItem) {
+                scheduleLabelTest(view);
+            }
         });
 
         Array.prototype.forEach.call(page.querySelectorAll('[data-default]'), function(group) {
@@ -5209,10 +5227,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             if (index === -1) {
                 var preset = labelPreset(id);
                 posterBadgeRules.push(newLabelRule({ Preset: id, Label: preset.label, Color: labelHex(preset.color, POSTER_BADGE_DEFAULT_COLOR) }));
-            } else if (!posterBadgeRules[index].Enabled) {
-                posterBadgeRules[index].Enabled = true;
             } else {
-                posterBadgeRules.splice(index, 1);
+                // Switched off rather than deleted, so its look and its users and devices
+                // are still there when it comes back.
+                posterBadgeRules[index].Enabled = !posterBadgeRules[index].Enabled;
             }
 
             renderLabels(view);

@@ -67,9 +67,10 @@ public static class PosterBadgePresets
     private static PosterBadgePreset P(string id, string label, string group, string color, string description) =>
         new() { Id = id, Label = label, Group = group, Color = color, Description = description };
 
-    private static readonly Regex Remux = new(@"\bREMUX\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // Not \b: in .NET "_" is a word character, so "Movie_REMUX_2160p" would never match.
+    private static readonly Regex Remux = new(@"(?<![\p{L}\p{N}])REMUX(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    private static readonly Regex Imax = new(@"(?<!NON[ ._-]?)\bIMAX\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex Imax = new(@"(?<!NON[ ._-]?)(?<![\p{L}\p{N}])IMAX(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly Regex DtsX = new(@"DTS[:\- ]?X\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 

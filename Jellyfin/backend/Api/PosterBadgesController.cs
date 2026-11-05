@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Reflection;
 using System.Net.Mime;
 using MediaBrowser.Controller.Entities;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moonfin.PosterBadges;
+using Moonfin.Server.Helpers;
 using Moonfin.Server.Services;
 
 namespace Moonfin.Server.Api;
@@ -45,7 +47,8 @@ public class PosterBadgesController : ControllerBase
     {
         var config = MoonfinPlugin.Instance?.Configuration;
         var defaults = config?.PosterBadgeDefaults ?? new PosterBadgeDefaults();
-        var rules = PosterBadgeMatcher.ForViewer(config?.PosterBadgeRules, this.GetUserIdFromClaims()?.ToString(), profile);
+        var userId = this.GetUserIdFromClaims();
+        var rules = PosterBadgeMatcher.ForViewer(config?.PosterBadgeRules, userId?.ToString(), profile);
         var version = PosterBadgeMatcher.Version(config?.PosterBadgeRules, defaults);
         if (rules.Count == 0)
         {
@@ -67,8 +70,26 @@ public class PosterBadgesController : ControllerBase
 
         var answer = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
+        // Labels come from the file, so a viewer only gets them for items they can see.
+        // Without a user there is no telling, so nothing is answered.
+        var viewer = userId.HasValue ? UserReflection.ResolveUser(HttpContext.RequestServices, userId.Value) : null;
+        if (viewer == null)
+        {
+            return Ok(new { enabled = true, version, maxPerCorner = Math.Max(1, defaults.MaxPerCorner), items = answer });
+        }
+
+        var clock = Stopwatch.StartNew();
+
         foreach (var raw in requested)
         {
+            // A whole-request budget for admin patterns that backtrack badly. Items past
+            // it get no labels this session; a per-item retry would need the client to ask again.
+            if (clock.Elapsed > RequestBudget)
+            {
+                _logger.LogWarning("Poster badges: stopped after {Seconds}s, a label pattern is too slow", RequestBudget.TotalSeconds);
+                break;
+            }
+
             if (!Guid.TryParse(raw, out var itemGuid))
             {
                 continue;
@@ -76,7 +97,7 @@ public class PosterBadgesController : ControllerBase
 
             // A series, season or collection has no file of its own to read.
             var item = _libraryManager.GetItemById(itemGuid);
-            if (item == null || item is Folder)
+            if (item == null || item is Folder || !UserReflection.IsVisibleTo(item, viewer))
             {
                 continue;
             }
@@ -136,6 +157,9 @@ public class PosterBadgesController : ControllerBase
             maxPerCorner = Math.Max(1, defaults.MaxPerCorner),
         });
     }
+
+    /// <summary>How long one request for up to 200 items may spend matching.</summary>
+    private static readonly TimeSpan RequestBudget = TimeSpan.FromSeconds(3);
 
     /// <summary>
     /// GetStaticMediaSources takes a User whose type moved between 10.10 and 10.11, so it is

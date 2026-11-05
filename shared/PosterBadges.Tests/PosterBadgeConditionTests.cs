@@ -189,6 +189,39 @@ public class PosterBadgeConditionTests
     }
 
     [Fact]
+    public void AMisspelledFieldNeverReadsAsNoTrackHasIt()
+    {
+        var file = new[] { Audio("fre", "VFF") };
+        Assert.False(Shows(When("Audio.Titel", PosterBadgeMatcher.Contains, "VFQ", PosterBadgeMatcher.None), Film, file));
+        Assert.False(Shows(When("Audoi.Title", PosterBadgeMatcher.Contains, "VFQ", PosterBadgeMatcher.None), Film, file));
+
+        // A real field still follows the rules, including a file with no track of that type.
+        Assert.True(Shows(When("Subtitle.Language", PosterBadgeMatcher.Is, "fre", PosterBadgeMatcher.None), Film, file));
+    }
+
+    [Fact]
+    public void TracksThatCouldNotBeReadAreUnknownNotMissing()
+    {
+        var rules = new List<PosterBadgeRule>
+        {
+            new PosterBadgeRule { Label = "No VFF", Conditions = new List<PosterBadgeCondition> { When("Audio.Title", PosterBadgeMatcher.Contains, "VFF", PosterBadgeMatcher.None) } },
+            new PosterBadgeRule { Label = "VFQ", Conditions = new List<PosterBadgeCondition> { When("Path", PosterBadgeMatcher.Contains, "VFQ") } },
+            new PosterBadgeRule { Label = "REMUX", Preset = "remux" },
+        };
+
+        var badges = PosterBadgeMatcher.Match(rules, "/films/Movie.VFQ.REMUX.mkv", null);
+        Assert.Equal(new[] { "VFQ", "REMUX" }, badges.Select(b => b.Label));
+    }
+
+    [Fact]
+    public void APatternThatRunsOutOfTimeFailsItsCondition()
+    {
+        // Catastrophic backtracking, well past the 100 ms limit.
+        var slow = When("Audio.Title", PosterBadgeMatcher.Matches, "^(a+)+$", PosterBadgeMatcher.None);
+        Assert.False(Shows(slow, Film, Audio("eng", new string('a', 40) + "b")));
+    }
+
+    [Fact]
     public void NoneTurnsThePathAround()
     {
         var notRemux = When("Path", PosterBadgeMatcher.Contains, "remux", PosterBadgeMatcher.None);

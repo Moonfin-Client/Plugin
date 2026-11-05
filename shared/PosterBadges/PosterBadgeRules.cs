@@ -298,18 +298,7 @@ public static class PosterBadgeMatcher
             return badges;
         }
 
-        var tracks = new List<object>();
-        if (streams != null)
-        {
-            foreach (var stream in streams)
-            {
-                if (stream != null)
-                {
-                    tracks.Add(stream);
-                }
-            }
-        }
-
+        var tracks = ReadTracks(streams);
         var shown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Worked out on the first preset rule only, since most items meet several.
@@ -326,7 +315,7 @@ public static class PosterBadgeMatcher
             bool holds;
             if (!string.IsNullOrWhiteSpace(rule.Preset))
             {
-                presets ??= PosterBadgePresets.Detect(path, tracks);
+                presets ??= PosterBadgePresets.Detect(path, tracks ?? new List<object>());
                 holds = presets.Contains(rule.Preset!.Trim());
             }
             else
@@ -419,8 +408,32 @@ public static class PosterBadgeMatcher
     private static string? Hex(string? value) =>
         value != null && Regex.IsMatch(value.Trim(), "^#[0-9a-fA-F]{6}$") ? value.Trim().ToUpperInvariant() : null;
 
+    /// <summary>
+    /// The server's track objects, or null when they couldnt be read. Unknown tracks are not
+    /// "no tracks": a condition on them fails, so "no French audio" never labels a file whose
+    /// tracks were never read.
+    /// </summary>
+    public static List<object>? ReadTracks(IEnumerable? streams)
+    {
+        if (streams == null)
+        {
+            return null;
+        }
+
+        var tracks = new List<object>();
+        foreach (var stream in streams)
+        {
+            if (stream != null)
+            {
+                tracks.Add(stream);
+            }
+        }
+
+        return tracks;
+    }
+
     /// <summary>Whether one condition holds for the file. Public for the admin page's test.</summary>
-    public static bool Holds(PosterBadgeCondition? condition, string? path, List<object> tracks)
+    public static bool Holds(PosterBadgeCondition? condition, string? path, List<object>? tracks)
     {
         var field = condition?.Field?.Trim();
         if (condition == null || string.IsNullOrEmpty(field))
@@ -449,7 +462,23 @@ public static class PosterBadgeMatcher
             return false;
         }
 
-        var passing = values.FindAll(value => Passes(op, condition.Value, value)).Count;
+        var passing = 0;
+        foreach (var value in values)
+        {
+            var passed = Passes(op, condition.Value, value);
+
+            // A pattern that ran out of time is an unfinished check, not a miss, so it can
+            // never let "no track" hold.
+            if (passed == null)
+            {
+                return false;
+            }
+
+            if (passed.Value)
+            {
+                passing++;
+            }
+        }
 
         if (string.Equals(match, None, StringComparison.OrdinalIgnoreCase))
         {
@@ -469,7 +498,7 @@ public static class PosterBadgeMatcher
     /// The values a condition looks at: the path, the number of tracks of a type, or that
     /// property of each track of the type. Null for a field that names nothing.
     /// </summary>
-    private static List<string?>? ValuesOf(string field, string? path, List<object> tracks)
+    private static List<string?>? ValuesOf(string field, string? path, List<object>? tracks)
     {
         if (string.Equals(field, "Path", StringComparison.OrdinalIgnoreCase))
         {
@@ -477,12 +506,18 @@ public static class PosterBadgeMatcher
         }
 
         var dot = field.IndexOf('.');
-        if (dot <= 0 || dot == field.Length - 1)
+        if (dot <= 0 || dot == field.Length - 1 || tracks == null)
         {
             return null;
         }
 
+        // A misspelled type would find no track and so read as "no track has it".
         var trackType = field.Substring(0, dot);
+        if (Array.Find(TrackTypes, known => string.Equals(known, trackType, StringComparison.OrdinalIgnoreCase)) == null)
+        {
+            return null;
+        }
+
         var property = field.Substring(dot + 1);
         var count = string.Equals(property, "Count", StringComparison.OrdinalIgnoreCase);
         var languageCount = string.Equals(property, "LanguageCount", StringComparison.OrdinalIgnoreCase);
@@ -504,7 +539,19 @@ public static class PosterBadgeMatcher
                 continue;
             }
 
-            var value = count ? null : type.GetProperty(property)?.GetValue(track);
+            object? value = null;
+            if (!count)
+            {
+                // A property the track doesnt have is a typo, not an empty value.
+                var info = type.GetProperty(property);
+                if (info == null)
+                {
+                    return null;
+                }
+
+                value = info.GetValue(track);
+            }
+
             values.Add(value == null ? null : Convert.ToString(value, CultureInfo.InvariantCulture));
         }
 
@@ -585,6 +632,9 @@ public static class PosterBadgeMatcher
         return code;
     }
 
+    /// <summary>The track kinds both servers name in MediaStream.Type.</summary>
+    private static readonly string[] TrackTypes = { "Audio", "Video", "Subtitle", "EmbeddedImage", "Data", "Attachment", "Lyric" };
+
     private static bool Usable(string op, string? target)
     {
         if (string.IsNullOrWhiteSpace(target))
@@ -616,7 +666,8 @@ public static class PosterBadgeMatcher
     private static double? Number(string? text) =>
         double.TryParse(text?.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? number : (double?)null;
 
-    private static bool Passes(string op, string target, string? value)
+    /// <summary>Null when the pattern ran out of time.</summary>
+    private static bool? Passes(string op, string target, string? value)
     {
         if (string.IsNullOrEmpty(value))
         {
@@ -657,7 +708,7 @@ public static class PosterBadgeMatcher
         }
         catch (RegexMatchTimeoutException)
         {
-            return false;
+            return null;
         }
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -45,9 +46,10 @@ namespace Emby.Plugins.Moonfin.Api
         {
             var config = Plugin.Instance?.Configuration;
             var defaults = config?.PosterBadgeDefaults ?? new PosterBadgeDefaults();
+            var viewer = AuthHelpers.GetCurrentUser(Request, _authContext);
             var rules = PosterBadgeMatcher.ForViewer(
                 config?.PosterBadgeRules,
-                AuthHelpers.GetCurrentUserId(Request, _authContext)?.ToString(),
+                viewer != null && viewer.Id != Guid.Empty ? viewer.Id.ToString() : null,
                 request.Profile);
             var version = PosterBadgeMatcher.Version(config?.PosterBadgeRules, defaults);
             if (rules.Count == 0)
@@ -72,11 +74,28 @@ namespace Emby.Plugins.Moonfin.Api
 
             var answer = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
+            // Labels come from the file, so a viewer only gets them for items they can see.
+            // Without a user there is no telling, so nothing is answered.
+            if (viewer == null)
+            {
+                return Json(new { enabled = true, version, maxPerCorner = Math.Max(1, defaults.MaxPerCorner), items = answer });
+            }
+
+            var clock = Stopwatch.StartNew();
+
             foreach (var raw in requested)
             {
+                // A whole-request budget for admin patterns that backtrack badly. Items
+                // past it get no labels this session; a per-item retry would need the client to ask again.
+                if (clock.Elapsed > RequestBudget)
+                {
+                    _logger.Warn("Poster badges: stopped after " + RequestBudget.TotalSeconds + "s, a label pattern is too slow");
+                    break;
+                }
+
                 // A series, season or collection has no file of its own to read.
                 var item = FindItem(raw);
-                if (item == null || item is Folder)
+                if (item == null || item is Folder || !item.IsVisible(viewer))
                 {
                     continue;
                 }
@@ -129,6 +148,9 @@ namespace Emby.Plugins.Moonfin.Api
                 maxPerCorner = Math.Max(1, defaults.MaxPerCorner),
             });
         }
+
+        /// <summary>How long one request for up to 200 items may spend matching.</summary>
+        private static readonly TimeSpan RequestBudget = TimeSpan.FromSeconds(3);
 
         /// <summary>
         /// The path and tracks labels are read from: the version with the largest picture when
