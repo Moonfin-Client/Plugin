@@ -4115,6 +4115,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             });
     }
 
+    function setAdminTabVisible(view, tabId, visible) {
+        var navItem = view.querySelector('.moonfinNavItem[data-tab="' + tabId + '"]');
+        navItem.hidden = !visible;
+        if (!visible && navItem.classList.contains('is-active')) {
+            view.querySelector('.moonfinNavItem[data-tab="settingsSync"]').click();
+        }
+    }
+
+    function updateDownloadsTabVisibility(view) {
+        ApiClient.getJSON(ApiClient.getUrl('Moonfin/Transcodes/Active')).then(function (jobs) {
+            setAdminTabVisible(view, 'syncs', !!(jobs && jobs.length));
+        }, function () {
+            setAdminTabVisible(view, 'syncs', true);
+        });
+    }
+
     function loadAdminPins(view) {
         var list = view.querySelector('#AdminPinList');
         if (!list) return;
@@ -4209,15 +4225,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     list.appendChild(row);
                 });
                 say('', false);
-
-                var navItem = view.querySelector('.moonfinNavItem[data-tab="accounts"]');
-                var anyPin = users.some(function (user) { return user.hasPin; });
-                navItem.hidden = !anyPin;
-                if (!anyPin && navItem.classList.contains('is-active')) {
-                    view.querySelector('.moonfinNavItem[data-tab="settingsSync"]').click();
-                }
+                setAdminTabVisible(view, 'accounts', users.some(function (user) { return user.hasPin; }));
             })
             .catch(function () {
+                setAdminTabVisible(view, 'accounts', true);
                 say('Couldn\'t load the users.', true);
             });
     }
@@ -5309,6 +5320,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             loadMessagesList(view);
         });
         loadAdminPins(view);
+        updateDownloadsTabVisibility(view);
         loadConfig(view);
         loadActionUsers(view);
     };

@@ -7992,6 +7992,14 @@
                 });
             }
 
+            function setAdminTabVisible(tabId, visible) {
+                var navItem = document.querySelector('.moonfinNavItem[data-tab="' + tabId + '"]');
+                navItem.hidden = !visible;
+                if (!visible && navItem.classList.contains('is-active')) {
+                    document.querySelector('.moonfinNavItem[data-tab="settingsSync"]').click();
+                }
+            }
+
             function loadAdminPins() {
                 var list = document.querySelector('#AdminPinList');
                 if (!list) {
@@ -8091,14 +8099,9 @@
                         list.appendChild(row);
                     });
                     say('', false);
-
-                    var navItem = document.querySelector('.moonfinNavItem[data-tab="accounts"]');
-                    var anyPin = users.some(function(user) { return user.hasPin; });
-                    navItem.hidden = !anyPin;
-                    if (!anyPin && navItem.classList.contains('is-active')) {
-                        document.querySelector('.moonfinNavItem[data-tab="settingsSync"]').click();
-                    }
+                    setAdminTabVisible('accounts', users.some(function(user) { return user.hasPin; }));
                 }, function() {
+                    setAdminTabVisible('accounts', true);
                     say('Couldn\'t load the users.', true);
                 });
             }
@@ -9070,6 +9073,7 @@
                     loadMessagesList();
                 });
                 loadAdminPins();
+                updateDownloadsTabVisibility();
 
                 loadConfigBackupStatus();
 
@@ -11041,6 +11045,7 @@
                     return;
                 }
                 if (!navItem.classList.contains('is-active')) {
+                    stopSyncsPolling();
                     return;
                 }
                 ApiClient.getJSON(ApiClient.getUrl("Moonfin/Transcodes/Active")).then(function(jobs) {
@@ -11136,6 +11141,14 @@
                     }
                 }, function() {
                     container.innerHTML = '<div style="padding:16px; text-align:center; color:#ff5252;">Could not load active downloads. The server may be restarting.</div>';
+                });
+            }
+
+            function updateDownloadsTabVisibility() {
+                ApiClient.getJSON(ApiClient.getUrl("Moonfin/Transcodes/Active")).then(function(jobs) {
+                    setAdminTabVisible('syncs', !!(jobs && jobs.length));
+                }, function() {
+                    setAdminTabVisible('syncs', true);
                 });
             }
 
