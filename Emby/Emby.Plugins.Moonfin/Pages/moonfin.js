@@ -4138,8 +4138,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         fetch(serverUrl + '/Moonfin/Admin/Pins', { method: 'GET', headers: moonfinAuthHeaders() })
             .then(parseJsonResponse)
             .then(function (users) {
+                users = Array.isArray(users) ? users : [];
                 list.innerHTML = '';
-                (Array.isArray(users) ? users : []).forEach(function (user) {
+                users.forEach(function (user) {
                     var row = document.createElement('div');
                     row.style.margin = '0 0 1.2em';
 
@@ -4208,6 +4209,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     list.appendChild(row);
                 });
                 say('', false);
+
+                var navItem = view.querySelector('.moonfinNavItem[data-tab="accounts"]');
+                var anyPin = users.some(function (user) { return user.hasPin; });
+                navItem.hidden = !anyPin;
+                if (!anyPin && navItem.classList.contains('is-active')) {
+                    view.querySelector('.moonfinNavItem[data-tab="settingsSync"]').click();
+                }
             })
             .catch(function () {
                 say('Couldn\'t load the users.', true);
