@@ -21,7 +21,7 @@ public class PosterBadgeRuleResult
     /// <summary>The rule's place in the list.</summary>
     public int Index { get; set; }
 
-    /// <summary>"shown", "off", "noText", "notMet" or "sameText" (an earlier rule with the same text showed).</summary>
+    /// <summary>"shown", "off", "noText" (neither text nor icon), "notMet" or "sameText" (an earlier rule with the same text showed).</summary>
     public string Outcome { get; set; } = string.Empty;
 
     /// <summary>Whether each condition held, in order. Empty for a built-in label.</summary>
@@ -79,12 +79,12 @@ public static class PosterBadgeTest
                 holds = result.Conditions.Count > 0 && result.Conditions.TrueForAll(passed => passed);
             }
 
-            var label = rule.Label?.Trim();
+            var key = PosterBadgeMatcher.ShownKey(rule);
             if (!rule.Enabled)
             {
                 result.Outcome = "off";
             }
-            else if (string.IsNullOrEmpty(label))
+            else if (key == null)
             {
                 result.Outcome = "noText";
             }
@@ -92,7 +92,7 @@ public static class PosterBadgeTest
             {
                 result.Outcome = "notMet";
             }
-            else if (!shown.Add(label!))
+            else if (!shown.Add(key))
             {
                 result.Outcome = "sameText";
             }

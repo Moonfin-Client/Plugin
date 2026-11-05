@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace Moonfin.PosterBadges;
@@ -47,6 +48,12 @@ public class PosterBadgeRule
 
     /// <summary>"rounded", "pill" or "square".</summary>
     public string? Shape { get; set; }
+
+    /// <summary>
+    /// A Material icon drawn before the text, one of <see cref="PosterBadgeMatcher.Icons"/>.
+    /// Empty for none, which is how every label starts. With no text the label is the icon.
+    /// </summary>
+    public string? Icon { get; set; }
 
     // Who sees it. Empty means everyone.
 
@@ -124,6 +131,9 @@ public class PosterBadge
 
     public string Shape { get; set; } = "rounded";
 
+    /// <summary>Empty for none.</summary>
+    public string Icon { get; set; } = string.Empty;
+
     /// <summary>
     /// The shape clients read. Spelled out because Jellyfin and Emby name JSON properties
     /// differently.
@@ -138,6 +148,7 @@ public class PosterBadge
         size = Size,
         corner = Corner,
         shape = Shape,
+        icon = Icon,
     };
 }
 
@@ -201,7 +212,7 @@ public static class PosterBadgeMatcher
 
         foreach (var rule in rules)
         {
-            if (rule == null || !rule.Enabled || string.IsNullOrWhiteSpace(rule.Label))
+            if (rule == null || !rule.Enabled || ShownKey(rule) == null)
             {
                 continue;
             }
@@ -247,7 +258,7 @@ public static class PosterBadgeMatcher
             }
 
             Add(rule.Label); Add(rule.Color); Add(rule.Enabled); Add(rule.Preset); Add(rule.TextColor); Add(rule.Style);
-            Add(rule.Opacity); Add(rule.Size); Add(rule.Corner); Add(rule.Shape);
+            Add(rule.Opacity); Add(rule.Size); Add(rule.Corner); Add(rule.Shape); Add(rule.Icon);
             Add(string.Join(",", rule.UserIds ?? new List<string>()));
             Add(string.Join(",", rule.Profiles ?? new List<string>()));
             foreach (var condition in rule.Conditions ?? new List<PosterBadgeCondition>())
@@ -306,8 +317,8 @@ public static class PosterBadgeMatcher
 
         foreach (var rule in rules)
         {
-            var label = rule?.Label?.Trim();
-            if (rule == null || !rule.Enabled || string.IsNullOrEmpty(label) || shown.Contains(label!))
+            var key = rule == null ? null : ShownKey(rule);
+            if (rule == null || !rule.Enabled || key == null || shown.Contains(key))
             {
                 continue;
             }
@@ -328,8 +339,8 @@ public static class PosterBadgeMatcher
 
             if (holds)
             {
-                shown.Add(label!);
-                badges.Add(Resolve(rule, label!, defaults ?? new PosterBadgeDefaults()));
+                shown.Add(key);
+                badges.Add(Resolve(rule, rule.Label?.Trim() ?? string.Empty, defaults ?? new PosterBadgeDefaults()));
             }
         }
 
@@ -345,6 +356,36 @@ public static class PosterBadgeMatcher
     private static readonly string[] Shapes = { "rounded", "pill", "square" };
 
     /// <summary>
+    /// The icons a label can carry, by their Material name, so every client draws the same
+    /// glyph. Brand logos are left out on purpose: they need a licence.
+    /// </summary>
+    public static readonly string[] Icons = new[]
+    {
+        "contrast", "hdr_on", "high_quality", "movie", "theaters", "aspect_ratio", "surround_sound",
+        "speaker", "graphic_eq", "album", "translate", "subtitles", "record_voice_over", "star", "check_circle",
+    }.Concat(PosterBadgeFlags.Codes.Select(code => "flag-" + code)).ToArray();
+
+    /// <summary>The rule's icon when it is one clients know, else null.</summary>
+    public static string? IconOf(PosterBadgeRule rule) =>
+        Array.Find(Icons, icon => string.Equals(icon, rule.Icon?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// What makes two labels the same, so it shows once: the text, or the icon for a label
+    /// that has none. Null for a label with neither, which has nothing to draw.
+    /// </summary>
+    public static string? ShownKey(PosterBadgeRule rule)
+    {
+        var label = rule.Label?.Trim();
+        if (!string.IsNullOrEmpty(label))
+        {
+            return label;
+        }
+
+        var icon = IconOf(rule);
+        return icon == null ? null : "icon:" + icon;
+    }
+
+    /// <summary>
     /// Fills every empty or unknown setting from the defaults, so clients draw exactly what
     /// they get and an old config or a typo never reaches them.
     /// </summary>
@@ -358,6 +399,7 @@ public static class PosterBadgeMatcher
         Size = Pick(Sizes, rule.Size, defaults.Size),
         Corner = Pick(Corners, rule.Corner, defaults.Corner),
         Shape = Pick(Shapes, rule.Shape, defaults.Shape),
+        Icon = IconOf(rule) ?? string.Empty,
     };
 
     private static string Pick(string[] allowed, string? value, string? fallback)

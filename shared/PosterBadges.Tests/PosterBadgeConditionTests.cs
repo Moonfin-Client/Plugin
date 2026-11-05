@@ -140,6 +140,55 @@ public class PosterBadgeConditionTests
     }
 
     [Fact]
+    public void ALabelCanBeAnIconAlone()
+    {
+        var multi = When("Audio.LanguageCount", PosterBadgeMatcher.AtLeast, "2");
+        var rules = new List<PosterBadgeRule>
+        {
+            new PosterBadgeRule { Label = "", Icon = "translate", Conditions = new List<PosterBadgeCondition> { multi } },
+            new PosterBadgeRule { Label = " ", Icon = "translate", Conditions = new List<PosterBadgeCondition> { multi } },
+            new PosterBadgeRule { Label = "MULTI", Icon = "translate", Conditions = new List<PosterBadgeCondition> { multi } },
+            new PosterBadgeRule { Label = "", Icon = "", Conditions = new List<PosterBadgeCondition> { multi } },
+        };
+
+        var badges = PosterBadgeMatcher.Match(rules, Film, new[] { Audio("fre"), Audio("eng") });
+
+        // The second icon-only rule is the same label as the first; the last has nothing to draw.
+        Assert.Equal(new[] { ("", "translate"), ("MULTI", "translate") }, badges.Select(b => (b.Label, b.Icon)));
+        Assert.Equal(new[] { "shown", "sameText", "shown", "noText" },
+            PosterBadgeTest.Explain(rules, Film, new[] { Audio("fre"), Audio("eng") }).Select(r => r.Outcome));
+    }
+
+    [Fact]
+    public void AFlagIsAnIconLikeTheOthers()
+    {
+        var quebec = When("Path", PosterBadgeMatcher.Contains, "VFQ");
+        var rules = new List<PosterBadgeRule>
+        {
+            new PosterBadgeRule { Label = "VFQ", Icon = "flag-ca", Conditions = new List<PosterBadgeCondition> { quebec } },
+            new PosterBadgeRule { Label = "", Icon = "flag-fr", Conditions = new List<PosterBadgeCondition> { quebec } },
+            new PosterBadgeRule { Label = "", Icon = "flag-zz", Conditions = new List<PosterBadgeCondition> { quebec } },
+            new PosterBadgeRule { Label = "CAT", Icon = "flag-es-ct", Conditions = new List<PosterBadgeCondition> { quebec } },
+        };
+
+        var badges = PosterBadgeMatcher.Match(rules, "/films/Movie.VFQ.mkv", new object[0]);
+        Assert.Equal(new[] { ("VFQ", "flag-ca"), ("", "flag-fr"), ("CAT", "flag-es-ct") }, badges.Select(b => (b.Label, b.Icon)));
+    }
+
+    [Fact]
+    public void AnUnknownIconIsDropped()
+    {
+        var rules = new List<PosterBadgeRule>
+        {
+            new PosterBadgeRule { Label = "VFQ", Icon = "dolby", Conditions = new List<PosterBadgeCondition> { When("Path", PosterBadgeMatcher.Contains, "VFQ") } },
+            new PosterBadgeRule { Label = "", Icon = "dolby", Conditions = new List<PosterBadgeCondition> { When("Path", PosterBadgeMatcher.Contains, "VFQ") } },
+        };
+
+        var badge = PosterBadgeMatcher.Match(rules, "/films/Movie.VFQ.mkv", new object[0]).Single();
+        Assert.Equal(("VFQ", ""), (badge.Label, badge.Icon));
+    }
+
+    [Fact]
     public void NoneTurnsThePathAround()
     {
         var notRemux = When("Path", PosterBadgeMatcher.Contains, "remux", PosterBadgeMatcher.None);
