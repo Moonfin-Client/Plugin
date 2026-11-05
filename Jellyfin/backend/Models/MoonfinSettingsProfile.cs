@@ -891,6 +891,60 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("sonarrCalendarShowDate")]
     public bool? SonarrCalendarShowDate { get; set; }
 
+    [JsonPropertyName("showCalendarButton")]
+    public bool? ShowCalendarButton { get; set; }
+
+    [JsonPropertyName("calendarStyle")]
+    public string? CalendarStyle { get; set; }
+
+    [JsonPropertyName("calendarWeekStart")]
+    public string? CalendarWeekStart { get; set; }
+
+    [JsonPropertyName("calendarScope")]
+    public string? CalendarScope { get; set; }
+
+    [JsonPropertyName("calendarShowEpisodes")]
+    public bool? CalendarShowEpisodes { get; set; }
+
+    [JsonPropertyName("calendarShowMovies")]
+    public bool? CalendarShowMovies { get; set; }
+
+    [JsonPropertyName("calendarLibraryIds")]
+    public List<string>? CalendarLibraryIds { get; set; }
+
+    [JsonPropertyName("calendarIncludeUnmonitored")]
+    public bool? CalendarIncludeUnmonitored { get; set; }
+
+    [JsonPropertyName("calendarShowSpecials")]
+    public bool? CalendarShowSpecials { get; set; }
+
+    [JsonPropertyName("calendarShowBadges")]
+    public bool? CalendarShowBadges { get; set; }
+
+    [JsonPropertyName("calendarColorBy")]
+    public string? CalendarColorBy { get; set; }
+
+    [JsonPropertyName("calendarImageType")]
+    public string? CalendarImageType { get; set; }
+
+    [JsonPropertyName("calendarSpoilerSafe")]
+    public bool? CalendarSpoilerSafe { get; set; }
+
+    [JsonPropertyName("calendarSelectAction")]
+    public string? CalendarSelectAction { get; set; }
+
+    [JsonPropertyName("calendarRequestButton")]
+    public bool? CalendarRequestButton { get; set; }
+
+    [JsonPropertyName("calendarReminders")]
+    public bool? CalendarReminders { get; set; }
+
+    [JsonPropertyName("calendarRowSeeAll")]
+    public bool? CalendarRowSeeAll { get; set; }
+
+    [JsonPropertyName("showNextAirDate")]
+    public bool? ShowNextAirDate { get; set; }
+
     [JsonPropertyName("libraryPosterSize")]
     public string? LibraryPosterSize { get; set; }
 

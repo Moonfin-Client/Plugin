@@ -11,8 +11,9 @@ namespace Emby.Plugins.Moonfin.Services
 {
     /// <summary>
     /// Hides the libraries the admin picked by adding them to each user's own My Media and Latest
-    /// exclude lists, the ones Library Visibility switches. Nothing is ever removed, so libraries a
-    /// user hid themselves stay hidden and a user can still show these again.
+    /// exclude lists, the ones Library Visibility switches. Some are picked for the Latest list only,
+    /// so they stay in navigation. Nothing is ever removed, so libraries a user hid themselves stay
+    /// hidden and a user can still show these again.
     /// </summary>
     public sealed class DefaultHiddenLibraries : IDisposable
     {
@@ -48,12 +49,13 @@ namespace Emby.Plugins.Moonfin.Services
 
         private void Apply(IEnumerable<User> users)
         {
-            var libraries = (Plugin.Instance?.Configuration?.DefaultHiddenLibraryIds ?? new List<string>())
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(id => id.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            var configuration = Plugin.Instance?.Configuration;
+            var hidden = CleanIds(configuration?.DefaultHiddenLibraryIds);
+            // A hidden library leaves the recently added rows too.
+            var hiddenFromLatest = hidden
+                .Union(CleanIds(configuration?.DefaultHiddenFromLatestLibraryIds), StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            if (libraries.Count == 0)
+            if (hiddenFromLatest.Count == 0)
             {
                 return;
             }
@@ -63,8 +65,8 @@ namespace Emby.Plugins.Moonfin.Services
                 try
                 {
                     var config = _userManager.GetUserConfiguration(user);
-                    var myMedia = Merge(config.MyMediaExcludes, libraries);
-                    var latest = Merge(config.LatestItemsExcludes, libraries);
+                    var myMedia = Merge(config.MyMediaExcludes, hidden);
+                    var latest = Merge(config.LatestItemsExcludes, hiddenFromLatest);
                     if (myMedia == null && latest == null)
                     {
                         continue;
@@ -80,6 +82,13 @@ namespace Emby.Plugins.Moonfin.Services
                 }
             }
         }
+
+        private static List<string> CleanIds(IEnumerable<string>? ids) =>
+            (ids ?? Enumerable.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private void OnUserCreated(object? sender, GenericEventArgs<User> e)
         {

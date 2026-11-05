@@ -10,8 +10,9 @@ namespace Moonfin.Server.Services;
 
 /// <summary>
 /// Hides the libraries the admin picked by adding them to each user's own My Media and Latest
-/// exclude lists, the ones Library Visibility switches. Nothing is ever removed, so libraries a
-/// user hid themselves stay hidden and a user can still show these again.
+/// exclude lists, the ones Library Visibility switches. Some are picked for the Latest list only,
+/// so they stay in navigation. Nothing is ever removed, so libraries a user hid themselves stay
+/// hidden and a user can still show these again.
 /// </summary>
 public class DefaultHiddenLibraries
 {
@@ -37,13 +38,12 @@ public class DefaultHiddenLibraries
 
     public async Task ApplyAsync(IEnumerable<Guid> userIds)
     {
-        var libraries = (MoonfinPlugin.Instance?.Configuration.DefaultHiddenLibraryIds ?? new List<string>())
-            .Select(s => Guid.TryParse(s, out var id) ? id : Guid.Empty)
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToList();
+        var configuration = MoonfinPlugin.Instance?.Configuration;
+        var hidden = ParseIds(configuration?.DefaultHiddenLibraryIds);
+        // A hidden library leaves the recently added rows too.
+        var hiddenFromLatest = hidden.Union(ParseIds(configuration?.DefaultHiddenFromLatestLibraryIds)).ToList();
         var userManager = UserReflection.UserManager(_serviceProvider);
-        if (libraries.Count == 0 || userManager == null || GetUserDtoMethod == null || UpdateConfigurationMethod == null)
+        if (hiddenFromLatest.Count == 0 || userManager == null || GetUserDtoMethod == null || UpdateConfigurationMethod == null)
         {
             return;
         }
@@ -66,8 +66,8 @@ public class DefaultHiddenLibraries
                     continue;
                 }
 
-                var myMedia = Merge(config.MyMediaExcludes, libraries);
-                var latest = Merge(config.LatestItemsExcludes, libraries);
+                var myMedia = Merge(config.MyMediaExcludes, hidden);
+                var latest = Merge(config.LatestItemsExcludes, hiddenFromLatest);
                 if (myMedia == null && latest == null)
                 {
                     continue;
@@ -86,6 +86,13 @@ public class DefaultHiddenLibraries
             }
         }
     }
+
+    private static List<Guid> ParseIds(IEnumerable<string>? ids) =>
+        (ids ?? Enumerable.Empty<string>())
+            .Select(s => Guid.TryParse(s, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
 
     /// <summary>The list with the missing libraries added, or null when it already has them all.</summary>
     internal static Guid[]? Merge(Guid[]? current, IReadOnlyCollection<Guid> libraries)

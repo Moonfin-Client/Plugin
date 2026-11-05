@@ -12,8 +12,6 @@ namespace Moonfin.Server.Services;
 /// </summary>
 public class StudioLogoFetchService
 {
-    private const string LogoBase = "https://image.tmdb.org/t/p/w500";
-
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly StudioLogoCacheService _cache;
     private readonly ILogger<StudioLogoFetchService> _logger;
@@ -94,7 +92,9 @@ public class StudioLogoFetchService
 
             if (!string.IsNullOrWhiteSpace(company.LogoPath))
             {
-                entry.HasLogo = await DownloadLogoAsync(company.Id, company.LogoPath!, client, cancellationToken).ConfigureAwait(false);
+                var logo = await DownloadLogoAsync(company.Id, company.LogoPath!, client, cancellationToken).ConfigureAwait(false);
+                entry.HasLogo = logo != null;
+                if (logo != null) entry.DarkLogo = StudioLogoTone.IsDark(logo);
             }
 
             entries.Add(entry);
@@ -102,9 +102,7 @@ public class StudioLogoFetchService
 
         _cache.SetItem(type, tmdbId, entries);
 
-        return entries
-            .Select(e => new StudioCompanyInfo { Id = e.Id, Name = e.Name, HasLogo = e.HasLogo })
-            .ToList();
+        return entries.Select(e => e.ToInfo()).ToList();
     }
 
     /// <summary>
@@ -118,27 +116,28 @@ public class StudioLogoFetchService
         var logoPath = _cache.GetLogoPath(companyId);
         if (string.IsNullOrWhiteSpace(logoPath)) return false;
 
-        return await DownloadLogoAsync(companyId, logoPath, CreateClient(), cancellationToken).ConfigureAwait(false);
+        return await DownloadLogoAsync(companyId, logoPath, CreateClient(), cancellationToken).ConfigureAwait(false) != null;
     }
 
-    private async Task<bool> DownloadLogoAsync(int companyId, string logoPath, HttpClient client, CancellationToken cancellationToken)
+    /// <summary>Downloads and saves a logo, returning its bytes, or null when it couldn't.</summary>
+    private async Task<byte[]?> DownloadLogoAsync(int companyId, string logoPath, HttpClient client, CancellationToken cancellationToken)
     {
         try
         {
-            var url = $"{LogoBase}{logoPath}";
+            var url = StudioLogoTone.LogoUrl(logoPath, dark: false);
             using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) return false;
+            if (!response.IsSuccessStatusCode) return null;
 
             var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-            if (bytes.Length == 0) return false;
+            if (bytes.Length == 0) return null;
 
             await _cache.SaveImageAsync(companyId, bytes).ConfigureAwait(false);
-            return true;
+            return bytes;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to download studio logo for company {Id}", companyId);
-            return false;
+            return null;
         }
     }
 

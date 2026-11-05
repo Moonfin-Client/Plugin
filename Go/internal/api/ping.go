@@ -25,6 +25,10 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"recommendationsSupported": false,
 		"clientLogSupported":       false,
 		"smartSearchEnabled":       s.smartSearchOn(cfg),
+		"calendarAvailable":        s.calendarOn(cfg, callerOf(r)),
+		"calendarDaysBack":         cfg.CalendarDaysBack,
+		"calendarDaysAhead":        cfg.CalendarDaysAhead,
+		"calendarReminders":        false,
 		"defaultSettings":          pingDefaults(cfg, r.URL.Query().Get("profile")),
 	})
 }

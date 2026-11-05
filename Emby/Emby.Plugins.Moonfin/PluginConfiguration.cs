@@ -27,6 +27,18 @@ namespace Emby.Plugins.Moonfin
         /// <summary>Optional public base URL of this server (scheme + host, no trailing slash) used to build the webhook URL Seerr calls. Falls back to the server's own address when empty. Example: https://emby.example.com</summary>
         public string? PublicServerUrl { get; set; }
 
+        /// <summary>Keeps the Sonarr and Radarr calendar to server admins.</summary>
+        public bool CalendarAdminsOnly { get; set; }
+
+        /// <summary>How many days before today the calendar can reach.</summary>
+        public int CalendarDaysBack { get; set; } = 14;
+
+        /// <summary>How many days after today the calendar can reach.</summary>
+        public int CalendarDaysAhead { get; set; } = 90;
+
+        /// <summary>How long an arr calendar answer is reused before the arr is asked again. 0 asks every time.</summary>
+        public int CalendarCacheMinutes { get; set; } = 5;
+
         /// <summary>Firebase service-account JSON, pasted by the admin, used to mint FCM access tokens for direct push delivery. Secret: never logged. Leave empty to use the hosted relay instead.</summary>
         public string? FcmServiceAccountJson { get; set; }
 
@@ -237,6 +249,13 @@ namespace Emby.Plugins.Moonfin
         /// clients match on and Emby's own apps ignore.
         /// </summary>
         public List<string> DefaultHiddenLibraryIds { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Libraries added only to the Latest exclude list, so they stay in navigation but leave the
+        /// recently added rows. Applied like <see cref="DefaultHiddenLibraryIds"/>, which already
+        /// covers both lists.
+        /// </summary>
+        public List<string> DefaultHiddenFromLatestLibraryIds { get; set; } = new List<string>();
 
         /// <summary>Metadata index for uploaded custom themes stored in the plugin data folder.</summary>
         public List<UploadedThemeEntry> UploadedThemes { get; set; } = new List<UploadedThemeEntry>();

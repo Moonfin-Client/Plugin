@@ -19,5 +19,6 @@ func Defaults() map[string]any {
 		"GamesMetadataDbUrlBase": "https://cdn.jsdelivr.net/gh/libretro/libretro-database@master/rdb/",
 		"GamesLaunchBoxEnabled":  true, "GamesLaunchBoxUrl": "https://gamesdb.launchbox-app.com/Metadata.zip",
 		"SmartSearchEnabled": false, "SmartSearchModel": "english",
+		"CalendarDaysBack": 14, "CalendarDaysAhead": 90, "CalendarAdminsOnly": false, "CalendarCacheMinutes": 5,
 	}
 }

@@ -24,6 +24,12 @@ type Config struct {
 	// DeviceDefaults is DefaultDeviceSettings, the admin's defaults for the
 	// desktop, mobile and tv profiles, laid over Defaults.
 	DeviceDefaults M
+	// The calendar's window around today, in days.
+	CalendarDaysBack, CalendarDaysAhead int
+	// CalendarCacheMinutes is how long an arr calendar is kept. 0 keeps none.
+	CalendarCacheMinutes int
+	CalendarAdminsOnly   bool
+	Sonarr, Radarr       arrServer
 }
 
 // DefaultsFor is the admin's defaults for one profile.
@@ -101,7 +107,24 @@ func configFrom(c M) Config {
 	cfg.SmartSearchModel = str(c["SmartSearchModel"])
 	cfg.Defaults, _ = c["DefaultUserSettings"].(M)
 	cfg.DeviceDefaults, _ = c["DefaultDeviceSettings"].(M)
+	cfg.CalendarDaysBack = wholeNumber(c["CalendarDaysBack"], 14)
+	cfg.CalendarDaysAhead = wholeNumber(c["CalendarDaysAhead"], 90)
+	cfg.CalendarCacheMinutes = wholeNumber(c["CalendarCacheMinutes"], 5)
+	cfg.CalendarAdminsOnly, _ = c["CalendarAdminsOnly"].(bool)
+	cfg.Sonarr = arrServerFrom(c, "Sonarr")
+	cfg.Radarr = arrServerFrom(c, "Radarr")
 	return cfg
+}
+
+// wholeNumber reads a number of at least 0 the page saved, or def when there is none.
+func wholeNumber(v any, def int) int {
+	if n, ok := v.(int); ok {
+		return max(0, n)
+	}
+	if f, ok := num(v); ok {
+		return max(0, int(f))
+	}
+	return def
 }
 
 func str(v any) string {

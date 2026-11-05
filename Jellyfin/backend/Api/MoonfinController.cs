@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Moonfin.Calendar;
 using Moonfin.Server.Helpers;
 using Moonfin.Server.Models;
 using Moonfin.Server.Services;
@@ -146,6 +147,12 @@ public class MoonfinController : ControllerBase
             ExtendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             SmartSearchEnabled = config?.SmartSearchEnabled ?? false,
+            CalendarAvailable = config?.SeerrEnabled == true
+                && !string.IsNullOrEmpty(config.GetEffectiveSeerrUrl())
+                && ArrCalendarWindow.Refusal(config.CalendarAdminsOnly, this.IsAdminFromClaims()) == null,
+            CalendarDaysBack = Math.Max(0, config?.CalendarDaysBack ?? 14),
+            CalendarDaysAhead = Math.Max(0, config?.CalendarDaysAhead ?? 90),
+            CalendarReminders = true,
             DefaultSettings = _settingsService.AdminDefaultsFor(profile)
         });
     }
@@ -1833,6 +1840,24 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("recommendationsSupported")]
     public bool? RecommendationsSupported { get; set; }
+
+    /// <summary>
+    /// True when Seerr is set up for the arr calendar and this user passes the admins-only setting.
+    /// </summary>
+    [JsonPropertyName("calendarAvailable")]
+    public bool? CalendarAvailable { get; set; }
+
+    [JsonPropertyName("calendarDaysBack")]
+    public int? CalendarDaysBack { get; set; }
+
+    [JsonPropertyName("calendarDaysAhead")]
+    public int? CalendarDaysAhead { get; set; }
+
+    /// <summary>
+    /// True when this plugin has the Calendar/Reminders endpoints.
+    /// </summary>
+    [JsonPropertyName("calendarReminders")]
+    public bool? CalendarReminders { get; set; }
 
     [JsonPropertyName("defaultSettings")]
     public MoonfinSettingsProfile? DefaultSettings { get; set; }

@@ -49,6 +49,8 @@ type Server struct {
 	native   map[string]M
 
 	smart smartState
+
+	arrCache ttlCache
 }
 
 func NewServer(version string, h Host) *Server {
@@ -56,7 +58,7 @@ func NewServer(version string, h Host) *Server {
 		version = "0.0.0-dev"
 	}
 	s := &Server{version: version, name: h.Name, backURL: h.AdminBackURL, kv: h.KV, catalog: h.Catalog,
-		identify: h.Identify, mux: http.NewServeMux(), ext: newExternal()}
+		identify: h.Identify, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}}}
 	s.smart.helper = h.SmartSearch
 	s.routes()
 	if h.SmartSearch != nil {
@@ -77,6 +79,7 @@ func (s *Server) routes() {
 	s.collectionRoutes()
 	s.watchPartyRoutes()
 	s.smartRoutes()
+	s.calendarRoutes()
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }

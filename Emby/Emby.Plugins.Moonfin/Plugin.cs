@@ -14,6 +14,7 @@ using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
+using Moonfin.Calendar;
 using Moonfin.Pin;
 using Moonfin.Romm;
 
@@ -64,6 +65,7 @@ namespace Emby.Plugins.Moonfin
         public AnimeMarkerResolver? AnimeMarkerResolver { get; private set; }
         public PinService? Pins { get; private set; }
         public SmartSearchIndexService? SmartSearch { get; private set; }
+        public CalendarReminderStore? CalendarReminders { get; private set; }
 
         public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogManager logManager)
             : base(applicationPaths, xmlSerializer)
@@ -216,6 +218,7 @@ namespace Emby.Plugins.Moonfin
             SeerrProvisioning = new SeerrProvisioningService(SeerrService, appHost, notifyLogger);
             Pins = new PinService(new FilePinStore(Path.Combine(DataFolderPath, "pins"), logManager.GetLogger("MoonfinPins")));
             SmartSearch = new SmartSearchIndexService(appHost.Resolve<ILibraryManager>(), DataFolderPath, logManager.GetLogger("MoonfinSmartSearch"));
+            CalendarReminders = new CalendarReminderStore(Path.Combine(DataFolderPath, "calendar-reminders"), new EmbyStateFile());
 
             // Ensure a webhook secret exists before provisioning tries to publish it.
             if (Configuration.EnsureWebhookSecret())

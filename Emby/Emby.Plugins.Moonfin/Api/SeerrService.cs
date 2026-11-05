@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Emby.Plugins.Moonfin.Services;
@@ -8,6 +9,7 @@ using MediaBrowser.Common;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Services;
+using Moonfin.Calendar;
 using Moonfin.Seasonal;
 using Moonfin.Seerr;
 
@@ -120,25 +122,39 @@ namespace Emby.Plugins.Moonfin.Api
         public async Task<object?> Put(SeerrProxyPutRequest request) => await ProxyApiRequest(HttpMethod.Put, request.Path, request.RequestStream).ConfigureAwait(false);
         public async Task<object?> Delete(SeerrProxyDeleteRequest request) => await ProxyApiRequest(HttpMethod.Delete, request.Path, null).ConfigureAwait(false);
 
-        public Task<object?> Get(GetRadarrCalendarRequest request) => GetArrCalendar("radarr", request.Start, request.End);
-        public Task<object?> Get(GetSonarrCalendarRequest request) => GetArrCalendar("sonarr", request.Start, request.End);
+        public Task<object?> Get(GetRadarrCalendarRequest request) => GetArrCalendar("radarr", request.Start, request.End, request.Unmonitored);
+        public Task<object?> Get(GetSonarrCalendarRequest request) => GetArrCalendar("sonarr", request.Start, request.End, request.Unmonitored);
 
-        private async Task<object?> GetArrCalendar(string service, string? start, string? end)
+        private async Task<object?> GetArrCalendar(string service, string? start, string? end, string? unmonitored)
         {
             var config = Plugin.Instance?.Configuration;
             if (config?.SeerrEnabled != true || string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()))
             { Request.Response.StatusCode = 503; return new { error = "Seerr integration is not enabled" }; }
 
-            if (AuthHelpers.GetCurrentUserId(Request, _authContext) == null)
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            if (user == null || user.Id == Guid.Empty)
             { Request.Response.StatusCode = 401; return new { error = "User not authenticated" }; }
 
-            var result = await Session.GetArrCalendarAsync(service, start, end).ConfigureAwait(false);
+            if (ArrCalendarWindow.Refusal(config.CalendarAdminsOnly, user.Policy?.IsAdministrator == true) is { } refusal)
+            { Request.Response.StatusCode = 403; return MoonfinJson.Result(Request, ResultFactory, new { error = refusal }); }
+
+            var window = ArrCalendarWindow.Clamp(start, end, DateTime.UtcNow, config.CalendarDaysBack, config.CalendarDaysAhead);
+            if (window == null) return ResultFactory.GetResult(Request, new MemoryStream(Encoding.UTF8.GetBytes("[]")), "application/json", null);
+
+            var all = bool.TryParse(unmonitored, out var parsed) && parsed;
+            var result = await Session.GetArrCalendarAsync(service, window.Value.Start, window.Value.End, all, config.CalendarCacheMinutes).ConfigureAwait(false);
 
             Request.Response.StatusCode = result.StatusCode;
             if (result.Body == null) return null;
 
+            var body = result.Body;
+            if (result.StatusCode == 200 && PluginServices.LibraryManager is { } libraryManager)
+            {
+                body = ArrCalendarAnnotator.Annotate(body, service == "sonarr", new EmbyCalendarLibrary(libraryManager, user));
+            }
+
             var responseContentType = string.IsNullOrWhiteSpace(result.ContentType) ? "application/octet-stream" : result.ContentType;
-            return ResultFactory.GetResult(Request, new MemoryStream(result.Body), responseContentType, null);
+            return ResultFactory.GetResult(Request, new MemoryStream(body), responseContentType, null);
         }
 
         private async Task<object?> ProxyApiRequest(HttpMethod method, string? path, System.IO.Stream? bodyStream)

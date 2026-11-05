@@ -60,6 +60,12 @@ namespace Emby.Plugins.Moonfin.Api
         public string? Type { get; set; }
     }
 
+    [Route("/Moonfin/Tmdb/StudioLogos", "GET")]
+    [Authenticated]
+    public class GetStudioLogosRequest : IReturn<object>
+    {
+    }
+
     [Route("/Moonfin/Tmdb/StudioImage/{CompanyId}", "GET")]
     [Authenticated]
     public class GetStudioImageRequest : IReturn<object>

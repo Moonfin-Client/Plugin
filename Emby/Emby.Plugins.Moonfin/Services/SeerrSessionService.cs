@@ -12,6 +12,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Logging;
+using Moonfin.Calendar;
 
 namespace Emby.Plugins.Moonfin.Services
 {
@@ -349,6 +350,26 @@ namespace Emby.Plugins.Moonfin.Services
             return session;
         }
 
+        /// <summary>The permissions in a Seerr /auth/me answer, or null when it has none.</summary>
+        internal static int? PermissionsFrom(byte[] body)
+        {
+            try
+            {
+                using (var doc = JsonDocument.Parse(body))
+                {
+                    return doc.RootElement.ValueKind == JsonValueKind.Object
+                        && doc.RootElement.TryGetProperty("permissions", out var perms)
+                        && perms.TryGetInt32(out var value)
+                            ? value
+                            : (int?)null;
+                }
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
         private static bool IsOlderThan(SeerrSession session, TimeSpan? maxAge)
         {
             if (maxAge == null || session.LastValidated <= 0) return true;
@@ -399,6 +420,8 @@ namespace Emby.Plugins.Moonfin.Services
                     }
 
                     await CheckForRotatedCookieAsync(session, response, cookieContainer, seerrUrl).ConfigureAwait(false);
+                    // A Seerr role can change after sign in, and the calendar finds its admin session by it.
+                    session.Permissions = PermissionsFrom(body) ?? session.Permissions;
                     session.LastValidated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     await SaveSessionAsync(session).ConfigureAwait(false);
                     return SessionCheck.Valid;
@@ -588,9 +611,21 @@ namespace Emby.Plugins.Moonfin.Services
         /// client. The arr connection is read from an admin Seerr session and the arr is called directly,
         /// which also lets remote clients see the calendar when the arr host is only on the local network.
         /// </summary>
-        public async Task<SeerrProxyResponse> GetArrCalendarAsync(string service, string? start, string? end)
+        public Task<SeerrProxyResponse> GetArrCalendarAsync(string service, DateTime start, DateTime end, bool unmonitored, int cacheMinutes)
         {
             var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
+            return CalendarCache.GetOrFetchAsync(
+                ArrCalendarWindow.CacheKey(isSonarr, start, end, unmonitored),
+                cacheMinutes,
+                () => FetchArrCalendarFromSeerrAsync(service, isSonarr, ArrCalendarWindow.Query(isSonarr, start, end, unmonitored)),
+                response => response.StatusCode == 200 && response.Body != null);
+        }
+
+        // The arr's own answer, shared by every user. Each user's annotation runs on top of it.
+        private ArrCalendarCache<SeerrProxyResponse> CalendarCache { get; } = new ArrCalendarCache<SeerrProxyResponse>();
+
+        private async Task<SeerrProxyResponse> FetchArrCalendarFromSeerrAsync(string service, bool isSonarr, string query)
+        {
             var settingsPath = isSonarr ? "settings/sonarr" : "settings/radarr";
 
             var adminSession = EnumerateSessions().FirstOrDefault(
@@ -628,14 +663,6 @@ namespace Emby.Plugins.Moonfin.Services
             }
 
             var apiKey = server.TryGetProperty("apiKey", out var k) ? k.GetString() ?? string.Empty : string.Empty;
-            var startDate = string.IsNullOrWhiteSpace(start) ? DateTime.UtcNow.ToString("yyyy-MM-dd") : start;
-            var endDate = string.IsNullOrWhiteSpace(end) ? DateTime.UtcNow.AddDays(90).ToString("yyyy-MM-dd") : end;
-            var query = "start=" + Uri.EscapeDataString(startDate) + "&end=" + Uri.EscapeDataString(endDate);
-            if (isSonarr)
-            {
-                query += "&includeSeries=true";
-            }
-
             return await FetchArrCalendarAsync(
                 () => new HttpClient(), _logger, service, ArrCalendarBases(server, isSonarr), apiKey, query).ConfigureAwait(false);
         }

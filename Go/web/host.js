@@ -24,9 +24,11 @@
                 'Recommendations',
                 'Live TV Recordings',
                 'Web Plugin Status',
-                'Active Downloads'
+                'Active Downloads',
+                'Calendar'
             ],
-            hiddenFields: ['DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote'],
+            hiddenFields: ['DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
+                'DefaultShowCalendarButton', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll'],
             unsupported: {
                 'IMDb Charts': 'Not supported on Silo yet: Silo doesn’t let plugins read its library, which the charts are matched against. These settings do nothing on Silo for now.',
                 'Anime Filler & Recap Markers': 'Not supported on Silo yet: Silo doesn’t let plugins read its library. These settings do nothing on Silo for now.',
@@ -60,8 +62,10 @@
                 'Web Plugin Status': 'Plex Web can’t load Moonfin add-ons, so this doesn’t apply on Plex.',
                 'Active Downloads': 'Not available on Plex.',
                 'MDBList Integration': 'Ratings work on Plex. The official MDBList lists don’t.',
-                'Smart Search': 'Works on Plex for your library. Titles you don’t have don’t show up, since the Seerr proxy isn’t part of Moonbase for Plex. The index rebuilds a minute after Moonbase starts and every night at 3:00.'
+                'Smart Search': 'Works on Plex for your library. Titles you don’t have don’t show up, since the Seerr proxy isn’t part of Moonbase for Plex. The index rebuilds a minute after Moonbase starts and every night at 3:00.',
+                'Calendar': 'Moonbase for Plex reads the calendar straight from Sonarr and Radarr, so set their addresses and API keys below. Reminders aren’t available on Plex.'
             },
+            arr: true,
             liveTv: true,
             ownRequests: false,
             serverRows: false
@@ -144,10 +148,12 @@
             draftOffered = true;
             if (draft) {
                 lastConfig = draft;
+                fillArrFields(draft);
                 return Promise.resolve(themeView(draft));
             }
             return this.getJSON(getUrl('Moonfin/Admin/Configuration')).then(function (config) {
                 lastConfig = config;
+                fillArrFields(config);
                 return themeView(config);
             }, function (error) {
                 // Saving reads the configuration first. Once the launch cookie
@@ -164,6 +170,7 @@
         },
         updatePluginConfiguration: function (id, config) {
             config = themeStore(config);
+            readArrFields(config);
             return send('POST', getUrl('Moonfin/Admin/Configuration'), JSON.stringify(config), 'application/json').then(function () {
                 clearDraft();
             }, function (error) {
@@ -554,8 +561,59 @@
         };
     }
 
+    // Moonbase for Plex has no Seerr proxy to reach Sonarr and Radarr through,
+    // so the Calendar section gets their addresses and keys. A saved key comes
+    // back as a mask, and saving the mask keeps the key.
+    var arrInputs = ['SonarrUrl', 'SonarrApiKey', 'RadarrUrl', 'RadarrApiKey'];
+    var arrFilled = false;
+
+    function addArrFields(page) {
+        var title = Array.prototype.find.call(page.querySelectorAll('.sectionTitle'), function (t) {
+            return t.textContent.trim() === 'Calendar';
+        });
+        if (!title) return;
+        var section = title.closest('.verticalSection');
+        // The calendar doesn't go through Seerr here, so its settings don't wait for the Seerr switch.
+        for (var k = FIELD_DEPENDENCIES.length - 1; k >= 0; k--) {
+            if (FIELD_DEPENDENCIES[k].fields.indexOf('CalendarAdminsOnly') >= 0) FIELD_DEPENDENCIES.splice(k, 1);
+        }
+        var block = document.createElement('div');
+        block.innerHTML = '<h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Sonarr and Radarr</h4>'
+            + arrInput('SonarrUrl', 'Sonarr URL', 'url', 'http://192.168.1.10:8989')
+            + arrInput('SonarrApiKey', 'Sonarr API Key', 'password', 'From Settings > General in Sonarr')
+            + arrInput('RadarrUrl', 'Radarr URL', 'url', 'http://192.168.1.10:7878')
+            + arrInput('RadarrApiKey', 'Radarr API Key', 'password', 'From Settings > General in Radarr')
+            + '<div class="fieldDescription">Moonbase reads each calendar from the address you give, so it has to be reachable from Moonbase, not from the apps. A saved key shows as dots. Type a new one to replace it, or clear the field to remove it.</div>';
+        section.appendChild(block);
+    }
+
+    function arrInput(id, label, type, placeholder) {
+        return '<div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="' + id + '">' + label + '</label>'
+            + '<input type="' + type + '" id="' + id + '" is="emby-input" autocomplete="off" placeholder="' + placeholder + '" /></div>';
+    }
+
+    // Saving reads the configuration again, so only the first read fills the
+    // fields, or it would undo what the admin typed.
+    function fillArrFields(config) {
+        if (!host.arr || arrFilled) return;
+        arrFilled = true;
+        arrInputs.forEach(function (id) {
+            var input = document.getElementById(id);
+            if (input) input.value = config[id] || '';
+        });
+    }
+
+    function readArrFields(config) {
+        if (!host.arr) return;
+        arrInputs.forEach(function (id) {
+            var input = document.getElementById(id);
+            if (input) config[id] = input.value.trim() || null;
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var page = document.getElementById('MoonfinConfigPage');
+        if (host.arr) addArrFields(page);
         upgrade(document);
         renameServer(page);
         adaptSections(page);

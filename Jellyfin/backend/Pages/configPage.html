@@ -607,93 +607,6 @@
                 font-size: 0.85em;
             }
 
-            #MoonfinConfigPage .moonfinLayers {
-                display: flex;
-                flex-direction: column;
-                margin-top: 14px;
-            }
-
-            #MoonfinConfigPage .moonfinLayer {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                gap: 14px;
-                padding: 14px 16px;
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 12px;
-                background: rgba(255, 255, 255, 0.04);
-            }
-
-            #MoonfinConfigPage .moonfinLayer.is-first {
-                border-color: rgba(0, 164, 220, 0.3);
-                background: rgba(0, 164, 220, 0.1);
-            }
-
-            #MoonfinConfigPage .moonfinLayerStep {
-                display: flex;
-                flex-shrink: 0;
-                align-items: center;
-                justify-content: center;
-                width: 28px;
-                height: 28px;
-                border-radius: 50%;
-                background: rgba(255, 255, 255, 0.16);
-                font-size: 0.9em;
-                font-weight: 700;
-            }
-
-            #MoonfinConfigPage .moonfinLayer.is-first .moonfinLayerStep {
-                background: #00a4dc;
-                color: #fff;
-            }
-
-            #MoonfinConfigPage .moonfinLayerText {
-                display: flex;
-                flex: 1 1 260px;
-                flex-direction: column;
-                gap: 2px;
-                min-width: 0;
-            }
-
-            #MoonfinConfigPage .moonfinLayerTitle {
-                font-weight: 600;
-            }
-
-            #MoonfinConfigPage .moonfinLayerDesc {
-                font-size: 0.92em;
-                line-height: 1.45;
-                opacity: 0.7;
-            }
-
-            #MoonfinConfigPage .moonfinLayerGap {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 4px 0 4px 29px;
-                font-size: 0.85em;
-                opacity: 0.55;
-            }
-
-            #MoonfinConfigPage .moonfinLayerGapIcon {
-                width: 16px;
-                height: 16px;
-                font-size: 16px;
-            }
-
-            #MoonfinConfigPage .moonfinLinkButton {
-                padding: 8px 4px;
-                border: 0;
-                background: transparent;
-                color: #00a4dc;
-                font: inherit;
-                font-weight: 600;
-                cursor: pointer;
-            }
-
-            #MoonfinConfigPage .moonfinLinkButton:hover {
-                text-decoration: underline;
-            }
-
             #MoonfinConfigPage .labelsStudio {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) 260px;
@@ -1450,8 +1363,7 @@
             }
 
             #MoonfinConfigPage.moonfin-searching .moonfinPageHead,
-            #MoonfinConfigPage.moonfin-searching .moonfinSyncDeps,
-            #MoonfinConfigPage.moonfin-searching .moonfinLayersCard {
+            #MoonfinConfigPage.moonfin-searching .moonfinSyncDeps {
                 display: none;
             }
 
@@ -2065,9 +1977,9 @@
                             <img id="MoonfinBrandLogo" class="moonfinNavLogo" alt="Moonfin" />
                             <span class="moonfinNavBrandText">Moonfin</span>
                         </div>
-                        <button type="button" class="moonfinNavItem is-active" data-tab="settingsSync">
-                            <span class="material-icons moonfinNavIcon" aria-hidden="true">sync</span>
-                            <span class="moonfinNavText"><span class="moonfinNavLabel">Settings Sync</span><span class="moonfinNavSub">Profiles and devices</span></span>
+                        <button type="button" class="moonfinNavItem is-active" data-tab="defaults">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">tune</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
                         </button>
                         <button type="button" class="moonfinNavItem" data-tab="webClient">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">language</span>
@@ -2088,10 +2000,6 @@
                         <button type="button" class="moonfinNavItem" data-tab="smartSearch">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">manage_search</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Smart Search</span><span class="moonfinNavSub">Search with plain sentences</span></span>
-                        </button>
-                        <button type="button" class="moonfinNavItem" data-tab="defaults">
-                            <span class="material-icons moonfinNavIcon" aria-hidden="true">tune</span>
-                            <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
                         </button>
                         <button type="button" class="moonfinNavItem" data-tab="themes">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">palette</span>
@@ -2127,58 +2035,6 @@
                         <span class="material-icons" aria-hidden="true">search</span>
                         <input type="search" id="MoonfinSettingsSearch" class="moonfinSearchInput" placeholder="Search settings" autocomplete="off" />
                     </div>
-                    <section class="moonfinTabPanel is-active" data-tab="settingsSync">
-                    <div class="moonfinPageHead">
-                        <h3 class="moonfinPageTitle">Settings Sync</h3>
-                        <p class="moonfinPageLead">Moonfin apps save each user's settings here and pick them up on every device that user signs in to.</p>
-                    </div>
-
-                    <div class="verticalSection moonfinSyncCard is-off" id="MoonfinSyncStatusCard">
-                        <div class="checkboxContainer moonfinSyncStatus">
-                            <span class="material-icons moonfinSyncIcon" aria-hidden="true">sync</span>
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
-                                <span><span class="moonfinSyncLines">
-                                    <span class="moonfinSyncTitle">Moonbase Sync</span>
-                                    <span class="moonfinSyncState"><span class="moonfinSyncDot" aria-hidden="true"></span><span class="moonfinSyncOnText">On for every user on this server</span><span class="moonfinSyncOffText">Off, so Moonfin apps keep their settings on each device</span></span>
-                                </span></span>
-                            </label>
-                        </div>
-                        <div class="moonfinSyncDeps">
-                            <span class="moonfinEyebrow">Also relies on sync</span>
-                            <div class="moonfinChips">
-                                <span class="moonfinChip">Seerr requests</span>
-                                <span class="moonfinChip">MDBList ratings</span>
-                                <span class="moonfinChip">TMDB ratings</span>
-                            </div>
-                            <div class="fieldDescription">Moonfin apps treat the plugin as missing while sync is off, so these stop working too.</div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection moonfinLayersCard">
-                        <h3 class="sectionTitle">Where a setting comes from</h3>
-                        <div class="fieldDescription">Each setting comes from the first layer that has it.</div>
-                        <div class="moonfinLayers">
-                            <div class="moonfinLayer is-first">
-                                <span class="moonfinLayerStep" aria-hidden="true">1</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Device profile</span><span class="moonfinLayerDesc">A device follows its own kind until the user picks another profile in the app.</span></span>
-                                <span class="moonfinChips"><span class="moonfinChip">Desktop</span><span class="moonfinChip">Mobile</span><span class="moonfinChip">TV</span></span>
-                            </div>
-                            <div class="moonfinLayerGap"><span class="material-icons moonfinLayerGapIcon" aria-hidden="true">arrow_downward</span>falls back to</div>
-                            <div class="moonfinLayer">
-                                <span class="moonfinLayerStep" aria-hidden="true">2</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Global</span><span class="moonfinLayerDesc">Shared by every device the user has.</span></span>
-                            </div>
-                            <div class="moonfinLayerGap"><span class="material-icons moonfinLayerGapIcon" aria-hidden="true">arrow_downward</span>falls back to</div>
-                            <div class="moonfinLayer">
-                                <span class="moonfinLayerStep" aria-hidden="true">3</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Admin defaults</span><span class="moonfinLayerDesc">What you set for everyone under User defaults.</span></span>
-                                <button type="button" class="moonfinLinkButton" data-open-tab="defaults">Open User defaults</button>
-                            </div>
-                        </div>
-                    </div>
-                    </section>
-
                     <section class="moonfinTabPanel" data-tab="webClient">
                     <div class="moonfinPageHead">
                         <h3 class="moonfinPageTitle">Web Client</h3>
@@ -2314,6 +2170,36 @@
                             Users authenticate once with their Jellyfin credentials, and the session is stored server-side.
                             All Moonfin clients access Seerr API through <code>/Moonfin/Seerr/Api/</code>
                             without re-authenticating.
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Calendar</h3>
+                        <div class="fieldDescription" style="margin-bottom: 1em;">
+                            The Calendar screen reads Sonarr and Radarr through the servers set up in Seerr, so it needs Seerr turned on above.
+                            Each user only sees titles from the Jellyfin libraries they have access to.
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CalendarAdminsOnly">Who can see the calendar</label>
+                            <select id="CalendarAdminsOnly" is="emby-select">
+                                <option value="false">Everyone</option>
+                                <option value="true">Admins only</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CalendarDaysBack">Days back</label>
+                            <input type="number" id="CalendarDaysBack" is="emby-input" min="0" max="365" step="1" />
+                            <div class="fieldDescription">How many days before today the calendar can show.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CalendarDaysAhead">Days ahead</label>
+                            <input type="number" id="CalendarDaysAhead" is="emby-input" min="0" max="730" step="1" />
+                            <div class="fieldDescription">How many days after today the calendar can show.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CalendarCacheMinutes">Cache minutes</label>
+                            <input type="number" id="CalendarCacheMinutes" is="emby-input" min="0" max="1440" step="1" />
+                            <div class="fieldDescription">How long an answer from Sonarr or Radarr is reused before they're asked again. 0 asks every time.</div>
                         </div>
                     </div>
 
@@ -2602,7 +2488,29 @@
                         </div>
                     </div>
                     </section>
-                    <section class="moonfinTabPanel" data-tab="defaults">
+                    <section class="moonfinTabPanel is-active" data-tab="defaults">
+                    <div class="verticalSection moonfinSyncCard is-off" id="MoonfinSyncStatusCard">
+                        <div class="checkboxContainer moonfinSyncStatus">
+                            <span class="material-icons moonfinSyncIcon" aria-hidden="true">sync</span>
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
+                                <span><span class="moonfinSyncLines">
+                                    <span class="moonfinSyncTitle">Moonbase Sync</span>
+                                    <span class="moonfinSyncState"><span class="moonfinSyncDot" aria-hidden="true"></span><span class="moonfinSyncOnText">On for every user on this server</span><span class="moonfinSyncOffText">Off, so Moonfin apps keep their settings on each device</span></span>
+                                </span></span>
+                            </label>
+                        </div>
+                        <div class="moonfinSyncDeps">
+                            <span class="moonfinEyebrow">Also relies on sync</span>
+                            <div class="moonfinChips">
+                                <span class="moonfinChip">Seerr requests</span>
+                                <span class="moonfinChip">MDBList ratings</span>
+                                <span class="moonfinChip">TMDB ratings</span>
+                            </div>
+                            <div class="fieldDescription">Moonfin apps treat the plugin as missing while sync is off, so these stop working too.</div>
+                        </div>
+                    </div>
+
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Default User Settings</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
@@ -2826,6 +2734,14 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultShowLiveTvButton">Show Live TV Button</label>
                                 <select id="DefaultShowLiveTvButton" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowCalendarButton">Show Calendar Button</label>
+                                <select id="DefaultShowCalendarButton" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
@@ -4351,6 +4267,13 @@
                                     Hidden from the home screen for new users, the same as switching them off in Library Visibility. Jellyfin's own home screen hides them too. Users keep access and can show them again. To hide them for existing users, Save and then use Apply Defaults To All Users Now on the Actions tab.
                                 </div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Hidden from recently added</label>
+                                <div id="DefaultHiddenFromLatestLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
+                                <div class="fieldDescription">
+                                    Left out of the recently added and recently released rows for new users, but still shown in navigation, the same as switching off "Show in recently added/released media" in Library Visibility. Jellyfin's own home screen leaves them out too. Hidden libraries above are already left out of both. To apply this to existing users, Save and then use Apply Defaults To All Users Now on the Actions tab.
+                                </div>
+                            </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Library Pages</h4>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultLibraryStyle">Video library style</label>
@@ -5046,6 +4969,143 @@
                                 <label class="inputLabel inputLabelUnfocused">Seerr Discovery Rows &amp; Order</label>
                                 <div class="fieldDescription">Enable rows to see on Seerr mainpage and use the arrows to set their order.</div>
                                 <div id="DefaultSeerrDiscoveryList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                            </div>
+                            <h4 id="DefaultCalendarHeading" style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Calendar</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarStyle">Calendar Style</label>
+                                <select id="DefaultCalendarStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="agenda">Agenda</option>
+                                    <option value="countdown">Countdown</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarWeekStart">Week Starts On</label>
+                                <select id="DefaultCalendarWeekStart" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="locale">Follow the Language</option>
+                                    <option value="sunday">Sunday</option>
+                                    <option value="monday">Monday</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarScope">What the Calendar Shows</label>
+                                <select id="DefaultCalendarScope" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="everything">Everything</option>
+                                    <option value="myShows">My Shows</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarShowEpisodes">Show Episodes</label>
+                                <select id="DefaultCalendarShowEpisodes" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarShowMovies">Show Movies</label>
+                                <select id="DefaultCalendarShowMovies" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Calendar Libraries</label>
+                                <div id="DefaultCalendarLibraryPicker" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                                <div class="fieldDescription">Only titles in, or headed for, the picked libraries. None picked means every library.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarIncludeUnmonitored">Include Unmonitored</label>
+                                <select id="DefaultCalendarIncludeUnmonitored" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Also list what Sonarr and Radarr aren't monitoring.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarShowSpecials">Show Specials</label>
+                                <select id="DefaultCalendarShowSpecials" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarShowBadges">Show Badges</label>
+                                <select id="DefaultCalendarShowBadges" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarColorBy">Color By</label>
+                                <select id="DefaultCalendarColorBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="type">Type</option>
+                                    <option value="status">Status</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarImageType">Calendar Image Type</label>
+                                <select id="DefaultCalendarImageType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="poster">Poster</option>
+                                    <option value="thumb">Thumbnail</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarSpoilerSafe">Spoiler Safe</label>
+                                <select id="DefaultCalendarSpoilerSafe" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarSelectAction">When a Title Is Picked</label>
+                                <select id="DefaultCalendarSelectAction" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="details">Open Details</option>
+                                    <option value="play">Play</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarRequestButton">Show Request Button</label>
+                                <select id="DefaultCalendarRequestButton" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarReminders">Show Remind Me Button</label>
+                                <select id="DefaultCalendarReminders" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Lets phones get a notification when an episode or movie lands in the library.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarRowSeeAll">See All on Upcoming Rows</label>
+                                <select id="DefaultCalendarRowSeeAll" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowNextAirDate">Show Next Air Date</label>
+                                <select id="DefaultShowNextAirDate" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -6182,12 +6242,6 @@
                 bindDefaultSettingsSubTabs(page);
                 initializeDefaultsCategories(page);
 
-                Array.prototype.slice.call(page.querySelectorAll('[data-open-tab]')).forEach(function(button) {
-                    button.addEventListener('click', function() {
-                        selectTab(button.getAttribute('data-open-tab'));
-                    });
-                });
-
                 var syncToggle = page.querySelector('#EnableSettingsSync');
                 if (syncToggle) {
                     syncToggle.addEventListener('change', updateSyncStatus);
@@ -6196,7 +6250,7 @@
                 var saved = null;
                 try { saved = window.localStorage.getItem('moonfinAdminActiveTab'); } catch (e) {}
                 var validSaved = saved && panels.some(function(p) { return p.getAttribute('data-tab') === saved; });
-                selectTab(validSaved ? saved : 'settingsSync');
+                selectTab(validSaved ? saved : 'defaults');
 
                 initializeSettingsSearch(page);
                 page.addEventListener('change', applyFieldDependencies);
@@ -6251,6 +6305,7 @@
             var FIELD_DEPENDENCIES = [
                 { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
+                { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
                 { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
@@ -6343,6 +6398,7 @@
                 ['genres', 'Genres'],
                 ['liveTv', 'Live TV'],
                 ['discover', 'Discover (Seerr)'],
+                ['calendar', 'Calendar'],
                 ['folders', 'Folders']
             ];
 
@@ -6709,8 +6765,8 @@
                 picker.innerHTML = html;
             }
 
-            function loadScreensaverLibraryPicker(selectedIds) {
-                var picker = document.querySelector('#DefaultScreensaverLibraryPicker');
+            function loadMediaLibraryPicker(pickerSelector, checkboxClass, selectedIds) {
+                var picker = document.querySelector(pickerSelector);
                 if (!picker) return;
                 picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">Loading...</div>';
                 var generation = defaultsState.generation;
@@ -6726,7 +6782,7 @@
                         picker.innerHTML = '<div style="padding:8px;color:rgba(255,255,255,0.5);font-size:0.9em;">No media libraries found.</div>';
                         return;
                     }
-                    renderScreensaverPickerRows(picker, 'screensaverLibraryCb', items.map(function(item) {
+                    renderScreensaverPickerRows(picker, checkboxClass, items.map(function(item) {
                         return { value: item.Id, label: item.Name || 'Untitled' };
                     }), selectedIds);
                 });
@@ -8708,6 +8764,14 @@
                 });
             }
 
+            function setAdminTabVisible(tabId, visible) {
+                var navItem = document.querySelector('.moonfinNavItem[data-tab="' + tabId + '"]');
+                navItem.hidden = !visible;
+                if (!visible && navItem.classList.contains('is-active')) {
+                    document.querySelector('.moonfinNavItem[data-tab="defaults"]').click();
+                }
+            }
+
             function loadAdminPins() {
                 var list = document.querySelector('#AdminPinList');
                 if (!list) {
@@ -8736,8 +8800,9 @@
                     url: ApiClient.getUrl('Moonfin/Admin/Pins'),
                     dataType: 'json'
                 }).then(function(users) {
+                    users = users || [];
                     list.innerHTML = '';
-                    (users || []).forEach(function(user) {
+                    users.forEach(function(user) {
                         var row = document.createElement('div');
                         row.style.margin = '0 0 1.2em';
 
@@ -8806,7 +8871,9 @@
                         list.appendChild(row);
                     });
                     say('', false);
+                    setAdminTabVisible('accounts', users.some(function(user) { return user.hasPin; }));
                 }, function() {
+                    setAdminTabVisible('accounts', true);
                     say('Couldn\'t load the users.', true);
                 });
             }
@@ -10723,6 +10790,7 @@
                 mediaBarLibraryIds: 'DefaultLibraryPicker',
                 mediaBarCollectionIds: 'DefaultCollectionPicker',
                 screensaverLibraryIds: 'DefaultScreensaverLibraryPicker',
+                calendarLibraryIds: 'DefaultCalendarLibraryPicker',
                 screensaverCollectionIds: 'DefaultScreensaverCollectionPicker',
                 screensaverExcludedGenres: 'DefaultScreensaverGenrePicker',
                 mdblistRatingSources: 'DefaultMdblistRatingSourcesList',
@@ -11160,6 +11228,7 @@
                     loadMessagesList();
                 });
                 loadAdminPins();
+                updateDownloadsTabVisibility();
 
                 loadConfigBackupStatus();
 
@@ -11171,6 +11240,10 @@
                     document.querySelector('#SeerrUrl').value = config.SeerrUrl || '';
                     document.querySelector('#SeerrDisplayName').value = config.SeerrDisplayName || '';
                     document.querySelector('#PublicServerUrl').value = config.PublicServerUrl || '';
+                    document.querySelector('#CalendarAdminsOnly').value = config.CalendarAdminsOnly === true ? 'true' : 'false';
+                    document.querySelector('#CalendarDaysBack').value = config.CalendarDaysBack != null ? config.CalendarDaysBack : 14;
+                    document.querySelector('#CalendarDaysAhead').value = config.CalendarDaysAhead != null ? config.CalendarDaysAhead : 90;
+                    document.querySelector('#CalendarCacheMinutes').value = config.CalendarCacheMinutes != null ? config.CalendarCacheMinutes : 5;
                     loadWebhookProvisioningStatus();
                     document.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
                     document.querySelector('#PushRelayAppKey').value = config.PushRelayAppKey || '';
@@ -11212,6 +11285,7 @@
                     document.querySelector('#WebEnableWebRtcScan').checked = config.WebEnableWebRtcScan !== false;
 
                     loadLibraryPicker('#DefaultHiddenLibraryPicker', 'defaultHiddenLibraryCb', config.DefaultHiddenLibraryIds || []);
+                    loadLibraryPicker('#DefaultHiddenFromLatestLibraryPicker', 'defaultHiddenFromLatestLibraryCb', config.DefaultHiddenFromLatestLibraryIds || []);
 
                     document.querySelector('#GamesEnabled').checked = config.GamesEnabled === true;
                     document.querySelector('#GamesIsolateWebApp').checked = config.GamesIsolateWebApp === true;
@@ -11281,7 +11355,7 @@
                     setSelectValue('#DefaultScreensaverPosition', defaults.screensaverPosition, 'Configured position');
                     setSelectValue('#DefaultScreensaverSize', defaults.screensaverSize, 'Configured size');
                     setSelectValue('#DefaultScreensaverContentType', defaults.screensaverContentType, 'Configured content type');
-                    loadScreensaverLibraryPicker(defaults.screensaverLibraryIds || []);
+                    loadMediaLibraryPicker('#DefaultScreensaverLibraryPicker', 'screensaverLibraryCb', defaults.screensaverLibraryIds || []);
                     loadScreensaverCollectionPicker(defaults.screensaverCollectionIds || []);
                     loadScreensaverGenrePicker(defaults.screensaverExcludedGenres || []);
                     setSelectValue('#DefaultLoadingAnimationImage', defaults.loadingAnimationImage, 'Configured image');
@@ -11300,6 +11374,7 @@
                     setNullableBoolSelect('#DefaultEnableFolderView', defaults.enableFolderView);
                     setNullableBoolSelect('#DefaultShowSeerrButton', defaults.showSeerrButton);
                     setNullableBoolSelect('#DefaultShowLiveTvButton', defaults.showLiveTvButton);
+                    setNullableBoolSelect('#DefaultShowCalendarButton', defaults.showCalendarButton);
                     setNullableBoolSelect('#DefaultShowDownloadsButton', defaults.showDownloadsButton);
                     setNullableBoolSelect('#DefaultShowServerMessagesButton', defaults.showServerMessagesButton);
                     setNullableBoolSelect('#DefaultShowFriendsButton', defaults.showFriendsButton);
@@ -11436,6 +11511,23 @@
                     setSelectValue('#DefaultSeerrRowsSortOrder', defaults.seerrRowsSortOrder, 'Configured direction');
                     var seerrPicker = seerrRowsToPicker(defaults.seerrRows);
                     loadSeerrDiscoveryPicker(seerrPicker.order, seerrPicker.hidden);
+                    setSelectValue('#DefaultCalendarStyle', defaults.calendarStyle, 'Configured value');
+                    setSelectValue('#DefaultCalendarWeekStart', defaults.calendarWeekStart, 'Configured value');
+                    setSelectValue('#DefaultCalendarScope', defaults.calendarScope, 'Configured value');
+                    setNullableBoolSelect('#DefaultCalendarShowEpisodes', defaults.calendarShowEpisodes);
+                    setNullableBoolSelect('#DefaultCalendarShowMovies', defaults.calendarShowMovies);
+                    loadMediaLibraryPicker('#DefaultCalendarLibraryPicker', 'calendarLibraryCb', defaults.calendarLibraryIds || []);
+                    setNullableBoolSelect('#DefaultCalendarIncludeUnmonitored', defaults.calendarIncludeUnmonitored);
+                    setNullableBoolSelect('#DefaultCalendarShowSpecials', defaults.calendarShowSpecials);
+                    setNullableBoolSelect('#DefaultCalendarShowBadges', defaults.calendarShowBadges);
+                    setSelectValue('#DefaultCalendarColorBy', defaults.calendarColorBy, 'Configured value');
+                    setSelectValue('#DefaultCalendarImageType', defaults.calendarImageType, 'Configured value');
+                    setNullableBoolSelect('#DefaultCalendarSpoilerSafe', defaults.calendarSpoilerSafe);
+                    setSelectValue('#DefaultCalendarSelectAction', defaults.calendarSelectAction, 'Configured value');
+                    setNullableBoolSelect('#DefaultCalendarRequestButton', defaults.calendarRequestButton);
+                    setNullableBoolSelect('#DefaultCalendarReminders', defaults.calendarReminders);
+                    setNullableBoolSelect('#DefaultCalendarRowSeeAll', defaults.calendarRowSeeAll);
+                    setNullableBoolSelect('#DefaultShowNextAirDate', defaults.showNextAirDate);
 
                     setNullableBoolSelect('#DefaultConfirmExit', defaults.confirmExit);
                     setSelectValue('#DefaultKeyboardStyle', defaults.keyboardStyle, 'Configured style');
@@ -12088,6 +12180,12 @@
                     });
                 }
 
+                // A blank or broken number falls back, and 0 stays 0.
+                function wholeNumberIn(raw, min, max, fallback) {
+                    var value = parseInt(raw, 10);
+                    return isNaN(value) ? fallback : Math.min(max, Math.max(min, value));
+                }
+
                 function submit() {
                     return ApiClient.getPluginConfiguration(MoonfinConfig.pluginUniqueId).then(function(config) {
                         config.EnableSettingsSync = document.querySelector('#EnableSettingsSync').checked;
@@ -12095,6 +12193,10 @@
                         config.SeerrUrl = document.querySelector('#SeerrUrl').value || null;
                         config.SeerrDisplayName = document.querySelector('#SeerrDisplayName').value || null;
                         config.PublicServerUrl = document.querySelector('#PublicServerUrl').value || null;
+                        config.CalendarAdminsOnly = document.querySelector('#CalendarAdminsOnly').value === 'true';
+                        config.CalendarDaysBack = wholeNumberIn(document.querySelector('#CalendarDaysBack').value, 0, 365, 14);
+                        config.CalendarDaysAhead = wholeNumberIn(document.querySelector('#CalendarDaysAhead').value, 0, 730, 90);
+                        config.CalendarCacheMinutes = wholeNumberIn(document.querySelector('#CalendarCacheMinutes').value, 0, 1440, 5);
                         config.PushRelayUrl = document.querySelector('#PushRelayUrl').value || 'https://push.moonfin.io/send';
                         config.PushRelayAppKey = document.querySelector('#PushRelayAppKey').value || null;
                         config.FcmServiceAccountJson = document.querySelector('#FcmServiceAccountJson').value || null;
@@ -12141,6 +12243,12 @@
                         if (document.querySelector('.defaultHiddenLibraryCb') != null) {
                             config.DefaultHiddenLibraryIds = Array.prototype.slice.call(
                                 document.querySelectorAll('.defaultHiddenLibraryCb:checked')
+                            ).map(function (cb) { return cb.getAttribute('data-id'); });
+                        }
+
+                        if (document.querySelector('.defaultHiddenFromLatestLibraryCb') != null) {
+                            config.DefaultHiddenFromLatestLibraryIds = Array.prototype.slice.call(
+                                document.querySelectorAll('.defaultHiddenFromLatestLibraryCb:checked')
                             ).map(function (cb) { return cb.getAttribute('data-id'); });
                         }
 
@@ -12272,6 +12380,7 @@
                     ds.enableFolderView = getNullableBoolSelect('#DefaultEnableFolderView');
                     ds.showSeerrButton = getNullableBoolSelect('#DefaultShowSeerrButton');
                     ds.showLiveTvButton = getNullableBoolSelect('#DefaultShowLiveTvButton');
+                    ds.showCalendarButton = getNullableBoolSelect('#DefaultShowCalendarButton');
                     ds.showDownloadsButton = getNullableBoolSelect('#DefaultShowDownloadsButton');
                     ds.showServerMessagesButton = getNullableBoolSelect('#DefaultShowServerMessagesButton');
                     ds.showFriendsButton = getNullableBoolSelect('#DefaultShowFriendsButton');
@@ -12437,6 +12546,26 @@
                     ds.seerrRows = seerrRows;
                     ds.seerrRowsSortBy = document.querySelector('#DefaultSeerrRowsSortBy').value || null;
                     ds.seerrRowsSortOrder = document.querySelector('#DefaultSeerrRowsSortOrder').value || null;
+                    ds.calendarStyle = document.querySelector('#DefaultCalendarStyle').value || null;
+                    ds.calendarWeekStart = document.querySelector('#DefaultCalendarWeekStart').value || null;
+                    ds.calendarScope = document.querySelector('#DefaultCalendarScope').value || null;
+                    ds.calendarShowEpisodes = getNullableBoolSelect('#DefaultCalendarShowEpisodes');
+                    ds.calendarShowMovies = getNullableBoolSelect('#DefaultCalendarShowMovies');
+                    if (document.querySelector('#DefaultCalendarLibraryPicker .calendarLibraryCb') != null) {
+                        var calendarLibraryIds = Array.prototype.slice.call(document.querySelectorAll('#DefaultCalendarLibraryPicker .calendarLibraryCb:checked')).map(function (cb) { return cb.dataset.value; });
+                        ds.calendarLibraryIds = calendarLibraryIds.length > 0 ? calendarLibraryIds : null;
+                    }
+                    ds.calendarIncludeUnmonitored = getNullableBoolSelect('#DefaultCalendarIncludeUnmonitored');
+                    ds.calendarShowSpecials = getNullableBoolSelect('#DefaultCalendarShowSpecials');
+                    ds.calendarShowBadges = getNullableBoolSelect('#DefaultCalendarShowBadges');
+                    ds.calendarColorBy = document.querySelector('#DefaultCalendarColorBy').value || null;
+                    ds.calendarImageType = document.querySelector('#DefaultCalendarImageType').value || null;
+                    ds.calendarSpoilerSafe = getNullableBoolSelect('#DefaultCalendarSpoilerSafe');
+                    ds.calendarSelectAction = document.querySelector('#DefaultCalendarSelectAction').value || null;
+                    ds.calendarRequestButton = getNullableBoolSelect('#DefaultCalendarRequestButton');
+                    ds.calendarReminders = getNullableBoolSelect('#DefaultCalendarReminders');
+                    ds.calendarRowSeeAll = getNullableBoolSelect('#DefaultCalendarRowSeeAll');
+                    ds.showNextAirDate = getNullableBoolSelect('#DefaultShowNextAirDate');
 
                     ds.confirmExit = getNullableBoolSelect('#DefaultConfirmExit');
                     ds.keyboardStyle = document.querySelector('#DefaultKeyboardStyle').value || null;
@@ -13083,6 +13212,7 @@
                     return;
                 }
                 if (!navItem.classList.contains('is-active')) {
+                    stopSyncsPolling();
                     return;
                 }
                 ApiClient.getJSON(ApiClient.getUrl("Moonfin/Transcodes/Active")).then(function(jobs) {
@@ -13178,6 +13308,14 @@
                     }
                 }, function() {
                     container.innerHTML = '<div style="padding:16px; text-align:center; color:#ff5252;">Could not load active downloads. The server may be restarting.</div>';
+                });
+            }
+
+            function updateDownloadsTabVisibility() {
+                ApiClient.getJSON(ApiClient.getUrl("Moonfin/Transcodes/Active")).then(function(jobs) {
+                    setAdminTabVisible('syncs', !!(jobs && jobs.length));
+                }, function() {
+                    setAdminTabVisible('syncs', true);
                 });
             }
 
