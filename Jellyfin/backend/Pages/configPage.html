@@ -694,53 +694,712 @@
                 text-decoration: underline;
             }
 
-            #MoonfinConfigPage .posterBadgeRule {
-                margin-bottom: 10px;
-                padding: 10px;
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 6px;
-                background: rgba(255, 255, 255, 0.025);
+            #MoonfinConfigPage .labelsStudio {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 260px;
+                gap: 18px;
+                align-items: start;
             }
 
-            #MoonfinConfigPage .posterBadgeRuleHead,
-            #MoonfinConfigPage .posterBadgeCondition {
+            #MoonfinConfigPage .labelsSide {
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            #MoonfinConfigPage .labelsPreview {
+                box-sizing: border-box;
+                flex-shrink: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                padding: 16px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                background: rgba(255, 255, 255, 0.02);
+            }
+
+            #MoonfinConfigPage .labelsPreviewHead {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                font-weight: 600;
+                color: #f0f6fc;
+            }
+
+            #MoonfinConfigPage .labelsPoster {
+                position: relative;
+                aspect-ratio: 2 / 3;
+                overflow: hidden;
+                border-radius: 10px;
+                background:
+                    radial-gradient(120% 70% at 30% 18%, rgba(55, 211, 230, 0.32), transparent 60%),
+                    radial-gradient(90% 60% at 80% 85%, rgba(124, 58, 237, 0.35), transparent 65%),
+                    linear-gradient(160deg, #1b2533, #0d1118 70%);
+                background-size: cover;
+                background-position: center;
+                box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+            }
+
+            #MoonfinConfigPage .labelsCorner {
+                position: absolute;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                max-width: calc(100% - 12px);
+            }
+
+            #MoonfinConfigPage .labelsCorner[data-corner="topLeft"] { top: 6px; left: 6px; align-items: flex-start; }
+            #MoonfinConfigPage .labelsCorner[data-corner="topRight"] { top: 6px; right: 6px; align-items: flex-end; }
+            #MoonfinConfigPage .labelsCorner[data-corner="bottomLeft"] { bottom: 6px; left: 6px; align-items: flex-start; flex-direction: column-reverse; }
+            #MoonfinConfigPage .labelsCorner[data-corner="bottomRight"] { bottom: 6px; right: 6px; align-items: flex-end; flex-direction: column-reverse; }
+
+            #MoonfinConfigPage .labelsBadge {
+                display: inline-block;
+                box-sizing: border-box;
+                max-width: 100%;
+                overflow: hidden;
+                font-weight: 700;
+                line-height: 1.3;
+                letter-spacing: 0.5px;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+            }
+
+            #MoonfinConfigPage .labelsBadge:empty {
+                display: none;
+            }
+
+            #MoonfinConfigPage .labelsPreviewNote {
+                font-size: 0.82em;
+                line-height: 1.4;
+                opacity: 0.6;
+            }
+
+            #MoonfinConfigPage .labelsNoteAction {
+                align-self: flex-start;
+                margin-top: 2px;
+                padding: 0;
+                font-size: 0.85em;
+                text-align: left;
+            }
+
+            #MoonfinConfigPage .labelsNoteAction[hidden] {
+                display: none;
+            }
+
+            #MoonfinConfigPage .labelsTest {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            #MoonfinConfigPage .labelsTestResults {
+                display: flex;
+                flex-direction: column;
+                max-height: 240px;
+                overflow-y: auto;
+                padding: 4px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 8px;
+                background: rgba(0, 0, 0, 0.2);
+            }
+
+            #MoonfinConfigPage .labelsTestResults[hidden] {
+                display: none;
+            }
+
+            #MoonfinConfigPage .labelsTestResult {
+                display: flex;
+                flex-direction: column;
+                padding: 6px 8px;
+                border: 0;
+                border-radius: 6px;
+                background: transparent;
+                color: inherit;
+                font: inherit;
+                font-size: 0.88em;
+                text-align: left;
+                cursor: pointer;
+            }
+
+            #MoonfinConfigPage .labelsTestResult:hover,
+            #MoonfinConfigPage .labelsTestResult:focus-visible {
+                background: rgba(255, 255, 255, 0.05);
+                outline: none;
+            }
+
+            #MoonfinConfigPage .labelsTestResult small {
+                opacity: 0.6;
+            }
+
+            #MoonfinConfigPage .labelsReport {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                padding-top: 12px;
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
+                font-size: 0.85em;
+            }
+
+            #MoonfinConfigPage .labelsReport:empty {
+                display: none;
+            }
+
+            #MoonfinConfigPage .labelsReportHead {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 8px;
+            }
+
+            #MoonfinConfigPage .labelsReportHead strong {
+                min-width: 0;
+                overflow-wrap: anywhere;
+                color: #f0f6fc;
+            }
+
+            #MoonfinConfigPage .labelsReportHead .moonfinLinkButton {
+                flex-shrink: 0;
+                padding: 0;
+                font-size: 1em;
+            }
+
+            #MoonfinConfigPage .labelsMatch {
                 display: grid;
+                grid-template-columns: auto minmax(0, 1fr);
+                gap: 8px;
+                align-items: baseline;
+            }
+
+            #MoonfinConfigPage .labelsMatchName {
+                color: #37d3e6;
+                font-weight: 600;
+            }
+
+            #MoonfinConfigPage .labelsMatchList {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            #MoonfinConfigPage .labelsReportWhy {
+                line-height: 1.4;
+                opacity: 0.7;
+                overflow-wrap: anywhere;
+            }
+
+            #MoonfinConfigPage .labelsReport details summary {
+                cursor: pointer;
+                opacity: 0.8;
+            }
+
+            #MoonfinConfigPage .labelsTrack {
+                margin-top: 6px;
+                line-height: 1.4;
+                opacity: 0.75;
+                overflow-wrap: anywhere;
+            }
+
+            #MoonfinConfigPage .labelsLead {
+                margin: 0 0 16px;
+                max-width: 72ch;
+                line-height: 1.5;
+                opacity: 0.72;
+            }
+
+            #MoonfinConfigPage .labelsField {
+                display: grid;
+                grid-template-columns: 140px minmax(0, 1fr);
+                gap: 12px;
+                align-items: center;
+                padding: 10px 0;
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
+            }
+
+            #MoonfinConfigPage .labelsField:first-of-type {
+                border-top: 0;
+            }
+
+            #MoonfinConfigPage .labelsFieldName {
+                font-size: 0.9em;
+                color: rgba(255, 255, 255, 0.72);
+            }
+
+            #MoonfinConfigPage .labelsStyles {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            #MoonfinConfigPage .labelsOption {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                min-height: 32px;
+                padding: 5px 12px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 999px;
+                background: transparent;
+                color: rgba(255, 255, 255, 0.7);
+                font: inherit;
+                font-size: 0.85em;
+                cursor: pointer;
+                transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+            }
+
+            #MoonfinConfigPage .labelsOption:hover {
+                border-color: rgba(255, 255, 255, 0.3);
+                color: rgba(255, 255, 255, 0.9);
+            }
+
+            #MoonfinConfigPage .labelsOption[aria-pressed="true"] {
+                border-color: #00a4dc;
+                background: rgba(0, 164, 220, 0.16);
+                color: #7fd6f2;
+            }
+
+            #MoonfinConfigPage .labelsOption:focus-visible,
+            #MoonfinConfigPage .labelsPreset:focus-visible,
+            #MoonfinConfigPage .labelsRuleToggle:focus-visible,
+            #MoonfinConfigPage .labelsCornerPicker button:focus-visible {
+                outline: 2px solid #37d3e6;
+                outline-offset: 2px;
+            }
+
+            #MoonfinConfigPage .labelsStyleSwatch {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 6px 8px;
+                border-radius: 6px;
+                background: linear-gradient(135deg, #2b3a4d, #141a22);
+            }
+
+            #MoonfinConfigPage .labelsCornerPicker {
+                display: grid;
+                grid-template-columns: repeat(2, 28px);
+                grid-template-rows: repeat(2, 38px);
+                gap: 4px;
+                padding: 4px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 8px;
+                background: rgba(0, 0, 0, 0.2);
+                width: max-content;
+            }
+
+            #MoonfinConfigPage .labelsCornerPicker button {
+                position: relative;
+                padding: 0;
+                border: 0;
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.05);
+                cursor: pointer;
+            }
+
+            #MoonfinConfigPage .labelsCornerPicker button::after {
+                content: '';
+                position: absolute;
+                width: 10px;
+                height: 6px;
+                border-radius: 2px;
+                background: rgba(255, 255, 255, 0.35);
+            }
+
+            #MoonfinConfigPage .labelsCornerPicker button[data-value="topLeft"]::after { top: 4px; left: 4px; }
+            #MoonfinConfigPage .labelsCornerPicker button[data-value="topRight"]::after { top: 4px; right: 4px; }
+            #MoonfinConfigPage .labelsCornerPicker button[data-value="bottomLeft"]::after { bottom: 4px; left: 4px; }
+            #MoonfinConfigPage .labelsCornerPicker button[data-value="bottomRight"]::after { bottom: 4px; right: 4px; }
+
+            #MoonfinConfigPage .labelsCornerPicker button[aria-pressed="true"] {
+                background: rgba(0, 164, 220, 0.22);
+            }
+
+            #MoonfinConfigPage .labelsCornerPicker button[aria-pressed="true"]::after {
+                background: #37d3e6;
+            }
+
+            #MoonfinConfigPage .labelsRange {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                max-width: 320px;
+            }
+
+            #MoonfinConfigPage .labelsRange input[type="range"] {
+                flex: 1 1 auto;
+                accent-color: #00a4dc;
+            }
+
+            #MoonfinConfigPage .labelsRangeValue {
+                min-width: 3.5em;
+                font-variant-numeric: tabular-nums;
+                text-align: right;
+                opacity: 0.8;
+            }
+
+            #MoonfinConfigPage .labelsPresetGroup {
+                display: grid;
+                grid-template-columns: 140px minmax(0, 1fr);
+                gap: 12px;
+                align-items: baseline;
+                padding: 10px 0;
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
+            }
+
+            #MoonfinConfigPage .labelsPresetGroup:first-child {
+                border-top: 0;
+            }
+
+            #MoonfinConfigPage .labelsPresets {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            #MoonfinConfigPage .labelsPreset {
+                display: inline-flex;
+                align-items: center;
+                gap: 7px;
+                padding: 4px 8px 4px 4px;
+                min-height: 30px;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.03);
+                color: rgba(255, 255, 255, 0.6);
+                font: inherit;
+                font-size: 0.85em;
+                cursor: pointer;
+                transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+            }
+
+            #MoonfinConfigPage .labelsPreset:hover {
+                border-color: rgba(255, 255, 255, 0.3);
+                color: rgba(255, 255, 255, 0.9);
+            }
+
+            #MoonfinConfigPage .labelsPreset .labelsBadge {
+                font-size: 11px;
+                padding: 2px 7px;
+                border-radius: 4px;
+                box-shadow: none;
+            }
+
+            #MoonfinConfigPage .labelsPreset[aria-pressed="false"] .labelsBadge {
+                border: 1px dashed rgba(255, 255, 255, 0.28) !important;
+                background: transparent !important;
+                color: rgba(255, 255, 255, 0.72) !important;
+            }
+
+            #MoonfinConfigPage .labelsPreset .material-icons {
+                font-size: 16px;
+                color: #37d3e6;
+            }
+
+            #MoonfinConfigPage .labelsPreset[aria-pressed="false"] .material-icons {
+                display: none;
+            }
+
+            #MoonfinConfigPage .labelsPreset[aria-pressed="true"] {
+                border-color: rgba(0, 164, 220, 0.6);
+                background: rgba(0, 164, 220, 0.12);
+            }
+
+            #MoonfinConfigPage .labelsRules {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 12px;
+            }
+
+            #MoonfinConfigPage .labelsRule {
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                background: rgba(255, 255, 255, 0.03);
+                transition: border-color 0.15s ease;
+            }
+
+            #MoonfinConfigPage .labelsRule.is-open {
+                border-color: rgba(0, 164, 220, 0.35);
+                background: rgba(0, 164, 220, 0.05);
+            }
+
+            #MoonfinConfigPage .labelsRule.is-off .labelsRuleHead > :not(.labelsRuleActions) {
+                opacity: 0.45;
+            }
+
+            #MoonfinConfigPage .labelsRuleHead {
+                display: grid;
+                grid-template-columns: 78px minmax(0, 1fr) auto;
+                gap: 12px;
+                align-items: center;
+                padding: 10px 12px;
+            }
+
+            #MoonfinConfigPage .labelsRuleToggle {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                min-width: 0;
+                padding: 0;
+                border: 0;
+                background: none;
+                color: inherit;
+                font: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+
+            #MoonfinConfigPage .labelsRuleName {
+                overflow: hidden;
+                font-weight: 600;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            #MoonfinConfigPage .labelsRuleSummary {
+                overflow: hidden;
+                font-size: 0.82em;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                opacity: 0.6;
+            }
+
+            #MoonfinConfigPage .labelsRuleActions {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            #MoonfinConfigPage .labelsSwitch {
+                position: relative;
+                display: inline-flex;
+                margin-right: 6px;
+                cursor: pointer;
+            }
+
+            #MoonfinConfigPage .labelsSwitch input {
+                position: absolute;
+                opacity: 0;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                cursor: pointer;
+            }
+
+            #MoonfinConfigPage .labelsSwitch span {
+                position: relative;
+                width: 36px;
+                height: 20px;
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.24);
+                transition: background-color 0.15s ease;
+            }
+
+            #MoonfinConfigPage .labelsSwitch span::after {
+                content: '';
+                position: absolute;
+                top: 3px;
+                left: 3px;
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background: #fff;
+                transition: transform 0.15s ease;
+            }
+
+            #MoonfinConfigPage .labelsSwitch input:checked + span {
+                background: #00a4dc;
+            }
+
+            #MoonfinConfigPage .labelsSwitch input:checked + span::after {
+                transform: translateX(16px);
+            }
+
+            #MoonfinConfigPage .labelsSwitch input:focus-visible + span {
+                outline: 2px solid #37d3e6;
+                outline-offset: 2px;
+            }
+
+            #MoonfinConfigPage .labelsRuleBody {
+                display: none;
+                padding: 2px 14px 14px;
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
+            }
+
+            #MoonfinConfigPage .labelsRule.is-open .labelsRuleBody {
+                display: block;
+            }
+
+            #MoonfinConfigPage .labelsRuleBody h4 {
+                margin: 16px 0 6px;
+                font-size: 0.9em;
+                font-weight: 600;
+                color: #f0f6fc;
+            }
+
+            #MoonfinConfigPage .labelsInline {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 8px;
+            }
+
+            #MoonfinConfigPage .labelsInline .homeCustomListInput {
+                width: auto;
+                min-width: 120px;
+            }
+
+            #MoonfinConfigPage .labelsColor {
+                width: 40px;
+                height: 30px;
+                padding: 0;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 6px;
+                background: transparent;
+                cursor: pointer;
+            }
+
+            #MoonfinConfigPage .labelsCondition {
+                display: grid;
+                grid-template-columns: minmax(84px, 0.6fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
                 gap: 8px;
                 align-items: center;
                 margin-bottom: 6px;
             }
 
-            #MoonfinConfigPage .posterBadgeRuleHead {
-                grid-template-columns: auto minmax(0, 1fr) 44px auto auto;
+            #MoonfinConfigPage .labelsAddRow {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px;
             }
 
-            #MoonfinConfigPage .posterBadgeCondition {
-                grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.5fr) auto;
+            #MoonfinConfigPage .labelsField.is-top {
+                align-items: start;
             }
 
-            #MoonfinConfigPage .posterBadgeRuleHead .homeCustomListCheckbox {
-                margin-top: 0;
+            #MoonfinConfigPage .labelsField.is-top > .labelsFieldName {
+                padding-top: 7px;
             }
 
-            #MoonfinConfigPage .posterBadgeColor {
-                width: 44px;
-                height: 30px;
-                padding: 0;
-                border: 0;
-                background: transparent;
+            #MoonfinConfigPage .labelsUserPicker {
+                max-width: 420px;
+                margin-top: 10px;
             }
 
-            #MoonfinConfigPage .posterBadgePill {
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-size: 0.78em;
-                font-weight: 700;
-                letter-spacing: 0.5px;
-                white-space: nowrap;
+            #MoonfinConfigPage .labelsUserFilter {
+                margin-bottom: 6px;
             }
 
-            #MoonfinConfigPage .posterBadgePill:empty {
+            #MoonfinConfigPage .labelsUserList {
+                max-height: 220px;
+                overflow-y: auto;
+                padding: 4px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 8px;
+                background: rgba(0, 0, 0, 0.2);
+            }
+
+            #MoonfinConfigPage .labelsUserRow {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 6px 8px;
+                border-radius: 6px;
+                font-size: 0.9em;
+                cursor: pointer;
+            }
+
+            #MoonfinConfigPage .labelsUserRow:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            #MoonfinConfigPage .labelsUserRow[hidden] {
                 display: none;
+            }
+
+            #MoonfinConfigPage .labelsUserRow input {
+                width: 16px;
+                height: 16px;
+                margin: 0;
+                accent-color: #00a4dc;
+            }
+
+            #MoonfinConfigPage .labelsUserCount {
+                margin-top: 6px;
+                font-size: 0.82em;
+                opacity: 0.65;
+            }
+
+            #MoonfinConfigPage .labelsUserCount.is-warning {
+                color: #fbbf24;
+                opacity: 1;
+            }
+
+            #MoonfinConfigPage .labelsHelp summary {
+                cursor: pointer;
+                color: #00a4dc;
+                font-weight: 600;
+            }
+
+            #MoonfinConfigPage .labelsHelp .fieldDescription {
+                margin-top: 8px;
+                max-width: 80ch;
+            }
+
+            @media (max-width: 1100px) {
+                #MoonfinConfigPage .labelsStudio {
+                    grid-template-columns: minmax(0, 1fr);
+                }
+
+                /* Above the settings, the two cards side by side when they fit. */
+                #MoonfinConfigPage .labelsSide {
+                    order: -1;
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                    align-items: start;
+                }
+
+                #MoonfinConfigPage .labelsPoster {
+                    width: 160px;
+                }
+            }
+
+            @media (max-width: 640px) {
+                #MoonfinConfigPage .labelsField,
+                #MoonfinConfigPage .labelsPresetGroup {
+                    grid-template-columns: minmax(0, 1fr);
+                    gap: 6px;
+                }
+
+                #MoonfinConfigPage .labelsCondition {
+                    grid-template-columns: minmax(0, 1fr) auto;
+                }
+
+                #MoonfinConfigPage .labelsCondition > :nth-child(2),
+                #MoonfinConfigPage .labelsCondition > :nth-child(3),
+                #MoonfinConfigPage .labelsCondition > :nth-child(4) {
+                    grid-column: 1;
+                }
+
+                #MoonfinConfigPage .labelsRuleHead {
+                    grid-template-columns: minmax(0, 1fr) auto;
+                }
+
+                #MoonfinConfigPage .labelsRuleHead > .labelsRuleBadge {
+                    display: none;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                #MoonfinConfigPage .labelsOption,
+                #MoonfinConfigPage .labelsPreset,
+                #MoonfinConfigPage .labelsRule {
+                    transition: none;
+                }
             }
 
             #MoonfinConfigPage.moonfin-searching .moonfinPageHead,
@@ -1391,9 +2050,9 @@
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">palette</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Themes</span><span class="moonfinNavSub">Upload &amp; catalog</span></span>
                         </button>
-                        <button type="button" class="moonfinNavItem" data-tab="posterBadges">
+                        <button type="button" class="moonfinNavItem" data-tab="labels">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">label</span>
-                            <span class="moonfinNavText"><span class="moonfinNavLabel">Poster Badges</span><span class="moonfinNavSub">Labels on posters</span></span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Labels</span><span class="moonfinNavSub">Posters &amp; anime episodes</span></span>
                         </button>
                         <button type="button" class="moonfinNavItem" data-tab="messages">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">notifications</span>
@@ -1716,214 +2375,6 @@
                                 Users who set their own key in their Moonfin client settings will use that instead.
                                 Supports both v3 API keys and v4 Bearer tokens.
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection" id="AnimeMarkersSection">
-                        <h3 class="sectionTitle">Anime Filler &amp; Recap Markers</h3>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkersEnabled" is="emby-checkbox" />
-                                <span>Classify anime episodes as canon, mixed or filler</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Nightly task that matches your anime against
-                                <a href="https://www.animefillerlist.com/" target="_blank">AnimeFillerList</a> so Moonfin
-                                clients can badge filler episodes. No account or API key is needed. Series are matched by
-                                title, falling back to the English and romaji titles behind their ids for libraries in other languages,
-                                and only shows the site actually lists are fetched.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused">Libraries to look in</label>
-                            <div id="AnimeMarkerLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
-                            <div class="fieldDescription">
-                                Leave everything unchecked to consider every library. Matching is a local title lookup, so
-                                narrowing this only helps if a non-anime show shares a title with an anime.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioTrustSelectedLibraries" is="emby-checkbox" />
-                                <span>Treat everything in the selected libraries as anime</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Affects the Subbed/Dubbed pills. Normally an item also has to look like anime on its own,
-                                meaning it carries an AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an
-                                &quot;Anime&quot; genre or tag. That check is what keeps a library holding both anime and
-                                ordinary shows from marking the ordinary ones.
-                                <br><br>
-                                If the libraries you picked above are <em>only</em> anime, turn this on: the check then
-                                only costs you the entries whose metadata happens to be thin, which would otherwise show
-                                no pill at all. Has no effect while no libraries are selected, since there is then
-                                nothing to trust.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkerRecapLookup" is="emby-checkbox" />
-                                <span>Also mark recap episodes (uses MyAnimeList)</span>
-                            </label>
-                            <div class="fieldDescription">
-                                AnimeFillerList has no recap category, so this asks MyAnimeList as well. It is best-effort
-                                and additive: if that lookup fails, the filler data is unaffected.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioMarkersEnabled" is="emby-checkbox" />
-                                <span>Also mark episodes and seasons as Subbed or Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Reads the audio tracks in each file: Japanese and nothing else is <strong>Subbed</strong>,
-                                anything carrying another spoken language is <strong>Dubbed</strong>. A season gets a pill
-                                only when every episode in it agrees. This needs no internet and does not depend on
-                                AnimeFillerList, so it works for anime the site has never listed. Files whose audio has no
-                                language tag are left unmarked rather than guessed at.
-                                <br><br>
-                                <strong>In a mixed library:</strong> when you select your anime libraries above, only shows
-                                in them are marked. If you leave the selection empty the whole server is in scope, and a
-                                series is then only marked when it looks like anime on its own, meaning it carries an
-                                AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an "Anime" genre or tag. A Japanese
-                                live-action show carrying one of those would still be marked.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioMarkersMovies" is="emby-checkbox" />
-                                <span>Also mark movies as Subbed or Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Extends the same audio rules to movies, so the pill shows on a movie card anywhere it
-                                appears, including home screen rows. Separate from the option above because a movie has
-                                no series to inherit from, and a mixed library is most likely to mislabel a film.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioSeparateDualAudio" is="emby-checkbox" />
-                                <span>Label dual-audio files as Subbed/Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                A file holding the Japanese audio <em>and</em> a dub can be watched either way, so it
-                                shows as <strong>Subbed/Dubbed</strong> rather than just Dubbed. Leave off for the
-                                shorter label.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeAudioLabelStyle">Audio pill wording</label>
-                            <select is="emby-select" id="AnimeAudioLabelStyle">
-                                <option value="full">Full: Subbed / Dubbed / Subbed/Dubbed</option>
-                                <option value="short">Short: Sub / Dub / Sub/Dub</option>
-                            </select>
-                            <div class="fieldDescription">
-                                Full wording is longer while on Phones and Tablets a shorter label fits better.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPlacement">Where to put the pills</label>
-                            <select is="emby-select" id="AnimeMarkerPlacement">
-                                <option value="below">Below the runtime</option>
-                                <option value="beside">Beside the runtime</option>
-                                <option value="thumbnail">On the episode thumbnail</option>
-                            </select>
-                            <div class="fieldDescription">
-                                Applies to episode rows in Moonfin clients. Season and movie cards always draw the pill
-                                over the artwork, since they have no runtime line to sit next to.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused">Which pills to show</label>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowFiller" is="emby-checkbox" />
-                                    <span>Filler</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowMixed" is="emby-checkbox" />
-                                    <span>Mixed canon and filler</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowRecap" is="emby-checkbox" />
-                                    <span>Recap</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowMangaCanon" is="emby-checkbox" />
-                                    <span>Manga canon</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowAnimeCanon" is="emby-checkbox" />
-                                    <span>Anime canon</span>
-                                </label>
-                            </div>
-                            <div class="fieldDescription">
-                                A pill that is switched off is never sent to a client, so every Moonfin client agrees.
-                                The two canon options are off by default: nearly every episode of most shows is canon,
-                                so turning them on puts a pill on almost everything.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerMaxAgeDays">Marker refresh age (days)</label>
-                            <input type="number" id="AnimeMarkerMaxAgeDays" is="emby-input" min="1" max="365" step="1" />
-                            <div class="fieldDescription">
-                                Shows older than this are re-fetched (default 30). A finished show's classifications never
-                                change, so this mainly governs how quickly an airing show picks up new episodes.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                <button type="button" id="AnimeMarkerDiagBtn" is="emby-button" class="raised">Check matching</button>
-                                <button type="button" id="AnimeMarkerClearBtn" is="emby-button" class="raised">Clear marker cache</button>
-                            </div>
-                            <div class="fieldDescription">
-                                Markers appear after the <strong>Moonfin Anime Markers Sync</strong> task has run. You can
-                                start it now from Dashboard &rarr; Scheduled Tasks.
-                            </div>
-                            <div id="AnimeMarkerDiagStatus" style="margin-top:8px;font-size:0.9em;color:rgba(255,255,255,0.7);"></div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPreviewName">Preview a series</label>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                                <input type="text" id="AnimeMarkerPreviewName" is="emby-input" placeholder="One Piece" style="flex:1;min-width:200px;" />
-                                <button type="button" id="AnimeMarkerPreviewBtn" is="emby-button" class="raised">Preview</button>
-                                <button type="button" id="AnimeMarkerFetchBtn" is="emby-button" class="raised">Fetch now</button>
-                            </div>
-                            <div class="fieldDescription">
-                                Type a series name from your library and press Preview to see exactly which of your
-                                episodes each marker landed on. <strong>Fetch now</strong> pulls that one show
-                                immediately (about ten seconds, the site's crawl delay) instead of waiting for the task.
-                            </div>
-                            <div id="AnimeMarkerPreviewStatus" style="margin-top:8px;font-size:0.9em;color:rgba(255,255,255,0.7);"></div>
-                            <div id="AnimeMarkerPreviewResult" style="margin-top:8px;max-height:420px;overflow:auto;"></div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkerVerboseLogging" is="emby-checkbox" />
-                                <span>Write a marker debug log</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Records every marker request a client makes and what it was answered with, to
-                                <code>moonfin-anime-markers.log</code> in the server's own log folder, so it also shows
-                                up under Dashboard &gt; Logs where it can be downloaded. Turn this on when a badge is not
-                                appearing: if a request never shows up here, the app never asked, which means the
-                                problem is in the app rather than on the server. Leave it off otherwise.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                <button type="button" id="AnimeMarkerLogBtn" is="emby-button" class="raised">Show log</button>
-                                <button type="button" id="AnimeMarkerClearLogBtn" is="emby-button" class="raised">Clear log</button>
-                            </div>
-                            <div id="AnimeMarkerLogStatus" style="margin-top:8px;font-size:0.9em;color:rgba(255,255,255,0.7);"></div>
-                            <pre id="AnimeMarkerLogOutput" style="margin-top:8px;max-height:320px;overflow:auto;font-size:0.8em;line-height:1.45;background:rgba(0,0,0,0.35);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-word;"></pre>
                         </div>
                     </div>
 
@@ -2514,6 +2965,14 @@
                                     <option value="hideUnwatched">Hide Unwatched</option>
                                     <option value="episodesOnly">Episodes Only</option>
                                     <option value="never">Never</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowPosterLabels">Poster Labels</label>
+                                <select id="DefaultShowPosterLabels" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Seasonal Effects</h4>
@@ -4574,29 +5033,336 @@
 
                     </section>
 
-                    <section class="moonfinTabPanel" data-tab="posterBadges">
+                    <section class="moonfinTabPanel" data-tab="labels">
+                    <div class="moonfinSubTabs" role="tablist" aria-label="Labels">
+                        <button type="button" class="moonfinSubTab is-active" role="tab" aria-selected="true" data-labels-tab="posters">Poster labels</button>
+                        <button type="button" class="moonfinSubTab" role="tab" aria-selected="false" data-labels-tab="anime">Anime episodes</button>
+                    </div>
+
+                    <div class="moonfinSubPanel is-active" data-labels-panel="posters">
+                    <div class="labelsStudio">
+                    <div class="labelsMain">
                     <div class="verticalSection">
-                        <h3 class="sectionTitle">Poster Badges</h3>
-                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            Put your own labels on movie and episode posters in Moonfin apps, worked out from each
-                            file's tracks and path. The files and the artwork are never changed.
-                            <br><br>
-                            A rule shows its badge when <strong>all</strong> its conditions hold. A condition on a track
-                            holds when any track of that type passes it, and "does not match" holds when no track of
-                            that type matches. Rules with the same label are alternatives: the badge shows once if any
-                            of them holds. Patterns are
-                            <a href="https://learn.microsoft.com/dotnet/standard/base-types/regular-expression-language-quick-reference" target="_blank">regular expressions</a>
-                            and ignore case. Apps show at most two badges per poster, in the order below.
-                            <br><br>
-                            <strong>Example</strong>, files whose only French is from Quebec. A first rule <em>VFQ</em>:
-                            "Audio track: title" matches <code>VFQ|Qu[ée]bec|Canad</code>, "Audio track: title" does not
-                            match <code>VFF|VFI|France|TRUEFRENCH</code>, and "File path" does not match
-                            <code>\bVF[F2I]\b|TRUEFRENCH</code>. A second rule <em>VFQ</em>, for files whose name says it:
-                            "File path" matches <code>\bVFQ\b</code>, "Audio track: language" matches <code>^(fre|fra)$</code>,
-                            and "Audio track: title" does not match <code>VFF|VFI|France|TRUEFRENCH</code>.
+                        <h3 class="sectionTitle">Default look</h3>
+                        <p class="labelsLead">
+                            Every label uses this look unless its own settings say otherwise. Labels are drawn by the
+                            Moonfin apps over movie and episode artwork; the files and the artwork are never changed.
+                        </p>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultStyleName">Style</span>
+                            <div class="labelsStyles" data-default="Style" role="group" aria-labelledby="LabelsDefaultStyleName"></div>
                         </div>
-                        <div id="PosterBadgeRulesList"></div>
-                        <button type="button" id="PosterBadgeAddRuleBtn" is="emby-button" class="raised">Add rule</button>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultShapeName">Shape</span>
+                            <div class="labelsStyles" data-default="Shape" role="group" aria-labelledby="LabelsDefaultShapeName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultSizeName">Size</span>
+                            <div class="labelsStyles" data-default="Size" role="group" aria-labelledby="LabelsDefaultSizeName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultCornerName">Corner</span>
+                            <div class="labelsCornerPicker" data-default="Corner" role="group" aria-labelledby="LabelsDefaultCornerName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <label class="labelsFieldName" for="LabelsDefaultOpacity">Opacity</label>
+                            <div class="labelsRange">
+                                <input type="range" id="LabelsDefaultOpacity" min="10" max="100" step="5" />
+                                <span class="labelsRangeValue" id="LabelsDefaultOpacityValue"></span>
+                            </div>
+                        </div>
+                        <div class="labelsField">
+                            <label class="labelsFieldName" for="LabelsMaxPerCorner">Labels per corner</label>
+                            <div class="labelsInline">
+                                <select class="homeCustomListInput" id="LabelsMaxPerCorner">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                </select>
+                                <span class="fieldDescription" style="margin:0;">The first ones in the list below win.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Built-in labels</h3>
+                        <p class="labelsLead">
+                            Switch on the ones you want. Moonbase reads them from the server's own track data, and each
+                            row shows at most one answer: a 4K file never also says 1080p, and Atmos replaces TrueHD.
+                        </p>
+                        <div id="LabelsPresetGroups"><div class="homeLayoutEmpty">Loading the built-in labels&hellip;</div></div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Your labels</h3>
+                        <p class="labelsLead">
+                            In the order the apps stack them. Open one to change its look, or limit it to some users or
+                            devices.
+                        </p>
+                        <div id="PosterBadgeRulesList" class="labelsRules"></div>
+                        <div class="labelsAddRow">
+                            <button type="button" id="PosterBadgeAddRuleBtn" is="emby-button" class="raised">Add custom label</button>
+                        </div>
+                        <details class="labelsHelp" style="margin-top:16px;">
+                            <summary>How custom labels match</summary>
+                            <div class="fieldDescription">
+                                A custom label shows when <strong>all</strong> its conditions hold. <em>Any</em>, <em>No</em>
+                                and <em>Every</em> say which tracks of that type a condition looks at: at least one, none of
+                                them, or all of them. A file without such a track never passes <em>Every</em>. For the file
+                                path and the track counts, <em>Unless</em> turns the test around. Each condition is checked on
+                                its own, so two conditions on audio can be met by two different tracks.
+                                <br><br>
+                                Text tests ignore case. <em>Is one of</em> takes a list separated by commas, such as
+                                <code>fre, fra</code>. <em>Matches pattern</em> takes a
+                                <a href="https://learn.microsoft.com/dotnet/standard/base-types/regular-expression-language-quick-reference" target="_blank">regular expression</a>.
+                                Labels with the same text are alternatives: the label shows once if any of them holds. Track
+                                values are the ones in Jellyfin's Media Info for the file.
+                            </div>
+                        </details>
+                    </div>
+                    </div>
+
+                    <aside class="labelsSide">
+                    <section class="labelsPreview" aria-labelledby="LabelsPreviewTitle">
+                        <div class="labelsPreviewHead">
+                            <span id="LabelsPreviewTitle">Preview</span>
+                            <button type="button" class="homeLayoutIconButton" id="LabelsPreviewShuffle" title="Another poster" aria-label="Another poster"><span class="material-icons" aria-hidden="true" style="font-size:16px;">shuffle</span></button>
+                        </div>
+                        <div class="labelsPoster" id="LabelsPoster">
+                            <div class="labelsCorner" data-corner="topLeft"></div>
+                            <div class="labelsCorner" data-corner="topRight"></div>
+                            <div class="labelsCorner" data-corner="bottomLeft"></div>
+                            <div class="labelsCorner" data-corner="bottomRight"></div>
+                        </div>
+                        <div class="labelsPreviewNote">Every label that is on, over a poster from your library, as if its file matched them all.</div>
+                    </section>
+                    <section class="labelsPreview" aria-labelledby="LabelsTestTitle">
+                        <div class="labelsPreviewHead">
+                            <span id="LabelsTestTitle">Test a file</span>
+                        </div>
+                        <div class="labelsPreviewNote">The labels one movie or episode really gets with the rules on screen, saved or not.</div>
+                        <div class="labelsTest">
+                            <label class="labelsFieldName" for="LabelsTestSearch">Movie or episode</label>
+                            <input type="search" id="LabelsTestSearch" class="homeCustomListInput" autocomplete="off" aria-controls="LabelsTestResults" />
+                            <div class="labelsTestResults" id="LabelsTestResults" hidden></div>
+                            <button type="button" class="moonfinLinkButton labelsNoteAction" id="LabelsTestUsePreview" hidden>Use the preview's movie</button>
+                        </div>
+                        <div class="labelsReport" id="LabelsTestReport" aria-live="polite"></div>
+                    </section>
+                    </aside>
+                    </div>
+                    </div>
+
+                    <div class="moonfinSubPanel" data-labels-panel="anime">
+                    <div class="verticalSection" id="AnimeMarkersSection">
+                        <h3 class="sectionTitle">Anime Filler &amp; Recap Markers</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkersEnabled" is="emby-checkbox" />
+                                <span>Classify anime episodes as canon, mixed or filler</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Nightly task that matches your anime against
+                                <a href="https://www.animefillerlist.com/" target="_blank">AnimeFillerList</a> so Moonfin
+                                clients can badge filler episodes. No account or API key is needed. Series are matched by
+                                title, falling back to the English and romaji titles behind their ids for libraries in other languages,
+                                and only shows the site actually lists are fetched.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Libraries to look in</label>
+                            <div id="AnimeMarkerLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
+                            <div class="fieldDescription">
+                                Leave everything unchecked to consider every library. Matching is a local title lookup, so
+                                narrowing this only helps if a non-anime show shares a title with an anime.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioTrustSelectedLibraries" is="emby-checkbox" />
+                                <span>Treat everything in the selected libraries as anime</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Affects the Subbed/Dubbed pills. Normally an item also has to look like anime on its own,
+                                meaning it carries an AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an
+                                &quot;Anime&quot; genre or tag. That check is what keeps a library holding both anime and
+                                ordinary shows from marking the ordinary ones.
+                                <br><br>
+                                If the libraries you picked above are <em>only</em> anime, turn this on: the check then
+                                only costs you the entries whose metadata happens to be thin, which would otherwise show
+                                no pill at all. Has no effect while no libraries are selected, since there is then
+                                nothing to trust.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkerRecapLookup" is="emby-checkbox" />
+                                <span>Also mark recap episodes (uses MyAnimeList)</span>
+                            </label>
+                            <div class="fieldDescription">
+                                AnimeFillerList has no recap category, so this asks MyAnimeList as well. It is best-effort
+                                and additive: if that lookup fails, the filler data is unaffected.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioMarkersEnabled" is="emby-checkbox" />
+                                <span>Also mark episodes and seasons as Subbed or Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Reads the audio tracks in each file: Japanese and nothing else is <strong>Subbed</strong>,
+                                anything carrying another spoken language is <strong>Dubbed</strong>. A season gets a pill
+                                only when every episode in it agrees. This needs no internet and does not depend on
+                                AnimeFillerList, so it works for anime the site has never listed. Files whose audio has no
+                                language tag are left unmarked rather than guessed at.
+                                <br><br>
+                                <strong>In a mixed library:</strong> when you select your anime libraries above, only shows
+                                in them are marked. If you leave the selection empty the whole server is in scope, and a
+                                series is then only marked when it looks like anime on its own, meaning it carries an
+                                AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an "Anime" genre or tag. A Japanese
+                                live-action show carrying one of those would still be marked.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioMarkersMovies" is="emby-checkbox" />
+                                <span>Also mark movies as Subbed or Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Extends the same audio rules to movies, so the pill shows on a movie card anywhere it
+                                appears, including home screen rows. Separate from the option above because a movie has
+                                no series to inherit from, and a mixed library is most likely to mislabel a film.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioSeparateDualAudio" is="emby-checkbox" />
+                                <span>Label dual-audio files as Subbed/Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                A file holding the Japanese audio <em>and</em> a dub can be watched either way, so it
+                                shows as <strong>Subbed/Dubbed</strong> rather than just Dubbed. Leave off for the
+                                shorter label.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeAudioLabelStyle">Audio pill wording</label>
+                            <select is="emby-select" id="AnimeAudioLabelStyle">
+                                <option value="full">Full: Subbed / Dubbed / Subbed/Dubbed</option>
+                                <option value="short">Short: Sub / Dub / Sub/Dub</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Full wording is longer while on Phones and Tablets a shorter label fits better.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPlacement">Where to put the pills</label>
+                            <select is="emby-select" id="AnimeMarkerPlacement">
+                                <option value="below">Below the runtime</option>
+                                <option value="beside">Beside the runtime</option>
+                                <option value="thumbnail">On the episode thumbnail</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Applies to episode rows in Moonfin clients. Season and movie cards always draw the pill
+                                over the artwork, since they have no runtime line to sit next to.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Which pills to show</label>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowFiller" is="emby-checkbox" />
+                                    <span>Filler</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowMixed" is="emby-checkbox" />
+                                    <span>Mixed canon and filler</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowRecap" is="emby-checkbox" />
+                                    <span>Recap</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowMangaCanon" is="emby-checkbox" />
+                                    <span>Manga canon</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowAnimeCanon" is="emby-checkbox" />
+                                    <span>Anime canon</span>
+                                </label>
+                            </div>
+                            <div class="fieldDescription">
+                                A pill that is switched off is never sent to a client, so every Moonfin client agrees.
+                                The two canon options are off by default: nearly every episode of most shows is canon,
+                                so turning them on puts a pill on almost everything.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerMaxAgeDays">Marker refresh age (days)</label>
+                            <input type="number" id="AnimeMarkerMaxAgeDays" is="emby-input" min="1" max="365" step="1" />
+                            <div class="fieldDescription">
+                                Shows older than this are re-fetched (default 30). A finished show's classifications never
+                                change, so this mainly governs how quickly an airing show picks up new episodes.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button type="button" id="AnimeMarkerDiagBtn" is="emby-button" class="raised">Check matching</button>
+                                <button type="button" id="AnimeMarkerClearBtn" is="emby-button" class="raised">Clear marker cache</button>
+                            </div>
+                            <div class="fieldDescription">
+                                Markers appear after the <strong>Moonfin Anime Markers Sync</strong> task has run. You can
+                                start it now from Dashboard &rarr; Scheduled Tasks.
+                            </div>
+                            <div id="AnimeMarkerDiagStatus" style="margin-top:8px;font-size:0.9em;color:rgba(255,255,255,0.7);"></div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPreviewName">Preview a series</label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <input type="text" id="AnimeMarkerPreviewName" is="emby-input" placeholder="One Piece" style="flex:1;min-width:200px;" />
+                                <button type="button" id="AnimeMarkerPreviewBtn" is="emby-button" class="raised">Preview</button>
+                                <button type="button" id="AnimeMarkerFetchBtn" is="emby-button" class="raised">Fetch now</button>
+                            </div>
+                            <div class="fieldDescription">
+                                Type a series name from your library and press Preview to see exactly which of your
+                                episodes each marker landed on. <strong>Fetch now</strong> pulls that one show
+                                immediately (about ten seconds, the site's crawl delay) instead of waiting for the task.
+                            </div>
+                            <div id="AnimeMarkerPreviewStatus" style="margin-top:8px;font-size:0.9em;color:rgba(255,255,255,0.7);"></div>
+                            <div id="AnimeMarkerPreviewResult" style="margin-top:8px;max-height:420px;overflow:auto;"></div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkerVerboseLogging" is="emby-checkbox" />
+                                <span>Write a marker debug log</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Records every marker request a client makes and what it was answered with, to
+                                <code>moonfin-anime-markers.log</code> in the server's own log folder, so it also shows
+                                up under Dashboard &gt; Logs where it can be downloaded. Turn this on when a badge is not
+                                appearing: if a request never shows up here, the app never asked, which means the
+                                problem is in the app rather than on the server. Leave it off otherwise.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button type="button" id="AnimeMarkerLogBtn" is="emby-button" class="raised">Show log</button>
+                                <button type="button" id="AnimeMarkerClearLogBtn" is="emby-button" class="raised">Clear log</button>
+                            </div>
+                            <div id="AnimeMarkerLogStatus" style="margin-top:8px;font-size:0.9em;color:rgba(255,255,255,0.7);"></div>
+                            <pre id="AnimeMarkerLogOutput" style="margin-top:8px;max-height:320px;overflow:auto;font-size:0.8em;line-height:1.45;background:rgba(0,0,0,0.35);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-word;"></pre>
+                        </div>
+                    </div>
                     </div>
                     </section>
                     <section class="moonfinTabPanel" data-tab="messages">
@@ -8081,6 +8847,8 @@
                 ['Audio.Codec', 'Audio track: codec'],
                 ['Audio.Profile', 'Audio track: profile'],
                 ['Audio.Channels', 'Audio track: channels'],
+                ['Audio.Count', 'Audio tracks: how many'],
+                ['Audio.LanguageCount', 'Audio tracks: how many languages'],
                 ['Video.Height', 'Video: height'],
                 ['Video.Width', 'Video: width'],
                 ['Video.Codec', 'Video: codec'],
@@ -8089,14 +8857,77 @@
                 ['Subtitle.Title', 'Subtitle: title']
             ];
 
-            var POSTER_BADGE_OPERATORS = [['matches', 'matches'], ['notMatches', 'does not match'], ['atLeast', 'is at least']];
+            var LABEL_NUMBER_FIELDS = ['Audio.Channels', 'Audio.Count', 'Audio.LanguageCount', 'Video.Height', 'Video.Width'];
+
+            var LABEL_TEXT_OPERATORS = [['contains', 'contains'], ['is', 'is'], ['oneOf', 'is one of'], ['matches', 'matches pattern']];
+
+            var LABEL_NUMBER_OPERATORS = [['atLeast', 'is at least'], ['moreThan', 'is more than'], ['atMost', 'is at most'], ['lessThan', 'is less than'], ['is', 'is']];
+
+            // The path and a count are one value, so they read "when" or "unless" rather than
+            // naming tracks.
+            function labelMatchChoices(field) {
+                return field === 'Path' || /Count$/.test(field)
+                    ? [['any', 'When'], ['none', 'Unless']]
+                    : [['any', 'Any'], ['none', 'No'], ['every', 'Every']];
+            }
+
+            function labelOperatorChoices(field) {
+                return LABEL_NUMBER_FIELDS.indexOf(field) !== -1 ? LABEL_NUMBER_OPERATORS : LABEL_TEXT_OPERATORS;
+            }
+
+            // Keeps the test and the tracks valid for the field, after the field changes or for
+            // a rule saved by the first version, whose "does not match" is now "No" with a pattern.
+            function normalizeLabelCondition(condition) {
+                if (condition.Operator === 'notMatches') {
+                    condition.Operator = 'matches';
+                    condition.Match = 'none';
+                }
+
+                var operators = labelOperatorChoices(condition.Field);
+                if (!operators.some(function(choice) { return choice[0] === condition.Operator; })) {
+                    condition.Operator = operators[0][0];
+                }
+
+                var matches = labelMatchChoices(condition.Field);
+                if (!matches.some(function(choice) { return choice[0] === condition.Match; })) {
+                    condition.Match = 'any';
+                }
+
+                return condition;
+            }
 
             var POSTER_BADGE_DEFAULT_COLOR = '#2563eb';
 
+            var LABEL_CHOICES = {
+                Style: [['solid', 'Solid'], ['glass', 'Glass'], ['outline', 'Outline'], ['dark', 'Dark'], ['light', 'Light']],
+                Shape: [['rounded', 'Rounded'], ['pill', 'Pill'], ['square', 'Square']],
+                Size: [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['xlarge', 'Extra large']],
+                Corner: [['topLeft', 'Top left'], ['topRight', 'Top right'], ['bottomLeft', 'Bottom left'], ['bottomRight', 'Bottom right']]
+            };
+
+            var LABEL_PROFILES = [['tv', 'TV'], ['desktop', 'Desktop'], ['mobile', 'Mobile']];
+
+            var LABEL_PRESET_GROUPS = [['resolution', 'Resolution'], ['hdr', 'Dynamic range'], ['audio', 'Audio format'], ['channels', 'Channels'], ['codec', 'Video codec'], ['release', 'Release']];
+
+            // Same scale as the apps, so the preview matches what people see.
+            var LABEL_SIZE_SCALE = { small: 0.8, medium: 1, large: 1.25, xlarge: 1.5 };
+
             var posterBadgeRules = [];
+            // Replaced once the config loads; filled now so nothing draws "undefined" before that.
+            var posterBadgeDefaults = { Style: 'solid', Shape: 'rounded', Size: 'medium', Corner: 'topLeft', Opacity: 100, MaxPerCorner: 2 };
+            var posterBadgePresets = [];
+            var labelUsers = [];
+
+            // The random poster, and the file being tested with its last answer.
+            var labelPreviewItem = null;
+            var labelTestItem = null;
+            var labelTestResult = null;
+            var labelTestError = '';
+            var labelTestTimer = null;
+            var labelSearchTimer = null;
 
             function newPosterBadgeCondition() {
-                return { Field: 'Audio.Title', Operator: 'matches', Value: '' };
+                return { Field: 'Audio.Title', Match: 'any', Operator: 'contains', Value: '' };
             }
 
             // The stored rules can come back in either casing, depending on the server's serializer.
@@ -8104,24 +8935,55 @@
                 return source[key] !== undefined ? source[key] : source[key.charAt(0).toLowerCase() + key.slice(1)];
             }
 
-            function setPosterBadgeRules(rules) {
+            function labelHex(value, fallback) {
+                return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : fallback;
+            }
+
+            function labelChoice(key, value, fallback) {
+                var found = LABEL_CHOICES[key].filter(function(choice) { return choice[0] === value; })[0];
+                return found ? found[0] : fallback;
+            }
+
+            function setPosterBadgeRules(rules, defaults) {
+                defaults = defaults || {};
+                var opacity = Number(posterBadgeValue(defaults, 'Opacity'));
+                var max = Number(posterBadgeValue(defaults, 'MaxPerCorner'));
+                posterBadgeDefaults = {
+                    Style: labelChoice('Style', posterBadgeValue(defaults, 'Style'), 'solid'),
+                    Shape: labelChoice('Shape', posterBadgeValue(defaults, 'Shape'), 'rounded'),
+                    Size: labelChoice('Size', posterBadgeValue(defaults, 'Size'), 'medium'),
+                    Corner: labelChoice('Corner', posterBadgeValue(defaults, 'Corner'), 'topLeft'),
+                    Opacity: opacity >= 10 && opacity <= 100 ? opacity : 100,
+                    MaxPerCorner: max >= 1 && max <= 5 ? max : 2
+                };
+
                 posterBadgeRules = (rules || []).map(function(rule) {
-                    var color = posterBadgeValue(rule, 'Color') || '';
+                    var ruleOpacity = posterBadgeValue(rule, 'Opacity');
                     return {
                         Label: posterBadgeValue(rule, 'Label') || '',
                         // The colour picker only takes #rrggbb.
-                        Color: /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : POSTER_BADGE_DEFAULT_COLOR,
+                        Color: labelHex(posterBadgeValue(rule, 'Color'), POSTER_BADGE_DEFAULT_COLOR),
+                        TextColor: labelHex(posterBadgeValue(rule, 'TextColor'), ''),
                         Enabled: posterBadgeValue(rule, 'Enabled') !== false,
+                        Preset: posterBadgeValue(rule, 'Preset') || '',
+                        Style: labelChoice('Style', posterBadgeValue(rule, 'Style'), ''),
+                        Shape: labelChoice('Shape', posterBadgeValue(rule, 'Shape'), ''),
+                        Size: labelChoice('Size', posterBadgeValue(rule, 'Size'), ''),
+                        Corner: labelChoice('Corner', posterBadgeValue(rule, 'Corner'), ''),
+                        Opacity: ruleOpacity === null || ruleOpacity === undefined ? null : Number(ruleOpacity),
+                        UserIds: (posterBadgeValue(rule, 'UserIds') || []).slice(),
+                        Profiles: (posterBadgeValue(rule, 'Profiles') || []).slice(),
                         Conditions: (posterBadgeValue(rule, 'Conditions') || []).map(function(condition) {
-                            return {
+                            return normalizeLabelCondition({
                                 Field: posterBadgeValue(condition, 'Field') || 'Path',
-                                Operator: posterBadgeValue(condition, 'Operator') || 'matches',
+                                Match: posterBadgeValue(condition, 'Match') || 'any',
+                                Operator: posterBadgeValue(condition, 'Operator') || 'contains',
                                 Value: posterBadgeValue(condition, 'Value') || ''
-                            };
+                            });
                         })
                     };
                 });
-                renderPosterBadgeRules();
+                renderLabels();
             }
 
             function getPosterBadgeRules() {
@@ -8129,28 +8991,201 @@
                     return {
                         Label: rule.Label.trim(),
                         Color: rule.Color,
+                        TextColor: rule.TextColor || null,
                         Enabled: rule.Enabled,
-                        Conditions: rule.Conditions.map(function(condition) {
-                            return { Field: condition.Field, Operator: condition.Operator, Value: condition.Value.trim() };
+                        Preset: rule.Preset || null,
+                        Style: rule.Style || null,
+                        Shape: rule.Shape || null,
+                        Size: rule.Size || null,
+                        Corner: rule.Corner || null,
+                        Opacity: rule.Opacity,
+                        UserIds: rule.UserIds,
+                        Profiles: rule.Profiles,
+                        Conditions: rule.Preset ? [] : rule.Conditions.map(function(condition) {
+                            return { Field: condition.Field, Match: condition.Match, Operator: condition.Operator, Value: condition.Value.trim() };
                         })
                     };
                 });
             }
 
-            // Flutter's own cut-off for dark or light text over a colour, so the preview reads like the apps.
-            function posterBadgeTextColor(hex) {
+            function getPosterBadgeDefaults() {
+                return {
+                    Style: posterBadgeDefaults.Style,
+                    Shape: posterBadgeDefaults.Shape,
+                    Size: posterBadgeDefaults.Size,
+                    Corner: posterBadgeDefaults.Corner,
+                    Opacity: posterBadgeDefaults.Opacity,
+                    MaxPerCorner: posterBadgeDefaults.MaxPerCorner
+                };
+            }
+
+            function labelLuminance(hex) {
                 var value = parseInt(String(hex || '').slice(1), 16) || 0;
                 var channel = function(c) {
                     c /= 255;
                     return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
                 };
-                var luminance = 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
-                return Math.pow(luminance + 0.05, 2) > 0.15 ? '#000000' : '#ffffff';
+                return 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
+            }
+
+            // Flutter's own cut-off for dark or light text over a colour, so the preview reads like the apps.
+            function posterBadgeTextColor(hex) {
+                return Math.pow(labelLuminance(hex) + 0.05, 2) > 0.15 ? '#000000' : '#ffffff';
+            }
+
+            function labelRgba(hex, alpha) {
+                var value = parseInt(String(hex || '').slice(1), 16) || 0;
+                return 'rgba(' + ((value >> 16) & 255) + ', ' + ((value >> 8) & 255) + ', ' + (value & 255) + ', ' + Math.round(alpha * 1000) / 1000 + ')';
+            }
+
+            // The look a rule ends up with, its own settings first and the defaults after.
+            function labelLook(rule) {
+                return {
+                    color: rule.Color,
+                    textColor: rule.TextColor,
+                    style: rule.Style || posterBadgeDefaults.Style,
+                    shape: rule.Shape || posterBadgeDefaults.Shape,
+                    size: rule.Size || posterBadgeDefaults.Size,
+                    corner: rule.Corner || posterBadgeDefaults.Corner,
+                    opacity: rule.Opacity === null || rule.Opacity === undefined ? posterBadgeDefaults.Opacity : rule.Opacity
+                };
+            }
+
+            // Kept in step with poster_badges.dart in Moonfin-Core. Opacity fades the fill and the
+            // border; the text stays solid so it stays readable.
+            function labelBadgeCss(look, baseFont) {
+                var alpha = look.opacity / 100;
+                var luminance = labelLuminance(look.color);
+                var background;
+                var border = 'none';
+                var text;
+
+                if (look.style === 'glass') {
+                    background = labelRgba(look.color, 0.45 * alpha);
+                    border = '1px solid rgba(255, 255, 255, ' + 0.35 * alpha + ')';
+                    text = '#ffffff';
+                } else if (look.style === 'outline') {
+                    background = 'rgba(0, 0, 0, ' + 0.55 * alpha + ')';
+                    border = '1.5px solid ' + labelRgba(look.color, alpha);
+                    text = luminance < 0.05 ? '#ffffff' : look.color;
+                } else if (look.style === 'dark') {
+                    background = 'rgba(12, 12, 16, ' + 0.85 * alpha + ')';
+                    text = luminance < 0.05 ? '#ffffff' : look.color;
+                } else if (look.style === 'light') {
+                    background = 'rgba(255, 255, 255, ' + 0.92 * alpha + ')';
+                    text = luminance > 0.4 ? '#111111' : look.color;
+                } else {
+                    background = labelRgba(look.color, alpha);
+                    text = posterBadgeTextColor(look.color);
+                }
+
+                var scale = LABEL_SIZE_SCALE[look.size] || 1;
+                var radius = look.shape === 'pill' ? '999px' : look.shape === 'square' ? '0' : 4 * scale + 'px';
+                return 'background:' + background + ';border:' + border + ';color:' + (look.textColor || text)
+                    + ';font-size:' + baseFont * scale + 'px;padding:' + 2 * scale + 'px ' + 6 * scale + 'px;border-radius:' + radius + ';';
+            }
+
+            function labelChoiceName(key, value) {
+                var found = LABEL_CHOICES[key].filter(function(choice) { return choice[0] === value; })[0];
+                return found ? found[1] : value;
+            }
+
+            function labelOptionButtons(key, selected, withDefault) {
+                var choices = withDefault ? [['', 'Default (' + labelChoiceName(key, posterBadgeDefaults[key]) + ')']].concat(LABEL_CHOICES[key]) : LABEL_CHOICES[key];
+                return choices.map(function(choice) {
+                    var sample = '';
+                    if (key === 'Style' && choice[0]) {
+                        sample = '<span class="labelsStyleSwatch"><span class="labelsBadge" style="' + labelBadgeCss({ color: '#0284c7', style: choice[0], shape: 'rounded', size: 'medium', opacity: 100 }, 10) + '">4K</span></span>';
+                    }
+                    return '<button type="button" class="labelsOption" data-pick="' + key + '" data-value="' + esc(choice[0]) + '" aria-pressed="' + (choice[0] === selected) + '">' + sample + esc(choice[1]) + '</button>';
+                }).join('');
+            }
+
+            function labelCornerButtons(selected) {
+                return LABEL_CHOICES.Corner.map(function(choice) {
+                    return '<button type="button" data-pick="Corner" data-value="' + choice[0] + '" aria-pressed="' + (choice[0] === selected) + '" title="' + choice[1] + '" aria-label="' + choice[1] + '"></button>';
+                }).join('');
             }
 
             function posterBadgeOptions(options, selected) {
                 return options.map(function(option) {
                     return '<option value="' + esc(option[0]) + '"' + (option[0] === selected ? ' selected' : '') + '>' + esc(option[1]) + '</option>';
+                }).join('');
+            }
+
+            function labelPreset(id) {
+                return posterBadgePresets.filter(function(preset) { return preset.id === id; })[0];
+            }
+
+            function labelSummary(rule) {
+                var look = labelLook(rule);
+                var preset = rule.Preset ? labelPreset(rule.Preset) : null;
+                var groupName = preset ? (LABEL_PRESET_GROUPS.filter(function(group) { return group[0] === preset.group; })[0] || [])[1] : '';
+                var parts = [
+                    rule.Preset ? 'Built-in' + (groupName ? ', ' + groupName.toLowerCase() : '') : rule.Conditions.length + (rule.Conditions.length === 1 ? ' condition' : ' conditions'),
+                    labelChoiceName('Corner', look.corner),
+                    labelChoiceName('Style', look.style),
+                    rule.UserIds.length ? rule.UserIds.length + (rule.UserIds.length === 1 ? ' user' : ' users') : 'Everyone',
+                    rule.Profiles.length ? rule.Profiles.map(function(profile) {
+                        return (LABEL_PROFILES.filter(function(p) { return p[0] === profile; })[0] || [profile, profile])[1];
+                    }).join(', ') : 'All devices'
+                ];
+                return parts.join(' · ');
+            }
+
+            function renderLabels() {
+                renderLabelDefaults();
+                renderLabelPresets();
+                renderPosterBadgeRules();
+                renderLabelPreview();
+                if (labelTestItem) {
+                    scheduleLabelTest();
+                }
+            }
+
+            function renderLabelDefaults() {
+                ['Style', 'Shape', 'Size'].forEach(function(key) {
+                    var group = document.querySelector('#MoonfinConfigPage [data-default="' + key + '"]');
+                    if (group) {
+                        group.innerHTML = labelOptionButtons(key, posterBadgeDefaults[key], false);
+                    }
+                });
+
+                var corner = document.querySelector('#MoonfinConfigPage [data-default="Corner"]');
+                if (corner) {
+                    corner.innerHTML = labelCornerButtons(posterBadgeDefaults.Corner);
+                }
+
+                var opacity = document.querySelector('#LabelsDefaultOpacity');
+                if (opacity) {
+                    opacity.value = posterBadgeDefaults.Opacity;
+                    document.querySelector('#LabelsDefaultOpacityValue').textContent = posterBadgeDefaults.Opacity + '%';
+                }
+
+                var max = document.querySelector('#LabelsMaxPerCorner');
+                if (max) {
+                    max.value = String(posterBadgeDefaults.MaxPerCorner);
+                }
+            }
+
+            function renderLabelPresets() {
+                var container = document.querySelector('#LabelsPresetGroups');
+                if (!container || !posterBadgePresets.length) {
+                    return;
+                }
+
+                container.innerHTML = LABEL_PRESET_GROUPS.map(function(group) {
+                    var chips = posterBadgePresets.filter(function(preset) { return preset.group === group[0]; }).map(function(preset) {
+                        var rule = posterBadgeRules.filter(function(r) { return r.Preset === preset.id; })[0];
+                        var on = !!rule && rule.Enabled;
+                        var look = rule ? labelLook(rule) : { color: preset.color, style: 'solid', shape: 'rounded', size: 'medium', opacity: 100 };
+                        look.size = 'medium';
+                        return '<button type="button" class="labelsPreset" data-preset="' + esc(preset.id) + '" aria-pressed="' + on + '" aria-label="' + esc(preset.label) + '" title="' + esc(preset.description) + '">'
+                            + '<span class="labelsBadge" style="' + labelBadgeCss(look, 10) + '">' + esc(rule ? rule.Label : preset.label) + '</span>'
+                            + '<span class="material-icons" aria-hidden="true">check</span>'
+                            + '</button>';
+                    }).join('');
+                    return chips ? '<div class="labelsPresetGroup"><span class="labelsFieldName">' + group[1] + '</span><div class="labelsPresets">' + chips + '</div></div>' : '';
                 }).join('');
             }
 
@@ -8161,36 +9196,368 @@
                 }
 
                 if (posterBadgeRules.length === 0) {
-                    container.innerHTML = '<div class="homeLayoutEmpty">No rules yet, so no poster gets a badge.</div>';
+                    container.innerHTML = '<div class="homeLayoutEmpty">No labels yet. Switch on a built-in one above, or add your own.</div>';
                     return;
                 }
 
                 container.innerHTML = posterBadgeRules.map(function(rule, ruleIndex) {
-                    var conditions = rule.Conditions.map(function(condition, conditionIndex) {
-                        return '<div class="posterBadgeCondition" data-condition="' + conditionIndex + '">'
-                            + '<select class="homeCustomListInput" data-key="Field" aria-label="Field">' + posterBadgeOptions(POSTER_BADGE_FIELDS, condition.Field) + '</select>'
-                            + '<select class="homeCustomListInput" data-key="Operator" aria-label="Test">' + posterBadgeOptions(POSTER_BADGE_OPERATORS, condition.Operator) + '</select>'
-                            + '<input type="text" class="homeCustomListInput" data-key="Value" aria-label="Value" placeholder="VFQ|Qu[ée]bec" value="' + esc(condition.Value) + '" />'
-                            + '<button type="button" class="homeLayoutIconButton" data-action="removeCondition" title="Remove condition" aria-label="Remove condition">&#x2715;</button>'
-                            + '</div>';
-                    }).join('');
+                    var look = labelLook(rule);
+                    var preset = rule.Preset ? labelPreset(rule.Preset) : null;
+                    var when = rule.Preset
+                        ? '<p class="labelsLead" style="margin:4px 0 0;">' + esc(preset ? preset.description : 'A built-in label.') + '</p>'
+                        : rule.Conditions.map(function(condition, conditionIndex) {
+                            var number = LABEL_NUMBER_FIELDS.indexOf(condition.Field) !== -1;
+                            return '<div class="labelsCondition" data-condition="' + conditionIndex + '">'
+                                + '<select class="homeCustomListInput" data-key="Match" aria-label="Which tracks">' + posterBadgeOptions(labelMatchChoices(condition.Field), condition.Match) + '</select>'
+                                + '<select class="homeCustomListInput" data-key="Field" aria-label="Field">' + posterBadgeOptions(POSTER_BADGE_FIELDS, condition.Field) + '</select>'
+                                + '<select class="homeCustomListInput" data-key="Operator" aria-label="Test">' + posterBadgeOptions(labelOperatorChoices(condition.Field), condition.Operator) + '</select>'
+                                + '<input type="text" class="homeCustomListInput" data-key="Value" aria-label="Value"' + (number ? ' inputmode="decimal"' : '') + ' value="' + esc(condition.Value) + '" />'
+                                + '<button type="button" class="homeLayoutIconButton" data-action="removeCondition" title="Remove condition" aria-label="Remove condition"><span class="material-icons" aria-hidden="true" style="font-size:16px;">close</span></button>'
+                                + '</div>';
+                        }).join('') + '<button type="button" class="moonfinLinkButton" data-action="addCondition">+ Add condition</button>';
 
-                    return '<div class="posterBadgeRule" data-rule="' + ruleIndex + '">'
-                        + '<div class="posterBadgeRuleHead">'
-                        + '<span class="posterBadgePill" style="background:' + esc(rule.Color) + ';color:' + posterBadgeTextColor(rule.Color) + ';">' + esc(rule.Label.trim()) + '</span>'
-                        + '<input type="text" class="homeCustomListInput" data-key="Label" maxlength="16" aria-label="Label" placeholder="Label, such as VFQ" value="' + esc(rule.Label) + '" />'
-                        + '<input type="color" class="posterBadgeColor" data-key="Color" aria-label="Colour" value="' + esc(rule.Color) + '" />'
-                        + '<label class="homeCustomListCheckbox"><input type="checkbox" data-key="Enabled"' + (rule.Enabled ? ' checked' : '') + ' />On</label>'
-                        + '<span>'
-                        + '<button type="button" class="homeLayoutIconButton" data-action="moveUp" title="Move up" aria-label="Move up"' + (ruleIndex === 0 ? ' disabled' : '') + '>&#9650;</button> '
-                        + '<button type="button" class="homeLayoutIconButton" data-action="moveDown" title="Move down" aria-label="Move down"' + (ruleIndex === posterBadgeRules.length - 1 ? ' disabled' : '') + '>&#9660;</button> '
-                        + '<button type="button" class="homeLayoutIconButton" data-action="removeRule" title="Delete rule" aria-label="Delete rule">&#x2715;</button>'
+                    var someUsers = rule._someUsers || rule.UserIds.length > 0;
+                    var users = '<div class="labelsInline">'
+                        + '<button type="button" class="labelsOption" data-action="allUsers" aria-pressed="' + !someUsers + '">Everyone</button>'
+                        + '<button type="button" class="labelsOption" data-action="someUsers" aria-pressed="' + someUsers + '">Only some users</button>'
+                        + '</div>'
+                        + (someUsers ? labelUserPicker(rule) : '');
+
+                    var devices = '<button type="button" class="labelsOption" data-action="allProfiles" aria-pressed="' + (rule.Profiles.length === 0) + '">All devices</button>'
+                        + LABEL_PROFILES.map(function(profile) {
+                            return '<button type="button" class="labelsOption" data-profile="' + profile[0] + '" aria-pressed="' + (rule.Profiles.indexOf(profile[0]) !== -1) + '">' + profile[1] + '</button>';
+                        }).join('');
+
+                    var opacityDefault = rule.Opacity === null || rule.Opacity === undefined;
+
+                    return '<div class="labelsRule' + (rule._open ? ' is-open' : '') + (rule.Enabled ? '' : ' is-off') + '" data-rule="' + ruleIndex + '">'
+                        + '<div class="labelsRuleHead">'
+                        + '<span class="labelsRuleBadge"><span class="labelsBadge" style="' + labelBadgeCss(look, 11) + '">' + esc(rule.Label.trim()) + '</span></span>'
+                        + '<button type="button" class="labelsRuleToggle" data-action="toggleOpen" aria-expanded="' + !!rule._open + '">'
+                        + '<span class="labelsRuleName">' + esc(rule.Label.trim() || 'New label') + '</span>'
+                        + '<span class="labelsRuleSummary">' + esc(labelSummary(rule)) + '</span>'
+                        + '</button>'
+                        + '<span class="labelsRuleActions">'
+                        + '<label class="labelsSwitch" title="On"><input type="checkbox" data-key="Enabled"' + (rule.Enabled ? ' checked' : '') + ' aria-label="On" /><span aria-hidden="true"></span></label>'
+                        + '<button type="button" class="homeLayoutIconButton" data-action="moveUp" title="Move up" aria-label="Move up"' + (ruleIndex === 0 ? ' disabled' : '') + '><span class="material-icons" aria-hidden="true" style="font-size:16px;">arrow_upward</span></button>'
+                        + '<button type="button" class="homeLayoutIconButton" data-action="moveDown" title="Move down" aria-label="Move down"' + (ruleIndex === posterBadgeRules.length - 1 ? ' disabled' : '') + '><span class="material-icons" aria-hidden="true" style="font-size:16px;">arrow_downward</span></button>'
+                        + '<button type="button" class="homeLayoutIconButton" data-action="removeRule" title="Delete label" aria-label="Delete label"><span class="material-icons" aria-hidden="true" style="font-size:16px;">delete</span></button>'
                         + '</span>'
                         + '</div>'
-                        + conditions
-                        + '<button type="button" class="moonfinLinkButton" data-action="addCondition">+ Add condition</button>'
+                        + '<div class="labelsRuleBody">'
+                        + '<h4>Shows when</h4>' + when
+                        + '<h4>Look</h4>'
+                        + '<div class="labelsField"><span class="labelsFieldName">Text and colour</span><div class="labelsInline">'
+                        + '<input type="text" class="homeCustomListInput" data-key="Label" maxlength="16" aria-label="Text" value="' + esc(rule.Label) + '" />'
+                        + '<input type="color" class="labelsColor" data-key="Color" aria-label="Colour" title="Colour" value="' + esc(rule.Color) + '" />'
+                        + '<select class="homeCustomListInput" data-key="TextColorMode" aria-label="Text colour"><option value=""' + (rule.TextColor ? '' : ' selected') + '>Text colour: automatic</option><option value="custom"' + (rule.TextColor ? ' selected' : '') + '>Text colour: custom</option></select>'
+                        + (rule.TextColor ? '<input type="color" class="labelsColor" data-key="TextColor" aria-label="Text colour" title="Text colour" value="' + esc(rule.TextColor) + '" />' : '')
+                        + '</div></div>'
+                        + '<div class="labelsField"><span class="labelsFieldName">Style</span><div class="labelsStyles">' + labelOptionButtons('Style', rule.Style, true) + '</div></div>'
+                        + '<div class="labelsField"><span class="labelsFieldName">Shape</span><div class="labelsStyles">' + labelOptionButtons('Shape', rule.Shape, true) + '</div></div>'
+                        + '<div class="labelsField"><span class="labelsFieldName">Size</span><div class="labelsStyles">' + labelOptionButtons('Size', rule.Size, true) + '</div></div>'
+                        + '<div class="labelsField"><span class="labelsFieldName">Corner</span><div class="labelsInline">'
+                        + '<button type="button" class="labelsOption" data-pick="Corner" data-value="" aria-pressed="' + !rule.Corner + '">Default (' + esc(labelChoiceName('Corner', posterBadgeDefaults.Corner)) + ')</button>'
+                        + '<div class="labelsCornerPicker">' + labelCornerButtons(rule.Corner) + '</div>'
+                        + '</div></div>'
+                        + '<div class="labelsField"><span class="labelsFieldName">Opacity</span><div class="labelsInline">'
+                        + '<button type="button" class="labelsOption" data-action="defaultOpacity" aria-pressed="' + opacityDefault + '">Default (' + posterBadgeDefaults.Opacity + '%)</button>'
+                        + '<span class="labelsRange"><input type="range" min="10" max="100" step="5" data-key="Opacity" aria-label="Opacity" value="' + look.opacity + '" /><span class="labelsRangeValue">' + look.opacity + '%</span></span>'
+                        + '</div></div>'
+                        + '<h4>Who sees it</h4>'
+                        + '<div class="labelsField is-top"><span class="labelsFieldName">Users</span><div>' + users + '</div></div>'
+                        + '<div class="labelsField"><span class="labelsFieldName">Devices</span><div class="labelsStyles">' + devices + '</div></div>'
+                        + '</div>'
                         + '</div>';
                 }).join('');
+            }
+
+            // A list rather than a button per user, so a server with many users stays readable.
+            function labelUserPicker(rule) {
+                var filter = (rule._userFilter || '').toLowerCase();
+                return '<div class="labelsUserPicker">'
+                    + (labelUsers.length > 8 ? '<input type="search" class="homeCustomListInput labelsUserFilter" data-user-filter placeholder="Find a user" aria-label="Find a user" value="' + esc(rule._userFilter || '') + '" />' : '')
+                    + '<div class="labelsUserList" role="group" aria-label="Users who see this label">'
+                    + labelUsers.map(function(user) {
+                        var hidden = filter && user.Name.toLowerCase().indexOf(filter) === -1;
+                        return '<label class="labelsUserRow"' + (hidden ? ' hidden' : '') + '>'
+                            + '<input type="checkbox" data-user-check="' + esc(user.Id) + '"' + (rule.UserIds.indexOf(user.Id) !== -1 ? ' checked' : '') + ' />'
+                            + '<span>' + esc(user.Name) + '</span></label>';
+                    }).join('')
+                    + '</div>'
+                    + '<div class="labelsUserCount' + (rule.UserIds.length ? '' : ' is-warning') + '" aria-live="polite">' + esc(labelUserCount(rule)) + '</div>'
+                    + '</div>';
+            }
+
+            function labelUserCount(rule) {
+                if (!rule.UserIds.length) {
+                    return 'Tick at least one user, or the label shows to everyone.';
+                }
+
+                return rule.UserIds.length + ' of ' + labelUsers.length + ' selected';
+            }
+
+            function renderLabelPreview() {
+                var poster = document.querySelector('#LabelsPoster');
+                if (!poster) {
+                    return;
+                }
+
+                drawLabelCorners(poster, posterBadgeRules.filter(function(rule) { return rule.Enabled; }).map(function(rule) {
+                    return { label: rule.Label.trim(), look: labelLook(rule) };
+                }));
+            }
+
+            // Stacks labels in their corners, once per text and as many per corner as the apps draw.
+            function drawLabelCorners(poster, entries) {
+                var corners = {};
+                var shown = {};
+                entries.forEach(function(entry) {
+                    var key = entry.label.toLowerCase();
+                    if (!entry.label || shown[key]) {
+                        return;
+                    }
+
+                    shown[key] = true;
+                    corners[entry.look.corner] = corners[entry.look.corner] || [];
+                    if (corners[entry.look.corner].length < posterBadgeDefaults.MaxPerCorner) {
+                        corners[entry.look.corner].push('<span class="labelsBadge" style="' + labelBadgeCss(entry.look, 10.5) + '">' + esc(entry.label) + '</span>');
+                    }
+                });
+
+                Array.prototype.forEach.call(poster.querySelectorAll('.labelsCorner'), function(corner) {
+                    corner.innerHTML = (corners[corner.getAttribute('data-corner')] || []).join('');
+                });
+            }
+
+            function setLabelPosterArt(poster, item) {
+                if (!poster || !item) {
+                    return;
+                }
+
+                // An episode's own image is wide, so the poster uses its series'.
+                var imageId = item.Type === 'Episode' && item.SeriesId ? item.SeriesId : item.Id;
+                poster.style.backgroundImage = 'url("' + ApiClient.getImageUrl(imageId, { type: 'Primary', maxWidth: 400 }) + '")';
+                poster.classList.add('has-art');
+                poster.setAttribute('aria-label', item.Name);
+            }
+
+            function loadLabelPreviewPoster() {
+                if (!ApiClient.getItems) {
+                    return;
+                }
+
+                ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                    IncludeItemTypes: 'Movie',
+                    Recursive: true,
+                    SortBy: 'Random',
+                    ImageTypes: 'Primary',
+                    Limit: 1
+                }).then(function(result) {
+                    var item = result && result.Items && result.Items[0];
+                    if (!item) {
+                        return;
+                    }
+
+                    labelPreviewItem = { Id: item.Id, Name: item.Name, Type: item.Type };
+                    setLabelPosterArt(document.querySelector('#LabelsPoster'), labelPreviewItem);
+                    renderLabelTestReport();
+                }).catch(function() {});
+            }
+
+            function startLabelTest(item) {
+                labelTestItem = item;
+                labelTestResult = null;
+                labelTestError = '';
+                renderLabelTestReport();
+                runLabelTest();
+            }
+
+            function stopLabelTest() {
+                labelTestItem = null;
+                labelTestResult = null;
+                labelTestError = '';
+                renderLabelTestReport();
+            }
+
+            // Edits come one key at a time, so the test waits for a pause.
+            function scheduleLabelTest() {
+                clearTimeout(labelTestTimer);
+                labelTestTimer = setTimeout(function() { runLabelTest(); }, 400);
+            }
+
+            function runLabelTest() {
+                var item = labelTestItem;
+                if (!item) {
+                    return;
+                }
+
+                ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl('Moonfin/PosterBadges/Test'),
+                    data: JSON.stringify({ ItemId: item.Id, Rules: getPosterBadgeRules(), Defaults: getPosterBadgeDefaults() }),
+                    contentType: 'application/json',
+                    dataType: 'json'
+                }).then(function(result) {
+                    // Another file may have been picked while this one was asked about.
+                    if (labelTestItem !== item) {
+                        return;
+                    }
+
+                    labelTestResult = result;
+                    labelTestError = '';
+                    renderLabelTestReport();
+                }).catch(function() {
+                    if (labelTestItem !== item) {
+                        return;
+                    }
+
+                    labelTestResult = null;
+                    labelTestError = 'This file could not be tested. Restart the server after updating Moonbase, then try again.';
+                    renderLabelTestReport();
+                });
+            }
+
+            function labelTrackText(track) {
+                var parts = [track.Language, track.Title, track.Codec, track.Profile];
+                if (track.Channels) {
+                    parts.push(track.Channels + ' ch');
+                }
+                if (track.Width && track.Height) {
+                    parts.push(track.Width + 'x' + track.Height);
+                }
+                parts.push(track.VideoRangeType || track.VideoRange || track.ExtendedVideoType);
+                if (track.IsForced === 'True') {
+                    parts.push('forced');
+                }
+                return track.Type + ': ' + parts.filter(function(part) { return part; }).join(' \u00b7 ');
+            }
+
+            // The tested file's own poster, the labels it matches, and its tracks.
+            function renderLabelTestReport() {
+                var usePreview = document.querySelector('#LabelsTestUsePreview');
+                if (usePreview) {
+                    usePreview.hidden = !labelPreviewItem || (labelTestItem && labelTestItem.Id === labelPreviewItem.Id);
+                }
+
+                var report = document.querySelector('#LabelsTestReport');
+                if (!report) {
+                    return;
+                }
+
+                if (!labelTestItem) {
+                    report.innerHTML = '';
+                    return;
+                }
+
+                var head = '<div class="labelsReportHead"><strong>' + esc(labelTestItem.Name) + '</strong>'
+                    + '<button type="button" class="moonfinLinkButton" data-label-test="clear">Clear</button></div>';
+                var poster = '<div class="labelsPoster" id="LabelsTestPoster">'
+                    + '<div class="labelsCorner" data-corner="topLeft"></div><div class="labelsCorner" data-corner="topRight"></div>'
+                    + '<div class="labelsCorner" data-corner="bottomLeft"></div><div class="labelsCorner" data-corner="bottomRight"></div></div>';
+
+                var body;
+                if (labelTestError) {
+                    body = '<div class="labelsReportWhy">' + esc(labelTestError) + '</div>';
+                } else if (!labelTestResult) {
+                    body = '<div class="labelsReportWhy">Testing&hellip;</div>';
+                } else {
+                    var badges = labelTestResult.badges || [];
+                    var tracks = labelTestResult.tracks || [];
+                    body = '<div class="labelsMatch"><span class="labelsMatchName">Match</span>'
+                        + (badges.length
+                            ? '<div class="labelsMatchList">' + badges.map(function(badge) {
+                                return '<span class="labelsBadge" style="' + labelBadgeCss(labelTestLook(badge), 10) + '">' + esc(badge.label) + '</span>';
+                            }).join('') + '</div>'
+                            : '<span class="labelsReportWhy">No label matches this file.</span>')
+                        + '</div>'
+                        + '<details><summary>Tracks in this file (' + tracks.length + ')</summary>'
+                        + '<div class="labelsTrack">' + esc(labelTestResult.path || '') + '</div>'
+                        + tracks.map(function(track) { return '<div class="labelsTrack">' + esc(labelTrackText(track)) + '</div>'; }).join('')
+                        + '</details>';
+                }
+
+                // The fold stays open across reruns while rules are edited.
+                var wasOpen = report.querySelector('details') && report.querySelector('details').open;
+                report.innerHTML = head + poster + body;
+                if (wasOpen && report.querySelector('details')) {
+                    report.querySelector('details').open = true;
+                }
+
+                var testPoster = report.querySelector('#LabelsTestPoster');
+                setLabelPosterArt(testPoster, labelTestItem);
+                if (labelTestResult) {
+                    drawLabelCorners(testPoster, (labelTestResult.badges || []).map(function(badge) {
+                        return { label: badge.label, look: labelTestLook(badge) };
+                    }));
+                }
+            }
+
+            // The server sends each label with its look already worked out.
+            function labelTestLook(badge) {
+                return { color: badge.color, textColor: badge.textColor, style: badge.style, shape: badge.shape, size: badge.size, corner: badge.corner, opacity: badge.opacity };
+            }
+
+            function searchLabelTestItems() {
+                var input = document.querySelector('#LabelsTestSearch');
+                var list = document.querySelector('#LabelsTestResults');
+                var term = input.value.trim();
+                if (term.length < 2 || !ApiClient.getItems) {
+                    list.hidden = true;
+                    list.innerHTML = '';
+                    return;
+                }
+
+                ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                    SearchTerm: term,
+                    IncludeItemTypes: 'Movie,Episode',
+                    Recursive: true,
+                    Limit: 8
+                }).then(function(result) {
+                    // The text may have changed while this was asked.
+                    if (input.value.trim() !== term) {
+                        return;
+                    }
+
+                    var items = (result && result.Items) || [];
+                    list.innerHTML = items.length
+                        ? items.map(function(item) {
+                            var detail = item.Type === 'Episode'
+                                ? [item.SeriesName, item.ParentIndexNumber != null && item.IndexNumber != null ? 'S' + item.ParentIndexNumber + 'E' + item.IndexNumber : ''].filter(Boolean).join(' \u00b7 ')
+                                : (item.ProductionYear ? String(item.ProductionYear) : '');
+                            return '<button type="button" class="labelsTestResult" data-test-id="' + esc(item.Id) + '" data-test-name="' + esc(item.Name) + '" data-test-type="' + esc(item.Type) + '" data-test-series="' + esc(item.SeriesId || '') + '">'
+                                + '<span>' + esc(item.Name) + '</span>' + (detail ? '<small>' + esc(detail) + '</small>' : '') + '</button>';
+                        }).join('')
+                        : '<div class="homeLayoutEmpty">Nothing found.</div>';
+                    list.hidden = false;
+                }).catch(function() {});
+            }
+
+            function loadLabelSources() {
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('Moonfin/PosterBadges/Presets'), dataType: 'json' }).then(function(presets) {
+                    posterBadgePresets = presets || [];
+                    renderLabels();
+                }).catch(function() {
+                    var container = document.querySelector('#LabelsPresetGroups');
+                    if (container) {
+                        container.innerHTML = '<div class="homeLayoutEmpty">The built-in labels could not be loaded. Restart the server after updating Moonbase, then reload this page.</div>';
+                    }
+                });
+
+                if (ApiClient.getUsers) {
+                    ApiClient.getUsers().then(function(users) {
+                        labelUsers = (users || []).map(function(user) { return { Id: user.Id, Name: user.Name }; });
+                        renderPosterBadgeRules();
+                    }).catch(function() {});
+                }
+
+                loadLabelPreviewPoster();
+            }
+
+            function newLabelRule(fields) {
+                var rule = { Label: '', Color: POSTER_BADGE_DEFAULT_COLOR, TextColor: '', Enabled: true, Preset: '', Style: '', Shape: '', Size: '', Corner: '', Opacity: null, UserIds: [], Profiles: [], Conditions: [] };
+                Object.keys(fields).forEach(function(key) { rule[key] = fields[key]; });
+                return rule;
             }
 
             function updatePosterBadgeField(target) {
@@ -8203,36 +9570,223 @@
                 var rule = posterBadgeRules[Number(ruleElement.getAttribute('data-rule'))];
                 var conditionElement = target.closest('[data-condition]');
                 var owner = conditionElement ? rule.Conditions[Number(conditionElement.getAttribute('data-condition'))] : rule;
-                owner[key] = target.type === 'checkbox' ? target.checked : target.value;
 
-                if (key === 'Label' || key === 'Color') {
-                    var pill = ruleElement.querySelector('.posterBadgePill');
-                    pill.textContent = rule.Label.trim();
-                    pill.style.background = rule.Color;
-                    pill.style.color = posterBadgeTextColor(rule.Color);
+                if (key === 'TextColorMode') {
+                    rule.TextColor = target.value === 'custom' ? posterBadgeTextColor(rule.Color) : '';
+                    renderLabels();
+                    return;
+                }
+
+                // Another field can bring other tests and track choices, so the row redraws and
+                // the focus goes back to the same control.
+                if (conditionElement && key === 'Field' && owner.Field !== target.value) {
+                    owner.Field = target.value;
+                    normalizeLabelCondition(owner);
+                    renderPosterBadgeRules();
+                    var again = document.querySelector('#PosterBadgeRulesList [data-rule="' + ruleElement.getAttribute('data-rule') + '"] [data-condition="' + conditionElement.getAttribute('data-condition') + '"] [data-key="Field"]');
+                    if (again) {
+                        again.focus();
+                    }
+                    if (labelTestItem) {
+                        scheduleLabelTest();
+                    }
+                    return;
+                }
+
+                if (key === 'Opacity') {
+                    rule.Opacity = Number(target.value);
+                    target.nextElementSibling.textContent = rule.Opacity + '%';
+                    var defaultButton = ruleElement.querySelector('[data-action="defaultOpacity"]');
+                    defaultButton.setAttribute('aria-pressed', 'false');
+                } else {
+                    owner[key] = target.type === 'checkbox' ? target.checked : target.value;
+                }
+
+                if (key === 'Enabled') {
+                    ruleElement.classList.toggle('is-off', !rule.Enabled);
+                    renderLabelPresets();
+                }
+
+                // Typing keeps the focus in place, so only the parts showing the label redraw.
+                if (!conditionElement) {
+                    var look = labelLook(rule);
+                    var badge = ruleElement.querySelector('.labelsRuleBadge .labelsBadge');
+                    badge.textContent = rule.Label.trim();
+                    badge.setAttribute('style', labelBadgeCss(look, 11));
+                    ruleElement.querySelector('.labelsRuleName').textContent = rule.Label.trim() || 'New label';
+                    if (rule.Preset) {
+                        renderLabelPresets();
+                    }
+                    renderLabelPreview();
+                }
+
+                if (labelTestItem) {
+                    scheduleLabelTest();
                 }
             }
 
             function bindPosterBadgeEditor() {
+                var page = document.querySelector('#MoonfinConfigPage');
                 var container = document.querySelector('#PosterBadgeRulesList');
                 var addButton = document.querySelector('#PosterBadgeAddRuleBtn');
-                if (!container || !addButton || container.dataset.bound) {
+                if (!page || !container || !addButton || container.dataset.bound) {
                     return;
                 }
 
                 container.dataset.bound = 'true';
 
+                Array.prototype.forEach.call(page.querySelectorAll('[data-labels-tab]'), function(tab) {
+                    tab.addEventListener('click', function() {
+                        var name = tab.getAttribute('data-labels-tab');
+                        Array.prototype.forEach.call(page.querySelectorAll('[data-labels-tab]'), function(other) {
+                            var active = other === tab;
+                            other.classList.toggle('is-active', active);
+                            other.setAttribute('aria-selected', String(active));
+                        });
+                        Array.prototype.forEach.call(page.querySelectorAll('[data-labels-panel]'), function(panel) {
+                            panel.classList.toggle('is-active', panel.getAttribute('data-labels-panel') === name);
+                        });
+                    });
+                });
+
                 addButton.addEventListener('click', function() {
-                    posterBadgeRules.push({ Label: '', Color: POSTER_BADGE_DEFAULT_COLOR, Enabled: true, Conditions: [newPosterBadgeCondition()] });
+                    posterBadgeRules.forEach(function(rule) { rule._open = false; });
+                    posterBadgeRules.push(newLabelRule({ Conditions: [newPosterBadgeCondition()], _open: true }));
+                    renderLabels();
+                    var input = container.querySelector('.labelsRule:last-child [data-key="Label"]');
+                    if (input) {
+                        input.focus();
+                    }
+                });
+
+                page.querySelector('#LabelsDefaultOpacity').addEventListener('input', function(e) {
+                    posterBadgeDefaults.Opacity = Number(e.target.value);
+                    document.querySelector('#LabelsDefaultOpacityValue').textContent = posterBadgeDefaults.Opacity + '%';
+                    renderLabelPresets();
                     renderPosterBadgeRules();
+                    renderLabelPreview();
+                });
+
+                page.querySelector('#LabelsMaxPerCorner').addEventListener('change', function(e) {
+                    posterBadgeDefaults.MaxPerCorner = Number(e.target.value);
+                    renderLabelPreview();
+                });
+
+                Array.prototype.forEach.call(page.querySelectorAll('[data-default]'), function(group) {
+                    group.addEventListener('click', function(e) {
+                        var button = e.target.closest('[data-pick]');
+                        if (button) {
+                            posterBadgeDefaults[button.getAttribute('data-pick')] = button.getAttribute('data-value');
+                            renderLabels();
+                        }
+                    });
+                });
+
+                page.querySelector('#LabelsPresetGroups').addEventListener('click', function(e) {
+                    var chip = e.target.closest('[data-preset]');
+                    if (!chip) {
+                        return;
+                    }
+
+                    var id = chip.getAttribute('data-preset');
+                    var index = -1;
+                    posterBadgeRules.forEach(function(rule, i) { if (rule.Preset === id) { index = i; } });
+
+                    if (index === -1) {
+                        var preset = labelPreset(id);
+                        posterBadgeRules.push(newLabelRule({ Preset: id, Label: preset.label, Color: labelHex(preset.color, POSTER_BADGE_DEFAULT_COLOR) }));
+                    } else if (!posterBadgeRules[index].Enabled) {
+                        posterBadgeRules[index].Enabled = true;
+                    } else {
+                        posterBadgeRules.splice(index, 1);
+                    }
+
+                    renderLabels();
+                    var again = page.querySelector('#LabelsPresetGroups [data-preset="' + id + '"]');
+                    if (again) {
+                        again.focus();
+                    }
+                });
+
+                page.querySelector('#LabelsPreviewShuffle').addEventListener('click', loadLabelPreviewPoster);
+
+                page.querySelector('#LabelsTestUsePreview').addEventListener('click', function() {
+                    if (labelPreviewItem) {
+                        startLabelTest(labelPreviewItem);
+                    }
+                });
+
+                page.querySelector('#LabelsTestReport').addEventListener('click', function(e) {
+                    if (e.target.closest('[data-label-test="clear"]')) {
+                        stopLabelTest();
+                    }
+                });
+
+                page.querySelector('#LabelsTestSearch').addEventListener('input', function() {
+                    clearTimeout(labelSearchTimer);
+                    labelSearchTimer = setTimeout(function() { searchLabelTestItems(); }, 250);
+                });
+
+                page.querySelector('#LabelsTestResults').addEventListener('click', function(e) {
+                    var button = e.target.closest('[data-test-id]');
+                    if (!button) {
+                        return;
+                    }
+
+                    var list = page.querySelector('#LabelsTestResults');
+                    list.hidden = true;
+                    list.innerHTML = '';
+                    page.querySelector('#LabelsTestSearch').value = '';
+                    startLabelTest({
+                        Id: button.getAttribute('data-test-id'),
+                        Name: button.getAttribute('data-test-name'),
+                        Type: button.getAttribute('data-test-type'),
+                        SeriesId: button.getAttribute('data-test-series')
+                    });
                 });
 
                 // Edits update the rule in place rather than redrawing, so the field keeps its focus.
-                container.addEventListener('input', function(e) { updatePosterBadgeField(e.target); });
-                container.addEventListener('change', function(e) { updatePosterBadgeField(e.target); });
+                container.addEventListener('input', function(e) {
+                    if (e.target.hasAttribute('data-user-filter')) {
+                        var rule = posterBadgeRules[Number(e.target.closest('[data-rule]').getAttribute('data-rule'))];
+                        rule._userFilter = e.target.value;
+                        var filter = rule._userFilter.toLowerCase();
+                        Array.prototype.forEach.call(e.target.closest('.labelsUserPicker').querySelectorAll('.labelsUserRow'), function(row) {
+                            row.hidden = !!filter && row.textContent.toLowerCase().indexOf(filter) === -1;
+                        });
+                        return;
+                    }
+
+                    updatePosterBadgeField(e.target);
+                });
+                container.addEventListener('change', function(e) {
+                    var userId = e.target.getAttribute('data-user-check');
+                    if (userId) {
+                        var ruleElement = e.target.closest('[data-rule]');
+                        var rule = posterBadgeRules[Number(ruleElement.getAttribute('data-rule'))];
+                        var at = rule.UserIds.indexOf(userId);
+                        if (e.target.checked && at === -1) {
+                            rule.UserIds.push(userId);
+                        } else if (!e.target.checked && at !== -1) {
+                            rule.UserIds.splice(at, 1);
+                        }
+
+                        var count = ruleElement.querySelector('.labelsUserCount');
+                        count.textContent = labelUserCount(rule);
+                        count.classList.toggle('is-warning', !rule.UserIds.length);
+                        ruleElement.querySelector('.labelsRuleSummary').textContent = labelSummary(rule);
+                        return;
+                    }
+
+                    updatePosterBadgeField(e.target);
+                    // The summary line only redraws once a pick is final.
+                    if (e.target.getAttribute('data-key') === 'Opacity') {
+                        renderLabelPresets();
+                    }
+                });
 
                 container.addEventListener('click', function(e) {
-                    var button = e.target.closest('[data-action]');
+                    var button = e.target.closest('[data-action], [data-pick], [data-profile]');
                     if (!button) {
                         return;
                     }
@@ -8241,7 +9795,28 @@
                     var rule = posterBadgeRules[ruleIndex];
                     var action = button.getAttribute('data-action');
 
-                    if (action === 'removeRule') {
+                    if (button.hasAttribute('data-pick')) {
+                        rule[button.getAttribute('data-pick')] = button.getAttribute('data-value');
+                    } else if (button.hasAttribute('data-profile')) {
+                        var profile = button.getAttribute('data-profile');
+                        var at = rule.Profiles.indexOf(profile);
+                        if (at === -1) {
+                            rule.Profiles.push(profile);
+                        } else {
+                            rule.Profiles.splice(at, 1);
+                        }
+                    } else if (action === 'allUsers') {
+                        rule.UserIds = [];
+                        rule._someUsers = false;
+                    } else if (action === 'someUsers') {
+                        rule._someUsers = true;
+                    } else if (action === 'allProfiles') {
+                        rule.Profiles = [];
+                    } else if (action === 'defaultOpacity') {
+                        rule.Opacity = null;
+                    } else if (action === 'toggleOpen') {
+                        rule._open = !rule._open;
+                    } else if (action === 'removeRule') {
                         posterBadgeRules.splice(ruleIndex, 1);
                     } else if (action === 'moveUp' || action === 'moveDown') {
                         var other = action === 'moveUp' ? ruleIndex - 1 : ruleIndex + 1;
@@ -8251,10 +9826,14 @@
                         rule.Conditions.push(newPosterBadgeCondition());
                     } else if (action === 'removeCondition') {
                         rule.Conditions.splice(Number(button.closest('[data-condition]').getAttribute('data-condition')), 1);
+                    } else {
+                        return;
                     }
 
-                    renderPosterBadgeRules();
+                    renderLabels();
                 });
+
+                loadLabelSources();
             }
 
             function renderMessagesList(items) {
@@ -9194,7 +10773,7 @@
                     document.querySelector('#AnimeMarkerMaxAgeDays').value = config.AnimeMarkerMaxAgeDays || 30;
                     document.querySelector('#AnimeMarkerVerboseLogging').checked = config.AnimeMarkerVerboseLogging === true;
                     loadLibraryPicker('#AnimeMarkerLibraryPicker', 'animeMarkerLibraryCb', config.AnimeMarkerLibraryIds || []);
-                    setPosterBadgeRules(config.PosterBadgeRules);
+                    setPosterBadgeRules(config.PosterBadgeRules, config.PosterBadgeDefaults);
                     document.querySelector('#WebDefaultServerUrl').value = config.WebDefaultServerUrl || '';
                     document.querySelector('#WebForcedServerUrl').value = config.WebForcedServerUrl || '';
                     document.querySelector('#WebEnableWebRtcScan').checked = config.WebEnableWebRtcScan !== false;
@@ -9260,6 +10839,7 @@
                     bindNullableRangeInput('#DefaultThemeMusicVolume', '%');
                     setNullableRangeInput('#DefaultThemeMusicVolume', defaults.themeMusicVolume, '%');
                     setSelectValue('#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
+                    setNullableBoolSelect('#DefaultShowPosterLabels', defaults.showPosterLabels);
                     setNullableBoolSelect('#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
                     setSelectValue('#DefaultScreensaverMode', defaults.screensaverMode, 'Configured mode');
                     setSelectValue('#DefaultScreensaverBackdrop', defaults.screensaverBackdrop, 'Configured backdrop');
@@ -10120,6 +11700,7 @@
                             document.querySelectorAll('.animeMarkerLibraryCb:checked')
                         ).map(function (cb) { return cb.getAttribute('data-id'); });
                         config.PosterBadgeRules = getPosterBadgeRules();
+                        config.PosterBadgeDefaults = getPosterBadgeDefaults();
                         config.WebDefaultServerUrl = document.querySelector('#WebDefaultServerUrl').value || null;
                         config.WebForcedServerUrl = document.querySelector('#WebForcedServerUrl').value || null;
                         config.WebEnableWebRtcScan = document.querySelector('#WebEnableWebRtcScan').checked;
@@ -10210,6 +11791,7 @@
                     ds.themeMusicLoop = getNullableBoolSelect('#DefaultThemeMusicLoop');
                     ds.themeMusicVolume = getNullableRangeInput('#DefaultThemeMusicVolume');
                     ds.watchedIndicator = document.querySelector('#DefaultWatchedIndicator').value || null;
+                    ds.showPosterLabels = getNullableBoolSelect('#DefaultShowPosterLabels');
                     ds.cardFocusExpansion = getNullableBoolSelect('#DefaultCardFocusExpansion');
                     ds.screensaverMode = document.querySelector('#DefaultScreensaverMode').value || null;
                     ds.screensaverBackdrop = document.querySelector('#DefaultScreensaverBackdrop').value || null;

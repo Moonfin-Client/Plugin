@@ -239,6 +239,9 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public List<PosterBadgeRule> PosterBadgeRules { get; set; } = new();
 
+    /// <summary>The look a label gets where its rule leaves a setting empty.</summary>
+    public PosterBadgeDefaults PosterBadgeDefaults { get; set; } = new();
+
     /// <summary>
     /// Optional default server URL shown in the Moonfin web Add Server dialog.
     /// </summary>

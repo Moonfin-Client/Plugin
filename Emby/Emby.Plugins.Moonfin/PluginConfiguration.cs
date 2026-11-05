@@ -181,6 +181,9 @@ namespace Emby.Plugins.Moonfin
         /// </summary>
         public List<PosterBadgeRule> PosterBadgeRules { get; set; } = new List<PosterBadgeRule>();
 
+        /// <summary>The look a label gets where its rule leaves a setting empty.</summary>
+        public PosterBadgeDefaults PosterBadgeDefaults { get; set; } = new PosterBadgeDefaults();
+
         /// <summary>Optional default server URL shown in the Moonfin web Add Server dialog.</summary>
         public string? WebDefaultServerUrl { get; set; }
 

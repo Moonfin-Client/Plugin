@@ -9,5 +9,21 @@ namespace Emby.Plugins.Moonfin.Api
     {
         /// <summary>Comma-separated item ids.</summary>
         public string? Ids { get; set; }
+
+        /// <summary>The client's device: tv, desktop or mobile.</summary>
+        public string? Profile { get; set; }
+    }
+
+    [Route("/Moonfin/PosterBadges/Test", "POST")]
+    [Authenticated(Roles = "Admin")]
+    public class TestPosterBadgesRequest : IReturn<object>, IRequiresRequestStream
+    {
+        public System.IO.Stream RequestStream { get; set; } = null!;
+    }
+
+    [Route("/Moonfin/PosterBadges/Presets", "GET")]
+    [Authenticated(Roles = "Admin")]
+    public class GetPosterBadgePresetsRequest : IReturn<object>
+    {
     }
 }

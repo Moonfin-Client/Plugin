@@ -2767,7 +2767,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#AnimeMarkerMaxAgeDays').value = config.AnimeMarkerMaxAgeDays || 30;
             view.querySelector('#AnimeMarkerVerboseLogging').checked = config.AnimeMarkerVerboseLogging === true;
             loadLibraryPicker(view, '#AnimeMarkerLibraryPicker', 'animeMarkerLibraryCb', config.AnimeMarkerLibraryIds || []);
-            setPosterBadgeRules(view, config.PosterBadgeRules);
+            setPosterBadgeRules(view, config.PosterBadgeRules, config.PosterBadgeDefaults);
             view.querySelector('#FcmServiceAccountJson').value = config.FcmServiceAccountJson || '';
             view.querySelector('#FcmServiceAccountPath').value = config.FcmServiceAccountPath || '';
             view.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
@@ -2844,6 +2844,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         bindNullableRangeInput(view, '#DefaultThemeMusicVolume', '%');
         setNullableRangeInput(view, '#DefaultThemeMusicVolume', defaults.themeMusicVolume, '%');
         setSelectValue(view, '#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
+        setNullableBoolSelect(view, '#DefaultShowPosterLabels', defaults.showPosterLabels);
         setNullableBoolSelect(view, '#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
         setSelectValue(view, '#DefaultScreensaverMode', defaults.screensaverMode, 'Configured mode');
         setSelectValue(view, '#DefaultScreensaverBackdrop', defaults.screensaverBackdrop, 'Configured backdrop');
@@ -3161,6 +3162,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     .map(function (cb) { return cb.getAttribute('data-id'); });
             }
             config.PosterBadgeRules = getPosterBadgeRules();
+            config.PosterBadgeDefaults = getPosterBadgeDefaults();
             config.FcmServiceAccountJson = view.querySelector('#FcmServiceAccountJson').value || null;
             config.FcmServiceAccountPath = view.querySelector('#FcmServiceAccountPath').value || null;
             config.PushRelayUrl = (view.querySelector('#PushRelayUrl').value || '').trim()
@@ -3254,6 +3256,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.themeMusicLoop = getNullableBoolSelect(view, '#DefaultThemeMusicLoop');
         d.themeMusicVolume = getNullableRangeInput(view, '#DefaultThemeMusicVolume');
         d.watchedIndicator = view.querySelector('#DefaultWatchedIndicator').value || null;
+        d.showPosterLabels = getNullableBoolSelect(view, '#DefaultShowPosterLabels');
         d.cardFocusExpansion = getNullableBoolSelect(view, '#DefaultCardFocusExpansion');
         d.screensaverMode = view.querySelector('#DefaultScreensaverMode').value || null;
         d.screensaverBackdrop = view.querySelector('#DefaultScreensaverBackdrop').value || null;
@@ -3989,6 +3992,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         ['Audio.Codec', 'Audio track: codec'],
         ['Audio.Profile', 'Audio track: profile'],
         ['Audio.Channels', 'Audio track: channels'],
+        ['Audio.Count', 'Audio tracks: how many'],
+        ['Audio.LanguageCount', 'Audio tracks: how many languages'],
         ['Video.Height', 'Video: height'],
         ['Video.Width', 'Video: width'],
         ['Video.Codec', 'Video: codec'],
@@ -3997,14 +4002,77 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         ['Subtitle.Title', 'Subtitle: title']
     ];
 
-    var POSTER_BADGE_OPERATORS = [['matches', 'matches'], ['notMatches', 'does not match'], ['atLeast', 'is at least']];
+    var LABEL_NUMBER_FIELDS = ['Audio.Channels', 'Audio.Count', 'Audio.LanguageCount', 'Video.Height', 'Video.Width'];
+
+    var LABEL_TEXT_OPERATORS = [['contains', 'contains'], ['is', 'is'], ['oneOf', 'is one of'], ['matches', 'matches pattern']];
+
+    var LABEL_NUMBER_OPERATORS = [['atLeast', 'is at least'], ['moreThan', 'is more than'], ['atMost', 'is at most'], ['lessThan', 'is less than'], ['is', 'is']];
+
+    // The path and a count are one value, so they read "when" or "unless" rather than
+    // naming tracks.
+    function labelMatchChoices(field) {
+        return field === 'Path' || /Count$/.test(field)
+            ? [['any', 'When'], ['none', 'Unless']]
+            : [['any', 'Any'], ['none', 'No'], ['every', 'Every']];
+    }
+
+    function labelOperatorChoices(field) {
+        return LABEL_NUMBER_FIELDS.indexOf(field) !== -1 ? LABEL_NUMBER_OPERATORS : LABEL_TEXT_OPERATORS;
+    }
+
+    // Keeps the test and the tracks valid for the field, after the field changes or for
+    // a rule saved by the first version, whose "does not match" is now "No" with a pattern.
+    function normalizeLabelCondition(condition) {
+        if (condition.Operator === 'notMatches') {
+            condition.Operator = 'matches';
+            condition.Match = 'none';
+        }
+
+        var operators = labelOperatorChoices(condition.Field);
+        if (!operators.some(function(choice) { return choice[0] === condition.Operator; })) {
+            condition.Operator = operators[0][0];
+        }
+
+        var matches = labelMatchChoices(condition.Field);
+        if (!matches.some(function(choice) { return choice[0] === condition.Match; })) {
+            condition.Match = 'any';
+        }
+
+        return condition;
+    }
 
     var POSTER_BADGE_DEFAULT_COLOR = '#2563eb';
 
+    var LABEL_CHOICES = {
+        Style: [['solid', 'Solid'], ['glass', 'Glass'], ['outline', 'Outline'], ['dark', 'Dark'], ['light', 'Light']],
+        Shape: [['rounded', 'Rounded'], ['pill', 'Pill'], ['square', 'Square']],
+        Size: [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['xlarge', 'Extra large']],
+        Corner: [['topLeft', 'Top left'], ['topRight', 'Top right'], ['bottomLeft', 'Bottom left'], ['bottomRight', 'Bottom right']]
+    };
+
+    var LABEL_PROFILES = [['tv', 'TV'], ['desktop', 'Desktop'], ['mobile', 'Mobile']];
+
+    var LABEL_PRESET_GROUPS = [['resolution', 'Resolution'], ['hdr', 'Dynamic range'], ['audio', 'Audio format'], ['channels', 'Channels'], ['codec', 'Video codec'], ['release', 'Release']];
+
+    // Same scale as the apps, so the preview matches what people see.
+    var LABEL_SIZE_SCALE = { small: 0.8, medium: 1, large: 1.25, xlarge: 1.5 };
+
     var posterBadgeRules = [];
+    // Replaced once the config loads; filled now so nothing draws "undefined" before that.
+    var posterBadgeDefaults = { Style: 'solid', Shape: 'rounded', Size: 'medium', Corner: 'topLeft', Opacity: 100, MaxPerCorner: 2 };
+    var posterBadgePresets = [];
+    var labelUsers = [];
+
+    // The random poster, and the file being tested with its last answer.
+    var labelPreviewItem = null;
+    var labelTestItem = null;
+    var labelTestResult = null;
+    var labelTestError = '';
+    var labelTestTimer = null;
+    var labelSearchTimer = null;
 
     function newPosterBadgeCondition() {
-        return { Field: 'Audio.Title', Operator: 'matches', Value: '' };
+        return { Field: 'Audio.Title', Match: 'any', Operator: 'contains', Value: '' };
     }
 
     // The stored rules can come back in either casing, depending on the server's serializer.
@@ -4012,24 +4080,55 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return source[key] !== undefined ? source[key] : source[key.charAt(0).toLowerCase() + key.slice(1)];
     }
 
-    function setPosterBadgeRules(view, rules) {
+    function labelHex(value, fallback) {
+        return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : fallback;
+    }
+
+    function labelChoice(key, value, fallback) {
+        var found = LABEL_CHOICES[key].filter(function(choice) { return choice[0] === value; })[0];
+        return found ? found[0] : fallback;
+    }
+
+    function setPosterBadgeRules(view, rules, defaults) {
+        defaults = defaults || {};
+        var opacity = Number(posterBadgeValue(defaults, 'Opacity'));
+        var max = Number(posterBadgeValue(defaults, 'MaxPerCorner'));
+        posterBadgeDefaults = {
+            Style: labelChoice('Style', posterBadgeValue(defaults, 'Style'), 'solid'),
+            Shape: labelChoice('Shape', posterBadgeValue(defaults, 'Shape'), 'rounded'),
+            Size: labelChoice('Size', posterBadgeValue(defaults, 'Size'), 'medium'),
+            Corner: labelChoice('Corner', posterBadgeValue(defaults, 'Corner'), 'topLeft'),
+            Opacity: opacity >= 10 && opacity <= 100 ? opacity : 100,
+            MaxPerCorner: max >= 1 && max <= 5 ? max : 2
+        };
+
         posterBadgeRules = (rules || []).map(function(rule) {
-            var color = posterBadgeValue(rule, 'Color') || '';
+            var ruleOpacity = posterBadgeValue(rule, 'Opacity');
             return {
                 Label: posterBadgeValue(rule, 'Label') || '',
                 // The colour picker only takes #rrggbb.
-                Color: /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : POSTER_BADGE_DEFAULT_COLOR,
+                Color: labelHex(posterBadgeValue(rule, 'Color'), POSTER_BADGE_DEFAULT_COLOR),
+                TextColor: labelHex(posterBadgeValue(rule, 'TextColor'), ''),
                 Enabled: posterBadgeValue(rule, 'Enabled') !== false,
+                Preset: posterBadgeValue(rule, 'Preset') || '',
+                Style: labelChoice('Style', posterBadgeValue(rule, 'Style'), ''),
+                Shape: labelChoice('Shape', posterBadgeValue(rule, 'Shape'), ''),
+                Size: labelChoice('Size', posterBadgeValue(rule, 'Size'), ''),
+                Corner: labelChoice('Corner', posterBadgeValue(rule, 'Corner'), ''),
+                Opacity: ruleOpacity === null || ruleOpacity === undefined ? null : Number(ruleOpacity),
+                UserIds: (posterBadgeValue(rule, 'UserIds') || []).slice(),
+                Profiles: (posterBadgeValue(rule, 'Profiles') || []).slice(),
                 Conditions: (posterBadgeValue(rule, 'Conditions') || []).map(function(condition) {
-                    return {
+                    return normalizeLabelCondition({
                         Field: posterBadgeValue(condition, 'Field') || 'Path',
-                        Operator: posterBadgeValue(condition, 'Operator') || 'matches',
+                        Match: posterBadgeValue(condition, 'Match') || 'any',
+                        Operator: posterBadgeValue(condition, 'Operator') || 'contains',
                         Value: posterBadgeValue(condition, 'Value') || ''
-                    };
+                    });
                 })
             };
         });
-        renderPosterBadgeRules(view);
+        renderLabels(view);
     }
 
     function getPosterBadgeRules() {
@@ -4037,28 +4136,201 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             return {
                 Label: rule.Label.trim(),
                 Color: rule.Color,
+                TextColor: rule.TextColor || null,
                 Enabled: rule.Enabled,
-                Conditions: rule.Conditions.map(function(condition) {
-                    return { Field: condition.Field, Operator: condition.Operator, Value: condition.Value.trim() };
+                Preset: rule.Preset || null,
+                Style: rule.Style || null,
+                Shape: rule.Shape || null,
+                Size: rule.Size || null,
+                Corner: rule.Corner || null,
+                Opacity: rule.Opacity,
+                UserIds: rule.UserIds,
+                Profiles: rule.Profiles,
+                Conditions: rule.Preset ? [] : rule.Conditions.map(function(condition) {
+                    return { Field: condition.Field, Match: condition.Match, Operator: condition.Operator, Value: condition.Value.trim() };
                 })
             };
         });
     }
 
-    // Flutter's own cut-off for dark or light text over a colour, so the preview reads like the apps.
-    function posterBadgeTextColor(hex) {
+    function getPosterBadgeDefaults() {
+        return {
+            Style: posterBadgeDefaults.Style,
+            Shape: posterBadgeDefaults.Shape,
+            Size: posterBadgeDefaults.Size,
+            Corner: posterBadgeDefaults.Corner,
+            Opacity: posterBadgeDefaults.Opacity,
+            MaxPerCorner: posterBadgeDefaults.MaxPerCorner
+        };
+    }
+
+    function labelLuminance(hex) {
         var value = parseInt(String(hex || '').slice(1), 16) || 0;
         var channel = function(c) {
             c /= 255;
             return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
         };
-        var luminance = 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
-        return Math.pow(luminance + 0.05, 2) > 0.15 ? '#000000' : '#ffffff';
+        return 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
+    }
+
+    // Flutter's own cut-off for dark or light text over a colour, so the preview reads like the apps.
+    function posterBadgeTextColor(hex) {
+        return Math.pow(labelLuminance(hex) + 0.05, 2) > 0.15 ? '#000000' : '#ffffff';
+    }
+
+    function labelRgba(hex, alpha) {
+        var value = parseInt(String(hex || '').slice(1), 16) || 0;
+        return 'rgba(' + ((value >> 16) & 255) + ', ' + ((value >> 8) & 255) + ', ' + (value & 255) + ', ' + Math.round(alpha * 1000) / 1000 + ')';
+    }
+
+    // The look a rule ends up with, its own settings first and the defaults after.
+    function labelLook(rule) {
+        return {
+            color: rule.Color,
+            textColor: rule.TextColor,
+            style: rule.Style || posterBadgeDefaults.Style,
+            shape: rule.Shape || posterBadgeDefaults.Shape,
+            size: rule.Size || posterBadgeDefaults.Size,
+            corner: rule.Corner || posterBadgeDefaults.Corner,
+            opacity: rule.Opacity === null || rule.Opacity === undefined ? posterBadgeDefaults.Opacity : rule.Opacity
+        };
+    }
+
+    // Kept in step with poster_badges.dart in Moonfin-Core. Opacity fades the fill and the
+    // border; the text stays solid so it stays readable.
+    function labelBadgeCss(look, baseFont) {
+        var alpha = look.opacity / 100;
+        var luminance = labelLuminance(look.color);
+        var background;
+        var border = 'none';
+        var text;
+
+        if (look.style === 'glass') {
+            background = labelRgba(look.color, 0.45 * alpha);
+            border = '1px solid rgba(255, 255, 255, ' + 0.35 * alpha + ')';
+            text = '#ffffff';
+        } else if (look.style === 'outline') {
+            background = 'rgba(0, 0, 0, ' + 0.55 * alpha + ')';
+            border = '1.5px solid ' + labelRgba(look.color, alpha);
+            text = luminance < 0.05 ? '#ffffff' : look.color;
+        } else if (look.style === 'dark') {
+            background = 'rgba(12, 12, 16, ' + 0.85 * alpha + ')';
+            text = luminance < 0.05 ? '#ffffff' : look.color;
+        } else if (look.style === 'light') {
+            background = 'rgba(255, 255, 255, ' + 0.92 * alpha + ')';
+            text = luminance > 0.4 ? '#111111' : look.color;
+        } else {
+            background = labelRgba(look.color, alpha);
+            text = posterBadgeTextColor(look.color);
+        }
+
+        var scale = LABEL_SIZE_SCALE[look.size] || 1;
+        var radius = look.shape === 'pill' ? '999px' : look.shape === 'square' ? '0' : 4 * scale + 'px';
+        return 'background:' + background + ';border:' + border + ';color:' + (look.textColor || text)
+            + ';font-size:' + baseFont * scale + 'px;padding:' + 2 * scale + 'px ' + 6 * scale + 'px;border-radius:' + radius + ';';
+    }
+
+    function labelChoiceName(key, value) {
+        var found = LABEL_CHOICES[key].filter(function(choice) { return choice[0] === value; })[0];
+        return found ? found[1] : value;
+    }
+
+    function labelOptionButtons(key, selected, withDefault) {
+        var choices = withDefault ? [['', 'Default (' + labelChoiceName(key, posterBadgeDefaults[key]) + ')']].concat(LABEL_CHOICES[key]) : LABEL_CHOICES[key];
+        return choices.map(function(choice) {
+            var sample = '';
+            if (key === 'Style' && choice[0]) {
+                sample = '<span class="labelsStyleSwatch"><span class="labelsBadge" style="' + labelBadgeCss({ color: '#0284c7', style: choice[0], shape: 'rounded', size: 'medium', opacity: 100 }, 10) + '">4K</span></span>';
+            }
+            return '<button type="button" class="labelsOption" data-pick="' + key + '" data-value="' + esc(choice[0]) + '" aria-pressed="' + (choice[0] === selected) + '">' + sample + esc(choice[1]) + '</button>';
+        }).join('');
+    }
+
+    function labelCornerButtons(selected) {
+        return LABEL_CHOICES.Corner.map(function(choice) {
+            return '<button type="button" data-pick="Corner" data-value="' + choice[0] + '" aria-pressed="' + (choice[0] === selected) + '" title="' + choice[1] + '" aria-label="' + choice[1] + '"></button>';
+        }).join('');
     }
 
     function posterBadgeOptions(options, selected) {
         return options.map(function(option) {
             return '<option value="' + esc(option[0]) + '"' + (option[0] === selected ? ' selected' : '') + '>' + esc(option[1]) + '</option>';
+        }).join('');
+    }
+
+    function labelPreset(id) {
+        return posterBadgePresets.filter(function(preset) { return preset.id === id; })[0];
+    }
+
+    function labelSummary(rule) {
+        var look = labelLook(rule);
+        var preset = rule.Preset ? labelPreset(rule.Preset) : null;
+        var groupName = preset ? (LABEL_PRESET_GROUPS.filter(function(group) { return group[0] === preset.group; })[0] || [])[1] : '';
+        var parts = [
+            rule.Preset ? 'Built-in' + (groupName ? ', ' + groupName.toLowerCase() : '') : rule.Conditions.length + (rule.Conditions.length === 1 ? ' condition' : ' conditions'),
+            labelChoiceName('Corner', look.corner),
+            labelChoiceName('Style', look.style),
+            rule.UserIds.length ? rule.UserIds.length + (rule.UserIds.length === 1 ? ' user' : ' users') : 'Everyone',
+            rule.Profiles.length ? rule.Profiles.map(function(profile) {
+                return (LABEL_PROFILES.filter(function(p) { return p[0] === profile; })[0] || [profile, profile])[1];
+            }).join(', ') : 'All devices'
+        ];
+        return parts.join(' · ');
+    }
+
+    function renderLabels(view) {
+        renderLabelDefaults(view);
+        renderLabelPresets(view);
+        renderPosterBadgeRules(view);
+        renderLabelPreview(view);
+        if (labelTestItem) {
+            scheduleLabelTest(view);
+        }
+    }
+
+    function renderLabelDefaults(view) {
+        ['Style', 'Shape', 'Size'].forEach(function(key) {
+            var group = view.querySelector('[data-default="' + key + '"]');
+            if (group) {
+                group.innerHTML = labelOptionButtons(key, posterBadgeDefaults[key], false);
+            }
+        });
+
+        var corner = view.querySelector('[data-default="Corner"]');
+        if (corner) {
+            corner.innerHTML = labelCornerButtons(posterBadgeDefaults.Corner);
+        }
+
+        var opacity = view.querySelector('#LabelsDefaultOpacity');
+        if (opacity) {
+            opacity.value = posterBadgeDefaults.Opacity;
+            view.querySelector('#LabelsDefaultOpacityValue').textContent = posterBadgeDefaults.Opacity + '%';
+        }
+
+        var max = view.querySelector('#LabelsMaxPerCorner');
+        if (max) {
+            max.value = String(posterBadgeDefaults.MaxPerCorner);
+        }
+    }
+
+    function renderLabelPresets(view) {
+        var container = view.querySelector('#LabelsPresetGroups');
+        if (!container || !posterBadgePresets.length) {
+            return;
+        }
+
+        container.innerHTML = LABEL_PRESET_GROUPS.map(function(group) {
+            var chips = posterBadgePresets.filter(function(preset) { return preset.group === group[0]; }).map(function(preset) {
+                var rule = posterBadgeRules.filter(function(r) { return r.Preset === preset.id; })[0];
+                var on = !!rule && rule.Enabled;
+                var look = rule ? labelLook(rule) : { color: preset.color, style: 'solid', shape: 'rounded', size: 'medium', opacity: 100 };
+                look.size = 'medium';
+                return '<button type="button" class="labelsPreset" data-preset="' + esc(preset.id) + '" aria-pressed="' + on + '" aria-label="' + esc(preset.label) + '" title="' + esc(preset.description) + '">'
+                    + '<span class="labelsBadge" style="' + labelBadgeCss(look, 10) + '">' + esc(rule ? rule.Label : preset.label) + '</span>'
+                    + '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+                    + '</button>';
+            }).join('');
+            return chips ? '<div class="labelsPresetGroup"><span class="labelsFieldName">' + group[1] + '</span><div class="labelsPresets">' + chips + '</div></div>' : '';
         }).join('');
     }
 
@@ -4069,39 +4341,371 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }
 
         if (posterBadgeRules.length === 0) {
-            container.innerHTML = '<div class="homeLayoutEmpty">No rules yet, so no poster gets a badge.</div>';
+            container.innerHTML = '<div class="homeLayoutEmpty">No labels yet. Switch on a built-in one above, or add your own.</div>';
             return;
         }
 
         container.innerHTML = posterBadgeRules.map(function(rule, ruleIndex) {
-            var conditions = rule.Conditions.map(function(condition, conditionIndex) {
-                return '<div class="posterBadgeCondition" data-condition="' + conditionIndex + '">'
-                    + '<select class="homeCustomListInput" data-key="Field" aria-label="Field">' + posterBadgeOptions(POSTER_BADGE_FIELDS, condition.Field) + '</select>'
-                    + '<select class="homeCustomListInput" data-key="Operator" aria-label="Test">' + posterBadgeOptions(POSTER_BADGE_OPERATORS, condition.Operator) + '</select>'
-                    + '<input type="text" class="homeCustomListInput" data-key="Value" aria-label="Value" placeholder="VFQ|Qu[ée]bec" value="' + esc(condition.Value) + '" />'
-                    + '<button type="button" class="homeLayoutIconButton" data-action="removeCondition" title="Remove condition" aria-label="Remove condition">&#x2715;</button>'
-                    + '</div>';
-            }).join('');
+            var look = labelLook(rule);
+            var preset = rule.Preset ? labelPreset(rule.Preset) : null;
+            var when = rule.Preset
+                ? '<p class="labelsLead" style="margin:4px 0 0;">' + esc(preset ? preset.description : 'A built-in label.') + '</p>'
+                : rule.Conditions.map(function(condition, conditionIndex) {
+                    var number = LABEL_NUMBER_FIELDS.indexOf(condition.Field) !== -1;
+                    return '<div class="labelsCondition" data-condition="' + conditionIndex + '">'
+                        + '<select class="homeCustomListInput" data-key="Match" aria-label="Which tracks">' + posterBadgeOptions(labelMatchChoices(condition.Field), condition.Match) + '</select>'
+                        + '<select class="homeCustomListInput" data-key="Field" aria-label="Field">' + posterBadgeOptions(POSTER_BADGE_FIELDS, condition.Field) + '</select>'
+                        + '<select class="homeCustomListInput" data-key="Operator" aria-label="Test">' + posterBadgeOptions(labelOperatorChoices(condition.Field), condition.Operator) + '</select>'
+                        + '<input type="text" class="homeCustomListInput" data-key="Value" aria-label="Value"' + (number ? ' inputmode="decimal"' : '') + ' value="' + esc(condition.Value) + '" />'
+                        + '<button type="button" class="homeLayoutIconButton" data-action="removeCondition" title="Remove condition" aria-label="Remove condition"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>'
+                        + '</div>';
+                }).join('') + '<button type="button" class="moonfinLinkButton" data-action="addCondition">+ Add condition</button>';
 
-            return '<div class="posterBadgeRule" data-rule="' + ruleIndex + '">'
-                + '<div class="posterBadgeRuleHead">'
-                + '<span class="posterBadgePill" style="background:' + esc(rule.Color) + ';color:' + posterBadgeTextColor(rule.Color) + ';">' + esc(rule.Label.trim()) + '</span>'
-                + '<input type="text" class="homeCustomListInput" data-key="Label" maxlength="16" aria-label="Label" placeholder="Label, such as VFQ" value="' + esc(rule.Label) + '" />'
-                + '<input type="color" class="posterBadgeColor" data-key="Color" aria-label="Colour" value="' + esc(rule.Color) + '" />'
-                + '<label class="homeCustomListCheckbox"><input type="checkbox" data-key="Enabled"' + (rule.Enabled ? ' checked' : '') + ' />On</label>'
-                + '<span>'
-                + '<button type="button" class="homeLayoutIconButton" data-action="moveUp" title="Move up" aria-label="Move up"' + (ruleIndex === 0 ? ' disabled' : '') + '>&#9650;</button> '
-                + '<button type="button" class="homeLayoutIconButton" data-action="moveDown" title="Move down" aria-label="Move down"' + (ruleIndex === posterBadgeRules.length - 1 ? ' disabled' : '') + '>&#9660;</button> '
-                + '<button type="button" class="homeLayoutIconButton" data-action="removeRule" title="Delete rule" aria-label="Delete rule">&#x2715;</button>'
+            var someUsers = rule._someUsers || rule.UserIds.length > 0;
+            var users = '<div class="labelsInline">'
+                + '<button type="button" class="labelsOption" data-action="allUsers" aria-pressed="' + !someUsers + '">Everyone</button>'
+                + '<button type="button" class="labelsOption" data-action="someUsers" aria-pressed="' + someUsers + '">Only some users</button>'
+                + '</div>'
+                + (someUsers ? labelUserPicker(rule) : '');
+
+            var devices = '<button type="button" class="labelsOption" data-action="allProfiles" aria-pressed="' + (rule.Profiles.length === 0) + '">All devices</button>'
+                + LABEL_PROFILES.map(function(profile) {
+                    return '<button type="button" class="labelsOption" data-profile="' + profile[0] + '" aria-pressed="' + (rule.Profiles.indexOf(profile[0]) !== -1) + '">' + profile[1] + '</button>';
+                }).join('');
+
+            var opacityDefault = rule.Opacity === null || rule.Opacity === undefined;
+
+            return '<div class="labelsRule' + (rule._open ? ' is-open' : '') + (rule.Enabled ? '' : ' is-off') + '" data-rule="' + ruleIndex + '">'
+                + '<div class="labelsRuleHead">'
+                + '<span class="labelsRuleBadge"><span class="labelsBadge" style="' + labelBadgeCss(look, 11) + '">' + esc(rule.Label.trim()) + '</span></span>'
+                + '<button type="button" class="labelsRuleToggle" data-action="toggleOpen" aria-expanded="' + !!rule._open + '">'
+                + '<span class="labelsRuleName">' + esc(rule.Label.trim() || 'New label') + '</span>'
+                + '<span class="labelsRuleSummary">' + esc(labelSummary(rule)) + '</span>'
+                + '</button>'
+                + '<span class="labelsRuleActions">'
+                + '<label class="labelsSwitch" title="On"><input type="checkbox" data-key="Enabled"' + (rule.Enabled ? ' checked' : '') + ' aria-label="On" /><span aria-hidden="true"></span></label>'
+                + '<button type="button" class="homeLayoutIconButton" data-action="moveUp" title="Move up" aria-label="Move up"' + (ruleIndex === 0 ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></button>'
+                + '<button type="button" class="homeLayoutIconButton" data-action="moveDown" title="Move down" aria-label="Move down"' + (ruleIndex === posterBadgeRules.length - 1 ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg></button>'
+                + '<button type="button" class="homeLayoutIconButton" data-action="removeRule" title="Delete label" aria-label="Delete label"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>'
                 + '</span>'
                 + '</div>'
-                + conditions
-                + '<button type="button" class="moonfinLinkButton" data-action="addCondition">+ Add condition</button>'
+                + '<div class="labelsRuleBody">'
+                + '<h4>Shows when</h4>' + when
+                + '<h4>Look</h4>'
+                + '<div class="labelsField"><span class="labelsFieldName">Text and colour</span><div class="labelsInline">'
+                + '<input type="text" class="homeCustomListInput" data-key="Label" maxlength="16" aria-label="Text" value="' + esc(rule.Label) + '" />'
+                + '<input type="color" class="labelsColor" data-key="Color" aria-label="Colour" title="Colour" value="' + esc(rule.Color) + '" />'
+                + '<select class="homeCustomListInput" data-key="TextColorMode" aria-label="Text colour"><option value=""' + (rule.TextColor ? '' : ' selected') + '>Text colour: automatic</option><option value="custom"' + (rule.TextColor ? ' selected' : '') + '>Text colour: custom</option></select>'
+                + (rule.TextColor ? '<input type="color" class="labelsColor" data-key="TextColor" aria-label="Text colour" title="Text colour" value="' + esc(rule.TextColor) + '" />' : '')
+                + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Style</span><div class="labelsStyles">' + labelOptionButtons('Style', rule.Style, true) + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Shape</span><div class="labelsStyles">' + labelOptionButtons('Shape', rule.Shape, true) + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Size</span><div class="labelsStyles">' + labelOptionButtons('Size', rule.Size, true) + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Corner</span><div class="labelsInline">'
+                + '<button type="button" class="labelsOption" data-pick="Corner" data-value="" aria-pressed="' + !rule.Corner + '">Default (' + esc(labelChoiceName('Corner', posterBadgeDefaults.Corner)) + ')</button>'
+                + '<div class="labelsCornerPicker">' + labelCornerButtons(rule.Corner) + '</div>'
+                + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Opacity</span><div class="labelsInline">'
+                + '<button type="button" class="labelsOption" data-action="defaultOpacity" aria-pressed="' + opacityDefault + '">Default (' + posterBadgeDefaults.Opacity + '%)</button>'
+                + '<span class="labelsRange"><input type="range" min="10" max="100" step="5" data-key="Opacity" aria-label="Opacity" value="' + look.opacity + '" /><span class="labelsRangeValue">' + look.opacity + '%</span></span>'
+                + '</div></div>'
+                + '<h4>Who sees it</h4>'
+                + '<div class="labelsField is-top"><span class="labelsFieldName">Users</span><div>' + users + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Devices</span><div class="labelsStyles">' + devices + '</div></div>'
+                + '</div>'
                 + '</div>';
         }).join('');
     }
 
-    function updatePosterBadgeField(target) {
+    // A list rather than a button per user, so a server with many users stays readable.
+    function labelUserPicker(rule) {
+        var filter = (rule._userFilter || '').toLowerCase();
+        return '<div class="labelsUserPicker">'
+            + (labelUsers.length > 8 ? '<input type="search" class="homeCustomListInput labelsUserFilter" data-user-filter placeholder="Find a user" aria-label="Find a user" value="' + esc(rule._userFilter || '') + '" />' : '')
+            + '<div class="labelsUserList" role="group" aria-label="Users who see this label">'
+            + labelUsers.map(function(user) {
+                var hidden = filter && user.Name.toLowerCase().indexOf(filter) === -1;
+                return '<label class="labelsUserRow"' + (hidden ? ' hidden' : '') + '>'
+                    + '<input type="checkbox" data-user-check="' + esc(user.Id) + '"' + (rule.UserIds.indexOf(user.Id) !== -1 ? ' checked' : '') + ' />'
+                    + '<span>' + esc(user.Name) + '</span></label>';
+            }).join('')
+            + '</div>'
+            + '<div class="labelsUserCount' + (rule.UserIds.length ? '' : ' is-warning') + '" aria-live="polite">' + esc(labelUserCount(rule)) + '</div>'
+            + '</div>';
+    }
+
+    function labelUserCount(rule) {
+        if (!rule.UserIds.length) {
+            return 'Tick at least one user, or the label shows to everyone.';
+        }
+
+        return rule.UserIds.length + ' of ' + labelUsers.length + ' selected';
+    }
+
+    function renderLabelPreview(view) {
+        var poster = view.querySelector('#LabelsPoster');
+        if (!poster) {
+            return;
+        }
+
+        drawLabelCorners(poster, posterBadgeRules.filter(function(rule) { return rule.Enabled; }).map(function(rule) {
+            return { label: rule.Label.trim(), look: labelLook(rule) };
+        }));
+    }
+
+    // Stacks labels in their corners, once per text and as many per corner as the apps draw.
+    function drawLabelCorners(poster, entries) {
+        var corners = {};
+        var shown = {};
+        entries.forEach(function(entry) {
+            var key = entry.label.toLowerCase();
+            if (!entry.label || shown[key]) {
+                return;
+            }
+
+            shown[key] = true;
+            corners[entry.look.corner] = corners[entry.look.corner] || [];
+            if (corners[entry.look.corner].length < posterBadgeDefaults.MaxPerCorner) {
+                corners[entry.look.corner].push('<span class="labelsBadge" style="' + labelBadgeCss(entry.look, 10.5) + '">' + esc(entry.label) + '</span>');
+            }
+        });
+
+        Array.prototype.forEach.call(poster.querySelectorAll('.labelsCorner'), function(corner) {
+            corner.innerHTML = (corners[corner.getAttribute('data-corner')] || []).join('');
+        });
+    }
+
+    function setLabelPosterArt(poster, item) {
+        if (!poster || !item) {
+            return;
+        }
+
+        // An episode's own image is wide, so the poster uses its series'.
+        var imageId = item.Type === 'Episode' && item.SeriesId ? item.SeriesId : item.Id;
+        poster.style.backgroundImage = 'url("' + ApiClient.getImageUrl(imageId, { type: 'Primary', maxWidth: 400 }) + '")';
+        poster.classList.add('has-art');
+        poster.setAttribute('aria-label', item.Name);
+    }
+
+    function loadLabelPreviewPoster(view) {
+        if (!ApiClient.getItems) {
+            return;
+        }
+
+        ApiClient.getItems(ApiClient.getCurrentUserId(), {
+            IncludeItemTypes: 'Movie',
+            Recursive: true,
+            SortBy: 'Random',
+            ImageTypes: 'Primary',
+            Limit: 1
+        }).then(function(result) {
+            var item = result && result.Items && result.Items[0];
+            if (!item) {
+                return;
+            }
+
+            labelPreviewItem = { Id: item.Id, Name: item.Name, Type: item.Type };
+            setLabelPosterArt(view.querySelector('#LabelsPoster'), labelPreviewItem);
+            renderLabelTestReport(view);
+        }).catch(function() {});
+    }
+
+    function startLabelTest(view, item) {
+        labelTestItem = item;
+        labelTestResult = null;
+        labelTestError = '';
+        renderLabelTestReport(view);
+        runLabelTest(view);
+    }
+
+    function stopLabelTest(view) {
+        labelTestItem = null;
+        labelTestResult = null;
+        labelTestError = '';
+        renderLabelTestReport(view);
+    }
+
+    // Edits come one key at a time, so the test waits for a pause.
+    function scheduleLabelTest(view) {
+        clearTimeout(labelTestTimer);
+        labelTestTimer = setTimeout(function() { runLabelTest(view); }, 400);
+    }
+
+    function runLabelTest(view) {
+        var item = labelTestItem;
+        if (!item) {
+            return;
+        }
+
+        ApiClient.ajax({
+            type: 'POST',
+            url: ApiClient.getUrl('Moonfin/PosterBadges/Test'),
+            data: JSON.stringify({ ItemId: item.Id, Rules: getPosterBadgeRules(), Defaults: getPosterBadgeDefaults() }),
+            contentType: 'application/json',
+            dataType: 'json'
+        }).then(function(result) {
+            // Another file may have been picked while this one was asked about.
+            if (labelTestItem !== item) {
+                return;
+            }
+
+            labelTestResult = result;
+            labelTestError = '';
+            renderLabelTestReport(view);
+        }).catch(function() {
+            if (labelTestItem !== item) {
+                return;
+            }
+
+            labelTestResult = null;
+            labelTestError = 'This file could not be tested. Restart the server after updating Moonbase, then try again.';
+            renderLabelTestReport(view);
+        });
+    }
+
+    function labelTrackText(track) {
+        var parts = [track.Language, track.Title, track.Codec, track.Profile];
+        if (track.Channels) {
+            parts.push(track.Channels + ' ch');
+        }
+        if (track.Width && track.Height) {
+            parts.push(track.Width + 'x' + track.Height);
+        }
+        parts.push(track.VideoRangeType || track.VideoRange || track.ExtendedVideoType);
+        if (track.IsForced === 'True') {
+            parts.push('forced');
+        }
+        return track.Type + ': ' + parts.filter(function(part) { return part; }).join(' \u00b7 ');
+    }
+
+    // The tested file's own poster, the labels it matches, and its tracks.
+    function renderLabelTestReport(view) {
+        var usePreview = view.querySelector('#LabelsTestUsePreview');
+        if (usePreview) {
+            usePreview.hidden = !labelPreviewItem || (labelTestItem && labelTestItem.Id === labelPreviewItem.Id);
+        }
+
+        var report = view.querySelector('#LabelsTestReport');
+        if (!report) {
+            return;
+        }
+
+        if (!labelTestItem) {
+            report.innerHTML = '';
+            return;
+        }
+
+        var head = '<div class="labelsReportHead"><strong>' + esc(labelTestItem.Name) + '</strong>'
+            + '<button type="button" class="moonfinLinkButton" data-label-test="clear">Clear</button></div>';
+        var poster = '<div class="labelsPoster" id="LabelsTestPoster">'
+            + '<div class="labelsCorner" data-corner="topLeft"></div><div class="labelsCorner" data-corner="topRight"></div>'
+            + '<div class="labelsCorner" data-corner="bottomLeft"></div><div class="labelsCorner" data-corner="bottomRight"></div></div>';
+
+        var body;
+        if (labelTestError) {
+            body = '<div class="labelsReportWhy">' + esc(labelTestError) + '</div>';
+        } else if (!labelTestResult) {
+            body = '<div class="labelsReportWhy">Testing&hellip;</div>';
+        } else {
+            var badges = labelTestResult.badges || [];
+            var tracks = labelTestResult.tracks || [];
+            body = '<div class="labelsMatch"><span class="labelsMatchName">Match</span>'
+                + (badges.length
+                    ? '<div class="labelsMatchList">' + badges.map(function(badge) {
+                        return '<span class="labelsBadge" style="' + labelBadgeCss(labelTestLook(badge), 10) + '">' + esc(badge.label) + '</span>';
+                    }).join('') + '</div>'
+                    : '<span class="labelsReportWhy">No label matches this file.</span>')
+                + '</div>'
+                + '<details><summary>Tracks in this file (' + tracks.length + ')</summary>'
+                + '<div class="labelsTrack">' + esc(labelTestResult.path || '') + '</div>'
+                + tracks.map(function(track) { return '<div class="labelsTrack">' + esc(labelTrackText(track)) + '</div>'; }).join('')
+                + '</details>';
+        }
+
+        // The fold stays open across reruns while rules are edited.
+        var wasOpen = report.querySelector('details') && report.querySelector('details').open;
+        report.innerHTML = head + poster + body;
+        if (wasOpen && report.querySelector('details')) {
+            report.querySelector('details').open = true;
+        }
+
+        var testPoster = report.querySelector('#LabelsTestPoster');
+        setLabelPosterArt(testPoster, labelTestItem);
+        if (labelTestResult) {
+            drawLabelCorners(testPoster, (labelTestResult.badges || []).map(function(badge) {
+                return { label: badge.label, look: labelTestLook(badge) };
+            }));
+        }
+    }
+
+    // The server sends each label with its look already worked out.
+    function labelTestLook(badge) {
+        return { color: badge.color, textColor: badge.textColor, style: badge.style, shape: badge.shape, size: badge.size, corner: badge.corner, opacity: badge.opacity };
+    }
+
+    function searchLabelTestItems(view) {
+        var input = view.querySelector('#LabelsTestSearch');
+        var list = view.querySelector('#LabelsTestResults');
+        var term = input.value.trim();
+        if (term.length < 2 || !ApiClient.getItems) {
+            list.hidden = true;
+            list.innerHTML = '';
+            return;
+        }
+
+        ApiClient.getItems(ApiClient.getCurrentUserId(), {
+            SearchTerm: term,
+            IncludeItemTypes: 'Movie,Episode',
+            Recursive: true,
+            Limit: 8
+        }).then(function(result) {
+            // The text may have changed while this was asked.
+            if (input.value.trim() !== term) {
+                return;
+            }
+
+            var items = (result && result.Items) || [];
+            list.innerHTML = items.length
+                ? items.map(function(item) {
+                    var detail = item.Type === 'Episode'
+                        ? [item.SeriesName, item.ParentIndexNumber != null && item.IndexNumber != null ? 'S' + item.ParentIndexNumber + 'E' + item.IndexNumber : ''].filter(Boolean).join(' \u00b7 ')
+                        : (item.ProductionYear ? String(item.ProductionYear) : '');
+                    return '<button type="button" class="labelsTestResult" data-test-id="' + esc(item.Id) + '" data-test-name="' + esc(item.Name) + '" data-test-type="' + esc(item.Type) + '" data-test-series="' + esc(item.SeriesId || '') + '">'
+                        + '<span>' + esc(item.Name) + '</span>' + (detail ? '<small>' + esc(detail) + '</small>' : '') + '</button>';
+                }).join('')
+                : '<div class="homeLayoutEmpty">Nothing found.</div>';
+            list.hidden = false;
+        }).catch(function() {});
+    }
+
+    function loadLabelSources(view) {
+        ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('Moonfin/PosterBadges/Presets'), dataType: 'json' }).then(function(presets) {
+            posterBadgePresets = presets || [];
+            renderLabels(view);
+        }).catch(function() {
+            var container = view.querySelector('#LabelsPresetGroups');
+            if (container) {
+                container.innerHTML = '<div class="homeLayoutEmpty">The built-in labels could not be loaded. Restart the server after updating Moonbase, then reload this page.</div>';
+            }
+        });
+
+        if (ApiClient.getUsers) {
+            ApiClient.getUsers().then(function(users) {
+                labelUsers = (users || []).map(function(user) { return { Id: user.Id, Name: user.Name }; });
+                renderPosterBadgeRules(view);
+            }).catch(function() {});
+        }
+
+        loadLabelPreviewPoster(view);
+    }
+
+    function newLabelRule(fields) {
+        var rule = { Label: '', Color: POSTER_BADGE_DEFAULT_COLOR, TextColor: '', Enabled: true, Preset: '', Style: '', Shape: '', Size: '', Corner: '', Opacity: null, UserIds: [], Profiles: [], Conditions: [] };
+        Object.keys(fields).forEach(function(key) { rule[key] = fields[key]; });
+        return rule;
+    }
+
+    function updatePosterBadgeField(view, target) {
         var key = target.getAttribute('data-key');
         var ruleElement = target.closest('[data-rule]');
         if (!key || !ruleElement) {
@@ -4111,36 +4715,223 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var rule = posterBadgeRules[Number(ruleElement.getAttribute('data-rule'))];
         var conditionElement = target.closest('[data-condition]');
         var owner = conditionElement ? rule.Conditions[Number(conditionElement.getAttribute('data-condition'))] : rule;
-        owner[key] = target.type === 'checkbox' ? target.checked : target.value;
 
-        if (key === 'Label' || key === 'Color') {
-            var pill = ruleElement.querySelector('.posterBadgePill');
-            pill.textContent = rule.Label.trim();
-            pill.style.background = rule.Color;
-            pill.style.color = posterBadgeTextColor(rule.Color);
+        if (key === 'TextColorMode') {
+            rule.TextColor = target.value === 'custom' ? posterBadgeTextColor(rule.Color) : '';
+            renderLabels(view);
+            return;
+        }
+
+        // Another field can bring other tests and track choices, so the row redraws and
+        // the focus goes back to the same control.
+        if (conditionElement && key === 'Field' && owner.Field !== target.value) {
+            owner.Field = target.value;
+            normalizeLabelCondition(owner);
+            renderPosterBadgeRules(view);
+            var again = view.querySelector('#PosterBadgeRulesList [data-rule="' + ruleElement.getAttribute('data-rule') + '"] [data-condition="' + conditionElement.getAttribute('data-condition') + '"] [data-key="Field"]');
+            if (again) {
+                again.focus();
+            }
+            if (labelTestItem) {
+                scheduleLabelTest(view);
+            }
+            return;
+        }
+
+        if (key === 'Opacity') {
+            rule.Opacity = Number(target.value);
+            target.nextElementSibling.textContent = rule.Opacity + '%';
+            var defaultButton = ruleElement.querySelector('[data-action="defaultOpacity"]');
+            defaultButton.setAttribute('aria-pressed', 'false');
+        } else {
+            owner[key] = target.type === 'checkbox' ? target.checked : target.value;
+        }
+
+        if (key === 'Enabled') {
+            ruleElement.classList.toggle('is-off', !rule.Enabled);
+            renderLabelPresets(view);
+        }
+
+        // Typing keeps the focus in place, so only the parts showing the label redraw.
+        if (!conditionElement) {
+            var look = labelLook(rule);
+            var badge = ruleElement.querySelector('.labelsRuleBadge .labelsBadge');
+            badge.textContent = rule.Label.trim();
+            badge.setAttribute('style', labelBadgeCss(look, 11));
+            ruleElement.querySelector('.labelsRuleName').textContent = rule.Label.trim() || 'New label';
+            if (rule.Preset) {
+                renderLabelPresets(view);
+            }
+            renderLabelPreview(view);
+        }
+
+        if (labelTestItem) {
+            scheduleLabelTest(view);
         }
     }
 
     function bindPosterBadgeEditor(view) {
+        var page = view;
         var container = view.querySelector('#PosterBadgeRulesList');
         var addButton = view.querySelector('#PosterBadgeAddRuleBtn');
-        if (!container || !addButton || container.dataset.bound) {
+        if (!page || !container || !addButton || container.dataset.bound) {
             return;
         }
 
         container.dataset.bound = 'true';
 
+        Array.prototype.forEach.call(page.querySelectorAll('[data-labels-tab]'), function(tab) {
+            tab.addEventListener('click', function() {
+                var name = tab.getAttribute('data-labels-tab');
+                Array.prototype.forEach.call(page.querySelectorAll('[data-labels-tab]'), function(other) {
+                    var active = other === tab;
+                    other.classList.toggle('is-active', active);
+                    other.setAttribute('aria-selected', String(active));
+                });
+                Array.prototype.forEach.call(page.querySelectorAll('[data-labels-panel]'), function(panel) {
+                    panel.classList.toggle('is-active', panel.getAttribute('data-labels-panel') === name);
+                });
+            });
+        });
+
         addButton.addEventListener('click', function() {
-            posterBadgeRules.push({ Label: '', Color: POSTER_BADGE_DEFAULT_COLOR, Enabled: true, Conditions: [newPosterBadgeCondition()] });
+            posterBadgeRules.forEach(function(rule) { rule._open = false; });
+            posterBadgeRules.push(newLabelRule({ Conditions: [newPosterBadgeCondition()], _open: true }));
+            renderLabels(view);
+            var input = container.querySelector('.labelsRule:last-child [data-key="Label"]');
+            if (input) {
+                input.focus();
+            }
+        });
+
+        page.querySelector('#LabelsDefaultOpacity').addEventListener('input', function(e) {
+            posterBadgeDefaults.Opacity = Number(e.target.value);
+            view.querySelector('#LabelsDefaultOpacityValue').textContent = posterBadgeDefaults.Opacity + '%';
+            renderLabelPresets(view);
             renderPosterBadgeRules(view);
+            renderLabelPreview(view);
+        });
+
+        page.querySelector('#LabelsMaxPerCorner').addEventListener('change', function(e) {
+            posterBadgeDefaults.MaxPerCorner = Number(e.target.value);
+            renderLabelPreview(view);
+        });
+
+        Array.prototype.forEach.call(page.querySelectorAll('[data-default]'), function(group) {
+            group.addEventListener('click', function(e) {
+                var button = e.target.closest('[data-pick]');
+                if (button) {
+                    posterBadgeDefaults[button.getAttribute('data-pick')] = button.getAttribute('data-value');
+                    renderLabels(view);
+                }
+            });
+        });
+
+        page.querySelector('#LabelsPresetGroups').addEventListener('click', function(e) {
+            var chip = e.target.closest('[data-preset]');
+            if (!chip) {
+                return;
+            }
+
+            var id = chip.getAttribute('data-preset');
+            var index = -1;
+            posterBadgeRules.forEach(function(rule, i) { if (rule.Preset === id) { index = i; } });
+
+            if (index === -1) {
+                var preset = labelPreset(id);
+                posterBadgeRules.push(newLabelRule({ Preset: id, Label: preset.label, Color: labelHex(preset.color, POSTER_BADGE_DEFAULT_COLOR) }));
+            } else if (!posterBadgeRules[index].Enabled) {
+                posterBadgeRules[index].Enabled = true;
+            } else {
+                posterBadgeRules.splice(index, 1);
+            }
+
+            renderLabels(view);
+            var again = page.querySelector('#LabelsPresetGroups [data-preset="' + id + '"]');
+            if (again) {
+                again.focus();
+            }
+        });
+
+        page.querySelector('#LabelsPreviewShuffle').addEventListener('click', function() { loadLabelPreviewPoster(view); });
+
+        page.querySelector('#LabelsTestUsePreview').addEventListener('click', function() {
+            if (labelPreviewItem) {
+                startLabelTest(view, labelPreviewItem);
+            }
+        });
+
+        page.querySelector('#LabelsTestReport').addEventListener('click', function(e) {
+            if (e.target.closest('[data-label-test="clear"]')) {
+                stopLabelTest(view);
+            }
+        });
+
+        page.querySelector('#LabelsTestSearch').addEventListener('input', function() {
+            clearTimeout(labelSearchTimer);
+            labelSearchTimer = setTimeout(function() { searchLabelTestItems(view); }, 250);
+        });
+
+        page.querySelector('#LabelsTestResults').addEventListener('click', function(e) {
+            var button = e.target.closest('[data-test-id]');
+            if (!button) {
+                return;
+            }
+
+            var list = page.querySelector('#LabelsTestResults');
+            list.hidden = true;
+            list.innerHTML = '';
+            page.querySelector('#LabelsTestSearch').value = '';
+            startLabelTest(view, {
+                Id: button.getAttribute('data-test-id'),
+                Name: button.getAttribute('data-test-name'),
+                Type: button.getAttribute('data-test-type'),
+                SeriesId: button.getAttribute('data-test-series')
+            });
         });
 
         // Edits update the rule in place rather than redrawing, so the field keeps its focus.
-        container.addEventListener('input', function(e) { updatePosterBadgeField(e.target); });
-        container.addEventListener('change', function(e) { updatePosterBadgeField(e.target); });
+        container.addEventListener('input', function(e) {
+            if (e.target.hasAttribute('data-user-filter')) {
+                var rule = posterBadgeRules[Number(e.target.closest('[data-rule]').getAttribute('data-rule'))];
+                rule._userFilter = e.target.value;
+                var filter = rule._userFilter.toLowerCase();
+                Array.prototype.forEach.call(e.target.closest('.labelsUserPicker').querySelectorAll('.labelsUserRow'), function(row) {
+                    row.hidden = !!filter && row.textContent.toLowerCase().indexOf(filter) === -1;
+                });
+                return;
+            }
+
+            updatePosterBadgeField(view, e.target);
+        });
+        container.addEventListener('change', function(e) {
+            var userId = e.target.getAttribute('data-user-check');
+            if (userId) {
+                var ruleElement = e.target.closest('[data-rule]');
+                var rule = posterBadgeRules[Number(ruleElement.getAttribute('data-rule'))];
+                var at = rule.UserIds.indexOf(userId);
+                if (e.target.checked && at === -1) {
+                    rule.UserIds.push(userId);
+                } else if (!e.target.checked && at !== -1) {
+                    rule.UserIds.splice(at, 1);
+                }
+
+                var count = ruleElement.querySelector('.labelsUserCount');
+                count.textContent = labelUserCount(rule);
+                count.classList.toggle('is-warning', !rule.UserIds.length);
+                ruleElement.querySelector('.labelsRuleSummary').textContent = labelSummary(rule);
+                return;
+            }
+
+            updatePosterBadgeField(view, e.target);
+            // The summary line only redraws once a pick is final.
+            if (e.target.getAttribute('data-key') === 'Opacity') {
+                renderLabelPresets(view);
+            }
+        });
 
         container.addEventListener('click', function(e) {
-            var button = e.target.closest('[data-action]');
+            var button = e.target.closest('[data-action], [data-pick], [data-profile]');
             if (!button) {
                 return;
             }
@@ -4149,7 +4940,28 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             var rule = posterBadgeRules[ruleIndex];
             var action = button.getAttribute('data-action');
 
-            if (action === 'removeRule') {
+            if (button.hasAttribute('data-pick')) {
+                rule[button.getAttribute('data-pick')] = button.getAttribute('data-value');
+            } else if (button.hasAttribute('data-profile')) {
+                var profile = button.getAttribute('data-profile');
+                var at = rule.Profiles.indexOf(profile);
+                if (at === -1) {
+                    rule.Profiles.push(profile);
+                } else {
+                    rule.Profiles.splice(at, 1);
+                }
+            } else if (action === 'allUsers') {
+                rule.UserIds = [];
+                rule._someUsers = false;
+            } else if (action === 'someUsers') {
+                rule._someUsers = true;
+            } else if (action === 'allProfiles') {
+                rule.Profiles = [];
+            } else if (action === 'defaultOpacity') {
+                rule.Opacity = null;
+            } else if (action === 'toggleOpen') {
+                rule._open = !rule._open;
+            } else if (action === 'removeRule') {
                 posterBadgeRules.splice(ruleIndex, 1);
             } else if (action === 'moveUp' || action === 'moveDown') {
                 var other = action === 'moveUp' ? ruleIndex - 1 : ruleIndex + 1;
@@ -4159,10 +4971,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 rule.Conditions.push(newPosterBadgeCondition());
             } else if (action === 'removeCondition') {
                 rule.Conditions.splice(Number(button.closest('[data-condition]').getAttribute('data-condition')), 1);
+            } else {
+                return;
             }
 
-            renderPosterBadgeRules(view);
+            renderLabels(view);
         });
+
+        loadLabelSources(view);
     }
 
     function renderMessagesList(view, items) {
