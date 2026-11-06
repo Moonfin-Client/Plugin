@@ -559,8 +559,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
         { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
         { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
-        { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
-        { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
+        { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
+        { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
         { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
         { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
         { parent: 'AnimeMarkersEnabled', fields: ['AnimeMarkerRecapLookup', 'AnimeMarkerShowFiller', 'AnimeMarkerMaxAgeDays'] },
@@ -3094,6 +3094,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultRadarrCalendarShowDate', defaults.radarrCalendarShowDate);
         setNullableBoolSelect(view, '#DefaultSonarrCalendarShowDate', defaults.sonarrCalendarShowDate);
         setNullableBoolSelect(view, '#DefaultSonarrCalendarShowEpisodeInfo', defaults.sonarrCalendarShowEpisodeInfo);
+        setNullableBoolSelect(view, '#DefaultRadarrCalendarHideDownloaded', defaults.radarrCalendarHideDownloaded);
+        setNullableBoolSelect(view, '#DefaultSonarrCalendarHideDownloaded', defaults.sonarrCalendarHideDownloaded);
         setSelectValue(view, '#DefaultPersonalRatingStyle', defaults.personalRatingStyle, 'Configured style');
         setSelectValue(view, '#DefaultPersonPageSortOption', defaults.personPageSortOption, 'Configured sort');
         setSelectValue(view, '#DefaultShuffleContentType', defaults.shuffleContentType, 'Configured content');
@@ -3555,6 +3557,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.radarrCalendarShowDate = getNullableBoolSelect(view, '#DefaultRadarrCalendarShowDate');
         d.sonarrCalendarShowDate = getNullableBoolSelect(view, '#DefaultSonarrCalendarShowDate');
         d.sonarrCalendarShowEpisodeInfo = getNullableBoolSelect(view, '#DefaultSonarrCalendarShowEpisodeInfo');
+        d.radarrCalendarHideDownloaded = getNullableBoolSelect(view, '#DefaultRadarrCalendarHideDownloaded');
+        d.sonarrCalendarHideDownloaded = getNullableBoolSelect(view, '#DefaultSonarrCalendarHideDownloaded');
         d.personalRatingStyle = view.querySelector('#DefaultPersonalRatingStyle').value || null;
         d.personPageSortOption = view.querySelector('#DefaultPersonPageSortOption').value || null;
         d.shuffleContentType = view.querySelector('#DefaultShuffleContentType').value || null;

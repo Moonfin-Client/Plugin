@@ -307,9 +307,11 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("radarrCalendarShowDigital")] public bool? RadarrCalendarShowDigital { get; set; }
         [JsonPropertyName("radarrCalendarShowPhysical")] public bool? RadarrCalendarShowPhysical { get; set; }
         [JsonPropertyName("radarrCalendarShowDate")] public bool? RadarrCalendarShowDate { get; set; }
+        [JsonPropertyName("radarrCalendarHideDownloaded")] public bool? RadarrCalendarHideDownloaded { get; set; }
         [JsonPropertyName("enableSonarrCalendar")] public bool? EnableSonarrCalendar { get; set; }
         [JsonPropertyName("sonarrCalendarShowEpisodeInfo")] public bool? SonarrCalendarShowEpisodeInfo { get; set; }
         [JsonPropertyName("sonarrCalendarShowDate")] public bool? SonarrCalendarShowDate { get; set; }
+        [JsonPropertyName("sonarrCalendarHideDownloaded")] public bool? SonarrCalendarHideDownloaded { get; set; }
         [JsonPropertyName("showCalendarButton")] public bool? ShowCalendarButton { get; set; }
         [JsonPropertyName("calendarStyle")] public string? CalendarStyle { get; set; }
         [JsonPropertyName("calendarWeekStart")] public string? CalendarWeekStart { get; set; }

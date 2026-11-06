@@ -882,6 +882,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("radarrCalendarShowDate")]
     public bool? RadarrCalendarShowDate { get; set; }
 
+    [JsonPropertyName("radarrCalendarHideDownloaded")]
+    public bool? RadarrCalendarHideDownloaded { get; set; }
+
     [JsonPropertyName("enableSonarrCalendar")]
     public bool? EnableSonarrCalendar { get; set; }
 
@@ -890,6 +893,9 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("sonarrCalendarShowDate")]
     public bool? SonarrCalendarShowDate { get; set; }
+
+    [JsonPropertyName("sonarrCalendarHideDownloaded")]
+    public bool? SonarrCalendarHideDownloaded { get; set; }
 
     [JsonPropertyName("showCalendarButton")]
     public bool? ShowCalendarButton { get; set; }

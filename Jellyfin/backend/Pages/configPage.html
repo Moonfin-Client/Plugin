@@ -4187,6 +4187,14 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultRadarrCalendarHideDownloaded">Radarr: Hide Movies Already on the Server</label>
+                                <select id="DefaultRadarrCalendarHideDownloaded" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarShowDate">Sonarr: Show Air Date</label>
                                 <select id="DefaultSonarrCalendarShowDate" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -4197,6 +4205,14 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarShowEpisodeInfo">Sonarr: Show Episode Info</label>
                                 <select id="DefaultSonarrCalendarShowEpisodeInfo" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSonarrCalendarHideDownloaded">Sonarr: Hide Episodes Already on the Server</label>
+                                <select id="DefaultSonarrCalendarHideDownloaded" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
@@ -6281,8 +6297,8 @@
                 { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
                 { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
-                { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultMergeRadarrSonarrCalendars'] },
-                { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultMergeRadarrSonarrCalendars'] },
+                { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
+                { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
                 { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
                 { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
@@ -11569,6 +11585,8 @@
                     setNullableBoolSelect('#DefaultRadarrCalendarShowDate', defaults.radarrCalendarShowDate);
                     setNullableBoolSelect('#DefaultSonarrCalendarShowDate', defaults.sonarrCalendarShowDate);
                     setNullableBoolSelect('#DefaultSonarrCalendarShowEpisodeInfo', defaults.sonarrCalendarShowEpisodeInfo);
+                    setNullableBoolSelect('#DefaultRadarrCalendarHideDownloaded', defaults.radarrCalendarHideDownloaded);
+                    setNullableBoolSelect('#DefaultSonarrCalendarHideDownloaded', defaults.sonarrCalendarHideDownloaded);
                     setSelectValue('#DefaultPersonalRatingStyle', defaults.personalRatingStyle, 'Configured style');
                     setSelectValue('#DefaultPersonPageSortOption', defaults.personPageSortOption, 'Configured sort');
                     setSelectValue('#DefaultShuffleContentType', defaults.shuffleContentType, 'Configured content');
@@ -12605,6 +12623,8 @@
                     ds.radarrCalendarShowDate = getNullableBoolSelect('#DefaultRadarrCalendarShowDate');
                     ds.sonarrCalendarShowDate = getNullableBoolSelect('#DefaultSonarrCalendarShowDate');
                     ds.sonarrCalendarShowEpisodeInfo = getNullableBoolSelect('#DefaultSonarrCalendarShowEpisodeInfo');
+                    ds.radarrCalendarHideDownloaded = getNullableBoolSelect('#DefaultRadarrCalendarHideDownloaded');
+                    ds.sonarrCalendarHideDownloaded = getNullableBoolSelect('#DefaultSonarrCalendarHideDownloaded');
                     ds.personalRatingStyle = document.querySelector('#DefaultPersonalRatingStyle').value || null;
                     ds.personPageSortOption = document.querySelector('#DefaultPersonPageSortOption').value || null;
                     ds.shuffleContentType = document.querySelector('#DefaultShuffleContentType').value || null;
