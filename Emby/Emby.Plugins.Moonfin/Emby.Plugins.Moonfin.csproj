@@ -38,6 +38,9 @@
     <EmbeddedResource Include="Web\loader.js" />
     <EmbeddedResource Include="assets\*.png" />
     <EmbeddedResource Include="assets\*.svg" />
+    <EmbeddedResource Include="..\..\shared\PosterBadges\flags\*.svg;..\..\shared\PosterBadges\flags\*.webp">
+      <LogicalName>Emby.Plugins.Moonfin.assets.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- The seasonal row's pure logic and rules are shared with the Jellyfin port, so both read

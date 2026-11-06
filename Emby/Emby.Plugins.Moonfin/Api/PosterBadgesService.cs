@@ -103,6 +103,12 @@ namespace Emby.Plugins.Moonfin.Api
                 try
                 {
                     var file = FileFor(item);
+                    // Unread tracks would pass every "no such track" rule, so the item gets no labels rather than wrong ones.
+                    if (file.Streams == null)
+                    {
+                        continue;
+                    }
+
                     var badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults);
                     if (badges.Count > 0)
                     {

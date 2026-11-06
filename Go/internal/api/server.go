@@ -27,6 +27,9 @@ type Host struct {
 	AdminBackURL string
 	// SmartSearch runs the smart search engine. Nil leaves smart search off.
 	SmartSearch *smartsearch.Helper
+	// FlagsDir holds the poster label flags as flag-xx.svg and .webp. Empty
+	// serves none.
+	FlagsDir string
 }
 
 var ErrSignedOut = errors.New("caller isn't signed in")
@@ -38,6 +41,7 @@ type Server struct {
 	kv       store.KV
 	catalog  Catalog
 	identify func(*http.Request) (Identity, error)
+	flagsDir string
 	mux      *http.ServeMux
 	ext      external
 
@@ -58,7 +62,7 @@ func NewServer(version string, h Host) *Server {
 		version = "0.0.0-dev"
 	}
 	s := &Server{version: version, name: h.Name, backURL: h.AdminBackURL, kv: h.KV, catalog: h.Catalog,
-		identify: h.Identify, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}}}
+		identify: h.Identify, flagsDir: h.FlagsDir, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}}}
 	s.smart.helper = h.SmartSearch
 	s.routes()
 	if h.SmartSearch != nil {
@@ -80,6 +84,7 @@ func (s *Server) routes() {
 	s.watchPartyRoutes()
 	s.smartRoutes()
 	s.calendarRoutes()
+	s.posterBadgeRoutes()
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
