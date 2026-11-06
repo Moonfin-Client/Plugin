@@ -106,7 +106,7 @@ body:
     attributes:
       label: Server logs / errors (optional)
       description: |
-        Paste any relevant log lines from your server's Logs page, especially around the settings profile save or resolve. The plugin logs under the Moonfin name, so search for that.
+        Paste any relevant log lines from your server's Logs page, especially around the settings profile save or resolve. The plugin logs under the Moonfin name, so search for that. The wiki has the steps for Jellyfin and Emby under [Where the logs are](https://github.com/Moonfin-Client/Plugin/wiki/Common-Problems#where-the-logs-are).
       render: shell
     validations:
       required: false
