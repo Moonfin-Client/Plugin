@@ -1119,6 +1119,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("use24HourClock")]
     public bool? Use24HourClock { get; set; }
 
+    [JsonPropertyName("dateFormat")]
+    public string? DateFormat { get; set; }
+
     [JsonPropertyName("homeRowInfoOverlay")]
     public bool? HomeRowInfoOverlay { get; set; }
 
