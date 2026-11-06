@@ -14,9 +14,9 @@ permissions:
 
 jobs:
   stale:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/stale@v9
+      - uses: actions/stale@v10
         with:
           days-before-issue-stale: 14
           days-before-issue-close: 7
@@ -27,9 +27,9 @@ jobs:
           days-before-pr-stale: -1
           days-before-pr-close: -1
 
-          # Feature requests are not waiting on the reporter for anything, so
-          # going quiet says nothing about whether they are still wanted.
-          exempt-issue-labels: 'Feature Request'
+          # Feature requests aren't waiting on the reporter for anything, so
+          # going quiet says nothing about whether they're still wanted.
+          exempt-issue-labels: 'Pinned,Keep Open,Roadmap,Security,Confirmed,Feature Request'
 
           # Default is 30 API operations per run, which quietly skips issues
           # once the backlog is larger than that.
@@ -47,7 +47,7 @@ jobs:
 
           close-issue-message: >
             Closing this as inactive, since there has been no response for 21
-            days. That's not a judgement on the report, we simply can't
+            days. That's not a judgment on the report, we simply can't
             reproduce or track something with no further information.
 
 

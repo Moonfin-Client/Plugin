@@ -18,10 +18,10 @@ concurrency:
 
 jobs:
   label:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Apply type, area and server labels
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // Each section of the body is read on its own. Scanning the whole

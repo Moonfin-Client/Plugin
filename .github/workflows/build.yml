@@ -12,11 +12,11 @@ permissions:
 jobs:
   build:
     name: Build Plugins
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Read Jellyfin version and ABI
         id: jf_meta
@@ -45,7 +45,7 @@ jobs:
           echo "abi=${ABI}.0" >> "$GITHUB_OUTPUT"
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -140,7 +140,7 @@ jobs:
 
       - name: Upload build results
         if: always() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-results
           path: ${{ runner.temp }}/build-results/
@@ -191,14 +191,14 @@ jobs:
 
       - name: Upload Jellyfin artifact
         if: github.event_name == 'push' && steps.backend_build.outcome == 'success' && steps.emby_build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.jf_package.outputs.zip_name }}
           path: ${{ steps.jf_package.outputs.zip_name }}
 
       - name: Upload Emby artifact
         if: github.event_name == 'push' && steps.backend_build.outcome == 'success' && steps.emby_build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.emby_build.outputs.zip_name }}
           path: Emby/${{ steps.emby_build.outputs.zip_name }}

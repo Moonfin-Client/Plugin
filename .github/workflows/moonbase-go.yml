@@ -18,19 +18,19 @@ permissions:
 jobs:
   go:
     name: Build Silo plugin and Plex companion
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: Go
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: Go/go.mod
           cache-dependency-path: Go/go.sum
@@ -65,7 +65,7 @@ jobs:
         run: for bin in dist/Moonbase.Silo-*-linux-amd64; do "./$bin" manifest > /dev/null; done
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Moonbase.Silo
           path: Go/dist/

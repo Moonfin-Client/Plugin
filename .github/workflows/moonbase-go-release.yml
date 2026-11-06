@@ -28,19 +28,19 @@ jobs:
   draft:
     name: Draft the release
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: Go
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: Go/go.mod
           cache: false
@@ -62,7 +62,7 @@ jobs:
       - name: Build the Plex image
         run: make plex-image VERSION="$VERSION"
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           draft: true
           name: Silo and Plex ${{ env.VERSION }}
@@ -75,11 +75,11 @@ jobs:
   publish:
     name: Ship the published release
     if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'go-')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
@@ -98,17 +98,17 @@ jobs:
           gh release upload "$CATALOG_TAG" index.json --clobber
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Sign in to ghcr.io
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push the Plex image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Go/cmd/plex/Dockerfile
