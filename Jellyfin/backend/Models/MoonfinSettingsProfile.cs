@@ -142,6 +142,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("watchedIndicator")]
     public string? WatchedIndicator { get; set; }
 
+    [JsonPropertyName("showPosterLabels")]
+    public bool? ShowPosterLabels { get; set; }
+
     [JsonPropertyName("cardFocusExpansion")]
     public bool? CardFocusExpansion { get; set; }
 

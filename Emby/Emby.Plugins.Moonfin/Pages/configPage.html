@@ -532,7 +532,8 @@
             color: inherit;
         }
 
-        #MoonfinConfigPage .defaultsSubnavBar {
+        #MoonfinConfigPage .defaultsSubnavBar,
+        #MoonfinConfigPage .moonfinSubTabs {
             display: flex;
             gap: 4px;
             flex-wrap: wrap;
@@ -544,7 +545,8 @@
             background: rgba(128, 128, 128, 0.08);
         }
 
-        #MoonfinConfigPage .defaultsSubtabBtn {
+        #MoonfinConfigPage .defaultsSubtabBtn,
+        #MoonfinConfigPage .moonfinSubTab {
             background: transparent;
             border: 0;
             color: inherit;
@@ -556,12 +558,14 @@
             transition: all 0.2s ease;
         }
 
-        #MoonfinConfigPage .defaultsSubtabBtn:hover {
+        #MoonfinConfigPage .defaultsSubtabBtn:hover,
+        #MoonfinConfigPage .moonfinSubTab:hover {
             background: rgba(128, 128, 128, 0.16);
             color: inherit;
         }
 
-        #MoonfinConfigPage .defaultsSubtabBtn.active {
+        #MoonfinConfigPage .defaultsSubtabBtn.active,
+        #MoonfinConfigPage .moonfinSubTab.is-active {
             background: #00a4dc;
             color: #fff;
             font-weight: 600;
@@ -829,6 +833,774 @@
             border-radius: 999px;
             background: rgba(0, 164, 220, 0.1);
             font-size: 0.85em;
+        }
+
+        #MoonfinConfigPage .moonfinSubPanel {
+            display: none;
+        }
+
+        #MoonfinConfigPage .moonfinSubPanel.is-active,
+        #MoonfinConfigPage.moonfin-searching .moonfinSubPanel {
+            display: block;
+        }
+
+        #MoonfinConfigPage.moonfin-searching .moonfinSubTabs {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsStudio {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 260px;
+            gap: 18px;
+            align-items: start;
+        }
+
+        #MoonfinConfigPage .labelsSide {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        #MoonfinConfigPage .labelsPreview {
+            box-sizing: border-box;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 16px;
+            border: 1px solid rgba(128, 128, 128, 0.28);
+            border-radius: 16px;
+            background: rgba(128, 128, 128, 0.05);
+        }
+
+        #MoonfinConfigPage .labelsPreviewHead {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsPoster {
+            position: relative;
+            aspect-ratio: 2 / 3;
+            overflow: hidden;
+            border-radius: 10px;
+            background:
+                radial-gradient(120% 70% at 30% 18%, rgba(55, 211, 230, 0.32), transparent 60%),
+                radial-gradient(90% 60% at 80% 85%, rgba(124, 58, 237, 0.35), transparent 65%),
+                linear-gradient(160deg, #1b2533, #0d1118 70%);
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+        }
+
+        #MoonfinConfigPage .labelsCorner {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-width: calc(100% - 12px);
+        }
+
+        #MoonfinConfigPage .labelsCorner[data-corner="topLeft"] { top: 6px; left: 6px; align-items: flex-start; }
+        #MoonfinConfigPage .labelsCorner[data-corner="topRight"] { top: 6px; right: 6px; align-items: flex-end; }
+        #MoonfinConfigPage .labelsCorner[data-corner="bottomLeft"] { bottom: 6px; left: 6px; align-items: flex-start; flex-direction: column-reverse; }
+        #MoonfinConfigPage .labelsCorner[data-corner="bottomRight"] { bottom: 6px; right: 6px; align-items: flex-end; flex-direction: column-reverse; }
+
+        #MoonfinConfigPage .labelsBadge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3em;
+            box-sizing: border-box;
+            max-width: 100%;
+            overflow: hidden;
+            font-weight: 700;
+            line-height: 1.3;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+        }
+
+        #MoonfinConfigPage .labelsBadge:empty {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsBadge > span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* The same Material glyphs the apps draw, at the text's colour. */
+        #MoonfinConfigPage .labelsBadge svg {
+            flex-shrink: 0;
+            width: 1.25em;
+            height: 1.25em;
+            fill: currentColor;
+        }
+
+        #MoonfinConfigPage .labelsBadge img.labelsFlag {
+            flex-shrink: 0;
+            width: 1.33em;
+            height: 1em;
+            border-radius: 2px;
+            object-fit: cover;
+            box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3);
+        }
+
+        #MoonfinConfigPage .labelsBadge.labelsBareFlag {
+            padding: 0;
+            background: none;
+            line-height: 0;
+        }
+
+        #MoonfinConfigPage .labelsBareFlag img.labelsFlag {
+            display: block;
+            box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+        }
+
+        #MoonfinConfigPage .labelsOption.is-icon {
+            justify-content: center;
+            width: 38px;
+            padding: 0;
+        }
+
+        #MoonfinConfigPage .labelsOption.is-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        #MoonfinConfigPage .labelsPreviewNote {
+            font-size: 0.82em;
+            line-height: 1.4;
+            opacity: 0.6;
+        }
+
+        #MoonfinConfigPage .labelsNoteAction {
+            align-self: flex-start;
+            margin-top: 2px;
+            padding: 0;
+            font-size: 0.85em;
+            text-align: left;
+        }
+
+        #MoonfinConfigPage .labelsNoteAction[hidden] {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsTest {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        #MoonfinConfigPage .labelsTestResults {
+            display: flex;
+            flex-direction: column;
+            max-height: 240px;
+            overflow-y: auto;
+            padding: 4px;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.08);
+        }
+
+        #MoonfinConfigPage .labelsTestResults[hidden] {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsTestResult {
+            display: flex;
+            flex-direction: column;
+            padding: 6px 8px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 0.88em;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsTestResult:hover,
+        #MoonfinConfigPage .labelsTestResult:focus-visible {
+            background: rgba(128, 128, 128, 0.12);
+            outline: none;
+        }
+
+        #MoonfinConfigPage .labelsTestResult small {
+            opacity: 0.6;
+        }
+
+        #MoonfinConfigPage .labelsReport {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+            font-size: 0.85em;
+        }
+
+        #MoonfinConfigPage .labelsReport:empty {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsReportHead {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .labelsReportHead strong {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsReportHead .moonfinLinkButton {
+            flex-shrink: 0;
+            padding: 0;
+            font-size: 1em;
+        }
+
+        #MoonfinConfigPage .labelsMatch {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 8px;
+            align-items: baseline;
+        }
+
+        #MoonfinConfigPage .labelsMatchName {
+            color: #00a4dc;
+            font-weight: 600;
+        }
+
+        #MoonfinConfigPage .labelsMatchList {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        #MoonfinConfigPage .labelsReportWhy {
+            line-height: 1.4;
+            opacity: 0.7;
+            overflow-wrap: anywhere;
+        }
+
+        #MoonfinConfigPage .labelsReport details summary {
+            cursor: pointer;
+            opacity: 0.8;
+        }
+
+        #MoonfinConfigPage .labelsTrack {
+            margin-top: 6px;
+            line-height: 1.4;
+            opacity: 0.75;
+            overflow-wrap: anywhere;
+        }
+
+        #MoonfinConfigPage .labelsLead {
+            margin: 0 0 16px;
+            max-width: 72ch;
+            line-height: 1.5;
+            opacity: 0.72;
+        }
+
+        #MoonfinConfigPage .labelsField {
+            display: grid;
+            grid-template-columns: 140px minmax(0, 1fr);
+            gap: 12px;
+            align-items: center;
+            padding: 10px 0;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        #MoonfinConfigPage .labelsField:first-of-type {
+            border-top: 0;
+        }
+
+        #MoonfinConfigPage .labelsFieldName {
+            font-size: 0.9em;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsStyles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .labelsOption {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 32px;
+            padding: 5px 12px;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 999px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsOption:hover {
+            border-color: rgba(128, 128, 128, 0.55);
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsOption[aria-pressed="true"] {
+            border-color: #00a4dc;
+            background: rgba(0, 164, 220, 0.16);
+            color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsOption:focus-visible,
+        #MoonfinConfigPage .labelsPreset:focus-visible,
+        #MoonfinConfigPage .labelsRuleToggle:focus-visible,
+        #MoonfinConfigPage .labelsCornerPicker button:focus-visible {
+            outline: 2px solid #00a4dc;
+            outline-offset: 2px;
+        }
+
+        #MoonfinConfigPage .labelsStyleSwatch {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 8px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #2b3a4d, #141a22);
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker {
+            display: grid;
+            grid-template-columns: repeat(2, 28px);
+            grid-template-rows: repeat(2, 38px);
+            gap: 4px;
+            padding: 4px;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.08);
+            width: max-content;
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker button {
+            position: relative;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            background: rgba(128, 128, 128, 0.12);
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker button::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 6px;
+            border-radius: 2px;
+            background: rgba(128, 128, 128, 0.6);
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker button[data-value="topLeft"]::after { top: 4px; left: 4px; }
+        #MoonfinConfigPage .labelsCornerPicker button[data-value="topRight"]::after { top: 4px; right: 4px; }
+        #MoonfinConfigPage .labelsCornerPicker button[data-value="bottomLeft"]::after { bottom: 4px; left: 4px; }
+        #MoonfinConfigPage .labelsCornerPicker button[data-value="bottomRight"]::after { bottom: 4px; right: 4px; }
+
+        #MoonfinConfigPage .labelsCornerPicker button[aria-pressed="true"] {
+            background: rgba(0, 164, 220, 0.22);
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker button[aria-pressed="true"]::after {
+            background: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsRange {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            max-width: 320px;
+        }
+
+        #MoonfinConfigPage .labelsRange input[type="range"] {
+            flex: 1 1 auto;
+            accent-color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsRangeValue {
+            min-width: 3.5em;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+            opacity: 0.8;
+        }
+
+        #MoonfinConfigPage .labelsPresetGroup {
+            display: grid;
+            grid-template-columns: 140px minmax(0, 1fr);
+            gap: 12px;
+            align-items: baseline;
+            padding: 10px 0;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        #MoonfinConfigPage .labelsPresetGroup:first-child {
+            border-top: 0;
+        }
+
+        #MoonfinConfigPage .labelsPresets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .labelsPreset {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 4px 8px 4px 4px;
+            min-height: 30px;
+            border: 1px solid rgba(128, 128, 128, 0.3);
+            border-radius: 999px;
+            background: rgba(128, 128, 128, 0.05);
+            color: inherit;
+            font: inherit;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsPreset:hover {
+            border-color: rgba(128, 128, 128, 0.55);
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsPreset .labelsBadge {
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            box-shadow: none;
+        }
+
+        #MoonfinConfigPage .labelsPreset[aria-pressed="false"] .labelsBadge {
+            border: 1px dashed rgba(128, 128, 128, 0.55) !important;
+            background: transparent !important;
+            color: inherit !important;
+        }
+
+        #MoonfinConfigPage .labelsPreset svg {
+            font-size: 16px;
+            color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsPreset[aria-pressed="false"] .material-icons {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsPreset[aria-pressed="true"] {
+            border-color: rgba(0, 164, 220, 0.6);
+            background: rgba(0, 164, 220, 0.12);
+        }
+
+        #MoonfinConfigPage .labelsRules {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        #MoonfinConfigPage .labelsRule {
+            border: 1px solid rgba(128, 128, 128, 0.28);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.05);
+            transition: border-color 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsRule.is-open {
+            border-color: rgba(0, 164, 220, 0.35);
+            background: rgba(0, 164, 220, 0.05);
+        }
+
+        #MoonfinConfigPage .labelsRule.is-off .labelsRuleHead > :not(.labelsRuleActions) {
+            opacity: 0.45;
+        }
+
+        #MoonfinConfigPage .labelsRuleHead {
+            display: grid;
+            grid-template-columns: 78px minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: center;
+            padding: 10px 12px;
+        }
+
+        #MoonfinConfigPage .labelsRuleToggle {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            padding: 0;
+            border: 0;
+            background: none;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsRuleName {
+            overflow: hidden;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #MoonfinConfigPage .labelsRuleSummary {
+            overflow: hidden;
+            font-size: 0.82em;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            opacity: 0.6;
+        }
+
+        #MoonfinConfigPage .labelsRuleActions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        #MoonfinConfigPage .labelsSwitch {
+            position: relative;
+            display: inline-flex;
+            margin-right: 6px;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsSwitch input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsSwitch span {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            border-radius: 999px;
+            background: rgba(128, 128, 128, 0.4);
+            transition: background-color 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsSwitch span::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            transition: transform 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsSwitch input:checked + span {
+            background: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsSwitch input:checked + span::after {
+            transform: translateX(16px);
+        }
+
+        #MoonfinConfigPage .labelsSwitch input:focus-visible + span {
+            outline: 2px solid #00a4dc;
+            outline-offset: 2px;
+        }
+
+        #MoonfinConfigPage .labelsRuleBody {
+            display: none;
+            padding: 2px 14px 14px;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        #MoonfinConfigPage .labelsRule.is-open .labelsRuleBody {
+            display: block;
+        }
+
+        #MoonfinConfigPage .labelsRuleBody h4 {
+            margin: 16px 0 6px;
+            font-size: 0.9em;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsInline {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .labelsInline .homeCustomListInput {
+            width: auto;
+            min-width: 120px;
+        }
+
+        #MoonfinConfigPage .labelsColor {
+            width: 40px;
+            height: 30px;
+            padding: 0;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsCondition {
+            display: grid;
+            grid-template-columns: minmax(84px, 0.6fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        #MoonfinConfigPage .labelsAddRow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+        }
+
+        #MoonfinConfigPage .labelsField.is-top {
+            align-items: start;
+        }
+
+        #MoonfinConfigPage .labelsField.is-top > .labelsFieldName {
+            padding-top: 7px;
+        }
+
+        #MoonfinConfigPage .labelsUserPicker {
+            max-width: 420px;
+            margin-top: 10px;
+        }
+
+        #MoonfinConfigPage .labelsUserFilter {
+            margin-bottom: 6px;
+        }
+
+        #MoonfinConfigPage .labelsUserList {
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 4px;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.08);
+        }
+
+        #MoonfinConfigPage .labelsUserRow {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsUserRow:hover {
+            background: rgba(128, 128, 128, 0.12);
+        }
+
+        #MoonfinConfigPage .labelsUserRow[hidden] {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsUserRow input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsUserCount {
+            margin-top: 6px;
+            font-size: 0.82em;
+            opacity: 0.65;
+        }
+
+        #MoonfinConfigPage .labelsUserCount.is-warning {
+            color: #f59e0b;
+            opacity: 1;
+        }
+
+        #MoonfinConfigPage .labelsHelp summary {
+            cursor: pointer;
+            color: #00a4dc;
+            font-weight: 600;
+        }
+
+        #MoonfinConfigPage .labelsHelp .fieldDescription {
+            margin-top: 8px;
+            max-width: 80ch;
+        }
+
+        @media (max-width: 1100px) {
+            #MoonfinConfigPage .labelsStudio {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            /* Above the settings, the two cards side by side when they fit. */
+            #MoonfinConfigPage .labelsSide {
+                order: -1;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                align-items: start;
+            }
+
+            #MoonfinConfigPage .labelsPoster {
+                width: 160px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            #MoonfinConfigPage .labelsField,
+            #MoonfinConfigPage .labelsPresetGroup {
+                grid-template-columns: minmax(0, 1fr);
+                gap: 6px;
+            }
+
+            #MoonfinConfigPage .labelsCondition {
+                grid-template-columns: minmax(0, 1fr) auto;
+            }
+
+            #MoonfinConfigPage .labelsCondition > :nth-child(2),
+            #MoonfinConfigPage .labelsCondition > :nth-child(3),
+            #MoonfinConfigPage .labelsCondition > :nth-child(4) {
+                grid-column: 1;
+            }
+
+            #MoonfinConfigPage .labelsRuleHead {
+                grid-template-columns: minmax(0, 1fr) auto;
+            }
+
+            #MoonfinConfigPage .labelsRuleHead > .labelsRuleBadge {
+                display: none;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #MoonfinConfigPage .labelsOption,
+            #MoonfinConfigPage .labelsPreset,
+            #MoonfinConfigPage .labelsRule {
+                transition: none;
+            }
         }
 
         #MoonfinConfigPage.moonfin-searching .moonfinPageHead,
@@ -1475,6 +2247,10 @@
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Themes</span><span class="moonfinNavSub">Upload &amp; catalog</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="labels">
+                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z"/></svg>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Labels</span><span class="moonfinNavSub">Posters &amp; anime episodes</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="messages">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5S10.5 3.17 10.5 4v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Messages</span><span class="moonfinNavSub">News for your users</span></span>
@@ -1752,214 +2528,6 @@
                                 Overrides the key this build ships with, for anyone running their own relay.
                                 Secret: never logged.
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">Anime Filler &amp; Recap Markers</h3>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkersEnabled" is="emby-checkbox" />
-                                <span>Classify anime episodes as canon, mixed or filler</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Nightly task that matches your anime against
-                                <a href="https://www.animefillerlist.com/" target="_blank">AnimeFillerList</a> so Moonfin
-                                clients can badge filler episodes. No account or API key is needed. Series are matched by
-                                title, falling back to the English and romaji titles behind their ids for libraries in other languages,
-                                and only shows the site actually lists are fetched.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused">Libraries to look in</label>
-                            <div id="AnimeMarkerLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(128,128,128,0.2);border-radius:4px;padding:4px;"></div>
-                            <div class="fieldDescription">
-                                Leave everything unchecked to consider every library. Matching is a local title lookup, so
-                                narrowing this only helps if a non-anime show shares a title with an anime.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioTrustSelectedLibraries" is="emby-checkbox" />
-                                <span>Treat everything in the selected libraries as anime</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Affects the Subbed/Dubbed pills. Normally an item also has to look like anime on its own,
-                                meaning it carries an AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an
-                                &quot;Anime&quot; genre or tag. That check is what keeps a library holding both anime and
-                                ordinary shows from marking the ordinary ones.
-                                <br><br>
-                                If the libraries you picked above are <em>only</em> anime, turn this on: the check then
-                                only costs you the entries whose metadata happens to be thin, which would otherwise show
-                                no pill at all. Has no effect while no libraries are selected, since there is then
-                                nothing to trust.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkerRecapLookup" is="emby-checkbox" />
-                                <span>Also mark recap episodes (uses MyAnimeList)</span>
-                            </label>
-                            <div class="fieldDescription">
-                                AnimeFillerList has no recap category, so this asks MyAnimeList as well. It is best-effort
-                                and additive: if that lookup fails, the filler data is unaffected.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioMarkersEnabled" is="emby-checkbox" />
-                                <span>Also mark episodes and seasons as Subbed or Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Reads the audio tracks in each file: Japanese and nothing else is <strong>Subbed</strong>,
-                                anything carrying another spoken language is <strong>Dubbed</strong>. A season gets a pill
-                                only when every episode in it agrees. This needs no internet and does not depend on
-                                AnimeFillerList, so it works for anime the site has never listed. Files whose audio has no
-                                language tag are left unmarked rather than guessed at.
-                                <br><br>
-                                <strong>In a mixed library:</strong> when you select your anime libraries above, only shows
-                                in them are marked. If you leave the selection empty the whole server is in scope, and a
-                                series is then only marked when it looks like anime on its own, meaning it carries an
-                                AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an "Anime" genre or tag. A Japanese
-                                live-action show carrying one of those would still be marked.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioMarkersMovies" is="emby-checkbox" />
-                                <span>Also mark movies as Subbed or Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Extends the same audio rules to movies, so the pill shows on a movie card anywhere it
-                                appears, including home screen rows. Separate from the option above because a movie has
-                                no series to inherit from, and a mixed library is most likely to mislabel a film.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioSeparateDualAudio" is="emby-checkbox" />
-                                <span>Label dual-audio files as Subbed/Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                A file holding the Japanese audio <em>and</em> a dub can be watched either way, so it
-                                shows as <strong>Subbed/Dubbed</strong> rather than just Dubbed. Leave off for the
-                                shorter label.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeAudioLabelStyle">Audio pill wording</label>
-                            <select is="emby-select" id="AnimeAudioLabelStyle">
-                                <option value="full">Full: Subbed / Dubbed / Subbed/Dubbed</option>
-                                <option value="short">Short: Sub / Dub / Sub/Dub</option>
-                            </select>
-                            <div class="fieldDescription">
-                                Full wording is longer while on Phones and Tablets a shorter label fits better.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPlacement">Where to put the pills</label>
-                            <select is="emby-select" id="AnimeMarkerPlacement">
-                                <option value="below">Below the runtime</option>
-                                <option value="beside">Beside the runtime</option>
-                                <option value="thumbnail">On the episode thumbnail</option>
-                            </select>
-                            <div class="fieldDescription">
-                                Applies to episode rows in Moonfin clients. Season and movie cards always draw the pill
-                                over the artwork, since they have no runtime line to sit next to.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused">Which pills to show</label>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowFiller" is="emby-checkbox" />
-                                    <span>Filler</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowMixed" is="emby-checkbox" />
-                                    <span>Mixed canon and filler</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowRecap" is="emby-checkbox" />
-                                    <span>Recap</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowMangaCanon" is="emby-checkbox" />
-                                    <span>Manga canon</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowAnimeCanon" is="emby-checkbox" />
-                                    <span>Anime canon</span>
-                                </label>
-                            </div>
-                            <div class="fieldDescription">
-                                A pill that is switched off is never sent to a client, so every Moonfin client agrees.
-                                The two canon options are off by default: nearly every episode of most shows is canon,
-                                so turning them on puts a pill on almost everything.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerMaxAgeDays">Marker refresh age (days)</label>
-                            <input type="number" id="AnimeMarkerMaxAgeDays" is="emby-input" min="1" max="365" step="1" />
-                            <div class="fieldDescription">
-                                Shows older than this are re-fetched (default 30). A finished show's classifications never
-                                change, so this mainly governs how quickly an airing show picks up new episodes.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                <button type="button" id="AnimeMarkerDiagBtn" is="emby-button" class="raised">Check matching</button>
-                                <button type="button" id="AnimeMarkerClearBtn" is="emby-button" class="raised">Clear marker cache</button>
-                            </div>
-                            <div class="fieldDescription">
-                                Markers appear after the <strong>Moonfin Anime Markers Sync</strong> task has run. You can
-                                start it now from Scheduled Tasks in the Emby dashboard.
-                            </div>
-                            <div id="AnimeMarkerDiagStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPreviewName">Preview a series</label>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                                <input type="text" id="AnimeMarkerPreviewName" is="emby-input" placeholder="One Piece" style="flex:1;min-width:200px;" />
-                                <button type="button" id="AnimeMarkerPreviewBtn" is="emby-button" class="raised">Preview</button>
-                                <button type="button" id="AnimeMarkerFetchBtn" is="emby-button" class="raised">Fetch now</button>
-                            </div>
-                            <div class="fieldDescription">
-                                Type a series name from your library and press Preview to see exactly which of your
-                                episodes each marker landed on. <strong>Fetch now</strong> pulls that one show
-                                immediately (about ten seconds, the site's crawl delay) instead of waiting for the task.
-                            </div>
-                            <div id="AnimeMarkerPreviewStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
-                            <div id="AnimeMarkerPreviewResult" style="margin-top:8px;max-height:420px;overflow:auto;"></div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkerVerboseLogging" is="emby-checkbox" />
-                                <span>Write a marker debug log</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Records every marker request a client makes and what it was answered with, to
-                                <code>moonfin-anime-markers.log</code> in the server's own log folder, so it also shows
-                                up under Logs in the Emby dashboard where it can be downloaded. Turn this on when a badge is not
-                                appearing: if a request never shows up here, the app never asked, which means the
-                                problem is in the app rather than on the server. Leave it off otherwise.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                <button type="button" id="AnimeMarkerLogBtn" is="emby-button" class="raised">Show log</button>
-                                <button type="button" id="AnimeMarkerClearLogBtn" is="emby-button" class="raised">Clear log</button>
-                            </div>
-                            <div id="AnimeMarkerLogStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
-                            <pre id="AnimeMarkerLogOutput" style="margin-top:8px;max-height:320px;overflow:auto;font-size:0.8em;line-height:1.45;background:rgba(128,128,128,0.12);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-word;"></pre>
                         </div>
                     </div>
 
@@ -2487,6 +3055,14 @@
                                     <option value="hideUnwatched">Hide Unwatched</option>
                                     <option value="episodesOnly">Episodes Only</option>
                                     <option value="never">Never</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowPosterLabels">Poster Labels</label>
+                                <select id="DefaultShowPosterLabels" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Seasonal Effects</h4>
@@ -4758,6 +5334,339 @@
                                 After that, nightly updates only index what changed and searches are about as fast with either model. Changing this rebuilds the index, which starts with the next search.
                             </div>
                         </div>
+                    </div>
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="labels">
+                    <div class="moonfinSubTabs" role="tablist" aria-label="Labels">
+                        <button type="button" class="moonfinSubTab is-active" role="tab" aria-selected="true" data-labels-tab="posters">Poster labels</button>
+                        <button type="button" class="moonfinSubTab" role="tab" aria-selected="false" data-labels-tab="anime">Anime episodes</button>
+                    </div>
+
+                    <div class="moonfinSubPanel is-active" data-labels-panel="posters">
+                    <div class="labelsStudio">
+                    <div class="labelsMain">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Default look</h3>
+                        <p class="labelsLead">
+                            Every label uses this look unless its own settings say otherwise. Labels are drawn by the
+                            Moonfin apps over movie and episode artwork; the files and the artwork are never changed.
+                        </p>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultStyleName">Style</span>
+                            <div class="labelsStyles" data-default="Style" role="group" aria-labelledby="LabelsDefaultStyleName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultShapeName">Shape</span>
+                            <div class="labelsStyles" data-default="Shape" role="group" aria-labelledby="LabelsDefaultShapeName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultSizeName">Size</span>
+                            <div class="labelsStyles" data-default="Size" role="group" aria-labelledby="LabelsDefaultSizeName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultCornerName">Corner</span>
+                            <div class="labelsCornerPicker" data-default="Corner" role="group" aria-labelledby="LabelsDefaultCornerName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <label class="labelsFieldName" for="LabelsDefaultOpacity">Opacity</label>
+                            <div class="labelsRange">
+                                <input type="range" id="LabelsDefaultOpacity" min="10" max="100" step="5" />
+                                <span class="labelsRangeValue" id="LabelsDefaultOpacityValue"></span>
+                            </div>
+                        </div>
+                        <div class="labelsField">
+                            <label class="labelsFieldName" for="LabelsMaxPerCorner">Labels per corner</label>
+                            <div class="labelsInline">
+                                <select class="homeCustomListInput" id="LabelsMaxPerCorner">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                </select>
+                                <span class="fieldDescription" style="margin:0;">The first ones in the list below win.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Built-in labels</h3>
+                        <p class="labelsLead">
+                            Switch on the ones you want. Moonbase reads them from the server's own track data, and each
+                            row shows at most one answer: a 4K file never also says 1080p, and Atmos replaces TrueHD.
+                            Release is the exception: REMUX and IMAX can both show.
+                        </p>
+                        <div id="LabelsPresetGroups"><div class="homeLayoutEmpty">Loading the built-in labels&hellip;</div></div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Your labels</h3>
+                        <p class="labelsLead">
+                            In the order the apps stack them. Open one to change its look, or limit it to some users or
+                            devices.
+                        </p>
+                        <div id="PosterBadgeRulesList" class="labelsRules"></div>
+                        <div class="labelsAddRow">
+                            <button type="button" id="PosterBadgeAddRuleBtn" is="emby-button" class="raised">Add custom label</button>
+                        </div>
+                        <details class="labelsHelp" style="margin-top:16px;">
+                            <summary>How custom labels match</summary>
+                            <div class="fieldDescription">
+                                A custom label shows when <strong>all</strong> its conditions hold. <em>Any</em>, <em>No</em>
+                                and <em>Every</em> say which tracks of that type a condition looks at: at least one, none of
+                                them, or all of them. A file without such a track never passes <em>Every</em>. For the file
+                                path and the track counts, <em>Unless</em> turns the test around. Each condition is checked on
+                                its own, so two conditions on audio can be met by two different tracks.
+                                <br><br>
+                                Text tests ignore case. <em>Is one of</em> takes a list separated by commas, such as
+                                <code>fre, fra</code>. <em>Matches pattern</em> takes a
+                                <a href="https://learn.microsoft.com/dotnet/standard/base-types/regular-expression-language-quick-reference" target="_blank">regular expression</a>.
+                                Labels with the same text are alternatives: the label shows once if any of them holds. Track
+                                values are the ones in Emby's Media Info for the file.
+                            </div>
+                        </details>
+                    </div>
+                    </div>
+
+                    <aside class="labelsSide">
+                    <section class="labelsPreview" aria-labelledby="LabelsPreviewTitle">
+                        <div class="labelsPreviewHead">
+                            <span id="LabelsPreviewTitle">Preview</span>
+                            <button type="button" class="homeLayoutIconButton" id="LabelsPreviewShuffle" title="Another poster" aria-label="Another poster"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+                        </div>
+                        <div class="labelsPoster" id="LabelsPoster">
+                            <div class="labelsCorner" data-corner="topLeft"></div>
+                            <div class="labelsCorner" data-corner="topRight"></div>
+                            <div class="labelsCorner" data-corner="bottomLeft"></div>
+                            <div class="labelsCorner" data-corner="bottomRight"></div>
+                        </div>
+                        <div class="labelsPreviewNote">Every label that is on, over a poster from your library, as if its file matched them all.</div>
+                    </section>
+                    <section class="labelsPreview" aria-labelledby="LabelsTestTitle">
+                        <div class="labelsPreviewHead">
+                            <span id="LabelsTestTitle">Test a file</span>
+                        </div>
+                        <div class="labelsPreviewNote">The labels one movie or episode really gets with the rules on screen, saved or not.</div>
+                        <div class="labelsTest">
+                            <label class="labelsFieldName" for="LabelsTestSearch">Movie or episode</label>
+                            <input type="search" id="LabelsTestSearch" class="homeCustomListInput" autocomplete="off" aria-controls="LabelsTestResults" />
+                            <div class="labelsTestResults" id="LabelsTestResults" hidden></div>
+                            <button type="button" class="moonfinLinkButton labelsNoteAction" id="LabelsTestUsePreview" hidden>Use the preview's movie</button>
+                        </div>
+                        <div class="labelsReport" id="LabelsTestReport" aria-live="polite"></div>
+                    </section>
+                    </aside>
+                    </div>
+                    </div>
+
+                    <div class="moonfinSubPanel" data-labels-panel="anime">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Anime Filler &amp; Recap Markers</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkersEnabled" is="emby-checkbox" />
+                                <span>Classify anime episodes as canon, mixed or filler</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Nightly task that matches your anime against
+                                <a href="https://www.animefillerlist.com/" target="_blank">AnimeFillerList</a> so Moonfin
+                                clients can badge filler episodes. No account or API key is needed. Series are matched by
+                                title, falling back to the English and romaji titles behind their ids for libraries in other languages,
+                                and only shows the site actually lists are fetched.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Libraries to look in</label>
+                            <div id="AnimeMarkerLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(128,128,128,0.2);border-radius:4px;padding:4px;"></div>
+                            <div class="fieldDescription">
+                                Leave everything unchecked to consider every library. Matching is a local title lookup, so
+                                narrowing this only helps if a non-anime show shares a title with an anime.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioTrustSelectedLibraries" is="emby-checkbox" />
+                                <span>Treat everything in the selected libraries as anime</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Affects the Subbed/Dubbed pills. Normally an item also has to look like anime on its own,
+                                meaning it carries an AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an
+                                &quot;Anime&quot; genre or tag. That check is what keeps a library holding both anime and
+                                ordinary shows from marking the ordinary ones.
+                                <br><br>
+                                If the libraries you picked above are <em>only</em> anime, turn this on: the check then
+                                only costs you the entries whose metadata happens to be thin, which would otherwise show
+                                no pill at all. Has no effect while no libraries are selected, since there is then
+                                nothing to trust.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkerRecapLookup" is="emby-checkbox" />
+                                <span>Also mark recap episodes (uses MyAnimeList)</span>
+                            </label>
+                            <div class="fieldDescription">
+                                AnimeFillerList has no recap category, so this asks MyAnimeList as well. It is best-effort
+                                and additive: if that lookup fails, the filler data is unaffected.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioMarkersEnabled" is="emby-checkbox" />
+                                <span>Also mark episodes and seasons as Subbed or Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Reads the audio tracks in each file: Japanese and nothing else is <strong>Subbed</strong>,
+                                anything carrying another spoken language is <strong>Dubbed</strong>. A season gets a pill
+                                only when every episode in it agrees. This needs no internet and does not depend on
+                                AnimeFillerList, so it works for anime the site has never listed. Files whose audio has no
+                                language tag are left unmarked rather than guessed at.
+                                <br><br>
+                                <strong>In a mixed library:</strong> when you select your anime libraries above, only shows
+                                in them are marked. If you leave the selection empty the whole server is in scope, and a
+                                series is then only marked when it looks like anime on its own, meaning it carries an
+                                AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an "Anime" genre or tag. A Japanese
+                                live-action show carrying one of those would still be marked.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioMarkersMovies" is="emby-checkbox" />
+                                <span>Also mark movies as Subbed or Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Extends the same audio rules to movies, so the pill shows on a movie card anywhere it
+                                appears, including home screen rows. Separate from the option above because a movie has
+                                no series to inherit from, and a mixed library is most likely to mislabel a film.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioSeparateDualAudio" is="emby-checkbox" />
+                                <span>Label dual-audio files as Subbed/Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                A file holding the Japanese audio <em>and</em> a dub can be watched either way, so it
+                                shows as <strong>Subbed/Dubbed</strong> rather than just Dubbed. Leave off for the
+                                shorter label.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeAudioLabelStyle">Audio pill wording</label>
+                            <select is="emby-select" id="AnimeAudioLabelStyle">
+                                <option value="full">Full: Subbed / Dubbed / Subbed/Dubbed</option>
+                                <option value="short">Short: Sub / Dub / Sub/Dub</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Full wording is longer while on Phones and Tablets a shorter label fits better.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPlacement">Where to put the pills</label>
+                            <select is="emby-select" id="AnimeMarkerPlacement">
+                                <option value="below">Below the runtime</option>
+                                <option value="beside">Beside the runtime</option>
+                                <option value="thumbnail">On the episode thumbnail</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Applies to episode rows in Moonfin clients. Season and movie cards always draw the pill
+                                over the artwork, since they have no runtime line to sit next to.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Which pills to show</label>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowFiller" is="emby-checkbox" />
+                                    <span>Filler</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowMixed" is="emby-checkbox" />
+                                    <span>Mixed canon and filler</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowRecap" is="emby-checkbox" />
+                                    <span>Recap</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowMangaCanon" is="emby-checkbox" />
+                                    <span>Manga canon</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowAnimeCanon" is="emby-checkbox" />
+                                    <span>Anime canon</span>
+                                </label>
+                            </div>
+                            <div class="fieldDescription">
+                                A pill that is switched off is never sent to a client, so every Moonfin client agrees.
+                                The two canon options are off by default: nearly every episode of most shows is canon,
+                                so turning them on puts a pill on almost everything.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerMaxAgeDays">Marker refresh age (days)</label>
+                            <input type="number" id="AnimeMarkerMaxAgeDays" is="emby-input" min="1" max="365" step="1" />
+                            <div class="fieldDescription">
+                                Shows older than this are re-fetched (default 30). A finished show's classifications never
+                                change, so this mainly governs how quickly an airing show picks up new episodes.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button type="button" id="AnimeMarkerDiagBtn" is="emby-button" class="raised">Check matching</button>
+                                <button type="button" id="AnimeMarkerClearBtn" is="emby-button" class="raised">Clear marker cache</button>
+                            </div>
+                            <div class="fieldDescription">
+                                Markers appear after the <strong>Moonfin Anime Markers Sync</strong> task has run. You can
+                                start it now from Scheduled Tasks in the Emby dashboard.
+                            </div>
+                            <div id="AnimeMarkerDiagStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPreviewName">Preview a series</label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <input type="text" id="AnimeMarkerPreviewName" is="emby-input" placeholder="One Piece" style="flex:1;min-width:200px;" />
+                                <button type="button" id="AnimeMarkerPreviewBtn" is="emby-button" class="raised">Preview</button>
+                                <button type="button" id="AnimeMarkerFetchBtn" is="emby-button" class="raised">Fetch now</button>
+                            </div>
+                            <div class="fieldDescription">
+                                Type a series name from your library and press Preview to see exactly which of your
+                                episodes each marker landed on. <strong>Fetch now</strong> pulls that one show
+                                immediately (about ten seconds, the site's crawl delay) instead of waiting for the task.
+                            </div>
+                            <div id="AnimeMarkerPreviewStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
+                            <div id="AnimeMarkerPreviewResult" style="margin-top:8px;max-height:420px;overflow:auto;"></div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkerVerboseLogging" is="emby-checkbox" />
+                                <span>Write a marker debug log</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Records every marker request a client makes and what it was answered with, to
+                                <code>moonfin-anime-markers.log</code> in the server's own log folder, so it also shows
+                                up under Logs in the Emby dashboard where it can be downloaded. Turn this on when a badge is not
+                                appearing: if a request never shows up here, the app never asked, which means the
+                                problem is in the app rather than on the server. Leave it off otherwise.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button type="button" id="AnimeMarkerLogBtn" is="emby-button" class="raised">Show log</button>
+                                <button type="button" id="AnimeMarkerClearLogBtn" is="emby-button" class="raised">Clear log</button>
+                            </div>
+                            <div id="AnimeMarkerLogStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
+                            <pre id="AnimeMarkerLogOutput" style="margin-top:8px;max-height:320px;overflow:auto;font-size:0.8em;line-height:1.45;background:rgba(128,128,128,0.12);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-word;"></pre>
+                        </div>
+                    </div>
                     </div>
                     </section>
                     <section class="moonfinTabPanel" data-tab="messages">

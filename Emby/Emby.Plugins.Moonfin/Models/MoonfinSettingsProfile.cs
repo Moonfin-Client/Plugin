@@ -40,6 +40,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("customThemeId")] public string? CustomThemeId { get; set; }
         [JsonPropertyName("oledMode")] public string? OledMode { get; set; }
         [JsonPropertyName("watchedIndicator")] public string? WatchedIndicator { get; set; }
+        [JsonPropertyName("showPosterLabels")] public bool? ShowPosterLabels { get; set; }
         [JsonPropertyName("cardFocusExpansion")] public bool? CardFocusExpansion { get; set; }
         [JsonPropertyName("showShuffleButton")] public bool? ShowShuffleButton { get; set; }
         [JsonPropertyName("showGenresButton")] public bool? ShowGenresButton { get; set; }

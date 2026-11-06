@@ -203,9 +203,19 @@
                 };
             });
         },
-        // Neither host lets the page read library items.
-        getItems: function () {
-            return Promise.resolve({ Items: [], TotalRecordCount: 0 });
+        // Artwork needs the server's own token, which the page never holds,
+        // so the poster label test draws on a blank poster.
+        getImageUrl: function () {
+            return '';
+        },
+        // Only the poster label test can search, for movies and episodes on a
+        // host that reads its files. Every other list stays empty.
+        getItems: function (userId, query) {
+            var term = query && query.SearchTerm;
+            if (!term || !/Movie|Episode/.test(query.IncludeItemTypes || '')) {
+                return Promise.resolve({ Items: [], TotalRecordCount: 0 });
+            }
+            return this.getJSON(getUrl('Moonfin/PosterBadges/Search', { term: term }));
         }
     };
 

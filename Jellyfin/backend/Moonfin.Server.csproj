@@ -47,6 +47,9 @@
     <EmbeddedResource Include="assets/*.svg">
       <LogicalName>Moonfin.Server.assets.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="../../shared/PosterBadges/flags/*.svg;../../shared/PosterBadges/flags/*.webp">
+      <LogicalName>Moonfin.Server.assets.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- The seasonal row's pure logic and rules are shared with the Emby port, so both read the
@@ -62,6 +65,7 @@
     <Compile Include="../../shared/Romm/*.cs" Link="Romm/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Games/*.cs" Link="Games/%(Filename)%(Extension)" />
     <Compile Include="../../shared/SmartSearch/*.cs" Link="SmartSearch/%(Filename)%(Extension)" />
+    <Compile Include="../../shared/PosterBadges/*.cs" Link="PosterBadges/%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../shared/Seasonal/seasonal-holidays.json" LogicalName="Moonfin.Seasonal.holidays.json" />
   </ItemGroup>
 

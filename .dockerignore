@@ -2,6 +2,7 @@
 *
 !Go/
 !shared/SmartSearch/
+!shared/PosterBadges/flags/
 Go/dist/
 Go/smartsearch/bin/
 Go/smartsearch/obj/

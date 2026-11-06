@@ -39,6 +39,8 @@ type Config struct {
 	Version string
 	// SmartSearchHelper is the smart search helper program. Empty leaves smart search off.
 	SmartSearchHelper string
+	// FlagsDir holds the poster label flags. Empty serves none.
+	FlagsDir string
 }
 
 // How long a checked token is trusted before Plex is asked again.
@@ -85,6 +87,7 @@ func New(cfg Config) (*Companion, error) {
 		Catalog:     c,
 		Identify:    c.Identify,
 		SmartSearch: helper,
+		FlagsDir:    cfg.FlagsDir,
 	})
 	return c, nil
 }

@@ -30,10 +30,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { id: 'recentlyreleased', label: 'Recently Released' }
     ];
 
+    // This declaration wins over the one above. Quotes too, since the result also goes into
+    // attributes.
     function esc(s) {
         var d = document.createElement('div');
         d.textContent = s;
-        return d.innerHTML;
+        return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     // Inline SVG icons for the Active Downloads cards. Emby's dashboard doesn't load the Material
@@ -2767,6 +2769,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#AnimeMarkerMaxAgeDays').value = config.AnimeMarkerMaxAgeDays || 30;
             view.querySelector('#AnimeMarkerVerboseLogging').checked = config.AnimeMarkerVerboseLogging === true;
             loadLibraryPicker(view, '#AnimeMarkerLibraryPicker', 'animeMarkerLibraryCb', config.AnimeMarkerLibraryIds || []);
+            setPosterBadgeRules(view, config.PosterBadgeRules, config.PosterBadgeDefaults);
             view.querySelector('#FcmServiceAccountJson').value = config.FcmServiceAccountJson || '';
             view.querySelector('#FcmServiceAccountPath').value = config.FcmServiceAccountPath || '';
             view.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
@@ -2844,6 +2847,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         bindNullableRangeInput(view, '#DefaultThemeMusicVolume', '%');
         setNullableRangeInput(view, '#DefaultThemeMusicVolume', defaults.themeMusicVolume, '%');
         setSelectValue(view, '#DefaultWatchedIndicator', defaults.watchedIndicator, 'Configured mode');
+        setNullableBoolSelect(view, '#DefaultShowPosterLabels', defaults.showPosterLabels);
         setNullableBoolSelect(view, '#DefaultCardFocusExpansion', defaults.cardFocusExpansion);
         setSelectValue(view, '#DefaultScreensaverMode', defaults.screensaverMode, 'Configured mode');
         setSelectValue(view, '#DefaultScreensaverBackdrop', defaults.screensaverBackdrop, 'Configured backdrop');
@@ -3188,6 +3192,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 config.AnimeMarkerLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.animeMarkerLibraryCb:checked'))
                     .map(function (cb) { return cb.getAttribute('data-id'); });
             }
+            config.PosterBadgeRules = getPosterBadgeRules();
+            config.PosterBadgeDefaults = getPosterBadgeDefaults();
             config.FcmServiceAccountJson = view.querySelector('#FcmServiceAccountJson').value || null;
             config.FcmServiceAccountPath = view.querySelector('#FcmServiceAccountPath').value || null;
             config.PushRelayUrl = (view.querySelector('#PushRelayUrl').value || '').trim()
@@ -3286,6 +3292,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.themeMusicLoop = getNullableBoolSelect(view, '#DefaultThemeMusicLoop');
         d.themeMusicVolume = getNullableRangeInput(view, '#DefaultThemeMusicVolume');
         d.watchedIndicator = view.querySelector('#DefaultWatchedIndicator').value || null;
+        d.showPosterLabels = getNullableBoolSelect(view, '#DefaultShowPosterLabels');
         d.cardFocusExpansion = getNullableBoolSelect(view, '#DefaultCardFocusExpansion');
         d.screensaverMode = view.querySelector('#DefaultScreensaverMode').value || null;
         d.screensaverBackdrop = view.querySelector('#DefaultScreensaverBackdrop').value || null;
@@ -4032,6 +4039,1388 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         var titleInput = view.querySelector('#MessageTitle');
         if (titleInput) titleInput.focus();
+    }
+
+    // Fields are the server's track properties by name, so another one only needs adding here.
+    var POSTER_BADGE_FIELDS = [
+        ['Path', 'File path'],
+        ['Audio.Language', 'Audio track: language'],
+        ['Audio.Title', 'Audio track: title'],
+        ['Audio.Codec', 'Audio track: codec'],
+        ['Audio.Profile', 'Audio track: profile'],
+        ['Audio.Channels', 'Audio track: channels'],
+        ['Audio.Count', 'Audio tracks: how many'],
+        ['Audio.LanguageCount', 'Audio tracks: how many languages'],
+        ['Video.Height', 'Video: height'],
+        ['Video.Width', 'Video: width'],
+        ['Video.Codec', 'Video: codec'],
+        ['Video.VideoRange', 'Video: HDR type'],
+        ['Subtitle.Language', 'Subtitle: language'],
+        ['Subtitle.Title', 'Subtitle: title']
+    ];
+
+    var LABEL_NUMBER_FIELDS = ['Audio.Channels', 'Audio.Count', 'Audio.LanguageCount', 'Video.Height', 'Video.Width'];
+
+    var LABEL_TEXT_OPERATORS = [['contains', 'contains'], ['is', 'is'], ['oneOf', 'is one of'], ['matches', 'matches pattern']];
+
+    var LABEL_NUMBER_OPERATORS = [['atLeast', 'is at least'], ['moreThan', 'is more than'], ['atMost', 'is at most'], ['lessThan', 'is less than'], ['is', 'is']];
+
+    // The path and a count are one value, so they read "when" or "unless" rather than
+    // naming tracks.
+    function labelMatchChoices(field) {
+        return field === 'Path' || /Count$/.test(field)
+            ? [['any', 'When'], ['none', 'Unless']]
+            : [['any', 'Any'], ['none', 'No'], ['every', 'Every']];
+    }
+
+    // The tests for the field. A stored test from the other list stays offered, so a
+    // saved rule like "Video: height matches 2160" isn't changed behind the admin's back.
+    function labelOperatorChoices(field, keep) {
+        var list = LABEL_NUMBER_FIELDS.indexOf(field) !== -1 ? LABEL_NUMBER_OPERATORS : LABEL_TEXT_OPERATORS;
+        var kept = LABEL_TEXT_OPERATORS.concat(LABEL_NUMBER_OPERATORS).filter(function(choice) { return choice[0] === keep; })[0];
+        return kept && list.indexOf(kept) === -1 ? list.concat([kept]) : list;
+    }
+
+    // Keeps the test and the tracks valid for the field. On load, a rule saved by the first
+    // version has its "does not match" turned into "No" with a pattern, and any test the
+    // server knows is kept. When the admin picks another field, the test follows it.
+    function normalizeLabelCondition(condition, fieldChanged) {
+        if (condition.Operator === 'notMatches') {
+            condition.Operator = 'matches';
+            condition.Match = 'none';
+        }
+
+        var operators = labelOperatorChoices(condition.Field, fieldChanged ? null : condition.Operator);
+        if (!operators.some(function(choice) { return choice[0] === condition.Operator; })) {
+            condition.Operator = operators[0][0];
+        }
+
+        var matches = labelMatchChoices(condition.Field);
+        if (!matches.some(function(choice) { return choice[0] === condition.Match; })) {
+            condition.Match = 'any';
+        }
+
+        return condition;
+    }
+
+    var POSTER_BADGE_DEFAULT_COLOR = '#2563eb';
+
+    var LABEL_CHOICES = {
+        Style: [['solid', 'Solid'], ['glass', 'Glass'], ['outline', 'Outline'], ['dark', 'Dark'], ['light', 'Light']],
+        Shape: [['rounded', 'Rounded'], ['pill', 'Pill'], ['square', 'Square']],
+        Size: [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['xlarge', 'Extra large']],
+        Corner: [['topLeft', 'Top left'], ['topRight', 'Top right'], ['bottomLeft', 'Bottom left'], ['bottomRight', 'Bottom right']]
+    };
+
+    var LABEL_PROFILES = [['tv', 'TV'], ['desktop', 'Desktop'], ['mobile', 'Mobile']];
+
+    var LABEL_PRESET_GROUPS = [['resolution', 'Resolution'], ['hdr', 'Dynamic range'], ['audio', 'Audio format'], ['channels', 'Channels'], ['codec', 'Video codec'], ['release', 'Release']];
+
+    // The icons a label can carry: id, name, and the Material glyph the apps draw. Kept
+    // in step with PosterBadgeMatcher.Icons and poster_badges.dart.
+    var LABEL_ICONS = [
+        ['contrast', 'Contrast', '<path d="M12,22c5.52,0,10-4.48,10-10S17.52,2,12,2S2,6.48,2,12S6.48,22,12,22z M13,4.07c3.94,0.49,7,3.85,7,7.93s-3.05,7.44-7,7.93 V4.07z"/>'],
+        ['hdr_on', 'HDR', '<path d="M21 11.5v-1c0-.8-.7-1.5-1.5-1.5H16v6h1.5v-2h1.1l.9 2H21l-.9-2.1c.5-.3.9-.8.9-1.4zm-1.5 0h-2v-1h2v1zm-13-.5h-2V9H3v6h1.5v-2.5h2V15H8V9H6.5v2zM13 9H9.5v6H13c.8 0 1.5-.7 1.5-1.5v-3c0-.8-.7-1.5-1.5-1.5zm0 4.5h-2v-3h2v3z"/>'],
+        ['high_quality', 'High quality', '<path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 11H9.5v-2h-2v2H6V9h1.5v2.5h2V9H11v6zm7-1c0 .55-.45 1-1 1h-.75v1.5h-1.5V15H14c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v4zm-3.5-.5h2v-3h-2v3z"/>'],
+        ['movie', 'Film', '<path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>'],
+        ['theaters', 'Cinema', '<path d="M18 3v2h-2V3H8v2H6V3H4v18h2v-2h2v2h8v-2h2v2h2V3h-2zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/>'],
+        ['aspect_ratio', 'Aspect ratio', '<path d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16.01H3V4.99h18v14.02z"/>'],
+        ['surround_sound', 'Surround sound', '<path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM7.76 16.24l-1.41 1.41C4.78 16.1 4 14.05 4 12c0-2.05.78-4.1 2.34-5.66l1.41 1.41C6.59 8.93 6 10.46 6 12s.59 3.07 1.76 4.24zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm5.66 1.66l-1.41-1.41C17.41 15.07 18 13.54 18 12s-.59-3.07-1.76-4.24l1.41-1.41C19.22 7.9 20 9.95 20 12c0 2.05-.78 4.1-2.34 5.66zM12 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>'],
+        ['speaker', 'Speaker', '<path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 1.99 2 1.99L17 22c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 2c1.1 0 2 .9 2 2s-.9 2-2 2c-1.11 0-2-.9-2-2s.89-2 2-2zm0 16c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>'],
+        ['graphic_eq', 'Equaliser', '<path d="M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z"/>'],
+        ['album', 'Disc', '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/>'],
+        ['translate', 'Languages', '<path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>'],
+        ['subtitles', 'Subtitles', '<path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/>'],
+        ['record_voice_over', 'Dub', '<circle cx="9" cy="9" r="4"/><path d="M9 15c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4zm7.76-9.64l-1.68 1.69c.84 1.18.84 2.71 0 3.89l1.68 1.69c2.02-2.02 2.02-5.07 0-7.27zM20.07 2l-1.63 1.63c2.77 3.02 2.77 7.56 0 10.74L20.07 16c3.9-3.89 3.91-9.95 0-14z"/>'],
+        ['star', 'Star', '<path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>'],
+        ['check_circle', 'Check', '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>']
+    ];
+
+    // Country and region flags, by code and name, sorted by name. The images come from
+    // the plugin's own assets, the same files the apps ship.
+    var LABEL_FLAGS = [
+        ['af', 'Afghanistan'],
+        ['ax', 'Aland Islands'],
+        ['al', 'Albania'],
+        ['dz', 'Algeria'],
+        ['as', 'American Samoa'],
+        ['ad', 'Andorra'],
+        ['ao', 'Angola'],
+        ['ai', 'Anguilla'],
+        ['aq', 'Antarctica'],
+        ['ag', 'Antigua and Barbuda'],
+        ['ar', 'Argentina'],
+        ['am', 'Armenia'],
+        ['aw', 'Aruba'],
+        ['sh-ac', 'Ascension Island'],
+        ['au', 'Australia'],
+        ['at', 'Austria'],
+        ['az', 'Azerbaijan'],
+        ['bs', 'Bahamas'],
+        ['bh', 'Bahrain'],
+        ['bd', 'Bangladesh'],
+        ['bb', 'Barbados'],
+        ['es-pv', 'Basque Country'],
+        ['by', 'Belarus'],
+        ['be', 'Belgium'],
+        ['bz', 'Belize'],
+        ['bj', 'Benin'],
+        ['bm', 'Bermuda'],
+        ['bt', 'Bhutan'],
+        ['bo', 'Bolivia'],
+        ['bq', 'Bonaire, Sint Eustatius and Saba'],
+        ['ba', 'Bosnia and Herzegovina'],
+        ['bw', 'Botswana'],
+        ['bv', 'Bouvet Island'],
+        ['br', 'Brazil'],
+        ['io', 'British Indian Ocean Territory'],
+        ['bn', 'Brunei Darussalam'],
+        ['bg', 'Bulgaria'],
+        ['bf', 'Burkina Faso'],
+        ['bi', 'Burundi'],
+        ['cv', 'Cabo Verde'],
+        ['kh', 'Cambodia'],
+        ['cm', 'Cameroon'],
+        ['ca', 'Canada'],
+        ['ic', 'Canary Islands'],
+        ['es-ct', 'Catalonia'],
+        ['ky', 'Cayman Islands'],
+        ['cf', 'Central African Republic'],
+        ['cefta', 'Central European Free Trade Agreement'],
+        ['td', 'Chad'],
+        ['cl', 'Chile'],
+        ['cn', 'China'],
+        ['cx', 'Christmas Island'],
+        ['cp', 'Clipperton Island'],
+        ['cc', 'Cocos (Keeling) Islands'],
+        ['co', 'Colombia'],
+        ['km', 'Comoros'],
+        ['ck', 'Cook Islands'],
+        ['cr', 'Costa Rica'],
+        ['hr', 'Croatia'],
+        ['cu', 'Cuba'],
+        ['cw', 'Curaçao'],
+        ['cy', 'Cyprus'],
+        ['cz', 'Czech Republic'],
+        ['ci', 'Côte d\'Ivoire'],
+        ['cd', 'Democratic Republic of the Congo'],
+        ['dk', 'Denmark'],
+        ['dg', 'Diego Garcia'],
+        ['dj', 'Djibouti'],
+        ['dm', 'Dominica'],
+        ['do', 'Dominican Republic'],
+        ['eac', 'East African Community'],
+        ['ec', 'Ecuador'],
+        ['eg', 'Egypt'],
+        ['sv', 'El Salvador'],
+        ['gb-eng', 'England'],
+        ['gq', 'Equatorial Guinea'],
+        ['er', 'Eritrea'],
+        ['ee', 'Estonia'],
+        ['sz', 'Eswatini'],
+        ['et', 'Ethiopia'],
+        ['eu', 'Europe'],
+        ['fk', 'Falkland Islands'],
+        ['fo', 'Faroe Islands'],
+        ['fm', 'Federated States of Micronesia'],
+        ['fj', 'Fiji'],
+        ['fi', 'Finland'],
+        ['fr', 'France'],
+        ['gf', 'French Guiana'],
+        ['pf', 'French Polynesia'],
+        ['tf', 'French Southern Territories'],
+        ['ga', 'Gabon'],
+        ['es-ga', 'Galicia'],
+        ['gm', 'Gambia'],
+        ['ge', 'Georgia'],
+        ['de', 'Germany'],
+        ['gh', 'Ghana'],
+        ['gi', 'Gibraltar'],
+        ['gr', 'Greece'],
+        ['gl', 'Greenland'],
+        ['gd', 'Grenada'],
+        ['gp', 'Guadeloupe'],
+        ['gu', 'Guam'],
+        ['gt', 'Guatemala'],
+        ['gg', 'Guernsey'],
+        ['gn', 'Guinea'],
+        ['gw', 'Guinea-Bissau'],
+        ['gy', 'Guyana'],
+        ['ht', 'Haiti'],
+        ['hm', 'Heard Island and McDonald Islands'],
+        ['va', 'Holy See'],
+        ['hn', 'Honduras'],
+        ['hk', 'Hong Kong'],
+        ['hu', 'Hungary'],
+        ['is', 'Iceland'],
+        ['in', 'India'],
+        ['id', 'Indonesia'],
+        ['ir', 'Iran'],
+        ['iq', 'Iraq'],
+        ['ie', 'Ireland'],
+        ['im', 'Isle of Man'],
+        ['il', 'Israel'],
+        ['it', 'Italy'],
+        ['jm', 'Jamaica'],
+        ['jp', 'Japan'],
+        ['je', 'Jersey'],
+        ['jo', 'Jordan'],
+        ['kz', 'Kazakhstan'],
+        ['ke', 'Kenya'],
+        ['ki', 'Kiribati'],
+        ['xk', 'Kosovo'],
+        ['kw', 'Kuwait'],
+        ['kg', 'Kyrgyzstan'],
+        ['la', 'Laos'],
+        ['lv', 'Latvia'],
+        ['arab', 'League of Arab States'],
+        ['lb', 'Lebanon'],
+        ['ls', 'Lesotho'],
+        ['lr', 'Liberia'],
+        ['ly', 'Libya'],
+        ['li', 'Liechtenstein'],
+        ['lt', 'Lithuania'],
+        ['lu', 'Luxembourg'],
+        ['mo', 'Macau'],
+        ['mg', 'Madagascar'],
+        ['mw', 'Malawi'],
+        ['my', 'Malaysia'],
+        ['mv', 'Maldives'],
+        ['ml', 'Mali'],
+        ['mt', 'Malta'],
+        ['mh', 'Marshall Islands'],
+        ['mq', 'Martinique'],
+        ['mr', 'Mauritania'],
+        ['mu', 'Mauritius'],
+        ['yt', 'Mayotte'],
+        ['mx', 'Mexico'],
+        ['md', 'Moldova'],
+        ['mc', 'Monaco'],
+        ['mn', 'Mongolia'],
+        ['me', 'Montenegro'],
+        ['ms', 'Montserrat'],
+        ['ma', 'Morocco'],
+        ['mz', 'Mozambique'],
+        ['mm', 'Myanmar'],
+        ['na', 'Namibia'],
+        ['nr', 'Nauru'],
+        ['np', 'Nepal'],
+        ['nl', 'Netherlands'],
+        ['nc', 'New Caledonia'],
+        ['nz', 'New Zealand'],
+        ['ni', 'Nicaragua'],
+        ['ne', 'Niger'],
+        ['ng', 'Nigeria'],
+        ['nu', 'Niue'],
+        ['nf', 'Norfolk Island'],
+        ['kp', 'North Korea'],
+        ['mk', 'North Macedonia'],
+        ['gb-nir', 'Northern Ireland'],
+        ['mp', 'Northern Mariana Islands'],
+        ['no', 'Norway'],
+        ['om', 'Oman'],
+        ['pc', 'Pacific Community'],
+        ['pk', 'Pakistan'],
+        ['pw', 'Palau'],
+        ['pa', 'Panama'],
+        ['pg', 'Papua New Guinea'],
+        ['py', 'Paraguay'],
+        ['pe', 'Peru'],
+        ['ph', 'Philippines'],
+        ['pn', 'Pitcairn'],
+        ['pl', 'Poland'],
+        ['pt', 'Portugal'],
+        ['pr', 'Puerto Rico'],
+        ['qa', 'Qatar'],
+        ['cg', 'Republic of the Congo'],
+        ['ro', 'Romania'],
+        ['ru', 'Russia'],
+        ['rw', 'Rwanda'],
+        ['re', 'Réunion'],
+        ['bl', 'Saint Barthélemy'],
+        ['sh-hl', 'Saint Helena'],
+        ['sh', 'Saint Helena, Ascension and Tristan da Cunha'],
+        ['kn', 'Saint Kitts and Nevis'],
+        ['lc', 'Saint Lucia'],
+        ['mf', 'Saint Martin'],
+        ['pm', 'Saint Pierre and Miquelon'],
+        ['vc', 'Saint Vincent and the Grenadines'],
+        ['ws', 'Samoa'],
+        ['sm', 'San Marino'],
+        ['st', 'Sao Tome and Principe'],
+        ['sa', 'Saudi Arabia'],
+        ['gb-sct', 'Scotland'],
+        ['sn', 'Senegal'],
+        ['rs', 'Serbia'],
+        ['sc', 'Seychelles'],
+        ['sl', 'Sierra Leone'],
+        ['sg', 'Singapore'],
+        ['sx', 'Sint Maarten'],
+        ['sk', 'Slovakia'],
+        ['si', 'Slovenia'],
+        ['sb', 'Solomon Islands'],
+        ['so', 'Somalia'],
+        ['za', 'South Africa'],
+        ['gs', 'South Georgia and the South Sandwich Islands'],
+        ['kr', 'South Korea'],
+        ['ss', 'South Sudan'],
+        ['es', 'Spain'],
+        ['lk', 'Sri Lanka'],
+        ['ps', 'State of Palestine'],
+        ['sd', 'Sudan'],
+        ['sr', 'Suriname'],
+        ['sj', 'Svalbard and Jan Mayen'],
+        ['se', 'Sweden'],
+        ['ch', 'Switzerland'],
+        ['sy', 'Syria'],
+        ['tw', 'Taiwan'],
+        ['tj', 'Tajikistan'],
+        ['tz', 'Tanzania'],
+        ['th', 'Thailand'],
+        ['tl', 'Timor-Leste'],
+        ['tg', 'Togo'],
+        ['tk', 'Tokelau'],
+        ['to', 'Tonga'],
+        ['tt', 'Trinidad and Tobago'],
+        ['sh-ta', 'Tristan da Cunha'],
+        ['tn', 'Tunisia'],
+        ['tm', 'Turkmenistan'],
+        ['tc', 'Turks and Caicos Islands'],
+        ['tv', 'Tuvalu'],
+        ['tr', 'Türkiye'],
+        ['ug', 'Uganda'],
+        ['ua', 'Ukraine'],
+        ['ae', 'United Arab Emirates'],
+        ['gb', 'United Kingdom'],
+        ['un', 'United Nations'],
+        ['um', 'United States Minor Outlying Islands'],
+        ['us', 'United States of America'],
+        ['uy', 'Uruguay'],
+        ['uz', 'Uzbekistan'],
+        ['vu', 'Vanuatu'],
+        ['ve', 'Venezuela'],
+        ['vn', 'Vietnam'],
+        ['vg', 'Virgin Islands (British)'],
+        ['vi', 'Virgin Islands (U.S.)'],
+        ['gb-wls', 'Wales'],
+        ['wf', 'Wallis and Futuna'],
+        ['eh', 'Western Sahara'],
+        ['ye', 'Yemen'],
+        ['zm', 'Zambia'],
+        ['zw', 'Zimbabwe']
+    ];
+
+    function labelFlag(id) {
+        return /^flag-/.test(id || '') ? LABEL_FLAGS.filter(function(flag) { return 'flag-' + flag[0] === id; })[0] : null;
+    }
+
+    function labelIconSvg(id) {
+        var flag = labelFlag(id);
+        if (flag) {
+            return '<img class="labelsFlag" src="' + ApiClient.getUrl('Moonfin/Assets/' + id + '.svg') + '" alt="" />';
+        }
+
+        var icon = LABEL_ICONS.filter(function(entry) { return entry[0] === id; })[0];
+        return icon ? '<svg viewBox="0 0 24 24" aria-hidden="true">' + icon[2] + '</svg>' : '';
+    }
+
+    function labelIconName(id) {
+        var flag = labelFlag(id);
+        if (flag) {
+            return 'Flag of ' + flag[1];
+        }
+
+        var icon = LABEL_ICONS.filter(function(entry) { return entry[0] === id; })[0];
+        return icon ? icon[1] : '';
+    }
+
+    // A label as the apps draw it: the icon, then the text, either of them alone.
+    function labelBadgeHtml(look, text, baseFont) {
+        var label = (text || '').trim();
+
+        // A flag alone is its own shape: no fill, no padding, as tall as a text label
+        // (its 1.3 line plus the padding) so it lines up with the labels around it.
+        if (!label && labelFlag(look.icon)) {
+            var scale = LABEL_SIZE_SCALE[look.size] || 1;
+            var height = baseFont * scale * 1.3 + 4 * scale;
+            var radius = look.shape === 'square' ? 0 : (look.shape === 'pill' ? 5 : 3) * scale;
+            return '<span class="labelsBadge labelsBareFlag" role="img" aria-label="' + esc(labelIconName(look.icon)) + '" style="border-radius:' + radius + 'px;">'
+                + '<img class="labelsFlag" src="' + ApiClient.getUrl('Moonfin/Assets/' + look.icon + '.svg') + '" alt="" style="width:' + height * 4 / 3 + 'px;height:' + height + 'px;border-radius:' + radius + 'px;" />'
+                + '</span>';
+        }
+
+        var icon = labelIconSvg(look.icon);
+        var shape = Object.assign({}, look, { iconOnly: !!icon && !label });
+        return '<span class="labelsBadge" style="' + labelBadgeCss(shape, baseFont) + '"'
+            + (!label && icon ? ' role="img" aria-label="' + esc(labelIconName(look.icon)) + '"' : '') + '>'
+            + icon + (label ? '<span>' + esc(label) + '</span>' : '') + '</span>';
+    }
+
+    // A rule's name in the list, for a label that may only be an icon.
+    function labelRuleName(rule) {
+        return rule.Label.trim() || (labelFlag(rule.Icon) ? labelIconName(rule.Icon) : rule.Icon ? labelIconName(rule.Icon) + ' icon' : 'New label');
+    }
+
+    // Same scale as the apps, so the preview matches what people see.
+    var LABEL_SIZE_SCALE = { small: 0.8, medium: 1, large: 1.25, xlarge: 1.5 };
+
+    var posterBadgeRules = [];
+    // Replaced once the config loads; filled now so nothing draws "undefined" before that.
+    var posterBadgeDefaults = { Style: 'solid', Shape: 'rounded', Size: 'medium', Corner: 'topLeft', Opacity: 100, MaxPerCorner: 2 };
+    var posterBadgePresets = [];
+    var labelUsers = [];
+
+    // The random poster, and the file being tested with its last answer.
+    var labelPreviewItem = null;
+    var labelTestItem = null;
+    var labelTestResult = null;
+    var labelTestError = '';
+    var labelTestTimer = null;
+    var labelSearchTimer = null;
+
+    function newPosterBadgeCondition() {
+        return { Field: 'Audio.Title', Match: 'any', Operator: 'contains', Value: '' };
+    }
+
+    // The stored rules can come back in either casing, depending on the server's serializer.
+    function posterBadgeValue(source, key) {
+        return source[key] !== undefined ? source[key] : source[key.charAt(0).toLowerCase() + key.slice(1)];
+    }
+
+    // The server reads user ids as guids, dashed or not, so the page compares them the same way.
+    function labelUserId(id) {
+        return String(id || '').replace(/-/g, '').toLowerCase();
+    }
+
+    function labelHex(value, fallback) {
+        return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : fallback;
+    }
+
+    function labelChoice(key, value, fallback) {
+        var found = LABEL_CHOICES[key].filter(function(choice) { return choice[0] === value; })[0];
+        return found ? found[0] : fallback;
+    }
+
+    function setPosterBadgeRules(view, rules, defaults) {
+        defaults = defaults || {};
+        var opacity = Number(posterBadgeValue(defaults, 'Opacity'));
+        var max = Number(posterBadgeValue(defaults, 'MaxPerCorner'));
+        posterBadgeDefaults = {
+            Style: labelChoice('Style', posterBadgeValue(defaults, 'Style'), 'solid'),
+            Shape: labelChoice('Shape', posterBadgeValue(defaults, 'Shape'), 'rounded'),
+            Size: labelChoice('Size', posterBadgeValue(defaults, 'Size'), 'medium'),
+            Corner: labelChoice('Corner', posterBadgeValue(defaults, 'Corner'), 'topLeft'),
+            Opacity: opacity >= 10 && opacity <= 100 ? opacity : 100,
+            MaxPerCorner: max >= 1 && max <= 5 ? max : 2
+        };
+
+        posterBadgeRules = (rules || []).filter(Boolean).map(function(rule) {
+            var ruleOpacity = posterBadgeValue(rule, 'Opacity');
+            return {
+                Label: posterBadgeValue(rule, 'Label') || '',
+                Icon: posterBadgeValue(rule, 'Icon') || '',
+                // The colour picker only takes #rrggbb.
+                Color: labelHex(posterBadgeValue(rule, 'Color'), POSTER_BADGE_DEFAULT_COLOR),
+                TextColor: labelHex(posterBadgeValue(rule, 'TextColor'), ''),
+                Enabled: posterBadgeValue(rule, 'Enabled') !== false,
+                Preset: posterBadgeValue(rule, 'Preset') || '',
+                Style: labelChoice('Style', posterBadgeValue(rule, 'Style'), ''),
+                Shape: labelChoice('Shape', posterBadgeValue(rule, 'Shape'), ''),
+                Size: labelChoice('Size', posterBadgeValue(rule, 'Size'), ''),
+                Corner: labelChoice('Corner', posterBadgeValue(rule, 'Corner'), ''),
+                Opacity: ruleOpacity === null || ruleOpacity === undefined ? null : Number(ruleOpacity),
+                UserIds: (posterBadgeValue(rule, 'UserIds') || []).map(labelUserId).filter(function(id, i, all) { return id && all.indexOf(id) === i; }),
+                Profiles: (posterBadgeValue(rule, 'Profiles') || []).slice(),
+                Conditions: (posterBadgeValue(rule, 'Conditions') || []).filter(Boolean).map(function(condition) {
+                    return normalizeLabelCondition({
+                        Field: posterBadgeValue(condition, 'Field') || 'Path',
+                        Match: posterBadgeValue(condition, 'Match') || 'any',
+                        Operator: posterBadgeValue(condition, 'Operator') || 'contains',
+                        Value: posterBadgeValue(condition, 'Value') || ''
+                    });
+                })
+            };
+        });
+        renderLabels(view);
+    }
+
+    function getPosterBadgeRules() {
+        return posterBadgeRules.map(function(rule) {
+            return {
+                Label: rule.Label.trim(),
+                Icon: rule.Icon || null,
+                Color: rule.Color,
+                TextColor: rule.TextColor || null,
+                Enabled: rule.Enabled,
+                Preset: rule.Preset || null,
+                Style: rule.Style || null,
+                Shape: rule.Shape || null,
+                Size: rule.Size || null,
+                Corner: rule.Corner || null,
+                Opacity: rule.Opacity,
+                UserIds: rule.UserIds,
+                Profiles: rule.Profiles,
+                Conditions: rule.Preset ? [] : rule.Conditions.map(function(condition) {
+                    return { Field: condition.Field, Match: condition.Match, Operator: condition.Operator, Value: condition.Value.trim() };
+                })
+            };
+        });
+    }
+
+    function getPosterBadgeDefaults() {
+        return {
+            Style: posterBadgeDefaults.Style,
+            Shape: posterBadgeDefaults.Shape,
+            Size: posterBadgeDefaults.Size,
+            Corner: posterBadgeDefaults.Corner,
+            Opacity: posterBadgeDefaults.Opacity,
+            MaxPerCorner: posterBadgeDefaults.MaxPerCorner
+        };
+    }
+
+    function labelLuminance(hex) {
+        var value = parseInt(String(hex || '').slice(1), 16) || 0;
+        var channel = function(c) {
+            c /= 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
+    }
+
+    // Flutter's own cut-off for dark or light text over a colour, so the preview reads like the apps.
+    function posterBadgeTextColor(hex) {
+        return Math.pow(labelLuminance(hex) + 0.05, 2) > 0.15 ? '#000000' : '#ffffff';
+    }
+
+    function labelRgba(hex, alpha) {
+        var value = parseInt(String(hex || '').slice(1), 16) || 0;
+        return 'rgba(' + ((value >> 16) & 255) + ', ' + ((value >> 8) & 255) + ', ' + (value & 255) + ', ' + Math.round(alpha * 1000) / 1000 + ')';
+    }
+
+    // The look a rule ends up with, its own settings first and the defaults after.
+    function labelLook(rule) {
+        return {
+            color: rule.Color,
+            textColor: rule.TextColor,
+            style: rule.Style || posterBadgeDefaults.Style,
+            shape: rule.Shape || posterBadgeDefaults.Shape,
+            size: rule.Size || posterBadgeDefaults.Size,
+            corner: rule.Corner || posterBadgeDefaults.Corner,
+            opacity: rule.Opacity === null || rule.Opacity === undefined ? posterBadgeDefaults.Opacity : rule.Opacity,
+            icon: rule.Icon
+        };
+    }
+
+    // Kept in step with poster_badges.dart in Moonfin-Core. Opacity fades the fill and the
+    // border; the text stays solid so it stays readable.
+    function labelBadgeCss(look, baseFont) {
+        var alpha = look.opacity / 100;
+        var luminance = labelLuminance(look.color);
+        var background;
+        var border = 'none';
+        var text;
+
+        if (look.style === 'glass') {
+            background = labelRgba(look.color, 0.45 * alpha);
+            border = '1px solid rgba(255, 255, 255, ' + 0.35 * alpha + ')';
+            text = '#ffffff';
+        } else if (look.style === 'outline') {
+            background = 'rgba(0, 0, 0, ' + 0.55 * alpha + ')';
+            border = '1.5px solid ' + labelRgba(look.color, alpha);
+            text = luminance < 0.05 ? '#ffffff' : look.color;
+        } else if (look.style === 'dark') {
+            background = 'rgba(12, 12, 16, ' + 0.85 * alpha + ')';
+            text = luminance < 0.05 ? '#ffffff' : look.color;
+        } else if (look.style === 'light') {
+            background = 'rgba(255, 255, 255, ' + 0.92 * alpha + ')';
+            text = luminance > 0.4 ? '#111111' : look.color;
+        } else {
+            background = labelRgba(look.color, alpha);
+            text = posterBadgeTextColor(look.color);
+        }
+
+        var scale = LABEL_SIZE_SCALE[look.size] || 1;
+        var radius = look.shape === 'pill' ? '999px' : look.shape === 'square' ? '0' : 4 * scale + 'px';
+        return 'background:' + background + ';border:' + border + ';color:' + (look.textColor || text)
+            + ';font-size:' + baseFont * scale + 'px;padding:' + 2 * scale + 'px ' + (look.iconOnly ? 3 : 6) * scale + 'px;border-radius:' + radius + ';';
+    }
+
+    function labelChoiceName(key, value) {
+        var found = LABEL_CHOICES[key].filter(function(choice) { return choice[0] === value; })[0];
+        return found ? found[1] : value;
+    }
+
+    function labelOptionButtons(key, selected, withDefault) {
+        var choices = withDefault ? [['', 'Default (' + labelChoiceName(key, posterBadgeDefaults[key]) + ')']].concat(LABEL_CHOICES[key]) : LABEL_CHOICES[key];
+        return choices.map(function(choice) {
+            var sample = '';
+            if (key === 'Style' && choice[0]) {
+                sample = '<span class="labelsStyleSwatch"><span class="labelsBadge" style="' + labelBadgeCss({ color: '#0284c7', style: choice[0], shape: 'rounded', size: 'medium', opacity: 100 }, 10) + '">4K</span></span>';
+            }
+            return '<button type="button" class="labelsOption" data-pick="' + key + '" data-value="' + esc(choice[0]) + '" aria-pressed="' + (choice[0] === selected) + '">' + sample + esc(choice[1]) + '</button>';
+        }).join('');
+    }
+
+    function labelCornerButtons(selected) {
+        return LABEL_CHOICES.Corner.map(function(choice) {
+            return '<button type="button" data-pick="Corner" data-value="' + choice[0] + '" aria-pressed="' + (choice[0] === selected) + '" title="' + choice[1] + '" aria-label="' + choice[1] + '"></button>';
+        }).join('');
+    }
+
+    function posterBadgeOptions(options, selected) {
+        return options.map(function(option) {
+            return '<option value="' + esc(option[0]) + '"' + (option[0] === selected ? ' selected' : '') + '>' + esc(option[1]) + '</option>';
+        }).join('');
+    }
+
+    function labelPreset(id) {
+        return posterBadgePresets.filter(function(preset) { return preset.id === id; })[0];
+    }
+
+    function labelSummary(rule) {
+        var look = labelLook(rule);
+        var preset = rule.Preset ? labelPreset(rule.Preset) : null;
+        var groupName = preset ? (LABEL_PRESET_GROUPS.filter(function(group) { return group[0] === preset.group; })[0] || [])[1] : '';
+        var parts = [
+            rule.Preset ? 'Built-in' + (groupName ? ', ' + groupName.toLowerCase() : '') : rule.Conditions.length + (rule.Conditions.length === 1 ? ' condition' : ' conditions'),
+            labelChoiceName('Corner', look.corner),
+            labelChoiceName('Style', look.style),
+            rule.UserIds.length ? rule.UserIds.length + (rule.UserIds.length === 1 ? ' user' : ' users') : 'Everyone',
+            rule.Profiles.length ? rule.Profiles.map(function(profile) {
+                return (LABEL_PROFILES.filter(function(p) { return p[0] === profile; })[0] || [profile, profile])[1];
+            }).join(', ') : 'All devices'
+        ];
+        return parts.join(' · ');
+    }
+
+    function renderLabels(view) {
+        renderLabelDefaults(view);
+        renderLabelPresets(view);
+        renderPosterBadgeRules(view);
+        renderLabelPreview(view);
+        if (labelTestItem) {
+            scheduleLabelTest(view);
+        }
+    }
+
+    function renderLabelDefaults(view) {
+        ['Style', 'Shape', 'Size'].forEach(function(key) {
+            var group = view.querySelector('[data-default="' + key + '"]');
+            if (group) {
+                group.innerHTML = labelOptionButtons(key, posterBadgeDefaults[key], false);
+            }
+        });
+
+        var corner = view.querySelector('[data-default="Corner"]');
+        if (corner) {
+            corner.innerHTML = labelCornerButtons(posterBadgeDefaults.Corner);
+        }
+
+        var opacity = view.querySelector('#LabelsDefaultOpacity');
+        if (opacity) {
+            opacity.value = posterBadgeDefaults.Opacity;
+            view.querySelector('#LabelsDefaultOpacityValue').textContent = posterBadgeDefaults.Opacity + '%';
+        }
+
+        var max = view.querySelector('#LabelsMaxPerCorner');
+        if (max) {
+            max.value = String(posterBadgeDefaults.MaxPerCorner);
+        }
+    }
+
+    function renderLabelPresets(view) {
+        var container = view.querySelector('#LabelsPresetGroups');
+        if (!container || !posterBadgePresets.length) {
+            return;
+        }
+
+        container.innerHTML = LABEL_PRESET_GROUPS.map(function(group) {
+            var chips = posterBadgePresets.filter(function(preset) { return preset.group === group[0]; }).map(function(preset) {
+                var rule = posterBadgeRules.filter(function(r) { return r.Preset === preset.id; })[0];
+                var on = !!rule && rule.Enabled;
+                var look = rule ? labelLook(rule) : { color: preset.color, style: 'solid', shape: 'rounded', size: 'medium', opacity: 100 };
+                look.size = 'medium';
+                return '<button type="button" class="labelsPreset" data-preset="' + esc(preset.id) + '" aria-pressed="' + on + '" aria-label="' + esc(preset.label) + '" title="' + esc(preset.description) + '">'
+                    + labelBadgeHtml(look, rule ? rule.Label : preset.label, 10)
+                    + '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+                    + '</button>';
+            }).join('');
+            return chips ? '<div class="labelsPresetGroup"><span class="labelsFieldName">' + group[1] + '</span><div class="labelsPresets">' + chips + '</div></div>' : '';
+        }).join('');
+    }
+
+    function renderPosterBadgeRules(view) {
+        var container = view.querySelector('#PosterBadgeRulesList');
+        if (!container) {
+            return;
+        }
+
+        if (posterBadgeRules.length === 0) {
+            container.innerHTML = '<div class="homeLayoutEmpty">No labels yet. Switch on a built-in one above, or add your own.</div>';
+            return;
+        }
+
+        container.innerHTML = posterBadgeRules.map(function(rule, ruleIndex) {
+            var look = labelLook(rule);
+            var preset = rule.Preset ? labelPreset(rule.Preset) : null;
+            var when = rule.Preset
+                ? '<p class="labelsLead" style="margin:4px 0 0;">' + esc(preset ? preset.description : 'A built-in label.') + '</p>'
+                : rule.Conditions.map(function(condition, conditionIndex) {
+                    var number = LABEL_NUMBER_FIELDS.indexOf(condition.Field) !== -1;
+                    return '<div class="labelsCondition" data-condition="' + conditionIndex + '">'
+                        + '<select class="homeCustomListInput" data-key="Match" aria-label="Which tracks">' + posterBadgeOptions(labelMatchChoices(condition.Field), condition.Match) + '</select>'
+                        + '<select class="homeCustomListInput" data-key="Field" aria-label="Field">' + posterBadgeOptions(POSTER_BADGE_FIELDS, condition.Field) + '</select>'
+                        + '<select class="homeCustomListInput" data-key="Operator" aria-label="Test">' + posterBadgeOptions(labelOperatorChoices(condition.Field, condition.Operator), condition.Operator) + '</select>'
+                        + '<input type="text" class="homeCustomListInput" data-key="Value" aria-label="Value"' + (number ? ' inputmode="decimal"' : '') + ' value="' + esc(condition.Value) + '" />'
+                        + '<button type="button" class="homeLayoutIconButton" data-action="removeCondition" title="Remove condition" aria-label="Remove condition"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>'
+                        + '</div>';
+                }).join('') + '<button type="button" class="moonfinLinkButton" data-action="addCondition">+ Add condition</button>';
+
+            var someUsers = rule._someUsers || rule.UserIds.length > 0;
+            var users = '<div class="labelsInline">'
+                + '<button type="button" class="labelsOption" data-action="allUsers" aria-pressed="' + !someUsers + '">Everyone</button>'
+                + '<button type="button" class="labelsOption" data-action="someUsers" aria-pressed="' + someUsers + '">Only some users</button>'
+                + '</div>'
+                + (someUsers ? labelUserPicker(rule) : '');
+
+            var devices = '<button type="button" class="labelsOption" data-action="allProfiles" aria-pressed="' + (rule.Profiles.length === 0) + '">All devices</button>'
+                + LABEL_PROFILES.map(function(profile) {
+                    return '<button type="button" class="labelsOption" data-profile="' + profile[0] + '" aria-pressed="' + (rule.Profiles.indexOf(profile[0]) !== -1) + '">' + profile[1] + '</button>';
+                }).join('');
+
+            var opacityDefault = rule.Opacity === null || rule.Opacity === undefined;
+
+            return '<div class="labelsRule' + (rule._open ? ' is-open' : '') + (rule.Enabled ? '' : ' is-off') + '" data-rule="' + ruleIndex + '">'
+                + '<div class="labelsRuleHead">'
+                + '<span class="labelsRuleBadge">' + labelBadgeHtml(look, rule.Label, 11) + '</span>'
+                + '<button type="button" class="labelsRuleToggle" data-action="toggleOpen" aria-expanded="' + !!rule._open + '">'
+                + '<span class="labelsRuleName">' + esc(labelRuleName(rule)) + '</span>'
+                + '<span class="labelsRuleSummary">' + esc(labelSummary(rule)) + '</span>'
+                + '</button>'
+                + '<span class="labelsRuleActions">'
+                + '<label class="labelsSwitch" title="On"><input type="checkbox" data-key="Enabled"' + (rule.Enabled ? ' checked' : '') + ' aria-label="On" /><span aria-hidden="true"></span></label>'
+                + '<button type="button" class="homeLayoutIconButton" data-action="moveUp" title="Move up" aria-label="Move up"' + (ruleIndex === 0 ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg></button>'
+                + '<button type="button" class="homeLayoutIconButton" data-action="moveDown" title="Move down" aria-label="Move down"' + (ruleIndex === posterBadgeRules.length - 1 ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg></button>'
+                + '<button type="button" class="homeLayoutIconButton" data-action="removeRule" title="Delete label" aria-label="Delete label"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>'
+                + '</span>'
+                + '</div>'
+                + '<div class="labelsRuleBody">'
+                + '<h4>Shows when</h4>' + when
+                + '<h4>Look</h4>'
+                + '<div class="labelsField"><span class="labelsFieldName">Text and colour</span><div class="labelsInline">'
+                + '<input type="text" class="homeCustomListInput" data-key="Label" maxlength="16" aria-label="Text" value="' + esc(rule.Label) + '" />'
+                + '<input type="color" class="labelsColor" data-key="Color" aria-label="Colour" title="Colour" value="' + esc(rule.Color) + '" />'
+                + '<select class="homeCustomListInput" data-key="TextColorMode" aria-label="Text colour"><option value=""' + (rule.TextColor ? '' : ' selected') + '>Text colour: automatic</option><option value="custom"' + (rule.TextColor ? ' selected' : '') + '>Text colour: custom</option></select>'
+                + (rule.TextColor ? '<input type="color" class="labelsColor" data-key="TextColor" aria-label="Text colour" title="Text colour" value="' + esc(rule.TextColor) + '" />' : '')
+                + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Icon</span><div class="labelsStyles" role="group" aria-label="Icon">'
+                + '<button type="button" class="labelsOption" data-pick="Icon" data-value="" aria-pressed="' + !rule.Icon + '">None</button>'
+                + LABEL_ICONS.map(function(icon) {
+                    return '<button type="button" class="labelsOption is-icon" data-pick="Icon" data-value="' + icon[0] + '" aria-pressed="' + (rule.Icon === icon[0]) + '" title="' + icon[1] + '" aria-label="' + icon[1] + '">' + labelIconSvg(icon[0]) + '</button>';
+                }).join('')
+                + '</div></div>'
+                + '<div class="labelsField"><label class="labelsFieldName" for="LabelFlag' + ruleIndex + '">Flag</label><div class="labelsInline">'
+                + '<select class="homeCustomListInput" id="LabelFlag' + ruleIndex + '" data-key="IconFlag">'
+                + '<option value="">None</option>'
+                + LABEL_FLAGS.map(function(flag) {
+                    return '<option value="flag-' + flag[0] + '"' + (rule.Icon === 'flag-' + flag[0] ? ' selected' : '') + '>' + esc(flag[1]) + '</option>';
+                }).join('')
+                + '</select>'
+                + '<span class="fieldDescription" style="margin:0;">Takes the place of the icon.</span>'
+                + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Style</span><div class="labelsStyles">' + labelOptionButtons('Style', rule.Style, true) + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Shape</span><div class="labelsStyles">' + labelOptionButtons('Shape', rule.Shape, true) + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Size</span><div class="labelsStyles">' + labelOptionButtons('Size', rule.Size, true) + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Corner</span><div class="labelsInline">'
+                + '<button type="button" class="labelsOption" data-pick="Corner" data-value="" aria-pressed="' + !rule.Corner + '">Default (' + esc(labelChoiceName('Corner', posterBadgeDefaults.Corner)) + ')</button>'
+                + '<div class="labelsCornerPicker">' + labelCornerButtons(rule.Corner) + '</div>'
+                + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Opacity</span><div class="labelsInline">'
+                + '<button type="button" class="labelsOption" data-action="defaultOpacity" aria-pressed="' + opacityDefault + '">Default (' + posterBadgeDefaults.Opacity + '%)</button>'
+                + '<span class="labelsRange"><input type="range" min="10" max="100" step="5" data-key="Opacity" aria-label="Opacity" value="' + look.opacity + '" /><span class="labelsRangeValue">' + look.opacity + '%</span></span>'
+                + '</div></div>'
+                + '<h4>Who sees it</h4>'
+                + '<div class="labelsField is-top"><span class="labelsFieldName">Users</span><div>' + users + '</div></div>'
+                + '<div class="labelsField"><span class="labelsFieldName">Devices</span><div class="labelsStyles">' + devices + '</div></div>'
+                + '</div>'
+                + '</div>';
+        }).join('');
+    }
+
+    // A list rather than a button per user, so a server with many users stays readable.
+    function labelUserPicker(rule) {
+        var filter = (rule._userFilter || '').toLowerCase();
+        return '<div class="labelsUserPicker">'
+            + (labelUsers.length > 8 ? '<input type="search" class="homeCustomListInput labelsUserFilter" data-user-filter placeholder="Find a user" aria-label="Find a user" value="' + esc(rule._userFilter || '') + '" />' : '')
+            + '<div class="labelsUserList" role="group" aria-label="Users who see this label">'
+            + labelUsers.map(function(user) {
+                var hidden = filter && user.Name.toLowerCase().indexOf(filter) === -1;
+                return '<label class="labelsUserRow"' + (hidden ? ' hidden' : '') + '>'
+                    + '<input type="checkbox" data-user-check="' + esc(user.Id) + '"' + (rule.UserIds.indexOf(user.Id) !== -1 ? ' checked' : '') + ' />'
+                    + '<span>' + esc(user.Name) + '</span></label>';
+            }).join('')
+            + '</div>'
+            + '<div class="labelsUserCount' + (rule.UserIds.length ? '' : ' is-warning') + '" aria-live="polite">' + esc(labelUserCount(rule)) + '</div>'
+            + '</div>';
+    }
+
+    function labelUserCount(rule) {
+        if (!rule.UserIds.length) {
+            return 'Tick at least one user, or the label shows to everyone.';
+        }
+
+        return rule.UserIds.length + ' of ' + labelUsers.length + ' selected';
+    }
+
+    function renderLabelPreview(view) {
+        var poster = view.querySelector('#LabelsPoster');
+        if (!poster) {
+            return;
+        }
+
+        drawLabelCorners(poster, posterBadgeRules.filter(function(rule) { return rule.Enabled; }).map(function(rule) {
+            return { label: rule.Label.trim(), look: labelLook(rule) };
+        }));
+    }
+
+    // Stacks labels in their corners, once per text and as many per corner as the apps draw.
+    function drawLabelCorners(poster, entries) {
+        var corners = {};
+        var shown = Object.create(null);
+        entries.forEach(function(entry) {
+            // An icon alone is a label too, keyed by its icon.
+            var key = entry.label ? entry.label.toLowerCase() : (entry.look.icon ? 'icon:' + entry.look.icon : '');
+            if (!key || shown[key]) {
+                return;
+            }
+
+            shown[key] = true;
+            corners[entry.look.corner] = corners[entry.look.corner] || [];
+            if (corners[entry.look.corner].length < posterBadgeDefaults.MaxPerCorner) {
+                corners[entry.look.corner].push(labelBadgeHtml(entry.look, entry.label, 10.5));
+            }
+        });
+
+        Array.prototype.forEach.call(poster.querySelectorAll('.labelsCorner'), function(corner) {
+            corner.innerHTML = (corners[corner.getAttribute('data-corner')] || []).join('');
+        });
+    }
+
+    function setLabelPosterArt(poster, item) {
+        if (!poster || !item) {
+            return;
+        }
+
+        // An episode's own image is wide, so the poster uses its series'.
+        var imageId = item.Type === 'Episode' && item.SeriesId ? item.SeriesId : item.Id;
+        poster.style.backgroundImage = 'url("' + ApiClient.getImageUrl(imageId, { type: 'Primary', maxWidth: 400 }) + '")';
+        poster.classList.add('has-art');
+        poster.setAttribute('aria-label', item.Name);
+    }
+
+    function loadLabelPreviewPoster(view) {
+        if (!ApiClient.getItems) {
+            return;
+        }
+
+        ApiClient.getItems(ApiClient.getCurrentUserId(), {
+            IncludeItemTypes: 'Movie',
+            Recursive: true,
+            SortBy: 'Random',
+            ImageTypes: 'Primary',
+            Limit: 1
+        }).then(function(result) {
+            var item = result && result.Items && result.Items[0];
+            if (!item) {
+                return;
+            }
+
+            labelPreviewItem = { Id: item.Id, Name: item.Name, Type: item.Type };
+            setLabelPosterArt(view.querySelector('#LabelsPoster'), labelPreviewItem);
+            renderLabelTestReport(view);
+        }).catch(function() {});
+    }
+
+    function startLabelTest(view, item) {
+        labelTestItem = item;
+        labelTestResult = null;
+        labelTestError = '';
+        renderLabelTestReport(view);
+        runLabelTest(view);
+    }
+
+    function stopLabelTest(view) {
+        labelTestItem = null;
+        labelTestResult = null;
+        labelTestError = '';
+        renderLabelTestReport(view);
+    }
+
+    // Edits come one key at a time, so the test waits for a pause.
+    function scheduleLabelTest(view) {
+        clearTimeout(labelTestTimer);
+        labelTestTimer = setTimeout(function() { runLabelTest(view); }, 400);
+    }
+
+    function runLabelTest(view) {
+        var item = labelTestItem;
+        if (!item) {
+            return;
+        }
+
+        ApiClient.ajax({
+            type: 'POST',
+            url: ApiClient.getUrl('Moonfin/PosterBadges/Test'),
+            data: JSON.stringify({ ItemId: item.Id, Rules: getPosterBadgeRules(), Defaults: getPosterBadgeDefaults() }),
+            contentType: 'application/json',
+            dataType: 'json'
+        }).then(function(result) {
+            // Another file may have been picked while this one was asked about.
+            if (labelTestItem !== item) {
+                return;
+            }
+
+            labelTestResult = result;
+            labelTestError = '';
+            renderLabelTestReport(view);
+        }).catch(function() {
+            if (labelTestItem !== item) {
+                return;
+            }
+
+            labelTestResult = null;
+            labelTestError = 'This file could not be tested. Restart the server after updating Moonbase, then try again.';
+            renderLabelTestReport(view);
+        });
+    }
+
+    function labelTrackText(track) {
+        var parts = [track.Language, track.Title, track.Codec, track.Profile];
+        if (track.Channels) {
+            parts.push(track.Channels + ' ch');
+        }
+        if (track.Width && track.Height) {
+            parts.push(track.Width + 'x' + track.Height);
+        }
+        parts.push(track.VideoRangeType || track.VideoRange || track.ExtendedVideoType);
+        if (track.IsForced === 'True') {
+            parts.push('forced');
+        }
+        return track.Type + ': ' + parts.filter(function(part) { return part; }).join(' \u00b7 ');
+    }
+
+    // The tested file's own poster, the labels it matches, and its tracks.
+    function renderLabelTestReport(view) {
+        var usePreview = view.querySelector('#LabelsTestUsePreview');
+        if (usePreview) {
+            usePreview.hidden = !labelPreviewItem || (labelTestItem && labelTestItem.Id === labelPreviewItem.Id);
+        }
+
+        var report = view.querySelector('#LabelsTestReport');
+        if (!report) {
+            return;
+        }
+
+        if (!labelTestItem) {
+            report.innerHTML = '';
+            return;
+        }
+
+        var head = '<div class="labelsReportHead"><strong>' + esc(labelTestItem.Name) + '</strong>'
+            + '<button type="button" class="moonfinLinkButton" data-label-test="clear">Clear</button></div>';
+        var poster = '<div class="labelsPoster" id="LabelsTestPoster">'
+            + '<div class="labelsCorner" data-corner="topLeft"></div><div class="labelsCorner" data-corner="topRight"></div>'
+            + '<div class="labelsCorner" data-corner="bottomLeft"></div><div class="labelsCorner" data-corner="bottomRight"></div></div>';
+
+        var body;
+        if (labelTestError) {
+            body = '<div class="labelsReportWhy">' + esc(labelTestError) + '</div>';
+        } else if (!labelTestResult) {
+            body = '<div class="labelsReportWhy">Testing&hellip;</div>';
+        } else {
+            var badges = labelTestResult.badges || [];
+            var tracks = labelTestResult.tracks || [];
+            body = '<div class="labelsMatch"><span class="labelsMatchName">Match</span>'
+                + (badges.length
+                    ? '<div class="labelsMatchList">' + badges.map(function(badge) {
+                        return labelBadgeHtml(labelTestLook(badge), badge.label, 10);
+                    }).join('') + '</div>'
+                    : '<span class="labelsReportWhy">No label matches this file.</span>')
+                + '</div>'
+                + '<details><summary>Tracks in this file (' + tracks.length + ')</summary>'
+                + '<div class="labelsTrack">' + esc(labelTestResult.path || '') + '</div>'
+                + tracks.map(function(track) { return '<div class="labelsTrack">' + esc(labelTrackText(track)) + '</div>'; }).join('')
+                + '</details>';
+        }
+
+        // The fold stays open across reruns while rules are edited.
+        var wasOpen = report.querySelector('details') && report.querySelector('details').open;
+        report.innerHTML = head + poster + body;
+        if (wasOpen && report.querySelector('details')) {
+            report.querySelector('details').open = true;
+        }
+
+        var testPoster = report.querySelector('#LabelsTestPoster');
+        setLabelPosterArt(testPoster, labelTestItem);
+        if (labelTestResult) {
+            drawLabelCorners(testPoster, (labelTestResult.badges || []).map(function(badge) {
+                return { label: badge.label, look: labelTestLook(badge) };
+            }));
+        }
+    }
+
+    // The server sends each label with its look already worked out.
+    function labelTestLook(badge) {
+        return { color: badge.color, textColor: badge.textColor, style: badge.style, shape: badge.shape, size: badge.size, corner: badge.corner, opacity: badge.opacity, icon: badge.icon };
+    }
+
+    function searchLabelTestItems(view) {
+        var input = view.querySelector('#LabelsTestSearch');
+        var list = view.querySelector('#LabelsTestResults');
+        var term = input.value.trim();
+        if (term.length < 2 || !ApiClient.getItems) {
+            list.hidden = true;
+            list.innerHTML = '';
+            return;
+        }
+
+        ApiClient.getItems(ApiClient.getCurrentUserId(), {
+            SearchTerm: term,
+            IncludeItemTypes: 'Movie,Episode',
+            Recursive: true,
+            Limit: 8
+        }).then(function(result) {
+            // The text may have changed while this was asked.
+            if (input.value.trim() !== term) {
+                return;
+            }
+
+            var items = (result && result.Items) || [];
+            list.innerHTML = items.length
+                ? items.map(function(item) {
+                    var detail = item.Type === 'Episode'
+                        ? [item.SeriesName, item.ParentIndexNumber != null && item.IndexNumber != null ? 'S' + item.ParentIndexNumber + 'E' + item.IndexNumber : ''].filter(Boolean).join(' \u00b7 ')
+                        : (item.ProductionYear ? String(item.ProductionYear) : '');
+                    return '<button type="button" class="labelsTestResult" data-test-id="' + esc(item.Id) + '" data-test-name="' + esc(item.Name) + '" data-test-type="' + esc(item.Type) + '" data-test-series="' + esc(item.SeriesId || '') + '">'
+                        + '<span>' + esc(item.Name) + '</span>' + (detail ? '<small>' + esc(detail) + '</small>' : '') + '</button>';
+                }).join('')
+                : '<div class="homeLayoutEmpty">Nothing found.</div>';
+            list.hidden = false;
+        }).catch(function() {});
+    }
+
+    function loadLabelSources(view) {
+        ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('Moonfin/PosterBadges/Presets'), dataType: 'json' }).then(function(presets) {
+            posterBadgePresets = presets || [];
+            renderLabels(view);
+        }).catch(function() {
+            var container = view.querySelector('#LabelsPresetGroups');
+            if (container) {
+                container.innerHTML = '<div class="homeLayoutEmpty">The built-in labels could not be loaded. Restart the server after updating Moonbase, then reload this page.</div>';
+            }
+        });
+
+        if (ApiClient.getUsers) {
+            ApiClient.getUsers().then(function(users) {
+                labelUsers = (users || []).map(function(user) { return { Id: labelUserId(user.Id), Name: user.Name }; });
+                renderPosterBadgeRules(view);
+            }).catch(function() {});
+        }
+
+        loadLabelPreviewPoster(view);
+    }
+
+    function newLabelRule(fields) {
+        var rule = { Label: '', Icon: '', Color: POSTER_BADGE_DEFAULT_COLOR, TextColor: '', Enabled: true, Preset: '', Style: '', Shape: '', Size: '', Corner: '', Opacity: null, UserIds: [], Profiles: [], Conditions: [] };
+        Object.keys(fields).forEach(function(key) { rule[key] = fields[key]; });
+        return rule;
+    }
+
+    function updatePosterBadgeField(view, target) {
+        var key = target.getAttribute('data-key');
+        var ruleElement = target.closest('[data-rule]');
+        if (!key || !ruleElement) {
+            return;
+        }
+
+        var rule = posterBadgeRules[Number(ruleElement.getAttribute('data-rule'))];
+        var conditionElement = target.closest('[data-condition]');
+        var owner = conditionElement ? rule.Conditions[Number(conditionElement.getAttribute('data-condition'))] : rule;
+
+        // A flag and an icon share one place, so picking either replaces the other.
+        if (key === 'IconFlag') {
+            rule.Icon = target.value || (labelFlag(rule.Icon) ? '' : rule.Icon);
+            renderLabels(view);
+            return;
+        }
+
+        if (key === 'TextColorMode') {
+            rule.TextColor = target.value === 'custom' ? posterBadgeTextColor(rule.Color) : '';
+            renderLabels(view);
+            return;
+        }
+
+        // Another field can bring other tests and track choices, so the row redraws and
+        // the focus goes back to the same control.
+        if (conditionElement && key === 'Field' && owner.Field !== target.value) {
+            owner.Field = target.value;
+            normalizeLabelCondition(owner, true);
+            renderPosterBadgeRules(view);
+            var again = view.querySelector('#PosterBadgeRulesList [data-rule="' + ruleElement.getAttribute('data-rule') + '"] [data-condition="' + conditionElement.getAttribute('data-condition') + '"] [data-key="Field"]');
+            if (again) {
+                again.focus();
+            }
+            if (labelTestItem) {
+                scheduleLabelTest(view);
+            }
+            return;
+        }
+
+        if (key === 'Opacity') {
+            rule.Opacity = Number(target.value);
+            target.nextElementSibling.textContent = rule.Opacity + '%';
+            var defaultButton = ruleElement.querySelector('[data-action="defaultOpacity"]');
+            defaultButton.setAttribute('aria-pressed', 'false');
+        } else {
+            owner[key] = target.type === 'checkbox' ? target.checked : target.value;
+        }
+
+        if (key === 'Enabled') {
+            ruleElement.classList.toggle('is-off', !rule.Enabled);
+            renderLabelPresets(view);
+        }
+
+        // Typing keeps the focus in place, so only the parts showing the label redraw.
+        if (!conditionElement) {
+            var look = labelLook(rule);
+            ruleElement.querySelector('.labelsRuleBadge').innerHTML = labelBadgeHtml(look, rule.Label, 11);
+            ruleElement.querySelector('.labelsRuleName').textContent = labelRuleName(rule);
+            if (rule.Preset) {
+                renderLabelPresets(view);
+            }
+            renderLabelPreview(view);
+        }
+
+        if (labelTestItem) {
+            scheduleLabelTest(view);
+        }
+    }
+
+    function bindPosterBadgeEditor(view) {
+        var page = view;
+        var container = view.querySelector('#PosterBadgeRulesList');
+        var addButton = view.querySelector('#PosterBadgeAddRuleBtn');
+        if (!page || !container || !addButton || container.dataset.bound) {
+            return;
+        }
+
+        container.dataset.bound = 'true';
+
+        Array.prototype.forEach.call(page.querySelectorAll('[data-labels-tab]'), function(tab) {
+            tab.addEventListener('click', function() {
+                var name = tab.getAttribute('data-labels-tab');
+                Array.prototype.forEach.call(page.querySelectorAll('[data-labels-tab]'), function(other) {
+                    var active = other === tab;
+                    other.classList.toggle('is-active', active);
+                    other.setAttribute('aria-selected', String(active));
+                });
+                Array.prototype.forEach.call(page.querySelectorAll('[data-labels-panel]'), function(panel) {
+                    panel.classList.toggle('is-active', panel.getAttribute('data-labels-panel') === name);
+                });
+            });
+        });
+
+        addButton.addEventListener('click', function() {
+            posterBadgeRules.forEach(function(rule) { rule._open = false; });
+            posterBadgeRules.push(newLabelRule({ Conditions: [newPosterBadgeCondition()], _open: true }));
+            renderLabels(view);
+            var input = container.querySelector('.labelsRule:last-child [data-key="Label"]');
+            if (input) {
+                input.focus();
+            }
+        });
+
+        page.querySelector('#LabelsDefaultOpacity').addEventListener('input', function(e) {
+            posterBadgeDefaults.Opacity = Number(e.target.value);
+            view.querySelector('#LabelsDefaultOpacityValue').textContent = posterBadgeDefaults.Opacity + '%';
+            renderLabelPresets(view);
+            renderPosterBadgeRules(view);
+            renderLabelPreview(view);
+            if (labelTestItem) {
+                scheduleLabelTest(view);
+            }
+        });
+
+        page.querySelector('#LabelsMaxPerCorner').addEventListener('change', function(e) {
+            posterBadgeDefaults.MaxPerCorner = Number(e.target.value);
+            renderLabelPreview(view);
+            if (labelTestItem) {
+                scheduleLabelTest(view);
+            }
+        });
+
+        Array.prototype.forEach.call(page.querySelectorAll('[data-default]'), function(group) {
+            group.addEventListener('click', function(e) {
+                var button = e.target.closest('[data-pick]');
+                if (button) {
+                    posterBadgeDefaults[button.getAttribute('data-pick')] = button.getAttribute('data-value');
+                    renderLabels(view);
+                }
+            });
+        });
+
+        page.querySelector('#LabelsPresetGroups').addEventListener('click', function(e) {
+            var chip = e.target.closest('[data-preset]');
+            if (!chip) {
+                return;
+            }
+
+            var id = chip.getAttribute('data-preset');
+            var index = -1;
+            posterBadgeRules.forEach(function(rule, i) { if (rule.Preset === id) { index = i; } });
+
+            if (index === -1) {
+                var preset = labelPreset(id);
+                posterBadgeRules.push(newLabelRule({ Preset: id, Label: preset.label, Color: labelHex(preset.color, POSTER_BADGE_DEFAULT_COLOR) }));
+            } else {
+                // Switched off rather than deleted, so its look and its users and devices
+                // are still there when it comes back.
+                posterBadgeRules[index].Enabled = !posterBadgeRules[index].Enabled;
+            }
+
+            renderLabels(view);
+            var again = page.querySelector('#LabelsPresetGroups [data-preset="' + id + '"]');
+            if (again) {
+                again.focus();
+            }
+        });
+
+        page.querySelector('#LabelsPreviewShuffle').addEventListener('click', function() { loadLabelPreviewPoster(view); });
+
+        page.querySelector('#LabelsTestUsePreview').addEventListener('click', function() {
+            if (labelPreviewItem) {
+                startLabelTest(view, labelPreviewItem);
+            }
+        });
+
+        page.querySelector('#LabelsTestReport').addEventListener('click', function(e) {
+            if (e.target.closest('[data-label-test="clear"]')) {
+                stopLabelTest(view);
+            }
+        });
+
+        page.querySelector('#LabelsTestSearch').addEventListener('input', function() {
+            clearTimeout(labelSearchTimer);
+            labelSearchTimer = setTimeout(function() { searchLabelTestItems(view); }, 250);
+        });
+
+        page.querySelector('#LabelsTestResults').addEventListener('click', function(e) {
+            var button = e.target.closest('[data-test-id]');
+            if (!button) {
+                return;
+            }
+
+            var list = page.querySelector('#LabelsTestResults');
+            list.hidden = true;
+            list.innerHTML = '';
+            page.querySelector('#LabelsTestSearch').value = '';
+            startLabelTest(view, {
+                Id: button.getAttribute('data-test-id'),
+                Name: button.getAttribute('data-test-name'),
+                Type: button.getAttribute('data-test-type'),
+                SeriesId: button.getAttribute('data-test-series')
+            });
+        });
+
+        // Edits update the rule in place rather than redrawing, so the field keeps its focus.
+        container.addEventListener('input', function(e) {
+            if (e.target.hasAttribute('data-user-filter')) {
+                var rule = posterBadgeRules[Number(e.target.closest('[data-rule]').getAttribute('data-rule'))];
+                rule._userFilter = e.target.value;
+                var filter = rule._userFilter.toLowerCase();
+                Array.prototype.forEach.call(e.target.closest('.labelsUserPicker').querySelectorAll('.labelsUserRow'), function(row) {
+                    row.hidden = !!filter && row.textContent.toLowerCase().indexOf(filter) === -1;
+                });
+                return;
+            }
+
+            updatePosterBadgeField(view, e.target);
+        });
+        container.addEventListener('change', function(e) {
+            var userId = e.target.getAttribute('data-user-check');
+            if (userId) {
+                var ruleElement = e.target.closest('[data-rule]');
+                var rule = posterBadgeRules[Number(ruleElement.getAttribute('data-rule'))];
+                var at = rule.UserIds.indexOf(userId);
+                if (e.target.checked && at === -1) {
+                    rule.UserIds.push(userId);
+                } else if (!e.target.checked && at !== -1) {
+                    rule.UserIds.splice(at, 1);
+                }
+
+                var count = ruleElement.querySelector('.labelsUserCount');
+                count.textContent = labelUserCount(rule);
+                count.classList.toggle('is-warning', !rule.UserIds.length);
+                ruleElement.querySelector('.labelsRuleSummary').textContent = labelSummary(rule);
+                return;
+            }
+
+            updatePosterBadgeField(view, e.target);
+            // The summary line only redraws once a pick is final.
+            if (e.target.getAttribute('data-key') === 'Opacity') {
+                renderLabelPresets(view);
+            }
+        });
+
+        container.addEventListener('click', function(e) {
+            var button = e.target.closest('[data-action], [data-pick], [data-profile]');
+            if (!button) {
+                return;
+            }
+
+            var ruleIndex = Number(button.closest('[data-rule]').getAttribute('data-rule'));
+            var rule = posterBadgeRules[ruleIndex];
+            var action = button.getAttribute('data-action');
+
+            if (button.hasAttribute('data-pick')) {
+                rule[button.getAttribute('data-pick')] = button.getAttribute('data-value');
+            } else if (button.hasAttribute('data-profile')) {
+                var profile = button.getAttribute('data-profile');
+                var at = rule.Profiles.indexOf(profile);
+                if (at === -1) {
+                    rule.Profiles.push(profile);
+                } else {
+                    rule.Profiles.splice(at, 1);
+                }
+            } else if (action === 'allUsers') {
+                rule.UserIds = [];
+                rule._someUsers = false;
+            } else if (action === 'someUsers') {
+                rule._someUsers = true;
+            } else if (action === 'allProfiles') {
+                rule.Profiles = [];
+            } else if (action === 'defaultOpacity') {
+                rule.Opacity = null;
+            } else if (action === 'toggleOpen') {
+                rule._open = !rule._open;
+            } else if (action === 'removeRule') {
+                posterBadgeRules.splice(ruleIndex, 1);
+            } else if (action === 'moveUp' || action === 'moveDown') {
+                var other = action === 'moveUp' ? ruleIndex - 1 : ruleIndex + 1;
+                posterBadgeRules[ruleIndex] = posterBadgeRules[other];
+                posterBadgeRules[other] = rule;
+            } else if (action === 'addCondition') {
+                rule.Conditions.push(newPosterBadgeCondition());
+            } else if (action === 'removeCondition') {
+                rule.Conditions.splice(Number(button.closest('[data-condition]').getAttribute('data-condition')), 1);
+            } else {
+                return;
+            }
+
+            renderLabels(view);
+        });
+
+        loadLabelSources(view);
     }
 
     function renderMessagesList(view, items) {
@@ -5182,6 +6571,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         initializeAdminTabs(view);
         initializeDefaultsSubtabs(view);
+        bindPosterBadgeEditor(view);
 
         var form = view.querySelector('#MoonfinConfigForm');
         if (form) {

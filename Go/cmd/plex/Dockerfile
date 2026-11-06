@@ -27,6 +27,7 @@ LABEL org.opencontainers.image.description="Moonbase for Plex, the Moonfin serve
 LABEL org.opencontainers.image.licenses=GPL-3.0-only
 COPY --from=build /out/moonbase-plex /moonbase-plex
 COPY --from=smartsearch /out/smartsearch /smartsearch
+COPY shared/PosterBadges/flags /flags
 # A named volume takes this folder's owner, so the nonroot user can write it.
 COPY --from=build --chown=65532:65532 /out/config /config
 USER 65532:65532
