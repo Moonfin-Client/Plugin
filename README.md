@@ -1,5 +1,5 @@
 <h1 align="center">Moonbase, the server plugin for Moonfin!</h1>
-<h3 align="center">Moonbase is the server plugin that powers the Moonfin experience on both Jellyfin and Emby.</h3>
+<h3 align="center">Moonbase is the server plugin that powers the Moonfin experience on Jellyfin, Emby, Silo and Plex.</h3>
 
 ---
 
@@ -12,15 +12,15 @@
 
 ## What is Moonbase?
 
-Moonbase is a server plugin for **Jellyfin and Emby** that gives every Moonfin client its shared backbone. It syncs your settings across devices, hosts the Moonfin web app right on your server, adds extra rating sources, connects your library to Seerr, and gives admins server-wide defaults and tools.
+Moonbase is a server plugin for **Jellyfin, Emby, Silo and Plex** that gives every Moonfin client its shared backbone. It syncs your settings across devices, hosts the Moonfin web app right on your server, adds extra rating sources, connects your library to Seerr, and gives admins server-wide defaults and tools.
 
 > **Recommended:** if you use any Moonfin client, install Moonbase on your server for the best experience.
 
-This repo ships two plugins from one place: a Jellyfin plugin under `Jellyfin/` and an Emby plugin under `Emby/`.
+This repo ships Moonbase for all four servers: a Jellyfin plugin under `Jellyfin/`, an Emby plugin under `Emby/`, and Moonbase for Silo and Plex, both built from `Go/`. Plex has no plugin system, so there Moonbase is a small service that runs next to Plex Media Server.
 
 ## Installation
 
-Moonbase needs **Jellyfin 10.10 or newer** or **Emby 4.8 or newer**. The wiki's [Installation](https://github.com/Moonfin-Client/Plugin/wiki/Installation) page has the steps plus updating and uninstalling.
+Moonbase needs **Jellyfin 10.10 or newer**, **Emby 4.8 or newer**, a **Silo** build from 2026-10-28 or newer on Linux, or any **Plex Media Server** plus Docker. The wiki's [Installation](https://github.com/Moonfin-Client/Plugin/wiki/Installation) page has the steps plus updating and uninstalling.
 
 ### Jellyfin
 
@@ -61,6 +61,22 @@ The Emby plugin is a drop-in zip, not a catalog plugin:
    | Windows | `%AppData%\Emby-Server\programdata\plugins\` |
 3. Restart Emby.
 
+### Silo
+
+1. In Silo's admin pages, open Plugins, go to the **Catalog** tab and add this repository:
+   `https://github.com/Moonfin-Client/Plugin/releases/download/moonbase-silo-catalog/index.json`
+2. Install **Moonbase** from the catalog. Silo keeps it updated.
+3. Set it up on the **Moonbase** page, from the menu at the top right of Silo's plugin page.
+
+To install by hand, upload the `Moonbase.Silo` file for your server from the [Silo and Plex release](https://github.com/Moonfin-Client/Plugin/releases/tag/go-3.0.0) on the same tab.
+
+### Plex
+
+1. Run `ghcr.io/moonfin-client/moonbase-plex:latest` next to Plex Media Server, with port 32500 published and `PLEX_URL` set to your Plex server's address.
+2. Open `http://<host>:32500/admin` and sign in with the account that owns the server.
+
+The [Moonbase for Silo and Plex guide](Go/README.md) has the Docker command, settings and known limits for both.
+
 ## Opening the Moonfin Web App
 
 Moonbase serves the Moonfin web app on your own server, so you can open and bookmark it directly:
@@ -91,6 +107,8 @@ On Emby, the web app is served the same way at `/Moonfin/Web/`, but there's no h
 </details>
 
 ## Features
+
+The list below is for Jellyfin and Emby. Moonbase for Silo and Plex covers settings sync, admin defaults, MDBList ratings and TMDB reviews, server messages, uploaded themes and each user's own collection order, since neither server lets it read your library. See the [Silo and Plex guide](Go/README.md).
 
 - **Cross-device settings sync**, so your preferences follow you between web, TV, mobile, and desktop, with an optional per-device profile for desktop, mobile, and TV.
 - **The Moonfin web app** hosted at `/Moonfin/Web/`, running side by side with the stock web interface.

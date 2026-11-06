@@ -1,9 +1,12 @@
 using System.Net.Mime;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.QuickConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Moonfin.Calendar;
 using Moonfin.Seerr;
+using Moonfin.Server.Helpers;
 using Moonfin.Server.Services;
 
 namespace Moonfin.Server.Api;
@@ -31,19 +34,22 @@ public class SeerrProxyController : ControllerBase
     private readonly ServerRatingLimitService _ratingLimits;
     private readonly TmdbRatingService _ratings;
     private readonly MoonfinSettingsService _settings;
+    private readonly ILibraryManager _libraryManager;
 
     public SeerrProxyController(
         SeerrSessionService sessionService,
         SeerrProvisioningService provisioning,
         ServerRatingLimitService ratingLimits,
         TmdbRatingService ratings,
-        MoonfinSettingsService settings)
+        MoonfinSettingsService settings,
+        ILibraryManager libraryManager)
     {
         _sessionService = sessionService;
         _provisioning = provisioning;
         _ratingLimits = ratingLimits;
         _ratings = ratings;
         _settings = settings;
+        _libraryManager = libraryManager;
     }
 
     /// <summary>
@@ -363,9 +369,24 @@ public class SeerrProxyController : ControllerBase
             return Unauthorized(new { error = "User not authenticated" });
         }
 
-        var start = Request.Query["start"].ToString();
-        var end = Request.Query["end"].ToString();
-        var result = await _sessionService.GetArrCalendarAsync(service, start, end);
+        if (ArrCalendarWindow.Refusal(config.CalendarAdminsOnly, this.IsAdminFromClaims()) is { } refusal)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = refusal });
+        }
+
+        var window = ArrCalendarWindow.Clamp(
+            Request.Query["start"].ToString(),
+            Request.Query["end"].ToString(),
+            DateTime.UtcNow,
+            config.CalendarDaysBack,
+            config.CalendarDaysAhead);
+        if (window == null)
+        {
+            return Content("[]", MediaTypeNames.Application.Json);
+        }
+
+        var unmonitored = bool.TryParse(Request.Query["unmonitored"].ToString(), out var all) && all;
+        var result = await _sessionService.GetArrCalendarAsync(service, window.Value.Start, window.Value.End, unmonitored, config.CalendarCacheMinutes);
         if (result.Body == null)
         {
             return StatusCode(result.StatusCode);
@@ -375,8 +396,15 @@ public class SeerrProxyController : ControllerBase
             ? MediaTypeNames.Application.Octet
             : result.ContentType;
 
+        var body = result.Body;
+        if (result.StatusCode == StatusCodes.Status200OK)
+        {
+            var user = UserReflection.ResolveUser(HttpContext.RequestServices, userId.Value);
+            body = ArrCalendarAnnotator.Annotate(body, service == "sonarr", new JellyfinCalendarLibrary(_libraryManager, user));
+        }
+
         Response.StatusCode = result.StatusCode;
-        return File(result.Body, responseContentType);
+        return File(body, responseContentType);
     }
 
     private async Task<IActionResult> ProxyApiRequest(HttpMethod method, string path)
@@ -409,7 +437,9 @@ public class SeerrProxyController : ControllerBase
         // A user with a parental limit gets Seerr held to it: lists lose the titles above it,
         // a details page above it is refused, and so is a request for one. Everyone else, and
         // every other call, is passed through as it was.
-        var verdict = SeerrParentalFilter.IsJudged(method.Method, path) ? await VerdictFor(userId.Value).ConfigureAwait(false) : null;
+        var verdict = SeerrParentalFilter.IsJudged(method.Method, path)
+            ? await _ratings.SeerrVerdictForAsync(_ratingLimits, _settings, userId.Value, HttpContext.RequestAborted).ConfigureAwait(false)
+            : null;
         if (verdict != null && method == HttpMethod.Post && SeerrParentalFilter.IsRequestPath(path))
         {
             var target = SeerrParentalFilter.RequestTarget(body);
@@ -458,43 +488,6 @@ public class SeerrProxyController : ControllerBase
 
         Response.StatusCode = result.StatusCode;
         return File(result.Body, responseContentType);
-    }
-
-    /// <summary>
-    /// The verdict a limited user's titles are held to, or null for a user without a limit.
-    /// Without a TMDB key nothing can be judged, so nothing passes: the same rule the custom rows
-    /// follow. A lookup that fails is a title that cannot be placed, and goes the same way.
-    /// </summary>
-    private async Task<SeerrParentalFilter.Verdict?> VerdictFor(Guid userId)
-    {
-        var limit = _ratingLimits.ForUser(userId);
-        if (!limit.HasLimit)
-        {
-            return null;
-        }
-
-        var apiKey = await TmdbApiKeys.ResolveAsync(_settings, userId).ConfigureAwait(false);
-        return async (mediaType, tmdbId) =>
-        {
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                return false;
-            }
-
-            try
-            {
-                var certification = await _ratings.GetCertificationAsync(mediaType, tmdbId, apiKey!, HttpContext.RequestAborted).ConfigureAwait(false);
-                return limit.IsAllowed(certification);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        };
     }
 
     private static bool IsJson(string? contentType) =>

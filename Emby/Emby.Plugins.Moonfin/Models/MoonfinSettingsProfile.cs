@@ -11,6 +11,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("seerrBlockNsfw")] public bool? SeerrBlockNsfw { get; set; }
         [JsonPropertyName("seerrShowMissingCollectionItems")] public bool? SeerrShowMissingCollectionItems { get; set; }
         [JsonPropertyName("showSeerrAvailabilityBadges")] public bool? ShowSeerrAvailabilityBadges { get; set; }
+        [JsonPropertyName("seerrBadgeStyle")] public string? SeerrBadgeStyle { get; set; }
         [JsonPropertyName("showBookDiscoverTab")] public bool? ShowBookDiscoverTab { get; set; }
         [JsonPropertyName("seerrRows")] public SeerrRowsConfig? SeerrRows { get; set; }
         [JsonPropertyName("mdblistEnabled")] public bool? MdblistEnabled { get; set; }
@@ -39,6 +40,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("customThemeId")] public string? CustomThemeId { get; set; }
         [JsonPropertyName("oledMode")] public string? OledMode { get; set; }
         [JsonPropertyName("watchedIndicator")] public string? WatchedIndicator { get; set; }
+        [JsonPropertyName("showPosterLabels")] public bool? ShowPosterLabels { get; set; }
         [JsonPropertyName("cardFocusExpansion")] public bool? CardFocusExpansion { get; set; }
         [JsonPropertyName("showShuffleButton")] public bool? ShowShuffleButton { get; set; }
         [JsonPropertyName("showGenresButton")] public bool? ShowGenresButton { get; set; }
@@ -70,6 +72,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("previewAudioEnabled")] public bool? PreviewAudioEnabled { get; set; }
         [JsonPropertyName("previewVolume")] public int? PreviewVolume { get; set; }
         [JsonPropertyName("mediaBarSourceType")] public string? MediaBarSourceType { get; set; }
+        [JsonPropertyName("mediaBarNewReleaseBanner")] public bool? MediaBarNewReleaseBanner { get; set; }
+        [JsonPropertyName("mediaBarNewReleaseDays")] public int? MediaBarNewReleaseDays { get; set; }
         [JsonPropertyName("mediaBarCollectionIds")] public List<string>? MediaBarCollectionIds { get; set; }
         [JsonPropertyName("mediaBarLibraryIds")] public List<string>? MediaBarLibraryIds { get; set; }
         [JsonPropertyName("mediaBarExcludedGenres")] public List<string>? MediaBarExcludedGenres { get; set; }
@@ -296,6 +300,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("tmdbTrendingTvDailyEnabled")] public bool? TmdbTrendingTvDailyEnabled { get; set; }
         [JsonPropertyName("tmdbTrendingTvWeeklyEnabled")] public bool? TmdbTrendingTvWeeklyEnabled { get; set; }
         [JsonPropertyName("tmdbTrendingAllWeeklyEnabled")] public bool? TmdbTrendingAllWeeklyEnabled { get; set; }
+        [JsonPropertyName("mdblistWatchingNowEnabled")] public bool? MdblistWatchingNowEnabled { get; set; }
         [JsonPropertyName("mergeRadarrSonarrCalendars")] public bool? MergeRadarrSonarrCalendars { get; set; }
         [JsonPropertyName("enableRadarrCalendar")] public bool? EnableRadarrCalendar { get; set; }
         [JsonPropertyName("radarrCalendarShowCinema")] public bool? RadarrCalendarShowCinema { get; set; }
@@ -307,6 +312,24 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("sonarrCalendarShowEpisodeInfo")] public bool? SonarrCalendarShowEpisodeInfo { get; set; }
         [JsonPropertyName("sonarrCalendarShowDate")] public bool? SonarrCalendarShowDate { get; set; }
         [JsonPropertyName("sonarrCalendarHideDownloaded")] public bool? SonarrCalendarHideDownloaded { get; set; }
+        [JsonPropertyName("showCalendarButton")] public bool? ShowCalendarButton { get; set; }
+        [JsonPropertyName("calendarStyle")] public string? CalendarStyle { get; set; }
+        [JsonPropertyName("calendarWeekStart")] public string? CalendarWeekStart { get; set; }
+        [JsonPropertyName("calendarScope")] public string? CalendarScope { get; set; }
+        [JsonPropertyName("calendarShowEpisodes")] public bool? CalendarShowEpisodes { get; set; }
+        [JsonPropertyName("calendarShowMovies")] public bool? CalendarShowMovies { get; set; }
+        [JsonPropertyName("calendarLibraryIds")] public List<string>? CalendarLibraryIds { get; set; }
+        [JsonPropertyName("calendarIncludeUnmonitored")] public bool? CalendarIncludeUnmonitored { get; set; }
+        [JsonPropertyName("calendarShowSpecials")] public bool? CalendarShowSpecials { get; set; }
+        [JsonPropertyName("calendarShowBadges")] public bool? CalendarShowBadges { get; set; }
+        [JsonPropertyName("calendarColorBy")] public string? CalendarColorBy { get; set; }
+        [JsonPropertyName("calendarImageType")] public string? CalendarImageType { get; set; }
+        [JsonPropertyName("calendarSpoilerSafe")] public bool? CalendarSpoilerSafe { get; set; }
+        [JsonPropertyName("calendarSelectAction")] public string? CalendarSelectAction { get; set; }
+        [JsonPropertyName("calendarRequestButton")] public bool? CalendarRequestButton { get; set; }
+        [JsonPropertyName("calendarReminders")] public bool? CalendarReminders { get; set; }
+        [JsonPropertyName("calendarRowSeeAll")] public bool? CalendarRowSeeAll { get; set; }
+        [JsonPropertyName("showNextAirDate")] public bool? ShowNextAirDate { get; set; }
         [JsonPropertyName("libraryPosterSize")] public string? LibraryPosterSize { get; set; }
         [JsonPropertyName("playlistPosterSize")] public string? PlaylistPosterSize { get; set; }
         [JsonPropertyName("audioSortOption")] public string? AudioSortOption { get; set; }

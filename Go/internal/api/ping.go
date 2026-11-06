@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+
+	"github.com/Moonfin-Client/Plugin/Go/internal/settings"
 )
 
 func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
@@ -22,7 +24,12 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"messagesSupported":        true,
 		"recommendationsSupported": false,
 		"clientLogSupported":       false,
-		"defaultSettings":          cfg.Defaults,
+		"smartSearchEnabled":       s.smartSearchOn(cfg),
+		"calendarAvailable":        s.calendarOn(cfg, callerOf(r)),
+		"calendarDaysBack":         cfg.CalendarDaysBack,
+		"calendarDaysAhead":        cfg.CalendarDaysAhead,
+		"calendarReminders":        false,
+		"defaultSettings":          pingDefaults(cfg, r.URL.Query().Get("profile")),
 	})
 }
 
@@ -56,4 +63,13 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 <h1>Moonbase %s</h1>
 <p>Moonbase is installed. Sign in with a Moonfin app and it will sync this profile's settings.</p>
 </body>`, html.EscapeString(s.version))
+}
+
+// pingDefaults is the admin's defaults for one device profile, laid over the
+// shared ones, or the shared ones alone for global or no profile.
+func pingDefaults(cfg Config, profile string) M {
+	if p, ok := settings.ProfileName(profile); ok && p != "global" {
+		return cfg.DefaultsFor(p)
+	}
+	return cfg.Defaults
 }

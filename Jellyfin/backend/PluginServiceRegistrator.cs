@@ -4,6 +4,7 @@ using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Moonfin.Calendar;
 using Moonfin.LiveTv;
 using Moonfin.Pin;
 using Moonfin.Romm;
@@ -93,6 +94,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<GameThumbService>();
         serviceCollection.AddSingleton<LaunchBoxService>();
         serviceCollection.AddSingleton<UserBookmarksService>();
+        serviceCollection.AddSingleton<SmartSearchService>();
         serviceCollection.AddHttpClient();
 
         // The custom row scrapes need a browser user agent to get a normal page back, and a
@@ -112,6 +114,10 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // Auto-register the Seerr webhook shortly after startup when an admin session exists.
         serviceCollection.AddHostedService<SeerrProvisioningStartupService>();
         serviceCollection.AddHostedService<NewMediaNotifier>();
+        serviceCollection.AddSingleton(_ => new CalendarReminderStore(
+            Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), "calendar-reminders"),
+            new JellyfinStateFile()));
+        serviceCollection.AddHostedService<CalendarReminderNotifier>();
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<GameArtworkReconciliationService>());
 
         // Incomplete Live TV recordings

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/Moonfin-Client/Plugin/Go/internal/api"
+	"github.com/Moonfin-Client/Plugin/Go/internal/smartsearch"
 	"github.com/Moonfin-Client/Plugin/Go/internal/store"
 )
 
@@ -36,6 +37,10 @@ type Config struct {
 	PlexTV  string
 	DataDir string
 	Version string
+	// SmartSearchHelper is the smart search helper program. Empty leaves smart search off.
+	SmartSearchHelper string
+	// FlagsDir holds the poster label flags. Empty serves none.
+	FlagsDir string
 }
 
 // How long a checked token is trusted before Plex is asked again.
@@ -72,11 +77,17 @@ func New(cfg Config) (*Companion, error) {
 		return nil, err
 	}
 	c := &Companion{cfg: cfg, http: &http.Client{Timeout: 10 * time.Second}, clientID: clientID, known: map[[32]byte]known{}}
+	var helper *smartsearch.Helper
+	if cfg.SmartSearchHelper != "" {
+		helper = smartsearch.New(cfg.SmartSearchHelper, cfg.DataDir)
+	}
 	c.api = api.NewServer(cfg.Version, api.Host{
-		Name:     "Plex",
-		KV:       store.FileKV{Dir: storeDir},
-		Catalog:  c,
-		Identify: c.Identify,
+		Name:        "Plex",
+		KV:          store.FileKV{Dir: storeDir},
+		Catalog:     c,
+		Identify:    c.Identify,
+		SmartSearch: helper,
+		FlagsDir:    cfg.FlagsDir,
 	})
 	return c, nil
 }

@@ -60,6 +60,12 @@ public sealed class AdminDefaultsMergeTests : IDisposable
         return userId;
     }
 
+    private Task<int> MergeAllAsync(MoonfinSettingsProfile defaults) =>
+        _service.MergeDefaultsAsync(new PluginConfiguration { DefaultUserSettings = defaults }, ["global"], null, null);
+
+    private Task<int> MergeIntoAsync(Guid userId, MoonfinSettingsProfile defaults) =>
+        _service.MergeDefaultsAsync(new PluginConfiguration { DefaultUserSettings = defaults }, ["global"], null, [userId]);
+
     private MoonfinUserSettings Read(Guid userId)
     {
         var json = File.ReadAllText(Path.Combine(_dataPath, userId + ".json"));
@@ -75,7 +81,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
 
         var defaults = new MoonfinSettingsProfile { CinemaModeEnabled = true };
 
-        await _service.MergeDefaultsToAllUsersAsync(defaults);
+        await MergeAllAsync(defaults);
 
         // The admin never set this, so the push must not have collected it from a user.
         Assert.Null(defaults.HiddenContinueWatchingItems);
@@ -92,7 +98,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
         var alice = SeedDeviceOnlyUser("{\"alice-item\":\"1\"}");
         var bob = SeedDeviceOnlyUser("{\"bob-item\":\"1\"}");
 
-        await _service.MergeDefaultsToAllUsersAsync(new MoonfinSettingsProfile { CinemaModeEnabled = true });
+        await MergeAllAsync(new MoonfinSettingsProfile { CinemaModeEnabled = true });
 
         var aliceHidden = Read(alice).Global?.HiddenContinueWatchingItems ?? string.Empty;
         var bobHidden = Read(bob).Global?.HiddenContinueWatchingItems ?? string.Empty;
@@ -115,7 +121,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
             HomeSections = new List<MoonfinHomeSectionConfig> { section },
         };
 
-        await _service.MergeDefaultsToAllUsersAsync(defaults);
+        await MergeAllAsync(defaults);
 
         // MergeProfile assigns references, and PropagateCustomHomeSectionsAcrossProfiles adds
         // to and removes from whatever list it lands on.
@@ -129,7 +135,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
         var alice = await SeedUserAsync(
             new MoonfinSettingsProfile { HiddenContinueWatchingItems = "{\"alice-item\":\"1\"}" });
 
-        await _service.MergeDefaultsToAllUsersAsync(new MoonfinSettingsProfile { CinemaModeEnabled = true });
+        await MergeAllAsync(new MoonfinSettingsProfile { CinemaModeEnabled = true });
 
         var settings = Read(alice);
         Assert.True(settings.Global?.CinemaModeEnabled);
@@ -142,7 +148,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
         var alice = SeedDeviceOnlyUser("{\"alice-item\":\"1\"}");
         var defaults = new MoonfinSettingsProfile { CinemaModeEnabled = true };
 
-        await _service.MergeDefaultsToUserAsync(alice, defaults);
+        await MergeIntoAsync(alice, defaults);
 
         Assert.Null(defaults.HiddenContinueWatchingItems);
     }
@@ -158,7 +164,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
             "test-seed",
             notifySettingsChanged: false);
 
-        await _service.MergeDefaultsToAllUsersAsync(new MoonfinSettingsProfile { CinemaModeEnabled = true });
+        await MergeAllAsync(new MoonfinSettingsProfile { CinemaModeEnabled = true });
 
         var settings = Read(alice);
         Assert.True(settings.Desktop?.CinemaModeEnabled);
@@ -179,7 +185,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
             "test-seed",
             notifySettingsChanged: false);
 
-        await _service.MergeDefaultsToUserAsync(alice, new MoonfinSettingsProfile { CinemaModeEnabled = true });
+        await MergeIntoAsync(alice, new MoonfinSettingsProfile { CinemaModeEnabled = true });
 
         Assert.True(Read(alice).Tv?.CinemaModeEnabled);
     }
@@ -204,7 +210,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
             HomeSections = [],
         };
 
-        await _service.MergeDefaultsToAllUsersAsync(defaults);
+        await MergeAllAsync(defaults);
 
         var desktop = Read(alice).Desktop!;
         Assert.True(desktop.CinemaModeEnabled);
@@ -218,7 +224,7 @@ public sealed class AdminDefaultsMergeTests : IDisposable
     {
         await SeedUserAsync(new MoonfinSettingsProfile());
 
-        var updated = await _service.MergeDefaultsToAllUsersAsync(
+        var updated = await MergeAllAsync(
             new MoonfinSettingsProfile { MediaBarLibraryIds = [], BlockedRatings = [] });
 
         Assert.Equal(0, updated);

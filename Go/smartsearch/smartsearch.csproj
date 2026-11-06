@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The smart search engine the Jellyfin and Emby plugins use, as a helper process for the Go hosts. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>moonbase-smartsearch</AssemblyName>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../shared/SmartSearch/*.cs" Link="SmartSearch/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

@@ -18,7 +18,7 @@ namespace Emby.Plugins.Moonfin.Services
     {
         public string Name => "Moonfin Studio Images Sync";
         public string Key => "Moonfin.Tmdb.StudioImages";
-        public string Description => "Fetches and caches TMDB studio logos for all movies and shows in the library so clients can show them on the details screen.";
+        public string Description => "Fetches and caches TMDB studio logos for all movies and shows in the library so clients can show them on the details screen and the Studios home row.";
         public string Category => "Moonfin";
 
         private const int LibraryPageSize = 2000;
@@ -68,6 +68,10 @@ namespace Emby.Plugins.Moonfin.Services
                 _logger.Warn("Studio images sync skipped: plugin services not initialized yet");
                 return;
             }
+
+            // Logos cached before their tone was recorded get checked once
+            if (CacheService.ToneUncheckedLogos() > 0)
+                await CacheService.FlushAsync().ConfigureAwait(false);
 
             progress.Report(0);
 

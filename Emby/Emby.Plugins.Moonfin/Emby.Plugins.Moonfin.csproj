@@ -38,11 +38,15 @@
     <EmbeddedResource Include="Web\loader.js" />
     <EmbeddedResource Include="assets\*.png" />
     <EmbeddedResource Include="assets\*.svg" />
+    <EmbeddedResource Include="..\..\shared\PosterBadges\flags\*.svg;..\..\shared\PosterBadges\flags\*.webp">
+      <LogicalName>Emby.Plugins.Moonfin.assets.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- The seasonal row's pure logic and rules are shared with the Jellyfin port, so both read
        the same files from the repo's shared folder. -->
   <ItemGroup>
+    <Compile Include="../../shared/Calendar/*.cs" Link="Calendar/%(Filename)%(Extension)" />
     <Compile Include="../../shared/LiveTv/*.cs" Link="LiveTv/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Pin/*.cs" Link="Pin/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Seasonal/*.cs" Link="Seasonal/%(Filename)%(Extension)" />
@@ -51,6 +55,8 @@
     <Compile Include="../../shared/Anime/*.cs" Link="Anime/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Romm/*.cs" Link="Romm/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Games/*.cs" Link="Games/%(Filename)%(Extension)" />
+    <Compile Include="../../shared/SmartSearch/*.cs" Link="SmartSearch/%(Filename)%(Extension)" />
+    <Compile Include="../../shared/PosterBadges/*.cs" Link="PosterBadges/%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../shared/Seasonal/seasonal-holidays.json" LogicalName="Moonfin.Seasonal.holidays.json" />
   </ItemGroup>
 

@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Emby.Plugins.Moonfin.Models;
 using Emby.Plugins.Moonfin.Services;
@@ -36,6 +37,26 @@ namespace Emby.Plugins.Moonfin.Api
         // Debounced disk flush for on-demand cache writes (the batch task also flushes).
         private static readonly TimeSpan FlushDebounce = TimeSpan.FromSeconds(30);
         private static DateTimeOffset _lastFlushRequest = DateTimeOffset.MinValue;
+
+        private sealed class WatchingNowCacheEntry
+        {
+            public DateTimeOffset CachedAt { get; }
+            public object Data { get; }
+
+            public WatchingNowCacheEntry(DateTimeOffset cachedAt, object data)
+            {
+                CachedAt = cachedAt;
+                Data = data;
+            }
+        }
+
+        private static WatchingNowCacheEntry? _watchingNowCache;
+        private static readonly TimeSpan WatchingNowCacheTtl = TimeSpan.FromMinutes(4.5);
+        private static readonly SemaphoreSlim _watchingNowLock = new SemaphoreSlim(1, 1);
+
+        // A dropped connection or timeout usually clears within the minute, so Watching Now
+        // remembers it only briefly, which still spares the requests queued behind it.
+        private static readonly TimeSpan ConnectionFailureTtl = TimeSpan.FromSeconds(30);
 
         private static readonly string[] DefaultRatingSources = { "imdb", "tmdb", "tomatoes", "metacritic" };
 
@@ -159,6 +180,106 @@ namespace Emby.Plugins.Moonfin.Api
         /// Admin-only, used by the "Test key" button on the plugin config page.
         /// Pass Key to test an unsaved key, otherwise the server-wide key is used.
         /// </summary>
+        public async Task<object?> Get(GetMdbListWatchingNowRequest request)
+        {
+            var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
+            string? apiKey = null;
+            if (userId != null)
+            {
+                var resolved = await Settings.GetResolvedProfileAsync(userId.Value, NormalizeProfileName(request.Profile)).ConfigureAwait(false);
+                apiKey = resolved?.MdblistApiKey;
+            }
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                apiKey = Plugin.Instance?.Configuration?.MdblistApiKey;
+            }
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                return Json(new { error = "No MDBList API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key." });
+            }
+
+            var snapshot = Volatile.Read(ref _watchingNowCache);
+            if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CachedAt < WatchingNowCacheTtl)
+            {
+                return Json(snapshot.Data);
+            }
+
+            var negKey = "watching_now:" + apiKey.Trim();
+            if (_negativeCache.TryGetValue(negKey, out var negative))
+            {
+                if (DateTimeOffset.UtcNow - negative.At < NegativeCacheTtl)
+                {
+                    return Json(new { error = negative.Error });
+                }
+                _negativeCache.TryRemove(negKey, out _);
+            }
+
+            await _watchingNowLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                snapshot = Volatile.Read(ref _watchingNowCache);
+                if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CachedAt < WatchingNowCacheTtl)
+                {
+                    return Json(snapshot.Data);
+                }
+
+                if (_negativeCache.TryGetValue(negKey, out negative))
+                {
+                    if (DateTimeOffset.UtcNow - negative.At < NegativeCacheTtl)
+                    {
+                        return Json(new { error = negative.Error });
+                    }
+                    _negativeCache.TryRemove(negKey, out _);
+                }
+
+                var url = "https://api.mdblist.com/watching/now?apikey=" + Uri.EscapeDataString(apiKey);
+                using (var client = MoonfinHttp.CreateClient(TimeSpan.FromSeconds(15), "Moonfin/1.0"))
+                {
+                    using (var response = await client.GetAsync(url).ConfigureAwait(false))
+                    {
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            var errBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            var statusCode = (int)response.StatusCode;
+                            var err = "MDBList API returned " + statusCode + ": " + errBody;
+                            if (statusCode == 429 || statusCode >= 500)
+                            {
+                                _negativeCache[negKey] = (DateTimeOffset.UtcNow, err);
+                            }
+                            return Json(new { error = err });
+                        }
+
+                        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        using (var doc = JsonDocument.Parse(json))
+                        {
+                            if (doc.RootElement.TryGetProperty("items", out var items) && items.GetArrayLength() > 0)
+                            {
+                                var cloned = doc.RootElement.Clone();
+                                Volatile.Write(ref _watchingNowCache, new WatchingNowCacheEntry(DateTimeOffset.UtcNow, cloned));
+                                return Json(cloned);
+                            }
+                            if (doc.RootElement.TryGetProperty("error", out _))
+                            {
+                                return Json(doc.RootElement.Clone());
+                            }
+                            return Json(new { error = "Failed to deserialize MDBList response." });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Dated so it lapses after ConnectionFailureTtl rather than the full window.
+                _negativeCache[negKey] = (DateTimeOffset.UtcNow - NegativeCacheTtl + ConnectionFailureTtl, ex.Message);
+                return Json(new { error = ex.Message });
+            }
+            finally
+            {
+                _watchingNowLock.Release();
+            }
+        }
+
         public async Task<object?> Get(GetMdbListKeyInfoRequest request)
         {
             var apiKey = string.IsNullOrWhiteSpace(request.Key)
@@ -553,6 +674,9 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(new { success = false, error = "Failed to fetch from TMDB: " + ex.Message });
             }
         }
+
+        public object Get(GetStudioLogosRequest request) =>
+            Json(new { success = true, companies = StudioLogoCache.GetCompaniesWithLogos() });
 
         public async Task<object?> Get(GetStudioImageRequest request)
         {

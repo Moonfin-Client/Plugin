@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Moonfin-Client/Plugin/Go/internal/plex"
@@ -20,7 +21,7 @@ func main() {
 		slog.Error("Set PLEX_URL to your Plex server's address, for example http://192.168.1.10:32400")
 		os.Exit(2)
 	}
-	c, err := plex.New(plex.Config{PMS: pms, DataDir: envOr("MOONBASE_DATA", "/config"), Version: version})
+	c, err := plex.New(plex.Config{PMS: pms, DataDir: envOr("MOONBASE_DATA", "/config"), Version: version, SmartSearchHelper: smartSearchHelper(), FlagsDir: besideProgram("MOONBASE_FLAGS", "flags")})
 	if err != nil {
 		slog.Error("start Moonbase", "error", err)
 		os.Exit(1)
@@ -32,6 +33,25 @@ func main() {
 		slog.Error("serve", "error", err)
 		os.Exit(1)
 	}
+}
+
+// smartSearchHelper is the helper the image installs next to this program,
+// unless MOONBASE_SMARTSEARCH names another.
+func smartSearchHelper() string {
+	return besideProgram("MOONBASE_SMARTSEARCH", filepath.Join("smartsearch", "moonbase-smartsearch"))
+}
+
+// besideProgram is the path the image installs next to this program, unless
+// the environment variable names another.
+func besideProgram(key, rel string) string {
+	if path := os.Getenv(key); path != "" {
+		return path
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exe), rel)
 }
 
 func envOr(key, fallback string) string {

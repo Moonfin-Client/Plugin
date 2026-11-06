@@ -5,11 +5,15 @@ VERSION ?= $(shell sed -n 's/^  "version": "\(.*\)",$$/\1/p' cmd/silo/manifest.j
 LDFLAGS := -s -w -X main.version=$(VERSION)
 PLATFORMS := linux/amd64 linux/arm64
 
-.PHONY: build test dist silo-index plex-image clean
+.PHONY: build smartsearch test dist silo-index plex-image clean
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/moonbase ./cmd/silo
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/moonbase-plex ./cmd/plex
+
+# The smart search helper, next to dist/moonbase-plex where it looks for it.
+smartsearch:
+	dotnet publish smartsearch -c Release -r linux-x64 -o dist/smartsearch
 
 test:
 	go vet ./...
@@ -33,7 +37,7 @@ silo-index: dist
 		--slurpfile m cmd/silo/manifest.json > dist/index.json
 
 plex-image:
-	$(or $(DOCKER),docker) build --build-arg VERSION=$(VERSION) -f cmd/plex/Dockerfile -t moonbase-plex:$(VERSION) .
+	$(or $(DOCKER),docker) build --build-arg VERSION=$(VERSION) -f cmd/plex/Dockerfile -t moonbase-plex:$(VERSION) ..
 
 clean:
 	rm -rf dist

@@ -110,7 +110,7 @@ jobs:
       - name: Build and push the Plex image
         uses: docker/build-push-action@v6
         with:
-          context: Go
+          context: .
           file: Go/cmd/plex/Dockerfile
           platforms: linux/amd64,linux/arm64
           build-args: VERSION=${{ env.VERSION }}

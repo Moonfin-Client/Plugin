@@ -83,6 +83,29 @@ func SaveProfile(env M, name string, incoming M, clientID string, keys ServerKey
 	return env
 }
 
+// PersonalKeys are a user's own keys and hidden items rather than
+// preferences, so copying settings to someone else never moves them.
+var PersonalKeys = []string{"seerrApiKey", "mdblistApiKey", "tmdbApiKey", "hiddenContinueWatchingItems", "hiddenNextUpSeries"}
+
+// ReplaceProfile swaps one profile of env (nil for a new user) for incoming,
+// keeping the user's PersonalKeys, and returns the envelope to store.
+func ReplaceProfile(env M, name string, incoming M, clientID string, keys ServerKeys, now time.Time) M {
+	if env == nil {
+		env = M{"schemaVersion": 2, "syncEnabled": true}
+	}
+	stored := storedHidden(env)
+	if existing, ok := env[name].(M); ok {
+		for _, k := range PersonalKeys {
+			if v, ok := existing[k]; ok {
+				incoming[k] = v
+			}
+		}
+	}
+	env[name] = incoming
+	finish(env, clientID, keys, now, stored)
+	return env
+}
+
 // SaveEnvelope builds the envelope to store from a whole incoming one.
 // mergeMode "merge" merges it into existing the way SaveProfile does per
 // profile. Anything else replaces it.
@@ -179,6 +202,21 @@ func LayerDefaults(all, device M) M {
 		}
 	}
 	maps.Copy(out, device)
+	return out
+}
+
+// Without is a copy of m minus every key mask sets, and minus the whole home
+// layout when mask has one.
+func Without(m, mask M) M {
+	out := maps.Clone(m)
+	for k := range mask {
+		delete(out, k)
+	}
+	if slices.ContainsFunc(layoutKeys, func(k string) bool { return mask[k] != nil }) {
+		for _, k := range layoutKeys {
+			delete(out, k)
+		}
+	}
 	return out
 }
 

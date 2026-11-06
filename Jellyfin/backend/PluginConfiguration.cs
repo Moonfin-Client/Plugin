@@ -1,5 +1,7 @@
 using System.Reflection;
+using System.Text.Json.Serialization;
 using MediaBrowser.Model.Plugins;
+using Moonfin.PosterBadges;
 using Moonfin.Server.Models;
 
 namespace Moonfin.Server;
@@ -43,6 +45,26 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Example: https://jellyfin.example.com
     /// </summary>
     public string? PublicServerUrl { get; set; }
+
+    /// <summary>
+    /// Keeps the Sonarr and Radarr calendar to server admins.
+    /// </summary>
+    public bool CalendarAdminsOnly { get; set; }
+
+    /// <summary>
+    /// How many days before today the calendar can reach.
+    /// </summary>
+    public int CalendarDaysBack { get; set; } = 14;
+
+    /// <summary>
+    /// How many days after today the calendar can reach.
+    /// </summary>
+    public int CalendarDaysAhead { get; set; } = 90;
+
+    /// <summary>
+    /// How long an arr calendar answer is reused before the arr is asked again. 0 asks every time.
+    /// </summary>
+    public int CalendarCacheMinutes { get; set; } = 5;
 
     /// <summary>
     /// Server-wide MDBList API key shared with all users.
@@ -92,6 +114,19 @@ public class PluginConfiguration : BasePluginConfiguration
     /// How long a cached studio-logo entry stays fresh before the sync task refetches it.
     /// </summary>
     public int StudioLogosMaxAgeDays { get; set; } = 30;
+
+    /// <summary>
+    /// Plain sentence search for clients ("90s movie about a kid pulled into a board game"). Off
+    /// by default: turning it on downloads a small model and indexes the library and, with the
+    /// TMDB key above, the most popular TMDB titles for Seerr.
+    /// </summary>
+    public bool SmartSearchEnabled { get; set; }
+
+    /// <summary>
+    /// "english" for the small model, or "multilingual" for one that understands searches in about
+    /// 100 languages at the cost of a bigger download and a slower first build.
+    /// </summary>
+    public string SmartSearchModel { get; set; } = "english";
 
     /// <summary>
     /// Watches Live TV recordings and tags the ones that come out incomplete. The other Live TV
@@ -214,6 +249,23 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public bool AnimeMarkerShowAnimeCanon { get; set; }
 
+    // ---------------------------------------------------------------------
+    // Poster badges
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Labels Moonfin clients draw on posters, each shown when its conditions hold for the
+    /// item's file. Empty by default, so no poster gets a badge until the admin adds a rule.
+    /// </summary>
+    public List<PosterBadgeRule> PosterBadgeRules { get; set; } = new();
+
+    /// <summary>
+    /// The look a label gets where its rule leaves a setting empty. Null until the admin saves
+    /// the Labels tab, and read as the standard look, so a fresh configuration stays all
+    /// defaults for the backup check.
+    /// </summary>
+    public PosterBadgeDefaults? PosterBadgeDefaults { get; set; }
+
     /// <summary>
     /// Optional default server URL shown in the Moonfin web Add Server dialog.
     /// </summary>
@@ -325,10 +377,32 @@ public class PluginConfiguration : BasePluginConfiguration
     public MoonfinSettingsProfile? DefaultUserSettings { get; set; }
 
     /// <summary>
+    /// Admin defaults for desktop, mobile and TV devices. Each set value wins over
+    /// <see cref="DefaultUserSettings"/> on that kind of device.
+    /// </summary>
+    public MoonfinDeviceDefaults? DefaultDeviceSettings { get; set; }
+
+    /// <summary>The admin defaults stored for one profile name, global or a device.</summary>
+    public MoonfinSettingsProfile? GetDefaultsFor(string? profileName) => profileName?.ToLowerInvariant() switch
+    {
+        "tv" => DefaultDeviceSettings?.Tv,
+        "desktop" => DefaultDeviceSettings?.Desktop,
+        "mobile" => DefaultDeviceSettings?.Mobile,
+        _ => DefaultUserSettings
+    };
+
+    /// <summary>
     /// Libraries added to each new user's My Media and Latest exclude lists, and to existing users'
     /// when the admin applies the defaults to them.
     /// </summary>
     public List<string> DefaultHiddenLibraryIds { get; set; } = new();
+
+    /// <summary>
+    /// Libraries added only to the Latest exclude list, so they stay in navigation but leave the
+    /// recently added rows. Applied like <see cref="DefaultHiddenLibraryIds"/>, which already
+    /// covers both lists.
+    /// </summary>
+    public List<string> DefaultHiddenFromLatestLibraryIds { get; set; } = new();
 
     /// <summary>
     /// Metadata index for uploaded custom themes stored in the plugin data folder.
@@ -489,6 +563,22 @@ public class PluginConfiguration : BasePluginConfiguration
 /// <summary>
 /// Metadata for an uploaded custom theme JSON file.
 /// </summary>
+/// <summary>
+/// The per-device admin defaults. A class rather than a dictionary, since the plugin configuration
+/// is stored as XML, and its JSON matches DefaultDeviceSettings on Moonbase for Silo and Plex.
+/// </summary>
+public class MoonfinDeviceDefaults
+{
+    [JsonPropertyName("desktop")]
+    public MoonfinSettingsProfile? Desktop { get; set; }
+
+    [JsonPropertyName("mobile")]
+    public MoonfinSettingsProfile? Mobile { get; set; }
+
+    [JsonPropertyName("tv")]
+    public MoonfinSettingsProfile? Tv { get; set; }
+}
+
 public class UploadedThemeEntry
 {
     public string Id { get; set; } = string.Empty;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -27,6 +28,21 @@ namespace Emby.Plugins.Moonfin.Services
         // Cached once. GetProperties() is called on the warm settings-resolve path.
         private static readonly System.Reflection.PropertyInfo[] ProfileProps = typeof(MoonfinSettingsProfile).GetProperties();
         private static readonly System.Reflection.PropertyInfo[] UserSettingsProps = typeof(MoonfinUserSettings).GetProperties();
+
+        // The admin page names settings by their JSON keys, which every profile property pins.
+        private static readonly Dictionary<string, string> ProfileJsonNames = ProfileProps.ToDictionary(
+            prop => prop.Name,
+            prop => prop.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? JsonNamingPolicy.CamelCase.ConvertName(prop.Name));
+
+        // A user's own keys and hidden items rather than preferences, so a copy never hands them to someone else.
+        private static readonly HashSet<string> PersonalProps = new HashSet<string>
+        {
+            nameof(MoonfinSettingsProfile.SeerrApiKey),
+            nameof(MoonfinSettingsProfile.MdblistApiKey),
+            nameof(MoonfinSettingsProfile.TmdbApiKey),
+            nameof(MoonfinSettingsProfile.HiddenContinueWatchingItems),
+            nameof(MoonfinSettingsProfile.HiddenNextUpSeries),
+        };
 
         // XmlSerializer loads an unset list default as an empty list, and the admin page never saves
         // an empty sources list, so an empty one in the admin defaults means the admin left it unset.
@@ -152,12 +168,17 @@ namespace Emby.Plugins.Moonfin.Services
             return ResolveProfile(settings, profileName);
         }
 
+        /// <summary>Resolves a flat profile: device override, global, admin device defaults, admin defaults.</summary>
         public MoonfinSettingsProfile ResolveProfile(MoonfinUserSettings settings, string profileName)
+            => ResolveProfile(settings, profileName, Plugin.Instance?.Configuration);
+
+        internal MoonfinSettingsProfile ResolveProfile(MoonfinUserSettings settings, string profileName, PluginConfiguration? config)
         {
             var global = settings.Global;
-            var deviceProfile = !string.IsNullOrEmpty(profileName) && !string.Equals(profileName, "global", StringComparison.OrdinalIgnoreCase)
-                ? settings.GetProfile(profileName) : null;
-            var adminDefaults = Plugin.Instance?.Configuration?.DefaultUserSettings;
+            var isDevice = IsDeviceProfile(profileName);
+            var deviceProfile = isDevice ? settings.GetProfile(profileName) : null;
+            var adminDefaults = config?.DefaultUserSettings;
+            var adminDevice = isDevice ? config?.GetDefaultsFor(profileName) : null;
 
             var resolved = new MoonfinSettingsProfile();
             var properties = ProfileProps;
@@ -165,6 +186,7 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 var value = deviceProfile != null ? prop.GetValue(deviceProfile) : null;
                 if (value == null) value = global != null ? prop.GetValue(global) : null;
+                if (value == null) value = AdminDeviceValue(prop, adminDevice);
                 if (value == null && adminDefaults != null)
                 {
                     value = prop.GetValue(adminDefaults);
@@ -189,29 +211,71 @@ namespace Emby.Plugins.Moonfin.Services
             // Home layout (sections + row order) resolves as a unit from a single profile layer
             // rather than field-by-field, so a client's sections and order never come from
             // different profiles.
-            var homeLayout = ResolveHomeLayout(deviceProfile, global, adminDefaults);
+            var homeLayout = ResolveHomeLayout(deviceProfile, global, HasHomeLayout(adminDevice) ? adminDevice : null, adminDefaults);
             resolved.HomeSections = homeLayout.HomeSections;
             resolved.HomeRowOrder = homeLayout.HomeRowOrder;
 
             if (string.IsNullOrWhiteSpace(resolved.TmdbApiKey))
             {
-                resolved.TmdbApiKey = Plugin.Instance?.Configuration?.TmdbApiKey;
+                resolved.TmdbApiKey = config?.TmdbApiKey;
             }
 
             if (string.IsNullOrWhiteSpace(resolved.MdblistApiKey))
             {
-                resolved.MdblistApiKey = Plugin.Instance?.Configuration?.MdblistApiKey;
+                resolved.MdblistApiKey = config?.MdblistApiKey;
             }
 
             return resolved;
         }
 
+        /// <summary>
+        /// What a profile resolves to for a user with no settings of their own: the device's admin
+        /// defaults over the global ones. Global, or no device, is the global defaults as stored.
+        /// </summary>
+        public MoonfinSettingsProfile? AdminDefaultsFor(string? profileName)
+            => AdminDefaultsFor(profileName, Plugin.Instance?.Configuration);
+
+        internal static MoonfinSettingsProfile? AdminDefaultsFor(string? profileName, PluginConfiguration? config)
+        {
+            var global = config?.DefaultUserSettings;
+            var device = IsDeviceProfile(profileName) ? config?.GetDefaultsFor(profileName) : null;
+            if (device == null) return global;
+
+            var merged = new MoonfinSettingsProfile();
+            foreach (var prop in ProfileProps)
+            {
+                var value = AdminDeviceValue(prop, device) ?? (global != null ? prop.GetValue(global) : null);
+                if (value != null) prop.SetValue(merged, value);
+            }
+
+            // The home layout moves as one unit, the same as in ResolveProfile.
+            var layout = HasHomeLayout(device) ? device : global;
+            merged.HomeSections = layout?.HomeSections;
+            merged.HomeRowOrder = layout?.HomeRowOrder;
+            return merged;
+        }
+
+        private static bool IsDeviceProfile(string? profileName) =>
+            !string.IsNullOrEmpty(profileName) && !string.Equals(profileName, "global", StringComparison.OrdinalIgnoreCase);
+
+        // XmlSerializer loads every list a device's defaults never set as an empty one, and an empty
+        // list there would hide the global default, so it counts as not set.
+        private static object? AdminDeviceValue(PropertyInfo prop, MoonfinSettingsProfile? deviceDefaults)
+        {
+            var value = deviceDefaults != null ? prop.GetValue(deviceDefaults) : null;
+            return value is System.Collections.ICollection { Count: 0 } ? null : value;
+        }
+
+        private static bool HasHomeLayout(MoonfinSettingsProfile? profile) =>
+            profile != null && (profile.HomeSections is { Count: > 0 } || profile.HomeRowOrder is { Count: > 0 });
+
         private static (List<MoonfinHomeSectionConfig>? HomeSections, List<string>? HomeRowOrder) ResolveHomeLayout(
             MoonfinSettingsProfile? deviceProfile,
             MoonfinSettingsProfile? global,
+            MoonfinSettingsProfile? adminDevice,
             MoonfinSettingsProfile? adminDefaults)
         {
-            foreach (var profile in new[] { deviceProfile, global, adminDefaults })
+            foreach (var profile in new[] { deviceProfile, global, adminDevice, adminDefaults })
             {
                 if (profile == null) continue;
                 if (profile.HomeSections == null && profile.HomeRowOrder == null) continue;
@@ -324,7 +388,7 @@ namespace Emby.Plugins.Moonfin.Services
             if (settingsChanged) NotifySettingsChanged(userId);
         }
 
-        public async Task SaveProfileAsync(Guid userId, string profileName, MoonfinSettingsProfile profile, string? clientId = null, bool notifySettingsChanged = true)
+        public async Task SaveProfileAsync(Guid userId, string profileName, MoonfinSettingsProfile profile, string? clientId = null, bool notifySettingsChanged = true, bool replace = false)
         {
             var filePath = GetUserSettingsPath(userId);
             bool settingsChanged;
@@ -343,7 +407,16 @@ namespace Emby.Plugins.Moonfin.Services
                     ? settings.Global
                     : settings.GetProfile(profileName);
 
-                if (existingProfile != null)
+                if (existingProfile != null && replace)
+                {
+                    // A replace swaps the preferences only, the user's own keys and hidden items stay.
+                    foreach (var prop in ProfileProps)
+                    {
+                        if (PersonalProps.Contains(prop.Name)) prop.SetValue(profile, prop.GetValue(existingProfile));
+                    }
+                    settings.SetProfile(profileName, profile);
+                }
+                else if (existingProfile != null)
                     MergeProfile(existingProfile, profile);
                 else
                     settings.SetProfile(profileName, profile);
@@ -544,22 +617,38 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
-        /// <summary>Merges admin defaults into every existing user's global and device profiles, keeping their values for every setting the defaults leave unset.</summary>
-        public async Task<int> MergeDefaultsToAllUsersAsync(MoonfinSettingsProfile defaults)
+        /// <summary>
+        /// Merges admin defaults into users' existing settings. Only the values set in the pushed
+        /// profiles are written, narrowed to <paramref name="keys"/> when given, and each user keeps
+        /// their own values for the rest. Null <paramref name="userIds"/> means every user with a
+        /// settings file, since the others already resolve to the admin defaults.
+        /// </summary>
+        public async Task<int> MergeDefaultsAsync(
+            PluginConfiguration config,
+            IReadOnlyCollection<string> profiles,
+            IReadOnlyCollection<string>? keys,
+            IReadOnlyCollection<Guid>? userIds)
         {
-            if (defaults == null) throw new ArgumentNullException("defaults");
-            var setDefaults = SetDefaultsOnly(defaults);
-            if (!HasAnyProfileValues(setDefaults)) return 0;
+            if (config == null) throw new ArgumentNullException(nameof(config));
+
+            var push = DefaultsToPush(config, profiles, keys);
+            if (push.Count == 0) return 0;
+
+            // Every device's own defaults, pushed or not, so Global's never lands where a device differs.
+            var deviceDefaults = new Dictionary<string, MoonfinSettingsProfile?>();
+            foreach (var name in MoonfinUserSettings.ValidProfiles.Where(IsDeviceProfile))
+            {
+                var own = config.GetDefaultsFor(name);
+                deviceDefaults[name] = own != null ? SetDefaultsOnly(own) : null;
+            }
 
             EnsureDataDirectory();
             var usersUpdated = 0;
-            foreach (var filePath in Directory.EnumerateFiles(_dataPath, "*.json", SearchOption.TopDirectoryOnly))
+            foreach (var userId in userIds ?? StoredUserIds())
             {
-                var fileName = Path.GetFileNameWithoutExtension(filePath);
-                if (!Guid.TryParse(fileName, out var userId)) continue;
                 try
                 {
-                    await MergeDefaultsIntoProfilesAsync(userId, setDefaults).ConfigureAwait(false);
+                    await MergeDefaultsIntoProfilesAsync(userId, push, deviceDefaults).ConfigureAwait(false);
                     usersUpdated++;
                 }
                 catch (Exception ex)
@@ -570,29 +659,161 @@ namespace Emby.Plugins.Moonfin.Services
             return usersUpdated;
         }
 
-        /// <summary>Merges admin defaults into one user's global and device profiles.</summary>
-        public async Task MergeDefaultsToUserAsync(Guid userId, MoonfinSettingsProfile defaults)
-        {
-            if (defaults == null) throw new ArgumentNullException("defaults");
-            var setDefaults = SetDefaultsOnly(defaults);
-            if (!HasAnyProfileValues(setDefaults)) return;
-
-            await MergeDefaultsIntoProfilesAsync(userId, setDefaults).ConfigureAwait(false);
-            NotifySettingsChanged(userId);
-        }
-
-        // A device profile wins over global, so a default only reaches a user once it's in every
-        // profile they have. Device profiles the user doesn't have aren't created.
-        private async Task MergeDefaultsIntoProfilesAsync(Guid userId, MoonfinSettingsProfile setDefaults)
+        // A device profile wins over global, so Global's defaults also go into each device profile
+        // the user already has, except where that device has defaults of its own. A device's own
+        // defaults create its profile when the user has none, or they would never reach that device.
+        private async Task MergeDefaultsIntoProfilesAsync(
+            Guid userId,
+            IReadOnlyDictionary<string, MoonfinSettingsProfile> push,
+            IReadOnlyDictionary<string, MoonfinSettingsProfile?> deviceDefaults)
         {
             var existing = await GetUserSettingsAsync(userId).ConfigureAwait(false);
+            push.TryGetValue("global", out var global);
             foreach (var profileName in MoonfinUserSettings.ValidProfiles)
             {
-                if (profileName != "global" && existing?.GetProfile(profileName) == null) continue;
+                MoonfinSettingsProfile? layer;
+                if (!IsDeviceProfile(profileName))
+                {
+                    layer = global;
+                }
+                else
+                {
+                    layer = global != null && existing?.GetProfile(profileName) != null
+                        ? Without(global, deviceDefaults[profileName])
+                        : null;
+                    if (push.TryGetValue(profileName, out var own)) layer = Overlay(layer, own);
+                }
 
-                // SaveProfileAsync mutates what it is handed, so each profile gets its own copy.
-                await SaveProfileAsync(userId, profileName, CloneProfile(setDefaults), "admin-default-push", notifySettingsChanged: false).ConfigureAwait(false);
+                if (layer == null || !HasAnyProfileValues(layer)) continue;
+
+                // SaveProfileAsync changes what it's handed, so each profile gets its own copy.
+                await SaveProfileAsync(userId, profileName, CloneProfile(layer), "admin-default-push", notifySettingsChanged: false).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// Copies one user's saved profiles onto other users. Merge keeps each target's values for the
+        /// settings the copy leaves out, replace makes every copied profile an exact copy. Personal data
+        /// such as API keys and hidden items always stays with its owner.
+        /// </summary>
+        public async Task<int> CopySettingsAsync(
+            Guid fromUserId,
+            IReadOnlyCollection<Guid> toUserIds,
+            IReadOnlyCollection<string> profiles,
+            IReadOnlyCollection<string>? keys,
+            bool replace)
+        {
+            var source = await GetUserSettingsAsync(fromUserId).ConfigureAwait(false);
+            if (source == null) return 0;
+
+            var copies = new Dictionary<string, MoonfinSettingsProfile>();
+            foreach (var profileName in profiles)
+            {
+                var profile = IsDeviceProfile(profileName) ? source.GetProfile(profileName) : source.Global;
+                if (profile == null) continue;
+
+                var copy = KeepOnly(CloneProfile(profile), keys);
+                foreach (var prop in ProfileProps)
+                {
+                    if (PersonalProps.Contains(prop.Name)) prop.SetValue(copy, null);
+                }
+
+                if (replace || HasAnyProfileValues(copy)) copies[profileName.ToLowerInvariant()] = copy;
+            }
+            if (copies.Count == 0) return 0;
+
+            var usersUpdated = 0;
+            foreach (var userId in toUserIds)
+            {
+                if (userId == fromUserId) continue;
+                try
+                {
+                    foreach (var entry in copies)
+                    {
+                        await SaveProfileAsync(userId, entry.Key, CloneProfile(entry.Value), "admin-copy", notifySettingsChanged: false, replace: replace).ConfigureAwait(false);
+                    }
+
+                    NotifySettingsChanged(userId);
+                    usersUpdated++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Failed to copy settings to user " + userId, ex);
+                }
+            }
+            return usersUpdated;
+        }
+
+        // The admin defaults to push into each profile, without the values they leave unset and
+        // narrowed to the keys. A profile left with nothing is skipped.
+        private static Dictionary<string, MoonfinSettingsProfile> DefaultsToPush(
+            PluginConfiguration config, IEnumerable<string> profiles, IReadOnlyCollection<string>? keys)
+        {
+            var push = new Dictionary<string, MoonfinSettingsProfile>(StringComparer.OrdinalIgnoreCase);
+            foreach (var profileName in profiles)
+            {
+                var defaults = config.GetDefaultsFor(profileName);
+                if (defaults == null) continue;
+                var copy = KeepOnly(SetDefaultsOnly(defaults), keys);
+                if (HasAnyProfileValues(copy)) push[profileName.ToLowerInvariant()] = copy;
+            }
+            return push;
+        }
+
+        private List<Guid> StoredUserIds()
+        {
+            var ids = new List<Guid>();
+            foreach (var filePath in Directory.EnumerateFiles(_dataPath, "*.json", SearchOption.TopDirectoryOnly))
+            {
+                if (Guid.TryParse(Path.GetFileNameWithoutExtension(filePath), out var userId)) ids.Add(userId);
+            }
+            return ids;
+        }
+
+        // A copy of source without the settings mask sets.
+        private static MoonfinSettingsProfile Without(MoonfinSettingsProfile source, MoonfinSettingsProfile? mask)
+        {
+            var copy = CloneProfile(source);
+            if (mask == null) return copy;
+            foreach (var prop in ProfileProps)
+            {
+                if (prop.GetValue(mask) != null) prop.SetValue(copy, null);
+            }
+            if (HasHomeLayout(mask))
+            {
+                copy.HomeSections = null;
+                copy.HomeRowOrder = null;
+            }
+            return copy;
+        }
+
+        // Writes every value over sets onto under, or onto a new profile when there's none.
+        private static MoonfinSettingsProfile Overlay(MoonfinSettingsProfile? under, MoonfinSettingsProfile over)
+        {
+            var result = under ?? new MoonfinSettingsProfile();
+            foreach (var prop in ProfileProps)
+            {
+                var value = prop.GetValue(over);
+                if (value != null) prop.SetValue(result, value);
+            }
+            if (HasHomeLayout(over))
+            {
+                result.HomeSections = over.HomeSections;
+                result.HomeRowOrder = over.HomeRowOrder;
+            }
+            return result;
+        }
+
+        // Clears every setting outside keys, matched by their JSON names.
+        private static MoonfinSettingsProfile KeepOnly(MoonfinSettingsProfile profile, IReadOnlyCollection<string>? keys)
+        {
+            if (keys == null) return profile;
+            var keep = new HashSet<string>(keys, StringComparer.OrdinalIgnoreCase);
+            foreach (var prop in ProfileProps)
+            {
+                if (!keep.Contains(ProfileJsonNames[prop.Name])) prop.SetValue(profile, null);
+            }
+            return profile;
         }
 
         // XmlSerializer loads every list the admin never set as an empty one, so an empty list
@@ -607,19 +828,23 @@ namespace Emby.Plugins.Moonfin.Services
             return copy;
         }
 
-        /// <summary>Resets every server user to a clean defaults-only profile and deletes orphaned files for users that no longer exist.</summary>
-        public async Task<(int UsersAffected, int OrphansDeleted)> ResetAllUsersToDefaultsAsync(
-            MoonfinSettingsProfile defaults, IReadOnlyCollection<Guid> serverUserIds, bool deleteOrphans)
+        /// <summary>
+        /// Resets users to clean settings files holding only the admin defaults of the given profiles,
+        /// and when deleteOrphans is set also deletes the files of users that no longer exist.
+        /// </summary>
+        public async Task<(int UsersAffected, int OrphansDeleted)> ResetUsersToDefaultsAsync(
+            PluginConfiguration config, IReadOnlyCollection<string> profiles, IReadOnlyCollection<Guid> userIds, bool deleteOrphans)
         {
-            if (defaults == null) throw new ArgumentNullException("defaults");
+            if (config == null) throw new ArgumentNullException(nameof(config));
             EnsureDataDirectory();
 
-            var serverSet = new HashSet<Guid>(serverUserIds);
+            var push = DefaultsToPush(config, profiles, null);
+            var userSet = new HashSet<Guid>(userIds);
             var usersAffected = 0;
 
-            foreach (var userId in serverSet)
+            foreach (var userId in userSet)
             {
-                try { await ResetUserToDefaultsAsync(userId, defaults).ConfigureAwait(false); usersAffected++; }
+                try { await WriteDefaultsOnlyAsync(userId, push).ConfigureAwait(false); usersAffected++; }
                 catch (Exception ex) { _logger.ErrorException("Failed to reset user " + userId, ex); }
             }
 
@@ -629,7 +854,7 @@ namespace Emby.Plugins.Moonfin.Services
                 foreach (var filePath in Directory.EnumerateFiles(_dataPath, "*.json", SearchOption.TopDirectoryOnly))
                 {
                     var fileName = Path.GetFileNameWithoutExtension(filePath);
-                    if (!Guid.TryParse(fileName, out var userId) || serverSet.Contains(userId)) continue;
+                    if (!Guid.TryParse(fileName, out var userId) || userSet.Contains(userId)) continue;
                     try { AtomicFile.DeleteWithSidecars(filePath); orphansDeleted++; }
                     catch (Exception ex) { _logger.ErrorException("Failed to delete orphan settings " + userId, ex); }
                 }
@@ -638,19 +863,20 @@ namespace Emby.Plugins.Moonfin.Services
             return (usersAffected, orphansDeleted);
         }
 
-        /// <summary>Replaces a single user's settings with a clean global-only profile equal to the defaults.</summary>
-        public async Task ResetUserToDefaultsAsync(Guid userId, MoonfinSettingsProfile defaults)
+        private async Task WriteDefaultsOnlyAsync(Guid userId, IReadOnlyDictionary<string, MoonfinSettingsProfile> push)
         {
-            if (defaults == null) throw new ArgumentNullException("defaults");
-
             var clean = new MoonfinUserSettings
             {
                 SchemaVersion = 2,
                 SyncEnabled = true,
                 LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 LastUpdatedBy = "admin-default-reset",
-                Global = CloneProfile(defaults)
+                Global = push.TryGetValue("global", out var global) ? CloneProfile(global) : new MoonfinSettingsProfile()
             };
+            foreach (var entry in push)
+            {
+                if (IsDeviceProfile(entry.Key)) clean.SetProfile(entry.Key, CloneProfile(entry.Value));
+            }
 
             await _lock.WaitAsync().ConfigureAwait(false);
             try
@@ -663,8 +889,6 @@ namespace Emby.Plugins.Moonfin.Services
             {
                 _lock.Release();
             }
-
-            NotifySettingsChanged(userId);
         }
 
         private static MoonfinSettingsProfile CloneProfile(MoonfinSettingsProfile source)

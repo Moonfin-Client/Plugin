@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using Moonfin.Calendar;
 using Moonfin.Server.Services;
 using Xunit;
 
@@ -18,6 +19,15 @@ public class SeerrArrCalendarTests
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
     private static string ServerName(JsonElement server) => server.GetProperty("name").GetString()!;
+
+    [Fact]
+    public void TheSessionCheckReadsTheCurrentSeerrPermissions()
+    {
+        Assert.Equal(4196386, SeerrSessionService.PermissionsFrom(Encoding.UTF8.GetBytes("""{ "id": 2, "permissions": 4196386 }""")));
+        Assert.Null(SeerrSessionService.PermissionsFrom(Encoding.UTF8.GetBytes("""{ "id": 2 }""")));
+        Assert.Null(SeerrSessionService.PermissionsFrom(Encoding.UTF8.GetBytes("[]")));
+        Assert.Null(SeerrSessionService.PermissionsFrom(Encoding.UTF8.GetBytes("not json")));
+    }
 
     [Fact]
     public void ASingleServerIsUsedWhateverItsFlags()
@@ -233,15 +243,40 @@ public class SeerrArrCalendarTests
         Assert.Single(handler.Requested);
     }
 
+    [Theory]
+    [InlineData(true, "&includeSeries=true&includeEpisodeImages=true&unmonitored=true")]
+    [InlineData(false, "&includeSeries=true&includeEpisodeImages=true")]
+    public async Task EpisodeImagesAndUnmonitoredReachSonarr(bool unmonitored, string flags)
+    {
+        var handler = new ArrHandler();
+        handler.Answer("sonarr.lan", HttpStatusCode.OK, "[]");
+        var query = ArrCalendarWindow.Query(true, new DateTime(2026, 11, 5), new DateTime(2027, 2, 3), unmonitored);
+
+        await Fetch(handler, ["http://sonarr.lan:8989"], query: query);
+
+        Assert.Equal(["http://sonarr.lan:8989/api/v3/calendar?start=2026-11-05&end=2027-02-03" + flags], handler.Requested);
+    }
+
+    [Fact]
+    public async Task UnmonitoredReachesRadarr()
+    {
+        var handler = new ArrHandler();
+        handler.Answer("radarr.lan", HttpStatusCode.OK, "[]");
+
+        await Fetch(handler, ["http://radarr.lan:7878"], query: ArrCalendarWindow.Query(false, new DateTime(2026, 11, 5), new DateTime(2026, 11, 6), unmonitored: true));
+
+        Assert.Equal(["http://radarr.lan:7878/api/v3/calendar?start=2026-11-05&end=2026-11-06&unmonitored=true"], handler.Requested);
+    }
+
     // Unless a test passes one, a lookup fails the test, since https and the internal address never need one.
-    private static Task<SeerrProxyResponse> Fetch(ArrHandler handler, string[] bases, Func<string, Task<IPAddress[]>>? resolveHost = null) =>
+    private static Task<SeerrProxyResponse> Fetch(ArrHandler handler, string[] bases, Func<string, Task<IPAddress[]>>? resolveHost = null, string query = Query) =>
         SeerrSessionService.FetchArrCalendarAsync(
             new FakeHttpClientFactory(handler),
             new NoOpLogger<SeerrSessionService>(),
             "radarr",
             bases,
             "secret",
-            Query,
+            query,
             resolveHost ?? (host => throw new InvalidOperationException("Unexpected lookup of " + host)));
 
     // A null list stands for a host that doesn't resolve.

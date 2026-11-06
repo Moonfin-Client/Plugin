@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Reflection;
 using MediaBrowser.Controller.Entities;
 
@@ -40,6 +41,41 @@ internal static class UserReflection
 
     public static object? UserManager(IServiceProvider services) =>
         UserManagerType == null ? null : services.GetService(UserManagerType);
+
+    // The user manager's list of users was the Users property up to 10.11 and is the GetUsers()
+    // method from 12.2, which dropped the property.
+    private static readonly Func<object, IEnumerable?>? ListUsers = UserListBinding(UserManagerType);
+
+    /// <summary>
+    /// Every user on the server, as Jellyfin's User objects, or null when this server's user
+    /// manager has neither way of listing them.
+    /// </summary>
+    public static IEnumerable? AllUsers(IServiceProvider services)
+    {
+        var userManager = UserManager(services);
+        return userManager == null || ListUsers == null ? null : ListUsers(userManager);
+    }
+
+    /// <summary>
+    /// How to list the users on a user manager of <paramref name="managerType"/>: its GetUsers()
+    /// method when it has one, else its Users property, else null.
+    /// </summary>
+    internal static Func<object, IEnumerable?>? UserListBinding(Type? managerType)
+    {
+        var method = managerType?.GetMethod("GetUsers", Type.EmptyTypes);
+        if (method != null && typeof(IEnumerable).IsAssignableFrom(method.ReturnType))
+        {
+            return manager => method.Invoke(manager, null) as IEnumerable;
+        }
+
+        var property = managerType?.GetProperty("Users");
+        if (property != null && typeof(IEnumerable).IsAssignableFrom(property.PropertyType))
+        {
+            return manager => property.GetValue(manager) as IEnumerable;
+        }
+
+        return null;
+    }
 
     /// <summary>Applies the user's parental limits and blocked tags to the query.</summary>
     public static bool ApplyUser(InternalItemsQuery query, object user)

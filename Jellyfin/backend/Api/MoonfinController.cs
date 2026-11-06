@@ -6,12 +6,14 @@ using MediaBrowser.Model.Configuration;
 using MediaBrowser.Controller.Dto;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Moonfin.Calendar;
 using Moonfin.Server.Helpers;
 using Moonfin.Server.Models;
 using Moonfin.Server.Services;
@@ -119,7 +121,7 @@ public class MoonfinController : ControllerBase
     [HttpGet("Ping")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<MoonfinPingResponse> Ping()
+    public ActionResult<MoonfinPingResponse> Ping([FromQuery] string? profile = null)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
 
@@ -144,7 +146,14 @@ public class MoonfinController : ControllerBase
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             ExtendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
-            DefaultSettings = config?.DefaultUserSettings
+            SmartSearchEnabled = config?.SmartSearchEnabled ?? false,
+            CalendarAvailable = config?.SeerrEnabled == true
+                && !string.IsNullOrEmpty(config.GetEffectiveSeerrUrl())
+                && ArrCalendarWindow.Refusal(config.CalendarAdminsOnly, this.IsAdminFromClaims()) == null,
+            CalendarDaysBack = Math.Max(0, config?.CalendarDaysBack ?? 14),
+            CalendarDaysAhead = Math.Max(0, config?.CalendarDaysAhead ?? 90),
+            CalendarReminders = true,
+            DefaultSettings = _settingsService.AdminDefaultsFor(profile)
         });
     }
 
@@ -450,71 +459,41 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
-    /// Applies the configured admin defaults to all users (admin only).
-    /// When <paramref name="overwrite"/> is false, the set defaults are merged into each existing
-    /// user's global and device profiles, keeping their values for the rest. When true,
-    /// every server user is reset to a clean global-only profile equal to the defaults
-    /// (including users with no file), and orphaned files for deleted users are removed.
+    /// Applies every profile's admin defaults to all users (admin only). Kept for callers of the
+    /// old route, the admin page uses <see cref="ApplyDefaults"/>.
     /// </summary>
     [HttpPost("Admin/PushDefaults")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult> ApplyDefaultsToAllUsers([FromQuery] bool overwrite = false)
-    {
-        var config = MoonfinPlugin.Instance?.Configuration;
-
-        if (config?.EnableSettingsSync != true)
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Settings sync is disabled" });
-        }
-
-        var defaults = config.DefaultUserSettings;
-        if (defaults == null)
-        {
-            return BadRequest(new { error = "No default user settings configured" });
-        }
-
-        int usersAffected;
-        var orphansDeleted = 0;
-
-        if (overwrite)
-        {
-            var serverUserIds = GetAllServerUserIds();
-            if (serverUserIds == null)
-            {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "User manager unavailable" });
-            }
-
-            (usersAffected, orphansDeleted) = await _settingsService.ResetAllUsersToDefaultsAsync(
-                defaults,
-                serverUserIds,
-                deleteOrphans: true);
-        }
-        else
-        {
-            usersAffected = await _settingsService.MergeDefaultsToAllUsersAsync(defaults);
-        }
-
-        await _hiddenLibraries.ApplyAsync(GetAllServerUserIds() ?? new List<Guid>());
-        var liveRefreshDeliveries = _settingsService.BroadcastSystemEvent("settingsUpdated");
-
-        return Ok(new { success = true, overwrite, usersAffected, orphansDeleted, liveRefreshDeliveries });
-    }
+    public Task<ActionResult> ApplyDefaultsToAllUsers([FromQuery] bool overwrite = false)
+        => ApplyDefaults(new MoonfinApplyDefaultsRequest { Overwrite = overwrite });
 
     /// <summary>
-    /// Applies the configured admin defaults to a single user (admin only).
-    /// When <paramref name="overwrite"/> is false, the set defaults are merged into the user's
-    /// global and device profiles, keeping their values for the rest. When true, the
-    /// user is reset to a clean global-only profile equal to the defaults.
+    /// Applies every profile's admin defaults to a single user (admin only). Kept for callers of
+    /// the old route, the admin page uses <see cref="ApplyDefaults"/>.
     /// </summary>
     [HttpPost("Admin/PushDefaults/{userId}")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult> ApplyDefaultsToUser([FromRoute] Guid userId, [FromQuery] bool overwrite = false)
+    public Task<ActionResult> ApplyDefaultsToUser([FromRoute] Guid userId, [FromQuery] bool overwrite = false)
+        => ApplyDefaults(new MoonfinApplyDefaultsRequest { Overwrite = overwrite, UserIds = [userId] });
+
+    /// <summary>
+    /// Pushes the admin defaults onto users' existing settings (admin only). Merge writes the set
+    /// defaults of the chosen profiles, optionally only some keys, and keeps everything else a user
+    /// chose. Overwrite resets each user to a clean file holding only those defaults, and for all
+    /// users also removes the files of users that no longer exist.
+    /// </summary>
+    [HttpPost("Admin/ApplyDefaults")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult> ApplyDefaults([FromBody] MoonfinApplyDefaultsRequest request)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
 
@@ -523,28 +502,130 @@ public class MoonfinController : ControllerBase
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Settings sync is disabled" });
         }
 
-        var defaults = config.DefaultUserSettings;
-        if (defaults == null)
+        var profiles = ProfilesOrAll(request.Profiles);
+        if (profiles == null)
+        {
+            return BadRequest(new { error = UnknownProfileError });
+        }
+
+        if (profiles.All(p => config.GetDefaultsFor(p) == null))
         {
             return BadRequest(new { error = "No default user settings configured" });
         }
 
-        if (userId == Guid.Empty)
+        if (request.Overwrite && request.Keys != null)
+        {
+            return BadRequest(new { error = "A full reset applies every default, so it can't take a list of settings" });
+        }
+
+        if (request.UserIds != null && (request.UserIds.Count == 0 || request.UserIds.Contains(Guid.Empty)))
         {
             return BadRequest(new { error = "A valid userId is required" });
         }
 
-        if (overwrite)
+        var serverUserIds = request.UserIds == null ? GetAllServerUserIds() : null;
+        int usersAffected;
+        var orphansDeleted = 0;
+
+        if (request.Overwrite)
         {
-            await _settingsService.ResetUserToDefaultsAsync(userId, defaults);
+            var targets = request.UserIds ?? serverUserIds;
+            if (targets == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "User manager unavailable" });
+            }
+
+            (usersAffected, orphansDeleted) = await _settingsService.ResetUsersToDefaultsAsync(
+                config,
+                profiles,
+                targets,
+                deleteOrphans: request.UserIds == null);
         }
         else
         {
-            await _settingsService.MergeDefaultsToUserAsync(userId, defaults);
+            usersAffected = await _settingsService.MergeDefaultsAsync(config, profiles, request.Keys, request.UserIds);
         }
 
-        await _hiddenLibraries.ApplyAsync([userId]);
-        return Ok(new { success = true, overwrite });
+        // Hidden libraries are part of the defaults as a whole, not a setting someone can pick.
+        if (request.Keys == null)
+        {
+            await _hiddenLibraries.ApplyAsync(request.UserIds ?? serverUserIds ?? new List<Guid>());
+        }
+
+        var liveRefreshDeliveries = 0;
+        if (request.UserIds == null)
+        {
+            liveRefreshDeliveries = _settingsService.BroadcastSystemEvent("settingsUpdated");
+        }
+        else
+        {
+            foreach (var userId in request.UserIds)
+            {
+                _settingsService.NotifySettingsChanged(userId);
+            }
+        }
+
+        return Ok(new { success = true, overwrite = request.Overwrite, usersAffected, orphansDeleted, liveRefreshDeliveries });
+    }
+
+    /// <summary>
+    /// Copies one user's saved Moonfin settings onto other users (admin only). Merge keeps each
+    /// target's values for whatever the copy leaves out, replace makes every copied profile an exact
+    /// copy. API keys and hidden items always stay with their owner.
+    /// </summary>
+    [HttpPost("Admin/CopySettings")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult> CopySettings([FromBody] MoonfinCopySettingsRequest request)
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+
+        if (config?.EnableSettingsSync != true)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Settings sync is disabled" });
+        }
+
+        var targets = (request.ToUserIds ?? new List<Guid>()).Where(id => id != Guid.Empty && id != request.FromUserId).Distinct().ToList();
+        if (request.FromUserId == Guid.Empty || targets.Count == 0)
+        {
+            return BadRequest(new { error = "A user to copy from and at least one other user to copy to are required" });
+        }
+
+        var profiles = ProfilesOrAll(request.Profiles);
+        if (profiles == null)
+        {
+            return BadRequest(new { error = UnknownProfileError });
+        }
+
+        if (request.Replace && request.Keys != null)
+        {
+            return BadRequest(new { error = "Replace copies whole profiles, so it can't take a list of settings" });
+        }
+
+        if (await _settingsService.GetUserSettingsAsync(request.FromUserId) == null)
+        {
+            return NotFound(new { error = "That user has no saved Moonfin settings" });
+        }
+
+        var usersAffected = await _settingsService.CopySettingsAsync(request.FromUserId, targets, profiles, request.Keys, request.Replace);
+        return Ok(new { success = true, replace = request.Replace, usersAffected });
+    }
+
+    private static readonly string UnknownProfileError =
+        "Unknown profile. Valid profiles: " + string.Join(", ", MoonfinUserSettings.ValidProfiles);
+
+    /// <summary>The requested profile names, every profile when none were given, or null when one isn't valid.</summary>
+    private static List<string>? ProfilesOrAll(List<string>? requested)
+    {
+        if (requested is not { Count: > 0 })
+        {
+            return MoonfinUserSettings.ValidProfiles.ToList();
+        }
+
+        return requested.All(p => MoonfinUserSettings.ValidProfiles.Contains(p.ToLowerInvariant())) ? requested : null;
     }
 
     [HttpPost("Broadcast")]
@@ -664,8 +745,7 @@ public class MoonfinController : ControllerBase
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
         if (resolved == null)
         {
-            // No user settings at all; return admin defaults if available.
-            var adminDefaults = config?.DefaultUserSettings;
+            var adminDefaults = _settingsService.AdminDefaultsFor(profile);
             return adminDefaults != null ? Ok(adminDefaults) : NotFound(new { Error = "No settings found" });
         }
 
@@ -707,7 +787,7 @@ public class MoonfinController : ControllerBase
         }
 
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, resolvedProfileName)
-            ?? config?.DefaultUserSettings
+            ?? _settingsService.AdminDefaultsFor(resolvedProfileName)
             ?? new MoonfinSettingsProfile();
 
         var blur = Math.Clamp(ResolveBackdropBlur(resolved), 0, MaxDetailsBackdropBlur);
@@ -815,7 +895,7 @@ public class MoonfinController : ControllerBase
         }
 
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, resolvedProfileName)
-            ?? config?.DefaultUserSettings
+            ?? _settingsService.AdminDefaultsFor(resolvedProfileName)
             ?? new MoonfinSettingsProfile();
 
         var opacity = Math.Clamp(resolved.DetailsBackdropOpacity ?? 90, 0, 100);
@@ -1160,10 +1240,9 @@ public class MoonfinController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        // Resolve settings: device profile → global → admin defaults
         var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
         var isFallback = resolved == null;
-        var settings = resolved ?? MoonfinPlugin.Instance?.Configuration?.DefaultUserSettings ?? new MoonfinSettingsProfile();
+        var settings = resolved ?? _settingsService.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 
         var sourceType = isFallback ? "library" : (settings.MediaBarSourceType ?? "library");
         var limit = isFallback ? 5 : (settings.MediaBarItemCount ?? 10);
@@ -1187,7 +1266,20 @@ public class MoonfinController : ControllerBase
         }
         else
         {
-            items = GetLibraryItems(isFallback ? null : settings.MediaBarLibraryIds, limit, queryUser, excludedGenres);
+            var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
+            items = sourceType switch
+            {
+                "recentlyAdded" => GetLibraryItems(libraryIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated),
+                "recentlyReleased" => GetLibraryItems(libraryIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate),
+                "newReleases" => GetNewReleaseSeries(libraryIds, settings.MediaBarNewReleaseDays ?? 30, limit, queryUser, excludedGenres),
+                _ => GetLibraryItems(libraryIds, limit, queryUser, excludedGenres)
+            };
+
+            // When nothing that aired in the window has a backdrop, the bar shows random titles instead, the way the app does.
+            if (sourceType == "newReleases" && !items.Any(HasBackdropImage))
+            {
+                items = GetLibraryItems(libraryIds, limit, queryUser, excludedGenres);
+            }
         }
 
         var dtos = items
@@ -1328,21 +1420,24 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
-    /// Queries random Movie/Series items, optionally filtered to specific libraries
-    /// and with genre exclusions applied at the database level.
+    /// Queries Movie/Series items, shuffled or newest first by <paramref name="order"/>, optionally
+    /// filtered to specific libraries and with genre exclusions applied at the database level.
     /// </summary>
-    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, int limit, object queryUser, List<string>? excludedGenreIds = null)
+    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random)
     {
         var includedGenreIds = GetIncludedGenreIds(excludedGenreIds, queryUser);
 
         if (includedGenreIds is { Length: 0 }) return [];
+
+        // Titles without a backdrop are left off the bar, so a newest-first list reads further ahead to still fill it.
+        var fetchLimit = order == ItemSortBy.Random ? limit : Math.Max(limit * 4, 50);
 
         if (libraryIds is not { Count: > 0 })
         {
             var query = new InternalItemsQuery
             {
                 IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                Limit = limit,
+                Limit = fetchLimit,
                 Recursive = true
             };
 
@@ -1350,29 +1445,20 @@ public class MoonfinController : ControllerBase
 
             if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
-            SetRandomOrder(query);
+            SetMediaBarOrder(query, order);
             return _libraryManager.GetItemsResult(query).Items
-                .Where(item => UserReflection.IsVisibleTo(item, queryUser))
+                .Where(item => UserReflection.IsVisibleTo(item, queryUser) && HasBackdropImage(item))
+                .Take(limit)
                 .ToList();
         }
 
-        // Only allow libraries the user can see; silently drop any the caller
-        // doesn't have access to so settings carried over from a previous state
-        // (or forged by a client) cannot leak restricted content.
-        var allowedLibraryIds = new List<Guid>();
-        foreach (var libId in libraryIds)
-        {
-            if (!Guid.TryParse(libId, out var parentGuid)) continue;
-            var parent = _libraryManager.GetItemById(parentGuid);
-            if (parent == null || !UserReflection.IsVisibleTo(parent, queryUser)) continue;
-            allowedLibraryIds.Add(parentGuid);
-        }
-
+        var allowedLibraryIds = VisibleLibraryIds(libraryIds, queryUser);
         if (allowedLibraryIds.Count == 0) return [];
 
         var allItems = new List<BaseItem>();
         var seenIds = new HashSet<Guid>();
-        var perLibraryLimit = Math.Max(1, limit / allowedLibraryIds.Count + 1);
+        // Newest first has to compare every library's newest, so each gives the full count.
+        var perLibraryLimit = order == ItemSortBy.Random ? Math.Max(1, limit / allowedLibraryIds.Count + 1) : fetchLimit;
 
         foreach (var parentGuid in allowedLibraryIds)
         {
@@ -1388,7 +1474,7 @@ public class MoonfinController : ControllerBase
 
             if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
-            SetRandomOrder(query);
+            SetMediaBarOrder(query, order);
 
             foreach (var item in _libraryManager.GetItemsResult(query).Items)
             {
@@ -1396,6 +1482,15 @@ public class MoonfinController : ControllerBase
                 if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
                 allItems.Add(item);
             }
+        }
+
+        if (order != ItemSortBy.Random)
+        {
+            return allItems
+                .Where(HasBackdropImage)
+                .OrderByDescending(item => order == ItemSortBy.DateCreated ? item.DateCreated : item.PremiereDate ?? DateTime.MinValue)
+                .Take(limit)
+                .ToList();
         }
 
         for (var i = allItems.Count - 1; i > 0; i--)
@@ -1408,10 +1503,108 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
-    /// Sets OrderBy to Random on the query using reflection, avoiding direct
-    /// reference to SortOrder which moved between Jellyfin 10.10 and 10.11.
+    /// The libraries in <paramref name="libraryIds"/> the user can see. Any the caller has no access
+    /// to are dropped silently, so settings carried over from a previous state (or forged by a
+    /// client) can't leak restricted content.
     /// </summary>
-    private void SetRandomOrder(InternalItemsQuery query)
+    private List<Guid> VisibleLibraryIds(List<string> libraryIds, object queryUser)
+    {
+        var allowedLibraryIds = new List<Guid>();
+        foreach (var libId in libraryIds)
+        {
+            if (!Guid.TryParse(libId, out var parentGuid)) continue;
+            var parent = _libraryManager.GetItemById(parentGuid);
+            if (parent == null || !UserReflection.IsVisibleTo(parent, queryUser)) continue;
+            allowedLibraryIds.Add(parentGuid);
+        }
+
+        return allowedLibraryIds;
+    }
+
+    /// <summary>
+    /// Series with an episode on the server that aired within the last <paramref name="days"/> days,
+    /// newest first. A series' own premiere date is its first season's, so the episodes are queried
+    /// and brought back to their series.
+    /// </summary>
+    private List<BaseItem> GetNewReleaseSeries(List<string>? libraryIds, int days, int limit, object queryUser, List<string>? excludedGenreIds = null)
+    {
+        var excludedNames = ResolveExcludedGenreNames(excludedGenreIds);
+
+        // The window comes from synced settings, so keep it to the 7 to 90 days the apps offer.
+        days = Math.Clamp(days, 7, 90);
+        var now = DateTime.UtcNow;
+        var episodeQuery = new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Episode],
+            MinPremiereDate = now.AddDays(-days),
+            MaxPremiereDate = now,
+            IsVirtualItem = false,
+            Limit = 300,
+            Recursive = true
+        };
+
+        if (libraryIds is { Count: > 0 })
+        {
+            var allowedLibraryIds = VisibleLibraryIds(libraryIds, queryUser);
+            if (allowedLibraryIds.Count == 0) return [];
+            episodeQuery.AncestorIds = allowedLibraryIds.ToArray();
+        }
+
+        if (!UserReflection.ApplyUser(episodeQuery, queryUser)) return [];
+        SetOrder(episodeQuery, ItemSortBy.PremiereDate, descending: true);
+
+        var seen = new HashSet<Guid>();
+        var series = new List<BaseItem>();
+        // Hidden or excluded series, or ones without a backdrop, can use up a whole page of episodes, so a few more pages are read before giving up.
+        for (var page = 0; page < 3 && series.Count < limit; page++)
+        {
+            episodeQuery.StartIndex = page * 300;
+            var episodes = _libraryManager.GetItemsResult(episodeQuery).Items;
+            var seriesIds = episodes
+                .OfType<Episode>()
+                .Select(episode => episode.SeriesId)
+                .Where(id => id != Guid.Empty && seen.Add(id))
+                .ToArray();
+
+            if (seriesIds.Length > 0)
+            {
+                var seriesQuery = new InternalItemsQuery
+                {
+                    IncludeItemTypes = [BaseItemKind.Series],
+                    ItemIds = seriesIds,
+                    Recursive = true
+                };
+
+                if (!UserReflection.ApplyUser(seriesQuery, queryUser)) return [];
+
+                var rank = seriesIds.Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index);
+                series.AddRange(_libraryManager.GetItemsResult(seriesQuery).Items
+                    .Where(item => UserReflection.IsVisibleTo(item, queryUser) && HasBackdropImage(item))
+                    .Where(item => excludedNames == null || !item.Genres.Any(g => excludedNames.Contains(g)))
+                    .OrderBy(item => rank[item.Id]));
+            }
+
+            if (episodes.Count < 300) break;
+        }
+
+        return series.Take(limit).ToList();
+    }
+
+    /// <summary>
+    /// Shuffles the library source, and lists the dated ones newest first. A release date still to
+    /// come isn't recently released.
+    /// </summary>
+    private void SetMediaBarOrder(InternalItemsQuery query, ItemSortBy order)
+    {
+        if (order == ItemSortBy.PremiereDate) query.MaxPremiereDate = DateTime.UtcNow;
+        SetOrder(query, order, descending: order != ItemSortBy.Random);
+    }
+
+    /// <summary>
+    /// Sets OrderBy on the query using reflection, avoiding a direct reference to SortOrder,
+    /// which moved between Jellyfin 10.10 and 10.11.
+    /// </summary>
+    private void SetOrder(InternalItemsQuery query, ItemSortBy sortBy, bool descending)
     {
         try
         {
@@ -1420,9 +1613,9 @@ public class MoonfinController : ControllerBase
 
             var elementType = orderByProp.PropertyType.GetGenericArguments()[0];
             var sortOrderType = elementType.GetGenericArguments()[1];
-            var ascending = Enum.ToObject(sortOrderType, 0);
+            var direction = Enum.ToObject(sortOrderType, descending ? 1 : 0);
 
-            var tuple = Activator.CreateInstance(elementType, ItemSortBy.Random, ascending);
+            var tuple = Activator.CreateInstance(elementType, sortBy, direction);
             var array = Array.CreateInstance(elementType, 1);
             array.SetValue(tuple, 0);
 
@@ -1430,7 +1623,7 @@ public class MoonfinController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to set random sort order via reflection; items will use default order");
+            _logger.LogWarning(ex, "Failed to set the sort order via reflection, so items will use the default order");
         }
     }
 
@@ -1520,6 +1713,37 @@ public class MoonfinController : ControllerBase
     }
 }
 
+public class MoonfinApplyDefaultsRequest
+{
+    /// <summary>Reset each user to a clean file holding only the defaults, instead of merging.</summary>
+    public bool Overwrite { get; set; }
+
+    /// <summary>The users to apply to. Null means all of them.</summary>
+    public List<Guid>? UserIds { get; set; }
+
+    /// <summary>The profiles whose defaults are applied: global, tv, desktop, mobile. Empty means all.</summary>
+    public List<string>? Profiles { get; set; }
+
+    /// <summary>The settings to push, by JSON key. Null means every set default.</summary>
+    public List<string>? Keys { get; set; }
+}
+
+public class MoonfinCopySettingsRequest
+{
+    public Guid FromUserId { get; set; }
+
+    public List<Guid>? ToUserIds { get; set; }
+
+    /// <summary>The profiles to copy: global, tv, desktop, mobile. Empty means all the source has.</summary>
+    public List<string>? Profiles { get; set; }
+
+    /// <summary>The settings to copy, by JSON key. Null means everything the source saved.</summary>
+    public List<string>? Keys { get; set; }
+
+    /// <summary>Make each copied profile an exact copy instead of merging into the target's.</summary>
+    public bool Replace { get; set; }
+}
+
 /// <summary>
 /// Response for the ping endpoint.
 /// </summary>
@@ -1594,6 +1818,12 @@ public class MoonfinPingResponse
     public bool? PinSupported { get; set; }
 
     /// <summary>
+    /// True when the admin turned on smart search, so clients can call /Moonfin/SmartSearch.
+    /// </summary>
+    [JsonPropertyName("smartSearchEnabled")]
+    public bool? SmartSearchEnabled { get; set; }
+
+    /// <summary>
     /// True when this plugin has the incomplete Live TV recordings endpoints and the admin left
     /// detection on. Older plugins leave it out, so the app hides the badge, the Record prompt and
     /// the setting.
@@ -1610,6 +1840,24 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("recommendationsSupported")]
     public bool? RecommendationsSupported { get; set; }
+
+    /// <summary>
+    /// True when Seerr is set up for the arr calendar and this user passes the admins-only setting.
+    /// </summary>
+    [JsonPropertyName("calendarAvailable")]
+    public bool? CalendarAvailable { get; set; }
+
+    [JsonPropertyName("calendarDaysBack")]
+    public int? CalendarDaysBack { get; set; }
+
+    [JsonPropertyName("calendarDaysAhead")]
+    public int? CalendarDaysAhead { get; set; }
+
+    /// <summary>
+    /// True when this plugin has the Calendar/Reminders endpoints.
+    /// </summary>
+    [JsonPropertyName("calendarReminders")]
+    public bool? CalendarReminders { get; set; }
 
     [JsonPropertyName("defaultSettings")]
     public MoonfinSettingsProfile? DefaultSettings { get; set; }

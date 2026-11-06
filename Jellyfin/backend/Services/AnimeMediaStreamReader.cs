@@ -51,6 +51,12 @@ public static class AnimeMediaStreamReader
         return languages;
     }
 
+    /// <summary>
+    /// Every track on an item, as the server's own objects, or null when they cant be read.
+    /// </summary>
+    public static IEnumerable? GetStreams(IMediaSourceManager? sourceManager, BaseItem item) =>
+        Resolve()?.Invoke(sourceManager, item);
+
     private static Func<IMediaSourceManager?, BaseItem, IEnumerable?>? Resolve()
     {
         if (_resolved)

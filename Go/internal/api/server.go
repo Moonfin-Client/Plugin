@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/Moonfin-Client/Plugin/Go/internal/smartsearch"
 	"github.com/Moonfin-Client/Plugin/Go/internal/store"
 )
 
@@ -24,6 +25,11 @@ type Host struct {
 	Identify func(*http.Request) (Identity, error)
 	// AdminBackURL is where the admin page's back arrow goes. Empty hides it.
 	AdminBackURL string
+	// SmartSearch runs the smart search engine. Nil leaves smart search off.
+	SmartSearch *smartsearch.Helper
+	// FlagsDir holds the poster label flags as flag-xx.svg and .webp. Empty
+	// serves none.
+	FlagsDir string
 }
 
 var ErrSignedOut = errors.New("caller isn't signed in")
@@ -35,6 +41,7 @@ type Server struct {
 	kv       store.KV
 	catalog  Catalog
 	identify func(*http.Request) (Identity, error)
+	flagsDir string
 	mux      *http.ServeMux
 	ext      external
 
@@ -44,6 +51,10 @@ type Server struct {
 	// native holds what Silo kept from its old plugin form (legacy_form.go).
 	nativeMu sync.RWMutex
 	native   map[string]M
+
+	smart smartState
+
+	arrCache ttlCache
 }
 
 func NewServer(version string, h Host) *Server {
@@ -51,8 +62,12 @@ func NewServer(version string, h Host) *Server {
 		version = "0.0.0-dev"
 	}
 	s := &Server{version: version, name: h.Name, backURL: h.AdminBackURL, kv: h.KV, catalog: h.Catalog,
-		identify: h.Identify, mux: http.NewServeMux(), ext: newExternal()}
+		identify: h.Identify, flagsDir: h.FlagsDir, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}}}
+	s.smart.helper = h.SmartSearch
 	s.routes()
+	if h.SmartSearch != nil {
+		s.scheduleSmartSearch()
+	}
 	return s
 }
 
@@ -67,6 +82,9 @@ func (s *Server) routes() {
 	s.themeRoutes()
 	s.collectionRoutes()
 	s.watchPartyRoutes()
+	s.smartRoutes()
+	s.calendarRoutes()
+	s.posterBadgeRoutes()
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }

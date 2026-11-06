@@ -14,6 +14,13 @@ namespace Emby.Plugins.Moonfin.Api
         public string? Profile { get; set; }
     }
 
+    [Route("/Moonfin/MdbList/WatchingNow", "GET")]
+    [Authenticated]
+    public class GetMdbListWatchingNowRequest : IReturn<object>
+    {
+        public string? Profile { get; set; }
+    }
+
     [Route("/Moonfin/MdbList/KeyInfo", "GET")]
     [Authenticated(Roles = "Admin")]
     public class GetMdbListKeyInfoRequest : IReturn<object>
@@ -51,6 +58,12 @@ namespace Emby.Plugins.Moonfin.Api
     {
         public string? TmdbId { get; set; }
         public string? Type { get; set; }
+    }
+
+    [Route("/Moonfin/Tmdb/StudioLogos", "GET")]
+    [Authenticated]
+    public class GetStudioLogosRequest : IReturn<object>
+    {
     }
 
     [Route("/Moonfin/Tmdb/StudioImage/{CompanyId}", "GET")]

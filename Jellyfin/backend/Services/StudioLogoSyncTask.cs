@@ -18,7 +18,7 @@ public class StudioLogoSyncTask : IScheduledTask
 {
     public string Name => "Moonfin Studio Images Sync";
     public string Key => "Moonfin.Tmdb.StudioImages";
-    public string Description => "Fetches and caches TMDB studio logos for all movies and shows in the library so clients can show them on the details screen.";
+    public string Description => "Fetches and caches TMDB studio logos for all movies and shows in the library so clients can show them on the details screen and the Studios home row.";
     public string Category => "Moonfin";
 
     private const int LibraryPageSize = 2000;
@@ -49,6 +49,12 @@ public class StudioLogoSyncTask : IScheduledTask
         {
             _logger.LogInformation("Studio images sync skipped: disabled in configuration");
             return;
+        }
+
+        // Logos cached before their tone was recorded get checked once, which needs no TMDB key
+        if (_cacheService.ToneUncheckedLogos() > 0)
+        {
+            await _cacheService.FlushAsync().ConfigureAwait(false);
         }
 
         var apiKey = MoonfinPlugin.Instance?.Configuration?.TmdbApiKey;

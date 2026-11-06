@@ -39,8 +39,11 @@ public sealed class AdminDefaultsMergeTests : IDisposable
             "test-seed",
             notifySettingsChanged: false);
 
-        await _service.MergeDefaultsToAllUsersAsync(
-            new MoonfinSettingsProfile { CinemaModeEnabled = true, MediaBarLibraryIds = new List<string>() });
+        await _service.MergeDefaultsAsync(
+            new PluginConfiguration { DefaultUserSettings = new MoonfinSettingsProfile { CinemaModeEnabled = true, MediaBarLibraryIds = new List<string>() } },
+            new[] { "global" },
+            null,
+            null);
 
         var settings = (await _service.GetUserSettingsAsync(alice))!;
         Assert.True(settings.Desktop?.CinemaModeEnabled);
@@ -61,13 +64,17 @@ public sealed class AdminDefaultsMergeTests : IDisposable
             "test-seed",
             notifySettingsChanged: false);
 
-        await _service.MergeDefaultsToUserAsync(alice, new MoonfinSettingsProfile { CinemaModeEnabled = true });
+        await _service.MergeDefaultsAsync(
+            new PluginConfiguration { DefaultUserSettings = new MoonfinSettingsProfile { CinemaModeEnabled = true } },
+            new[] { "global" },
+            null,
+            new[] { alice });
 
         Assert.True((await _service.GetUserSettingsAsync(alice))!.Tv?.CinemaModeEnabled);
     }
 
     /// <summary>An Emby logger that drops everything.</summary>
-    private class NoOpLogger : DispatchProxy
+    internal class NoOpLogger : DispatchProxy
     {
         public static ILogger Create() => Create<ILogger, NoOpLogger>();
 

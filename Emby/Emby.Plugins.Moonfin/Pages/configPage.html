@@ -532,7 +532,8 @@
             color: inherit;
         }
 
-        #MoonfinConfigPage .defaultsSubnavBar {
+        #MoonfinConfigPage .defaultsSubnavBar,
+        #MoonfinConfigPage .moonfinSubTabs {
             display: flex;
             gap: 4px;
             flex-wrap: wrap;
@@ -544,7 +545,8 @@
             background: rgba(128, 128, 128, 0.08);
         }
 
-        #MoonfinConfigPage .defaultsSubtabBtn {
+        #MoonfinConfigPage .defaultsSubtabBtn,
+        #MoonfinConfigPage .moonfinSubTab {
             background: transparent;
             border: 0;
             color: inherit;
@@ -556,12 +558,14 @@
             transition: all 0.2s ease;
         }
 
-        #MoonfinConfigPage .defaultsSubtabBtn:hover {
+        #MoonfinConfigPage .defaultsSubtabBtn:hover,
+        #MoonfinConfigPage .moonfinSubTab:hover {
             background: rgba(128, 128, 128, 0.16);
             color: inherit;
         }
 
-        #MoonfinConfigPage .defaultsSubtabBtn.active {
+        #MoonfinConfigPage .defaultsSubtabBtn.active,
+        #MoonfinConfigPage .moonfinSubTab.is-active {
             background: #00a4dc;
             color: #fff;
             font-weight: 600;
@@ -831,97 +835,1374 @@
             font-size: 0.85em;
         }
 
-        #MoonfinConfigPage .moonfinLayers {
+        #MoonfinConfigPage .moonfinSubPanel {
+            display: none;
+        }
+
+        #MoonfinConfigPage .moonfinSubPanel.is-active,
+        #MoonfinConfigPage.moonfin-searching .moonfinSubPanel {
+            display: block;
+        }
+
+        #MoonfinConfigPage.moonfin-searching .moonfinSubTabs {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsStudio {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 260px;
+            gap: 18px;
+            align-items: start;
+        }
+
+        #MoonfinConfigPage .labelsSide {
             display: flex;
             flex-direction: column;
-            margin-top: 14px;
+            gap: 16px;
         }
 
-        #MoonfinConfigPage .moonfinLayer {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 14px;
-            padding: 14px 16px;
-            border: 1px solid rgba(128, 128, 128, 0.18);
-            border-radius: 12px;
-            background: rgba(128, 128, 128, 0.06);
-        }
-
-        #MoonfinConfigPage .moonfinLayer.is-first {
-            border-color: rgba(0, 164, 220, 0.3);
-            background: rgba(0, 164, 220, 0.1);
-        }
-
-        #MoonfinConfigPage .moonfinLayerStep {
-            display: flex;
+        #MoonfinConfigPage .labelsPreview {
+            box-sizing: border-box;
             flex-shrink: 0;
-            align-items: center;
-            justify-content: center;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: rgba(128, 128, 128, 0.24);
-            font-size: 0.9em;
-            font-weight: 700;
-        }
-
-        #MoonfinConfigPage .moonfinLayer.is-first .moonfinLayerStep {
-            background: #00a4dc;
-            color: #fff;
-        }
-
-        #MoonfinConfigPage .moonfinLayerText {
             display: flex;
-            flex: 1 1 260px;
             flex-direction: column;
-            gap: 2px;
-            min-width: 0;
+            gap: 10px;
+            padding: 16px;
+            border: 1px solid rgba(128, 128, 128, 0.28);
+            border-radius: 16px;
+            background: rgba(128, 128, 128, 0.05);
         }
 
-        #MoonfinConfigPage .moonfinLayerTitle {
+        #MoonfinConfigPage .labelsPreviewHead {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsPoster {
+            position: relative;
+            aspect-ratio: 2 / 3;
+            overflow: hidden;
+            border-radius: 10px;
+            background:
+                radial-gradient(120% 70% at 30% 18%, rgba(55, 211, 230, 0.32), transparent 60%),
+                radial-gradient(90% 60% at 80% 85%, rgba(124, 58, 237, 0.35), transparent 65%),
+                linear-gradient(160deg, #1b2533, #0d1118 70%);
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+        }
+
+        #MoonfinConfigPage .labelsCorner {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-width: calc(100% - 12px);
+        }
+
+        #MoonfinConfigPage .labelsCorner[data-corner="topLeft"] { top: 6px; left: 6px; align-items: flex-start; }
+        #MoonfinConfigPage .labelsCorner[data-corner="topRight"] { top: 6px; right: 6px; align-items: flex-end; }
+        #MoonfinConfigPage .labelsCorner[data-corner="bottomLeft"] { bottom: 6px; left: 6px; align-items: flex-start; flex-direction: column-reverse; }
+        #MoonfinConfigPage .labelsCorner[data-corner="bottomRight"] { bottom: 6px; right: 6px; align-items: flex-end; flex-direction: column-reverse; }
+
+        #MoonfinConfigPage .labelsBadge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3em;
+            box-sizing: border-box;
+            max-width: 100%;
+            overflow: hidden;
+            font-weight: 700;
+            line-height: 1.3;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+        }
+
+        #MoonfinConfigPage .labelsBadge:empty {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsBadge > span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* The same Material glyphs the apps draw, at the text's colour. */
+        #MoonfinConfigPage .labelsBadge svg {
+            flex-shrink: 0;
+            width: 1.25em;
+            height: 1.25em;
+            fill: currentColor;
+        }
+
+        #MoonfinConfigPage .labelsBadge img.labelsFlag {
+            flex-shrink: 0;
+            width: 1.33em;
+            height: 1em;
+            border-radius: 2px;
+            object-fit: cover;
+            box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3);
+        }
+
+        #MoonfinConfigPage .labelsBadge.labelsBareFlag {
+            padding: 0;
+            background: none;
+            line-height: 0;
+        }
+
+        #MoonfinConfigPage .labelsBareFlag img.labelsFlag {
+            display: block;
+            box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+        }
+
+        #MoonfinConfigPage .labelsOption.is-icon {
+            justify-content: center;
+            width: 38px;
+            padding: 0;
+        }
+
+        #MoonfinConfigPage .labelsOption.is-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        #MoonfinConfigPage .labelsPreviewNote {
+            font-size: 0.82em;
+            line-height: 1.4;
+            opacity: 0.6;
+        }
+
+        #MoonfinConfigPage .labelsNoteAction {
+            align-self: flex-start;
+            margin-top: 2px;
+            padding: 0;
+            font-size: 0.85em;
+            text-align: left;
+        }
+
+        #MoonfinConfigPage .labelsNoteAction[hidden] {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsTest {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        #MoonfinConfigPage .labelsTestResults {
+            display: flex;
+            flex-direction: column;
+            max-height: 240px;
+            overflow-y: auto;
+            padding: 4px;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.08);
+        }
+
+        #MoonfinConfigPage .labelsTestResults[hidden] {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsTestResult {
+            display: flex;
+            flex-direction: column;
+            padding: 6px 8px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 0.88em;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsTestResult:hover,
+        #MoonfinConfigPage .labelsTestResult:focus-visible {
+            background: rgba(128, 128, 128, 0.12);
+            outline: none;
+        }
+
+        #MoonfinConfigPage .labelsTestResult small {
+            opacity: 0.6;
+        }
+
+        #MoonfinConfigPage .labelsReport {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+            font-size: 0.85em;
+        }
+
+        #MoonfinConfigPage .labelsReport:empty {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsReportHead {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .labelsReportHead strong {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsReportHead .moonfinLinkButton {
+            flex-shrink: 0;
+            padding: 0;
+            font-size: 1em;
+        }
+
+        #MoonfinConfigPage .labelsMatch {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 8px;
+            align-items: baseline;
+        }
+
+        #MoonfinConfigPage .labelsMatchName {
+            color: #00a4dc;
             font-weight: 600;
         }
 
-        #MoonfinConfigPage .moonfinLayerDesc {
-            font-size: 0.92em;
-            line-height: 1.45;
+        #MoonfinConfigPage .labelsMatchList {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        #MoonfinConfigPage .labelsReportWhy {
+            line-height: 1.4;
+            opacity: 0.7;
+            overflow-wrap: anywhere;
+        }
+
+        #MoonfinConfigPage .labelsReport details summary {
+            cursor: pointer;
+            opacity: 0.8;
+        }
+
+        #MoonfinConfigPage .labelsTrack {
+            margin-top: 6px;
+            line-height: 1.4;
+            opacity: 0.75;
+            overflow-wrap: anywhere;
+        }
+
+        #MoonfinConfigPage .labelsLead {
+            margin: 0 0 16px;
+            max-width: 72ch;
+            line-height: 1.5;
+            opacity: 0.72;
+        }
+
+        #MoonfinConfigPage .labelsField {
+            display: grid;
+            grid-template-columns: 140px minmax(0, 1fr);
+            gap: 12px;
+            align-items: center;
+            padding: 10px 0;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        #MoonfinConfigPage .labelsField:first-of-type {
+            border-top: 0;
+        }
+
+        #MoonfinConfigPage .labelsFieldName {
+            font-size: 0.9em;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsStyles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .labelsOption {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 32px;
+            padding: 5px 12px;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 999px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsOption:hover {
+            border-color: rgba(128, 128, 128, 0.55);
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsOption[aria-pressed="true"] {
+            border-color: #00a4dc;
+            background: rgba(0, 164, 220, 0.16);
+            color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsOption:focus-visible,
+        #MoonfinConfigPage .labelsPreset:focus-visible,
+        #MoonfinConfigPage .labelsRuleToggle:focus-visible,
+        #MoonfinConfigPage .labelsCornerPicker button:focus-visible {
+            outline: 2px solid #00a4dc;
+            outline-offset: 2px;
+        }
+
+        #MoonfinConfigPage .labelsStyleSwatch {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 8px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #2b3a4d, #141a22);
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker {
+            display: grid;
+            grid-template-columns: repeat(2, 28px);
+            grid-template-rows: repeat(2, 38px);
+            gap: 4px;
+            padding: 4px;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.08);
+            width: max-content;
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker button {
+            position: relative;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            background: rgba(128, 128, 128, 0.12);
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker button::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 6px;
+            border-radius: 2px;
+            background: rgba(128, 128, 128, 0.6);
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker button[data-value="topLeft"]::after { top: 4px; left: 4px; }
+        #MoonfinConfigPage .labelsCornerPicker button[data-value="topRight"]::after { top: 4px; right: 4px; }
+        #MoonfinConfigPage .labelsCornerPicker button[data-value="bottomLeft"]::after { bottom: 4px; left: 4px; }
+        #MoonfinConfigPage .labelsCornerPicker button[data-value="bottomRight"]::after { bottom: 4px; right: 4px; }
+
+        #MoonfinConfigPage .labelsCornerPicker button[aria-pressed="true"] {
+            background: rgba(0, 164, 220, 0.22);
+        }
+
+        #MoonfinConfigPage .labelsCornerPicker button[aria-pressed="true"]::after {
+            background: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsRange {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            max-width: 320px;
+        }
+
+        #MoonfinConfigPage .labelsRange input[type="range"] {
+            flex: 1 1 auto;
+            accent-color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsRangeValue {
+            min-width: 3.5em;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+            opacity: 0.8;
+        }
+
+        #MoonfinConfigPage .labelsPresetGroup {
+            display: grid;
+            grid-template-columns: 140px minmax(0, 1fr);
+            gap: 12px;
+            align-items: baseline;
+            padding: 10px 0;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        #MoonfinConfigPage .labelsPresetGroup:first-child {
+            border-top: 0;
+        }
+
+        #MoonfinConfigPage .labelsPresets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .labelsPreset {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 4px 8px 4px 4px;
+            min-height: 30px;
+            border: 1px solid rgba(128, 128, 128, 0.3);
+            border-radius: 999px;
+            background: rgba(128, 128, 128, 0.05);
+            color: inherit;
+            font: inherit;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsPreset:hover {
+            border-color: rgba(128, 128, 128, 0.55);
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsPreset .labelsBadge {
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            box-shadow: none;
+        }
+
+        #MoonfinConfigPage .labelsPreset[aria-pressed="false"] .labelsBadge {
+            border: 1px dashed rgba(128, 128, 128, 0.55) !important;
+            background: transparent !important;
+            color: inherit !important;
+        }
+
+        #MoonfinConfigPage .labelsPreset svg {
+            font-size: 16px;
+            color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsPreset[aria-pressed="false"] .material-icons {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsPreset[aria-pressed="true"] {
+            border-color: rgba(0, 164, 220, 0.6);
+            background: rgba(0, 164, 220, 0.12);
+        }
+
+        #MoonfinConfigPage .labelsRules {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        #MoonfinConfigPage .labelsRule {
+            border: 1px solid rgba(128, 128, 128, 0.28);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.05);
+            transition: border-color 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsRule.is-open {
+            border-color: rgba(0, 164, 220, 0.35);
+            background: rgba(0, 164, 220, 0.05);
+        }
+
+        #MoonfinConfigPage .labelsRule.is-off .labelsRuleHead > :not(.labelsRuleActions) {
+            opacity: 0.45;
+        }
+
+        #MoonfinConfigPage .labelsRuleHead {
+            display: grid;
+            grid-template-columns: 78px minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: center;
+            padding: 10px 12px;
+        }
+
+        #MoonfinConfigPage .labelsRuleToggle {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            padding: 0;
+            border: 0;
+            background: none;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsRuleName {
+            overflow: hidden;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #MoonfinConfigPage .labelsRuleSummary {
+            overflow: hidden;
+            font-size: 0.82em;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            opacity: 0.6;
+        }
+
+        #MoonfinConfigPage .labelsRuleActions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        #MoonfinConfigPage .labelsSwitch {
+            position: relative;
+            display: inline-flex;
+            margin-right: 6px;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsSwitch input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsSwitch span {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            border-radius: 999px;
+            background: rgba(128, 128, 128, 0.4);
+            transition: background-color 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsSwitch span::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            transition: transform 0.15s ease;
+        }
+
+        #MoonfinConfigPage .labelsSwitch input:checked + span {
+            background: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsSwitch input:checked + span::after {
+            transform: translateX(16px);
+        }
+
+        #MoonfinConfigPage .labelsSwitch input:focus-visible + span {
+            outline: 2px solid #00a4dc;
+            outline-offset: 2px;
+        }
+
+        #MoonfinConfigPage .labelsRuleBody {
+            display: none;
+            padding: 2px 14px 14px;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        #MoonfinConfigPage .labelsRule.is-open .labelsRuleBody {
+            display: block;
+        }
+
+        #MoonfinConfigPage .labelsRuleBody h4 {
+            margin: 16px 0 6px;
+            font-size: 0.9em;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .labelsInline {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .labelsInline .homeCustomListInput {
+            width: auto;
+            min-width: 120px;
+        }
+
+        #MoonfinConfigPage .labelsColor {
+            width: 40px;
+            height: 30px;
+            padding: 0;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsCondition {
+            display: grid;
+            grid-template-columns: minmax(84px, 0.6fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        #MoonfinConfigPage .labelsAddRow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+        }
+
+        #MoonfinConfigPage .labelsField.is-top {
+            align-items: start;
+        }
+
+        #MoonfinConfigPage .labelsField.is-top > .labelsFieldName {
+            padding-top: 7px;
+        }
+
+        #MoonfinConfigPage .labelsUserPicker {
+            max-width: 420px;
+            margin-top: 10px;
+        }
+
+        #MoonfinConfigPage .labelsUserFilter {
+            margin-bottom: 6px;
+        }
+
+        #MoonfinConfigPage .labelsUserList {
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 4px;
+            border: 1px solid rgba(128, 128, 128, 0.32);
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.08);
+        }
+
+        #MoonfinConfigPage .labelsUserRow {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .labelsUserRow:hover {
+            background: rgba(128, 128, 128, 0.12);
+        }
+
+        #MoonfinConfigPage .labelsUserRow[hidden] {
+            display: none;
+        }
+
+        #MoonfinConfigPage .labelsUserRow input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .labelsUserCount {
+            margin-top: 6px;
+            font-size: 0.82em;
+            opacity: 0.65;
+        }
+
+        #MoonfinConfigPage .labelsUserCount.is-warning {
+            color: #f59e0b;
+            opacity: 1;
+        }
+
+        #MoonfinConfigPage .labelsHelp summary {
+            cursor: pointer;
+            color: #00a4dc;
+            font-weight: 600;
+        }
+
+        #MoonfinConfigPage .labelsHelp .fieldDescription {
+            margin-top: 8px;
+            max-width: 80ch;
+        }
+
+        @media (max-width: 1100px) {
+            #MoonfinConfigPage .labelsStudio {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            /* Above the settings, the two cards side by side when they fit. */
+            #MoonfinConfigPage .labelsSide {
+                order: -1;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                align-items: start;
+            }
+
+            #MoonfinConfigPage .labelsPoster {
+                width: 160px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            #MoonfinConfigPage .labelsField,
+            #MoonfinConfigPage .labelsPresetGroup {
+                grid-template-columns: minmax(0, 1fr);
+                gap: 6px;
+            }
+
+            #MoonfinConfigPage .labelsCondition {
+                grid-template-columns: minmax(0, 1fr) auto;
+            }
+
+            #MoonfinConfigPage .labelsCondition > :nth-child(2),
+            #MoonfinConfigPage .labelsCondition > :nth-child(3),
+            #MoonfinConfigPage .labelsCondition > :nth-child(4) {
+                grid-column: 1;
+            }
+
+            #MoonfinConfigPage .labelsRuleHead {
+                grid-template-columns: minmax(0, 1fr) auto;
+            }
+
+            #MoonfinConfigPage .labelsRuleHead > .labelsRuleBadge {
+                display: none;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #MoonfinConfigPage .labelsOption,
+            #MoonfinConfigPage .labelsPreset,
+            #MoonfinConfigPage .labelsRule {
+                transition: none;
+            }
+        }
+
+        #MoonfinConfigPage.moonfin-searching .moonfinPageHead,
+        #MoonfinConfigPage.moonfin-searching .moonfinSyncDeps {
+            display: none;
+        }
+
+        #MoonfinConfigPage [hidden] {
+            display: none !important;
+        }
+
+        #MoonfinConfigPage .moonfinProfileSwitch {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 0 0 10px;
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn {
+            flex: 1 1 150px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 60px;
+            padding: 10px 14px;
+            border: 1px solid rgba(128, 128, 128, 0.22);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.04);
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn:hover {
+            background: rgba(128, 128, 128, 0.11);
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn.is-active {
+            border-color: #00a4dc;
+            background: rgba(0, 164, 220, 0.12);
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn svg {
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+            fill: currentColor;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinProfileBtn.is-active svg {
+            color: #37d3e6;
+        }
+
+        #MoonfinConfigPage .moonfinProfileText,
+        #MoonfinConfigPage .moonfinProfileChipText,
+        #MoonfinConfigPage .moonfinModeText,
+        #MoonfinConfigPage .moonfinPickedText {
+            display: flex;
+            flex: 1 1 auto;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        #MoonfinConfigPage .moonfinProfileLabel,
+        #MoonfinConfigPage .moonfinProfileChipLabel,
+        #MoonfinConfigPage .moonfinModeTitle,
+        #MoonfinConfigPage .moonfinPickedHeadline {
+            font-weight: 600;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinProfileSub,
+        #MoonfinConfigPage .moonfinProfileChipSub,
+        #MoonfinConfigPage .moonfinModeDesc,
+        #MoonfinConfigPage .moonfinPickedPreview {
+            font-size: 0.85em;
+            color: inherit;
             opacity: 0.7;
         }
 
-        #MoonfinConfigPage .moonfinLayerGap {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 0 4px 29px;
-            font-size: 0.85em;
-            opacity: 0.55;
+        #MoonfinConfigPage .moonfinProfileCount {
+            flex-shrink: 0;
+            padding: 2px 9px;
+            border-radius: 999px;
+            background: rgba(0, 164, 220, 0.2);
+            color: inherit;
+            font-size: 0.8em;
+            font-weight: 600;
         }
 
-        #MoonfinConfigPage .moonfinLayerGapIcon {
+        #MoonfinConfigPage .moonfinProfileHint {
+            margin: 0 0 4px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        #MoonfinConfigPage .moonfinActionRow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 24px;
+            padding: 16px 0;
+            border-top: 1px solid rgba(128, 128, 128, 0.15);
+        }
+
+        #MoonfinConfigPage .moonfinActionLabel {
+            flex: 0 0 120px;
+            padding-top: 8px;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinActionBody {
+            display: flex;
+            flex: 1 1 360px;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        #MoonfinConfigPage .moonfinActionBody > select {
+            max-width: 360px;
+        }
+
+        #MoonfinConfigPage .moonfinSeg {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 4px;
+            border: 1px solid rgba(128, 128, 128, 0.18);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.12);
+        }
+
+        #MoonfinConfigPage .moonfinSegBtn {
+            padding: 8px 14px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinSegBtn.is-active {
+            background: rgba(0, 164, 220, 0.22);
+            box-shadow: inset 0 0 0 1px #00a4dc;
+            color: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinUserChips,
+        #MoonfinConfigPage .moonfinProfileChips {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #MoonfinConfigPage .moonfinUserChip {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            height: 36px;
+            padding: 0 2px 0 14px;
+            border: 1px solid rgba(0, 164, 220, 0.35);
+            border-radius: 999px;
+            background: rgba(0, 164, 220, 0.1);
+            font-size: 0.9em;
+        }
+
+        #MoonfinConfigPage .moonfinUserChip button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinUserChip svg {
             width: 16px;
             height: 16px;
             fill: currentColor;
         }
 
-        #MoonfinConfigPage .moonfinLinkButton {
-            padding: 8px 4px;
+        #MoonfinConfigPage .moonfinAddUser {
+            height: 36px;
+            padding: 0 10px;
+            border: 1px dashed rgba(128, 128, 128, 0.6);
+            border-radius: 999px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 0.9em;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 140px;
+            min-height: 52px;
+            padding: 8px 16px 8px 12px;
+            border: 1px solid rgba(128, 128, 128, 0.26);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.04);
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip.is-on {
+            border-color: #00a4dc;
+            background: rgba(0, 164, 220, 0.12);
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip[disabled] {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChipBox {
+            display: flex;
+            flex-shrink: 0;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            box-sizing: border-box;
+            border: 1.5px solid rgba(128, 128, 128, 0.6);
+            border-radius: 6px;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChipBox svg {
+            visibility: hidden;
+            width: 15px;
+            height: 15px;
+            fill: #fff;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip.is-on .moonfinProfileChipBox {
+            border-color: #00a4dc;
+            background: #0079a8;
+        }
+
+        #MoonfinConfigPage .moonfinProfileChip.is-on .moonfinProfileChipBox svg {
+            visibility: visible;
+        }
+
+        #MoonfinConfigPage .moonfinPickedBox {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 16px;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 720px;
+            padding: 10px 10px 10px 16px;
+            border: 1px solid rgba(0, 164, 220, 0.3);
+            border-radius: 12px;
+            background: rgba(0, 164, 220, 0.08);
+        }
+
+        #MoonfinConfigPage .moonfinPickedEdit,
+        #MoonfinConfigPage .moonfinPickerCancel,
+        #MoonfinConfigPage .moonfinPickerBulk {
+            min-height: 36px;
+            padding: 0 14px;
+            border: 1px solid rgba(128, 128, 128, 0.4);
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.13);
+            color: inherit;
+            font: inherit;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinModeCards {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: stretch;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard {
+            display: flex;
+            flex: 1 1 260px;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            border: 1px solid rgba(128, 128, 128, 0.22);
+            border-radius: 12px;
+            background: rgba(128, 128, 128, 0.04);
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard input {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            margin: 2px 0 0;
+            accent-color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard:has(input:checked) {
+            border-color: #00a4dc;
+            background: rgba(0, 164, 220, 0.1);
+        }
+
+        #MoonfinConfigPage .moonfinModeCard.is-danger .moonfinModeTitle {
+            color: #d97706;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard.is-danger input {
+            accent-color: #f59e0b;
+        }
+
+        #MoonfinConfigPage .moonfinModeCard.is-danger:has(input:checked) {
+            border-color: rgba(245, 158, 11, 0.7);
+            background: rgba(245, 158, 11, 0.08);
+        }
+
+        #MoonfinConfigPage .moonfinModeCard.is-disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        #MoonfinConfigPage .moonfinModeOnlyAll {
+            margin-top: 4px;
+            font-size: 0.85em;
+        }
+
+        #MoonfinConfigPage .moonfinActionFoot {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(128, 128, 128, 0.15);
+        }
+
+        #MoonfinConfigPage .moonfinActionSummary {
+            flex: 1 1 320px;
+            margin: 0;
+        }
+
+        #MoonfinConfigPage .moonfinActionSummary.is-danger {
+            color: #d97706;
+        }
+
+        #MoonfinConfigPage .moonfinActionSummary.is-muted {
+            opacity: 0.65;
+        }
+
+        #MoonfinConfigPage .moonfinTabPanel .moonfinActionGo {
+            width: auto;
+            margin: 0;
+        }
+
+        #MoonfinConfigPage .moonfinTabPanel .moonfinActionGo.is-danger {
+            background: #b45309;
+        }
+
+        #MoonfinConfigPage .moonfinPickerBackdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.6);
+        }
+
+        #MoonfinConfigPage .moonfinPicker {
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 720px;
+            max-height: calc(100vh - 32px);
+            border: 1px solid rgba(128, 128, 128, 0.22);
+            border-radius: 16px;
+            background: #1c1c1e;
+            color: inherit;
+            overflow: hidden;
+        }
+
+        #MoonfinConfigPage .moonfinPickerHead {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 20px 16px 0 22px;
+        }
+
+        #MoonfinConfigPage .moonfinPickerHead > div {
+            flex: 1 1 auto;
+        }
+
+        #MoonfinConfigPage .moonfinPickerTitle {
+            margin: 0 0 4px;
+            font-size: 1.2em;
+        }
+
+        #MoonfinConfigPage .moonfinPickerSub,
+        #MoonfinConfigPage .moonfinPickerNote {
+            margin: 0;
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        #MoonfinConfigPage .moonfinPickerNote {
+            margin: 12px 22px 0;
+            padding: 10px 14px;
+            border: 1px solid rgba(0, 164, 220, 0.3);
+            border-radius: 10px;
+            background: rgba(0, 164, 220, 0.08);
+            opacity: 1;
+        }
+
+        #MoonfinConfigPage .moonfinPickerClose svg {
+            width: 22px;
+            height: 22px;
+            fill: currentColor;
+        }
+
+        #MoonfinConfigPage .moonfinPickerClose {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerSearch {
+            box-sizing: border-box;
+            margin: 12px 22px 0;
+            width: calc(100% - 44px);
+            height: 40px;
+            padding: 0 12px;
+            border: 1px solid rgba(128, 128, 128, 0.31);
+            border-radius: 10px;
+            background: rgba(128, 128, 128, 0.1);
+            color: inherit;
+            font: inherit;
+        }
+
+        #MoonfinConfigPage .moonfinPickerTools {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px 8px;
+            margin: 8px 22px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        #MoonfinConfigPage .moonfinPickerCount {
+            margin-right: 6px;
+            font-weight: 600;
+        }
+
+        #MoonfinConfigPage .moonfinPickerTool {
+            min-height: 36px;
+            padding: 0 10px;
             border: 0;
             background: transparent;
-            color: #00a4dc;
+            color: #37d3e6;
             font: inherit;
             font-weight: 600;
             cursor: pointer;
         }
 
-        #MoonfinConfigPage .moonfinLinkButton:hover {
-            text-decoration: underline;
+        #MoonfinConfigPage .moonfinPickerOnlyLabel {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            cursor: pointer;
         }
 
-        #MoonfinConfigPage.moonfin-searching .moonfinPageHead,
-        #MoonfinConfigPage.moonfin-searching .moonfinSyncDeps,
-        #MoonfinConfigPage.moonfin-searching .moonfinLayersCard {
-            display: none;
+        #MoonfinConfigPage .moonfinPickerList {
+            flex: 1 1 auto;
+            min-height: 120px;
+            padding: 4px 14px 10px;
+            overflow-y: auto;
+        }
+
+        #MoonfinConfigPage .moonfinPickerGroup {
+            position: relative;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.13);
+        }
+
+        #MoonfinConfigPage .moonfinPickerGroup > summary {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 44px;
+            padding: 0 90px 0 8px;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerGroupName {
+            font-weight: 600;
+        }
+
+        #MoonfinConfigPage .moonfinPickerGroupCount {
+            font-size: 0.85em;
+            opacity: 0.7;
+        }
+
+        #MoonfinConfigPage .moonfinPickerBulk {
+            position: absolute;
+            top: 8px;
+            right: 6px;
+        }
+
+        #MoonfinConfigPage .moonfinPickerRow {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 44px;
+            padding: 4px 10px 4px 26px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerRow.is-picked {
+            background: rgba(0, 164, 220, 0.07);
+        }
+
+        #MoonfinConfigPage .moonfinPickerRow input {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            accent-color: #00a4dc;
+        }
+
+        #MoonfinConfigPage .moonfinPickerLabel {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        #MoonfinConfigPage .moonfinPickerValue {
+            flex-shrink: 1;
+            max-width: 45%;
+            font-size: 0.85em;
+            text-align: right;
+            opacity: 0.75;
+        }
+
+        #MoonfinConfigPage .moonfinPickerEmpty {
+            margin: 40px 0;
+            text-align: center;
+            opacity: 0.6;
+        }
+
+        #MoonfinConfigPage .moonfinPickerFoot {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 12px 18px;
+            border-top: 1px solid rgba(128, 128, 128, 0.18);
+            background: rgba(128, 128, 128, 0.08);
+        }
+
+        #MoonfinConfigPage .moonfinPickerUse {
+            width: auto;
+            min-height: 40px;
+            margin: 0;
+            padding: 0 20px;
+            border: 0;
+            border-radius: 8px;
+            background: #00a4dc;
+            color: #fff;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        #MoonfinConfigPage .moonfinPickerUse[disabled] {
+            background: rgba(128, 128, 128, 0.22);
+            color: inherit;
+            cursor: not-allowed;
         }
 
     </style>
@@ -938,9 +2219,9 @@
                             <img id="MoonfinBrandLogo" class="moonfinNavLogo" alt="Moonfin" />
                             <span class="moonfinNavBrandText">Moonfin</span>
                         </div>
-                        <button type="button" class="moonfinNavItem is-active" data-tab="settingsSync">
-                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
-                            <span class="moonfinNavText"><span class="moonfinNavLabel">Settings Sync</span><span class="moonfinNavSub">Profiles and devices</span></span>
+                        <button type="button" class="moonfinNavItem is-active" data-tab="defaults">
+                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
                         </button>
                         <button type="button" class="moonfinNavItem" data-tab="webClient">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/></svg>
@@ -958,13 +2239,17 @@
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6h-7.59l3.29-3.29L16 2l-4 4-4-4-.71.71L10.59 6H3c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.11-.9-2-2-2zm0 14H3V8h18v12zM9 10v8l7-4z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Live TV</span><span class="moonfinNavSub">Recordings</span></span>
                         </button>
-                        <button type="button" class="moonfinNavItem" data-tab="defaults">
-                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
-                            <span class="moonfinNavText"><span class="moonfinNavLabel">User defaults</span><span class="moonfinNavSub">Force client settings</span></span>
+                        <button type="button" class="moonfinNavItem" data-tab="smartSearch">
+                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9H2V7h5v2zm0 3H2v2h5v-2zm13.59 7l-3.83-3.83c-.8.52-1.74.83-2.76.83-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5c0 1.02-.31 1.96-.83 2.75L22 17.59 20.59 19zM17 11c0-1.65-1.35-3-3-3s-3 1.35-3 3 1.35 3 3 3 3-1.35 3-3zM2 19h10v-2H2v2z"/></svg>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Smart Search</span><span class="moonfinNavSub">Search with plain sentences</span></span>
                         </button>
                         <button type="button" class="moonfinNavItem" data-tab="themes">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Themes</span><span class="moonfinNavSub">Upload &amp; catalog</span></span>
+                        </button>
+                        <button type="button" class="moonfinNavItem" data-tab="labels">
+                            <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z"/></svg>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Labels</span><span class="moonfinNavSub">Posters &amp; anime episodes</span></span>
                         </button>
                         <button type="button" class="moonfinNavItem" data-tab="messages">
                             <svg class="moonfinNavIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5S10.5 3.17 10.5 4v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
@@ -992,58 +2277,6 @@
                         <svg class="moonfinSearchIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
                         <input type="search" id="MoonfinSettingsSearch" class="moonfinSearchInput" placeholder="Search settings" autocomplete="off" />
                     </div>
-                    <section class="moonfinTabPanel is-active" data-tab="settingsSync">
-                    <div class="moonfinPageHead">
-                        <h3 class="moonfinPageTitle">Settings Sync</h3>
-                        <p class="moonfinPageLead">Moonfin apps save each user's settings here and pick them up on every device that user signs in to.</p>
-                    </div>
-
-                    <div class="verticalSection moonfinSyncCard is-off" id="MoonfinSyncStatusCard">
-                        <div class="checkboxContainer moonfinSyncStatus">
-                            <svg class="moonfinSyncIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
-                                <span><span class="moonfinSyncLines">
-                                    <span class="moonfinSyncTitle">Moonbase Sync</span>
-                                    <span class="moonfinSyncState"><span class="moonfinSyncDot" aria-hidden="true"></span><span class="moonfinSyncOnText">On for every user on this server</span><span class="moonfinSyncOffText">Off, so Moonfin apps keep their settings on each device</span></span>
-                                </span></span>
-                            </label>
-                        </div>
-                        <div class="moonfinSyncDeps">
-                            <span class="moonfinEyebrow">Also relies on sync</span>
-                            <div class="moonfinChips">
-                                <span class="moonfinChip">Seerr requests</span>
-                                <span class="moonfinChip">MDBList ratings</span>
-                                <span class="moonfinChip">TMDB ratings</span>
-                            </div>
-                            <div class="fieldDescription">Moonfin apps treat the plugin as missing while sync is off, so these stop working too.</div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection moonfinLayersCard">
-                        <h3 class="sectionTitle">Where a setting comes from</h3>
-                        <div class="fieldDescription">Each setting comes from the first layer that has it.</div>
-                        <div class="moonfinLayers">
-                            <div class="moonfinLayer is-first">
-                                <span class="moonfinLayerStep" aria-hidden="true">1</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Device profile</span><span class="moonfinLayerDesc">A device follows its own kind until the user picks another profile in the app.</span></span>
-                                <span class="moonfinChips"><span class="moonfinChip">Desktop</span><span class="moonfinChip">Mobile</span><span class="moonfinChip">TV</span></span>
-                            </div>
-                            <div class="moonfinLayerGap"><svg class="moonfinLayerGapIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>falls back to</div>
-                            <div class="moonfinLayer">
-                                <span class="moonfinLayerStep" aria-hidden="true">2</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Global</span><span class="moonfinLayerDesc">Shared by every device the user has.</span></span>
-                            </div>
-                            <div class="moonfinLayerGap"><svg class="moonfinLayerGapIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>falls back to</div>
-                            <div class="moonfinLayer">
-                                <span class="moonfinLayerStep" aria-hidden="true">3</span>
-                                <span class="moonfinLayerText"><span class="moonfinLayerTitle">Admin defaults</span><span class="moonfinLayerDesc">What you set for everyone under User defaults.</span></span>
-                                <button type="button" class="moonfinLinkButton" data-open-tab="defaults">Open User defaults</button>
-                            </div>
-                        </div>
-                    </div>
-                    </section>
-
                     <section class="moonfinTabPanel" data-tab="webClient">
                     <div class="moonfinPageHead">
                         <h3 class="moonfinPageTitle">Web Client</h3>
@@ -1139,6 +2372,36 @@
                             Users authenticate once with their Emby credentials, and the session is stored server-side.
                             All Moonfin clients access Seerr API through <code>/Moonfin/Seerr/Api/</code>
                             without re-authenticating.
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Calendar</h3>
+                        <div class="fieldDescription" style="margin-bottom: 1em;">
+                            The Calendar screen reads Sonarr and Radarr through the servers set up in Seerr, so it needs Seerr turned on above.
+                            Each user only sees titles from the Emby libraries they have access to.
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CalendarAdminsOnly">Who can see the calendar</label>
+                            <select id="CalendarAdminsOnly" is="emby-select">
+                                <option value="false">Everyone</option>
+                                <option value="true">Admins only</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CalendarDaysBack">Days back</label>
+                            <input type="number" id="CalendarDaysBack" is="emby-input" min="0" max="365" step="1" />
+                            <div class="fieldDescription">How many days before today the calendar can show.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CalendarDaysAhead">Days ahead</label>
+                            <input type="number" id="CalendarDaysAhead" is="emby-input" min="0" max="730" step="1" />
+                            <div class="fieldDescription">How many days after today the calendar can show.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CalendarCacheMinutes">Cache minutes</label>
+                            <input type="number" id="CalendarCacheMinutes" is="emby-input" min="0" max="1440" step="1" />
+                            <div class="fieldDescription">How long an answer from Sonarr or Radarr is reused before they're asked again. 0 asks every time.</div>
                         </div>
                     </div>
 
@@ -1268,214 +2531,6 @@
                         </div>
                     </div>
 
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">Anime Filler &amp; Recap Markers</h3>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkersEnabled" is="emby-checkbox" />
-                                <span>Classify anime episodes as canon, mixed or filler</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Nightly task that matches your anime against
-                                <a href="https://www.animefillerlist.com/" target="_blank">AnimeFillerList</a> so Moonfin
-                                clients can badge filler episodes. No account or API key is needed. Series are matched by
-                                title, falling back to the English and romaji titles behind their ids for libraries in other languages,
-                                and only shows the site actually lists are fetched.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused">Libraries to look in</label>
-                            <div id="AnimeMarkerLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(128,128,128,0.2);border-radius:4px;padding:4px;"></div>
-                            <div class="fieldDescription">
-                                Leave everything unchecked to consider every library. Matching is a local title lookup, so
-                                narrowing this only helps if a non-anime show shares a title with an anime.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioTrustSelectedLibraries" is="emby-checkbox" />
-                                <span>Treat everything in the selected libraries as anime</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Affects the Subbed/Dubbed pills. Normally an item also has to look like anime on its own,
-                                meaning it carries an AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an
-                                &quot;Anime&quot; genre or tag. That check is what keeps a library holding both anime and
-                                ordinary shows from marking the ordinary ones.
-                                <br><br>
-                                If the libraries you picked above are <em>only</em> anime, turn this on: the check then
-                                only costs you the entries whose metadata happens to be thin, which would otherwise show
-                                no pill at all. Has no effect while no libraries are selected, since there is then
-                                nothing to trust.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkerRecapLookup" is="emby-checkbox" />
-                                <span>Also mark recap episodes (uses MyAnimeList)</span>
-                            </label>
-                            <div class="fieldDescription">
-                                AnimeFillerList has no recap category, so this asks MyAnimeList as well. It is best-effort
-                                and additive: if that lookup fails, the filler data is unaffected.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioMarkersEnabled" is="emby-checkbox" />
-                                <span>Also mark episodes and seasons as Subbed or Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Reads the audio tracks in each file: Japanese and nothing else is <strong>Subbed</strong>,
-                                anything carrying another spoken language is <strong>Dubbed</strong>. A season gets a pill
-                                only when every episode in it agrees. This needs no internet and does not depend on
-                                AnimeFillerList, so it works for anime the site has never listed. Files whose audio has no
-                                language tag are left unmarked rather than guessed at.
-                                <br><br>
-                                <strong>In a mixed library:</strong> when you select your anime libraries above, only shows
-                                in them are marked. If you leave the selection empty the whole server is in scope, and a
-                                series is then only marked when it looks like anime on its own, meaning it carries an
-                                AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an "Anime" genre or tag. A Japanese
-                                live-action show carrying one of those would still be marked.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioMarkersMovies" is="emby-checkbox" />
-                                <span>Also mark movies as Subbed or Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Extends the same audio rules to movies, so the pill shows on a movie card anywhere it
-                                appears, including home screen rows. Separate from the option above because a movie has
-                                no series to inherit from, and a mixed library is most likely to mislabel a film.
-                            </div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeAudioSeparateDualAudio" is="emby-checkbox" />
-                                <span>Label dual-audio files as Subbed/Dubbed</span>
-                            </label>
-                            <div class="fieldDescription">
-                                A file holding the Japanese audio <em>and</em> a dub can be watched either way, so it
-                                shows as <strong>Subbed/Dubbed</strong> rather than just Dubbed. Leave off for the
-                                shorter label.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeAudioLabelStyle">Audio pill wording</label>
-                            <select is="emby-select" id="AnimeAudioLabelStyle">
-                                <option value="full">Full: Subbed / Dubbed / Subbed/Dubbed</option>
-                                <option value="short">Short: Sub / Dub / Sub/Dub</option>
-                            </select>
-                            <div class="fieldDescription">
-                                Full wording is longer while on Phones and Tablets a shorter label fits better.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPlacement">Where to put the pills</label>
-                            <select is="emby-select" id="AnimeMarkerPlacement">
-                                <option value="below">Below the runtime</option>
-                                <option value="beside">Beside the runtime</option>
-                                <option value="thumbnail">On the episode thumbnail</option>
-                            </select>
-                            <div class="fieldDescription">
-                                Applies to episode rows in Moonfin clients. Season and movie cards always draw the pill
-                                over the artwork, since they have no runtime line to sit next to.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused">Which pills to show</label>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowFiller" is="emby-checkbox" />
-                                    <span>Filler</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowMixed" is="emby-checkbox" />
-                                    <span>Mixed canon and filler</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowRecap" is="emby-checkbox" />
-                                    <span>Recap</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowMangaCanon" is="emby-checkbox" />
-                                    <span>Manga canon</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer">
-                                <label>
-                                    <input type="checkbox" id="AnimeMarkerShowAnimeCanon" is="emby-checkbox" />
-                                    <span>Anime canon</span>
-                                </label>
-                            </div>
-                            <div class="fieldDescription">
-                                A pill that is switched off is never sent to a client, so every Moonfin client agrees.
-                                The two canon options are off by default: nearly every episode of most shows is canon,
-                                so turning them on puts a pill on almost everything.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerMaxAgeDays">Marker refresh age (days)</label>
-                            <input type="number" id="AnimeMarkerMaxAgeDays" is="emby-input" min="1" max="365" step="1" />
-                            <div class="fieldDescription">
-                                Shows older than this are re-fetched (default 30). A finished show's classifications never
-                                change, so this mainly governs how quickly an airing show picks up new episodes.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                <button type="button" id="AnimeMarkerDiagBtn" is="emby-button" class="raised">Check matching</button>
-                                <button type="button" id="AnimeMarkerClearBtn" is="emby-button" class="raised">Clear marker cache</button>
-                            </div>
-                            <div class="fieldDescription">
-                                Markers appear after the <strong>Moonfin Anime Markers Sync</strong> task has run. You can
-                                start it now from Scheduled Tasks in the Emby dashboard.
-                            </div>
-                            <div id="AnimeMarkerDiagStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPreviewName">Preview a series</label>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                                <input type="text" id="AnimeMarkerPreviewName" is="emby-input" placeholder="One Piece" style="flex:1;min-width:200px;" />
-                                <button type="button" id="AnimeMarkerPreviewBtn" is="emby-button" class="raised">Preview</button>
-                                <button type="button" id="AnimeMarkerFetchBtn" is="emby-button" class="raised">Fetch now</button>
-                            </div>
-                            <div class="fieldDescription">
-                                Type a series name from your library and press Preview to see exactly which of your
-                                episodes each marker landed on. <strong>Fetch now</strong> pulls that one show
-                                immediately (about ten seconds, the site's crawl delay) instead of waiting for the task.
-                            </div>
-                            <div id="AnimeMarkerPreviewStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
-                            <div id="AnimeMarkerPreviewResult" style="margin-top:8px;max-height:420px;overflow:auto;"></div>
-                        </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="AnimeMarkerVerboseLogging" is="emby-checkbox" />
-                                <span>Write a marker debug log</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Records every marker request a client makes and what it was answered with, to
-                                <code>moonfin-anime-markers.log</code> in the server's own log folder, so it also shows
-                                up under Logs in the Emby dashboard where it can be downloaded. Turn this on when a badge is not
-                                appearing: if a request never shows up here, the app never asked, which means the
-                                problem is in the app rather than on the server. Leave it off otherwise.
-                            </div>
-                        </div>
-                        <div class="inputContainer">
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                <button type="button" id="AnimeMarkerLogBtn" is="emby-button" class="raised">Show log</button>
-                                <button type="button" id="AnimeMarkerClearLogBtn" is="emby-button" class="raised">Clear log</button>
-                            </div>
-                            <div id="AnimeMarkerLogStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
-                            <pre id="AnimeMarkerLogOutput" style="margin-top:8px;max-height:320px;overflow:auto;font-size:0.8em;line-height:1.45;background:rgba(128,128,128,0.12);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-word;"></pre>
-                        </div>
-                    </div>
-
                     </section>
                     <section class="moonfinTabPanel" data-tab="games">
                     <div class="verticalSection">
@@ -1569,7 +2624,29 @@
                     </div>
 
                     </section>
-                    <section class="moonfinTabPanel" data-tab="defaults">
+                    <section class="moonfinTabPanel is-active" data-tab="defaults">
+                    <div class="verticalSection moonfinSyncCard is-off" id="MoonfinSyncStatusCard">
+                        <div class="checkboxContainer moonfinSyncStatus">
+                            <svg class="moonfinSyncIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="EnableSettingsSync" is="emby-checkbox" />
+                                <span><span class="moonfinSyncLines">
+                                    <span class="moonfinSyncTitle">Moonbase Sync</span>
+                                    <span class="moonfinSyncState"><span class="moonfinSyncDot" aria-hidden="true"></span><span class="moonfinSyncOnText">On for every user on this server</span><span class="moonfinSyncOffText">Off, so Moonfin apps keep their settings on each device</span></span>
+                                </span></span>
+                            </label>
+                        </div>
+                        <div class="moonfinSyncDeps">
+                            <span class="moonfinEyebrow">Also relies on sync</span>
+                            <div class="moonfinChips">
+                                <span class="moonfinChip">Seerr requests</span>
+                                <span class="moonfinChip">MDBList ratings</span>
+                                <span class="moonfinChip">TMDB ratings</span>
+                            </div>
+                            <div class="fieldDescription">Moonfin apps treat the plugin as missing while sync is off, so these stop working too.</div>
+                        </div>
+                    </div>
+
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Default User Settings</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
@@ -1579,8 +2656,32 @@
 
                         <div style="background-color: rgba(0, 164, 220, 0.1); border: 1px solid rgba(0, 164, 220, 0.3); border-radius: 10px; padding: 0.8em 1.2em; margin-bottom: 1.2em; font-size: 0.9em;">
                             <strong>How it works:</strong> These are the lowest-priority fallback. Resolution order:
-                            User's device profile &rarr; User's global settings &rarr; <strong>These admin defaults</strong> &rarr; Built-in defaults.
+                            User's device profile &gt; User's global settings &gt; <strong>These admin defaults</strong>, the device's own before Global &gt; Built-in defaults.
                         </div>
+
+                        <div id="DefaultsProfileSwitch" class="moonfinProfileSwitch" role="group" aria-label="Which defaults to edit">
+                            <button type="button" class="moonfinProfileBtn is-active" data-profile="global" aria-pressed="true">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                                <span class="moonfinProfileText"><span class="moonfinProfileLabel">Global</span><span class="moonfinProfileSub">Every device</span></span>
+                                <span class="moonfinProfileCount"></span>
+                            </button>
+                            <button type="button" class="moonfinProfileBtn" data-profile="tv" aria-pressed="false">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3H3c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.11-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+                                <span class="moonfinProfileText"><span class="moonfinProfileLabel">TV</span><span class="moonfinProfileSub">TV apps</span></span>
+                                <span class="moonfinProfileCount"></span>
+                            </button>
+                            <button type="button" class="moonfinProfileBtn" data-profile="desktop" aria-pressed="false">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H3V4h18v12z"/></svg>
+                                <span class="moonfinProfileText"><span class="moonfinProfileLabel">Desktop</span><span class="moonfinProfileSub">Computers</span></span>
+                                <span class="moonfinProfileCount"></span>
+                            </button>
+                            <button type="button" class="moonfinProfileBtn" data-profile="mobile" aria-pressed="false">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+                                <span class="moonfinProfileText"><span class="moonfinProfileLabel">Mobile</span><span class="moonfinProfileSub">Phones and tablets</span></span>
+                                <span class="moonfinProfileCount"></span>
+                            </button>
+                        </div>
+                        <div id="DefaultsProfileHint" class="moonfinProfileHint"></div>
 
                         <div style="background-color: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 10px; padding: 0.8em 1.2em; margin-bottom: 1.2em; font-size: 0.9em;">
                             <strong>Important:</strong> New nullable settings use <strong>Not set / Yes / No</strong> style inputs.
@@ -1775,6 +2876,14 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowCalendarButton">Show Calendar Button</label>
+                                <select id="DefaultShowCalendarButton" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultShowLibrariesInToolbar">Show Libraries in Toolbar</label>
                                 <select id="DefaultShowLibrariesInToolbar" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -1946,6 +3055,14 @@
                                     <option value="hideUnwatched">Hide Unwatched</option>
                                     <option value="episodesOnly">Episodes Only</option>
                                     <option value="never">Never</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowPosterLabels">Poster Labels</label>
+                                <select id="DefaultShowPosterLabels" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
                                 </select>
                             </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Seasonal Effects</h4>
@@ -2580,6 +3697,9 @@
                                     <option value="">Not set (user decides)</option>
                                     <option value="library">Library (Random)</option>
                                     <option value="collection">Collections / Playlists</option>
+                                    <option value="recentlyAdded">Recently Added</option>
+                                    <option value="recentlyReleased">Recently Released</option>
+                                    <option value="newReleases">New Seasons &amp; Episodes</option>
                                 </select>
                             </div>
                             <div id="DefaultLibraryPickerSection" style="display:none;">
@@ -2595,6 +3715,27 @@
                                     <label class="inputLabel inputLabelUnfocused">Default Collections / Playlists</label>
                                     <div id="DefaultCollectionPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
                                 </div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseBanner">New Release Banner</label>
+                                <select id="DefaultMediaBarNewReleaseBanner" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Flag series in the media bar with a new season or new episodes that aired recently.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseDays">New Release Window</label>
+                                <select id="DefaultMediaBarNewReleaseDays" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="7">7 days</option>
+                                    <option value="14">14 days</option>
+                                    <option value="30">30 days</option>
+                                    <option value="60">60 days</option>
+                                    <option value="90">90 days</option>
+                                </select>
+                                <div class="fieldDescription">How long after an episode airs it still counts as new, for the banner and the New Seasons &amp; Episodes source.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Excluded Genres</label>
@@ -2992,6 +4133,14 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMdblistWatchingNowEnabled">Watching on MDBList</label>
+                                <select id="DefaultMdblistWatchingNowEnabled" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultTmdbRowsSortBy">TMDB Rows Sorting</label>
                                 <select id="DefaultTmdbRowsSortBy" is="emby-select"></select>
                             </div>
@@ -3261,6 +4410,13 @@
                                     Hidden from the home screen in Moonfin for new users, the same as switching them off in Library Visibility. Emby's own apps still show them. Users keep access and can show them again. To hide them for existing users, Save and then use Apply Defaults To All Users Now on the Actions tab.
                                 </div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Hidden from recently added</label>
+                                <div id="DefaultHiddenFromLatestLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(128,128,128,0.3);border-radius:4px;padding:4px;"></div>
+                                <div class="fieldDescription">
+                                    Left out of the recently added and recently released rows in Moonfin for new users, but still shown in navigation, the same as switching off "Show in recently added/released media" in Library Visibility. Emby's own apps still show them. Hidden libraries above are already left out of both. To apply this to existing users, Save and then use Apply Defaults To All Users Now on the Actions tab.
+                                </div>
+                            </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Library Pages</h4>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultLibraryStyle">Video library style</label>
@@ -3466,6 +4622,10 @@
                                     <option value="spotlight">Spotlight</option>
                                     <option value="nouveau">Nouveau</option>
                                     <option value="minimalist">Minimalist</option>
+                                    <option value="stage">Stage</option>
+                                    <option value="premiere">Premiere</option>
+                                    <option value="quickLook">Quick Look</option>
+                                    <option value="frost">Frost</option>
                                 </select>
                                 <div class="fieldDescription">Default layout for item detail pages. Keep Not set to let users choose.</div>
                             </div>
@@ -3928,6 +5088,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrBadgeStyle">Seerr Badge Style</label>
+                                <select id="DefaultSeerrBadgeStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="badge">Badge</option>
+                                    <option value="banner">Banner</option>
+                                </select>
+                                <div class="fieldDescription">Badge puts Seerr's dot in a corner. Banner runs the status across the top of the poster.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultSeerrRowsSortBy">Seerr Rows Sorting</label>
                                 <select id="DefaultSeerrRowsSortBy" is="emby-select"></select>
                             </div>
@@ -3943,6 +5112,143 @@
                                 <label class="inputLabel inputLabelUnfocused">Seerr Discovery Rows &amp; Order</label>
                                 <div class="fieldDescription">Enable rows to see on Seerr mainpage and use the arrows to set their order.</div>
                                 <div id="DefaultSeerrDiscoveryList" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                            </div>
+                            <h4 id="DefaultCalendarHeading" style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Calendar</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarStyle">Calendar Style</label>
+                                <select id="DefaultCalendarStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="agenda">Agenda</option>
+                                    <option value="countdown">Countdown</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarWeekStart">Week Starts On</label>
+                                <select id="DefaultCalendarWeekStart" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="locale">Follow the Language</option>
+                                    <option value="sunday">Sunday</option>
+                                    <option value="monday">Monday</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarScope">What the Calendar Shows</label>
+                                <select id="DefaultCalendarScope" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="everything">Everything</option>
+                                    <option value="myShows">My Shows</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarShowEpisodes">Show Episodes</label>
+                                <select id="DefaultCalendarShowEpisodes" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarShowMovies">Show Movies</label>
+                                <select id="DefaultCalendarShowMovies" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Calendar Libraries</label>
+                                <div id="DefaultCalendarLibraryPicker" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
+                                <div class="fieldDescription">Only titles in, or headed for, the picked libraries. None picked means every library.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarIncludeUnmonitored">Include Unmonitored</label>
+                                <select id="DefaultCalendarIncludeUnmonitored" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Also list what Sonarr and Radarr aren't monitoring.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarShowSpecials">Show Specials</label>
+                                <select id="DefaultCalendarShowSpecials" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarShowBadges">Show Badges</label>
+                                <select id="DefaultCalendarShowBadges" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarColorBy">Color By</label>
+                                <select id="DefaultCalendarColorBy" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="type">Type</option>
+                                    <option value="status">Status</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarImageType">Calendar Image Type</label>
+                                <select id="DefaultCalendarImageType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="poster">Poster</option>
+                                    <option value="thumb">Thumbnail</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarSpoilerSafe">Spoiler Safe</label>
+                                <select id="DefaultCalendarSpoilerSafe" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarSelectAction">When a Title Is Picked</label>
+                                <select id="DefaultCalendarSelectAction" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="details">Open Details</option>
+                                    <option value="play">Play</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarRequestButton">Show Request Button</label>
+                                <select id="DefaultCalendarRequestButton" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarReminders">Show Remind Me Button</label>
+                                <select id="DefaultCalendarReminders" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Lets phones get a notification when an episode or movie lands in the library.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultCalendarRowSeeAll">See All on Upcoming Rows</label>
+                                <select id="DefaultCalendarRowSeeAll" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultShowNextAirDate">Show Next Air Date</label>
+                                <select id="DefaultShowNextAirDate" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -4015,6 +5321,369 @@
                         </div>
                     </div>
 
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="smartSearch">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Smart Search</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="SmartSearchEnabled" is="emby-checkbox" />
+                                <span>Enable smart search</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Lets Moonfin apps search with plain sentences like "90s movie about a kid pulled into a board game" or "electronic music duo from the 90s".
+                                Searches run on this server's CPU with a small model, so what people type never leaves the server. Turning it on downloads the model
+                                and indexes movies, shows, people, music and books with the Moonfin Smart Search Index task, which starts on its own with the first search.
+                                With the TMDB key on the Integrations tab it also indexes the most popular TMDB titles, so titles you don't have show up as Seerr suggestions.
+                                The first run takes 15 to 30 minutes on a desktop CPU and an hour or more on a Raspberry Pi, using half the cores. After that only changes are indexed. See the Smart Search page in the wiki.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="SmartSearchModel">Search model</label>
+                            <select is="emby-select" id="SmartSearchModel">
+                                <option value="english">English</option>
+                                <option value="multilingual">Multilingual</option>
+                            </select>
+                            <div class="fieldDescription">
+                                English is the small, fast model: a 91 MB download that keeps about 120 MB in memory. Multilingual understands searches in about 100 languages
+                                and still does well in English, but it's a 488 MB download, keeps about 175 MB in memory, and its first build takes about two and a half times as long.
+                                After that, nightly updates only index what changed and searches are about as fast with either model. Changing this rebuilds the index, which starts with the next search.
+                            </div>
+                        </div>
+                    </div>
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="labels">
+                    <div class="moonfinSubTabs" role="tablist" aria-label="Labels">
+                        <button type="button" class="moonfinSubTab is-active" role="tab" aria-selected="true" data-labels-tab="posters">Poster labels</button>
+                        <button type="button" class="moonfinSubTab" role="tab" aria-selected="false" data-labels-tab="anime">Anime episodes</button>
+                    </div>
+
+                    <div class="moonfinSubPanel is-active" data-labels-panel="posters">
+                    <div class="labelsStudio">
+                    <div class="labelsMain">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Default look</h3>
+                        <p class="labelsLead">
+                            Every label uses this look unless its own settings say otherwise. Labels are drawn by the
+                            Moonfin apps over movie and episode artwork; the files and the artwork are never changed.
+                        </p>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultStyleName">Style</span>
+                            <div class="labelsStyles" data-default="Style" role="group" aria-labelledby="LabelsDefaultStyleName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultShapeName">Shape</span>
+                            <div class="labelsStyles" data-default="Shape" role="group" aria-labelledby="LabelsDefaultShapeName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultSizeName">Size</span>
+                            <div class="labelsStyles" data-default="Size" role="group" aria-labelledby="LabelsDefaultSizeName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <span class="labelsFieldName" id="LabelsDefaultCornerName">Corner</span>
+                            <div class="labelsCornerPicker" data-default="Corner" role="group" aria-labelledby="LabelsDefaultCornerName"></div>
+                        </div>
+                        <div class="labelsField">
+                            <label class="labelsFieldName" for="LabelsDefaultOpacity">Opacity</label>
+                            <div class="labelsRange">
+                                <input type="range" id="LabelsDefaultOpacity" min="10" max="100" step="5" />
+                                <span class="labelsRangeValue" id="LabelsDefaultOpacityValue"></span>
+                            </div>
+                        </div>
+                        <div class="labelsField">
+                            <label class="labelsFieldName" for="LabelsMaxPerCorner">Labels per corner</label>
+                            <div class="labelsInline">
+                                <select class="homeCustomListInput" id="LabelsMaxPerCorner">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                </select>
+                                <span class="fieldDescription" style="margin:0;">The first ones in the list below win.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Built-in labels</h3>
+                        <p class="labelsLead">
+                            Switch on the ones you want. Moonbase reads them from the server's own track data, and each
+                            row shows at most one answer: a 4K file never also says 1080p, and Atmos replaces TrueHD.
+                            Release is the exception: REMUX and IMAX can both show.
+                        </p>
+                        <div id="LabelsPresetGroups"><div class="homeLayoutEmpty">Loading the built-in labels&hellip;</div></div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Your labels</h3>
+                        <p class="labelsLead">
+                            In the order the apps stack them. Open one to change its look, or limit it to some users or
+                            devices.
+                        </p>
+                        <div id="PosterBadgeRulesList" class="labelsRules"></div>
+                        <div class="labelsAddRow">
+                            <button type="button" id="PosterBadgeAddRuleBtn" is="emby-button" class="raised">Add custom label</button>
+                        </div>
+                        <details class="labelsHelp" style="margin-top:16px;">
+                            <summary>How custom labels match</summary>
+                            <div class="fieldDescription">
+                                A custom label shows when <strong>all</strong> its conditions hold. <em>Any</em>, <em>No</em>
+                                and <em>Every</em> say which tracks of that type a condition looks at: at least one, none of
+                                them, or all of them. A file without such a track never passes <em>Every</em>. For the file
+                                path and the track counts, <em>Unless</em> turns the test around. Each condition is checked on
+                                its own, so two conditions on audio can be met by two different tracks.
+                                <br><br>
+                                Text tests ignore case. <em>Is one of</em> takes a list separated by commas, such as
+                                <code>fre, fra</code>. <em>Matches pattern</em> takes a
+                                <a href="https://learn.microsoft.com/dotnet/standard/base-types/regular-expression-language-quick-reference" target="_blank">regular expression</a>.
+                                Labels with the same text are alternatives: the label shows once if any of them holds. Track
+                                values are the ones in Emby's Media Info for the file.
+                            </div>
+                        </details>
+                    </div>
+                    </div>
+
+                    <aside class="labelsSide">
+                    <section class="labelsPreview" aria-labelledby="LabelsPreviewTitle">
+                        <div class="labelsPreviewHead">
+                            <span id="LabelsPreviewTitle">Preview</span>
+                            <button type="button" class="homeLayoutIconButton" id="LabelsPreviewShuffle" title="Another poster" aria-label="Another poster"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+                        </div>
+                        <div class="labelsPoster" id="LabelsPoster">
+                            <div class="labelsCorner" data-corner="topLeft"></div>
+                            <div class="labelsCorner" data-corner="topRight"></div>
+                            <div class="labelsCorner" data-corner="bottomLeft"></div>
+                            <div class="labelsCorner" data-corner="bottomRight"></div>
+                        </div>
+                        <div class="labelsPreviewNote">Every label that is on, over a poster from your library, as if its file matched them all.</div>
+                    </section>
+                    <section class="labelsPreview" aria-labelledby="LabelsTestTitle">
+                        <div class="labelsPreviewHead">
+                            <span id="LabelsTestTitle">Test a file</span>
+                        </div>
+                        <div class="labelsPreviewNote">The labels one movie or episode really gets with the rules on screen, saved or not.</div>
+                        <div class="labelsTest">
+                            <label class="labelsFieldName" for="LabelsTestSearch">Movie or episode</label>
+                            <input type="search" id="LabelsTestSearch" class="homeCustomListInput" autocomplete="off" aria-controls="LabelsTestResults" />
+                            <div class="labelsTestResults" id="LabelsTestResults" hidden></div>
+                            <button type="button" class="moonfinLinkButton labelsNoteAction" id="LabelsTestUsePreview" hidden>Use the preview's movie</button>
+                        </div>
+                        <div class="labelsReport" id="LabelsTestReport" aria-live="polite"></div>
+                    </section>
+                    </aside>
+                    </div>
+                    </div>
+
+                    <div class="moonfinSubPanel" data-labels-panel="anime">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Anime Filler &amp; Recap Markers</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkersEnabled" is="emby-checkbox" />
+                                <span>Classify anime episodes as canon, mixed or filler</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Nightly task that matches your anime against
+                                <a href="https://www.animefillerlist.com/" target="_blank">AnimeFillerList</a> so Moonfin
+                                clients can badge filler episodes. No account or API key is needed. Series are matched by
+                                title, falling back to the English and romaji titles behind their ids for libraries in other languages,
+                                and only shows the site actually lists are fetched.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Libraries to look in</label>
+                            <div id="AnimeMarkerLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(128,128,128,0.2);border-radius:4px;padding:4px;"></div>
+                            <div class="fieldDescription">
+                                Leave everything unchecked to consider every library. Matching is a local title lookup, so
+                                narrowing this only helps if a non-anime show shares a title with an anime.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioTrustSelectedLibraries" is="emby-checkbox" />
+                                <span>Treat everything in the selected libraries as anime</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Affects the Subbed/Dubbed pills. Normally an item also has to look like anime on its own,
+                                meaning it carries an AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an
+                                &quot;Anime&quot; genre or tag. That check is what keeps a library holding both anime and
+                                ordinary shows from marking the ordinary ones.
+                                <br><br>
+                                If the libraries you picked above are <em>only</em> anime, turn this on: the check then
+                                only costs you the entries whose metadata happens to be thin, which would otherwise show
+                                no pill at all. Has no effect while no libraries are selected, since there is then
+                                nothing to trust.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkerRecapLookup" is="emby-checkbox" />
+                                <span>Also mark recap episodes (uses MyAnimeList)</span>
+                            </label>
+                            <div class="fieldDescription">
+                                AnimeFillerList has no recap category, so this asks MyAnimeList as well. It is best-effort
+                                and additive: if that lookup fails, the filler data is unaffected.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioMarkersEnabled" is="emby-checkbox" />
+                                <span>Also mark episodes and seasons as Subbed or Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Reads the audio tracks in each file: Japanese and nothing else is <strong>Subbed</strong>,
+                                anything carrying another spoken language is <strong>Dubbed</strong>. A season gets a pill
+                                only when every episode in it agrees. This needs no internet and does not depend on
+                                AnimeFillerList, so it works for anime the site has never listed. Files whose audio has no
+                                language tag are left unmarked rather than guessed at.
+                                <br><br>
+                                <strong>In a mixed library:</strong> when you select your anime libraries above, only shows
+                                in them are marked. If you leave the selection empty the whole server is in scope, and a
+                                series is then only marked when it looks like anime on its own, meaning it carries an
+                                AniList, AniDB, AniSearch, Kitsu or MyAnimeList id, or an "Anime" genre or tag. A Japanese
+                                live-action show carrying one of those would still be marked.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioMarkersMovies" is="emby-checkbox" />
+                                <span>Also mark movies as Subbed or Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Extends the same audio rules to movies, so the pill shows on a movie card anywhere it
+                                appears, including home screen rows. Separate from the option above because a movie has
+                                no series to inherit from, and a mixed library is most likely to mislabel a film.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeAudioSeparateDualAudio" is="emby-checkbox" />
+                                <span>Label dual-audio files as Subbed/Dubbed</span>
+                            </label>
+                            <div class="fieldDescription">
+                                A file holding the Japanese audio <em>and</em> a dub can be watched either way, so it
+                                shows as <strong>Subbed/Dubbed</strong> rather than just Dubbed. Leave off for the
+                                shorter label.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeAudioLabelStyle">Audio pill wording</label>
+                            <select is="emby-select" id="AnimeAudioLabelStyle">
+                                <option value="full">Full: Subbed / Dubbed / Subbed/Dubbed</option>
+                                <option value="short">Short: Sub / Dub / Sub/Dub</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Full wording is longer while on Phones and Tablets a shorter label fits better.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPlacement">Where to put the pills</label>
+                            <select is="emby-select" id="AnimeMarkerPlacement">
+                                <option value="below">Below the runtime</option>
+                                <option value="beside">Beside the runtime</option>
+                                <option value="thumbnail">On the episode thumbnail</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Applies to episode rows in Moonfin clients. Season and movie cards always draw the pill
+                                over the artwork, since they have no runtime line to sit next to.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Which pills to show</label>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowFiller" is="emby-checkbox" />
+                                    <span>Filler</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowMixed" is="emby-checkbox" />
+                                    <span>Mixed canon and filler</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowRecap" is="emby-checkbox" />
+                                    <span>Recap</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowMangaCanon" is="emby-checkbox" />
+                                    <span>Manga canon</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label>
+                                    <input type="checkbox" id="AnimeMarkerShowAnimeCanon" is="emby-checkbox" />
+                                    <span>Anime canon</span>
+                                </label>
+                            </div>
+                            <div class="fieldDescription">
+                                A pill that is switched off is never sent to a client, so every Moonfin client agrees.
+                                The two canon options are off by default: nearly every episode of most shows is canon,
+                                so turning them on puts a pill on almost everything.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerMaxAgeDays">Marker refresh age (days)</label>
+                            <input type="number" id="AnimeMarkerMaxAgeDays" is="emby-input" min="1" max="365" step="1" />
+                            <div class="fieldDescription">
+                                Shows older than this are re-fetched (default 30). A finished show's classifications never
+                                change, so this mainly governs how quickly an airing show picks up new episodes.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button type="button" id="AnimeMarkerDiagBtn" is="emby-button" class="raised">Check matching</button>
+                                <button type="button" id="AnimeMarkerClearBtn" is="emby-button" class="raised">Clear marker cache</button>
+                            </div>
+                            <div class="fieldDescription">
+                                Markers appear after the <strong>Moonfin Anime Markers Sync</strong> task has run. You can
+                                start it now from Scheduled Tasks in the Emby dashboard.
+                            </div>
+                            <div id="AnimeMarkerDiagStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AnimeMarkerPreviewName">Preview a series</label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <input type="text" id="AnimeMarkerPreviewName" is="emby-input" placeholder="One Piece" style="flex:1;min-width:200px;" />
+                                <button type="button" id="AnimeMarkerPreviewBtn" is="emby-button" class="raised">Preview</button>
+                                <button type="button" id="AnimeMarkerFetchBtn" is="emby-button" class="raised">Fetch now</button>
+                            </div>
+                            <div class="fieldDescription">
+                                Type a series name from your library and press Preview to see exactly which of your
+                                episodes each marker landed on. <strong>Fetch now</strong> pulls that one show
+                                immediately (about ten seconds, the site's crawl delay) instead of waiting for the task.
+                            </div>
+                            <div id="AnimeMarkerPreviewStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
+                            <div id="AnimeMarkerPreviewResult" style="margin-top:8px;max-height:420px;overflow:auto;"></div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="AnimeMarkerVerboseLogging" is="emby-checkbox" />
+                                <span>Write a marker debug log</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Records every marker request a client makes and what it was answered with, to
+                                <code>moonfin-anime-markers.log</code> in the server's own log folder, so it also shows
+                                up under Logs in the Emby dashboard where it can be downloaded. Turn this on when a badge is not
+                                appearing: if a request never shows up here, the app never asked, which means the
+                                problem is in the app rather than on the server. Leave it off otherwise.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button type="button" id="AnimeMarkerLogBtn" is="emby-button" class="raised">Show log</button>
+                                <button type="button" id="AnimeMarkerClearLogBtn" is="emby-button" class="raised">Clear log</button>
+                            </div>
+                            <div id="AnimeMarkerLogStatus" style="margin-top:8px;font-size:0.9em;color:rgba(128,128,128,0.9);"></div>
+                            <pre id="AnimeMarkerLogOutput" style="margin-top:8px;max-height:320px;overflow:auto;font-size:0.8em;line-height:1.45;background:rgba(128,128,128,0.12);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-word;"></pre>
+                        </div>
+                    </div>
+                    </div>
                     </section>
                     <section class="moonfinTabPanel" data-tab="messages">
                     <div class="verticalSection">
@@ -4144,20 +5813,133 @@
 
                     </section>
                     <section class="moonfinTabPanel" data-tab="actions">
-                    <div class="verticalSection">
-                        <h3 class="sectionTitle">Push Defaults To Existing Users</h3>
+                    <div class="verticalSection" id="ApplyDefaultsSection">
+                        <h3 class="sectionTitle">Apply Defaults To Users</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            Apply the configured defaults above to every existing user now.
-                            Only fields that are set (not "Not set") will be merged into each user's global and device settings.
-                            Save your default settings first if you made changes.
+                            New users and users who never synced pick up the defaults on their own once you Save. Use this
+                            to also write them over settings users already have. Applying saves your changes first.
                         </div>
-                        <div style="background-color: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 10px; padding: 0.8em 1.2em; margin-bottom: 1em; font-size: 0.9em;">
-                            <strong>Warning:</strong> This action updates existing user profiles immediately for all set fields.
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Users</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinSeg" role="group" aria-label="Which users">
+                                    <button type="button" class="moonfinSegBtn is-active" data-seg="applyUsers" data-value="all" aria-pressed="true">All users</button>
+                                    <button type="button" class="moonfinSegBtn" data-seg="applyUsers" data-value="pick" aria-pressed="false">Pick users</button>
+                                </div>
+                                <div id="ApplyUserChips" class="moonfinUserChips" hidden></div>
+                            </div>
                         </div>
-                        <button is="emby-button" type="button" id="PushDefaultsBtn" class="raised">
-                            <span>Apply Defaults To All Users Now</span>
-                        </button>
-                        <div id="PushDefaultsResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Profiles</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinProfileChips" role="group" aria-label="Which default profiles to apply"></div>
+                                <div class="fieldDescription">
+                                    Each profile's defaults go into the same profile on every user. Global defaults also land in
+                                    any device profile a user already has, except where that device has its own default.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Settings</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinSeg" role="group" aria-label="Which settings">
+                                    <button type="button" class="moonfinSegBtn is-active" data-seg="applySettings" data-value="all" aria-pressed="true">Every set default</button>
+                                    <button type="button" class="moonfinSegBtn" data-seg="applySettings" data-value="pick" aria-pressed="false">Pick settings</button>
+                                </div>
+                                <div class="moonfinPickedBox" hidden>
+                                    <span class="moonfinPickedText"><span class="moonfinPickedHeadline"></span><span class="moonfinPickedPreview"></span></span>
+                                    <button type="button" class="moonfinPickedEdit" data-choose="apply">Choose settings</button>
+                                </div>
+                                <div class="fieldDescription moonfinAllNote">Only settings that have a default get pushed. Anything left on Not set is skipped.</div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">How</div>
+                            <div class="moonfinActionBody moonfinModeCards">
+                                <label class="moonfinModeCard">
+                                    <input type="radio" name="ApplyMode" value="merge" checked />
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Merge</span><span class="moonfinModeDesc">The pushed settings replace the user's own. Everything else they chose stays.</span></span>
+                                </label>
+                                <label class="moonfinModeCard is-danger">
+                                    <input type="radio" name="ApplyMode" value="reset" />
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Full reset</span><span class="moonfinModeDesc">Erases each user's settings, device profiles included, and starts them over from the defaults. For all users it also removes settings left behind by deleted users.</span><span class="moonfinModeOnlyAll" hidden>Only works with every set default, not a pick.</span></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionFoot">
+                            <p class="moonfinActionSummary" role="status"></p>
+                            <button is="emby-button" type="button" id="ApplyDefaultsBtn" class="raised button-submit moonfinActionGo">Apply Defaults</button>
+                        </div>
+                        <div id="ApplyDefaultsResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+                    </div>
+
+                    <div class="verticalSection" id="CopySettingsSection">
+                        <h3 class="sectionTitle">Copy A User's Settings</h3>
+                        <div class="fieldDescription" style="margin-bottom: 0.8em;">
+                            Start someone off with a setup you already like. Only Moonfin settings are copied. API keys and
+                            hidden Continue Watching and Next Up items stay with each user.
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <label class="moonfinActionLabel" for="CopyFromUser">From</label>
+                            <div class="moonfinActionBody">
+                                <select id="CopyFromUser" is="emby-select"></select>
+                                <div id="CopyFromProfiles" class="fieldDescription"></div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">To</div>
+                            <div class="moonfinActionBody">
+                                <div id="CopyToChips" class="moonfinUserChips"></div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Profiles</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinProfileChips" role="group" aria-label="Which profiles to copy"></div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">Settings</div>
+                            <div class="moonfinActionBody">
+                                <div class="moonfinSeg" role="group" aria-label="Which settings to copy">
+                                    <button type="button" class="moonfinSegBtn is-active" data-seg="copySettings" data-value="all" aria-pressed="true">Everything they saved</button>
+                                    <button type="button" class="moonfinSegBtn" data-seg="copySettings" data-value="pick" aria-pressed="false">Pick settings</button>
+                                </div>
+                                <div class="moonfinPickedBox" hidden>
+                                    <span class="moonfinPickedText"><span class="moonfinPickedHeadline"></span><span class="moonfinPickedPreview"></span></span>
+                                    <button type="button" class="moonfinPickedEdit" data-choose="copy">Choose settings</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionRow">
+                            <div class="moonfinActionLabel">How</div>
+                            <div class="moonfinActionBody moonfinModeCards">
+                                <label class="moonfinModeCard">
+                                    <input type="radio" name="CopyMode" value="merge" checked />
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Merge into theirs</span><span class="moonfinModeDesc">The copied settings replace theirs. Anything the copy leaves out stays as they had it.</span></span>
+                                </label>
+                                <label class="moonfinModeCard is-danger">
+                                    <input type="radio" name="CopyMode" value="reset" />
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Replace theirs</span><span class="moonfinModeDesc">Each picked profile becomes an exact copy. Their own changes in those profiles are lost.</span><span class="moonfinModeOnlyAll" hidden>Only works when copying everything, not a pick.</span></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="moonfinActionFoot">
+                            <p class="moonfinActionSummary" role="status"></p>
+                            <button is="emby-button" type="button" id="CopySettingsBtn" class="raised button-submit moonfinActionGo">Copy Settings</button>
+                        </div>
+                        <div id="CopySettingsResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
                     </div>
 
                     <div class="verticalSection">
@@ -4232,6 +6014,29 @@
                     </div>
                     </div>
                 </form>
+                <div id="MoonfinSettingsPicker" class="moonfinPickerBackdrop" hidden>
+                    <div class="moonfinPicker" role="dialog" aria-modal="true" aria-labelledby="MoonfinPickerTitle">
+                        <div class="moonfinPickerHead">
+                            <div>
+                                <h3 id="MoonfinPickerTitle" class="moonfinPickerTitle"></h3>
+                                <p class="moonfinPickerSub"></p>
+                            </div>
+                            <button type="button" class="moonfinPickerClose" data-picker="cancel" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.4L17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg></button>
+                        </div>
+                        <p class="moonfinPickerNote"></p>
+                        <input type="search" class="moonfinPickerSearch" placeholder="Filter settings" aria-label="Filter settings" autocomplete="off" />
+                        <div class="moonfinPickerTools">
+                            <span class="moonfinPickerCount" role="status"></span>
+                            <button type="button" class="moonfinPickerTool" data-picker="all">Select all</button>
+                            <button type="button" class="moonfinPickerTool" data-picker="none">Clear</button>
+                            <label class="moonfinPickerOnlyLabel"><input type="checkbox" class="moonfinPickerOnly" /> Only show picked</label>
+                        </div>
+                        <div class="moonfinPickerList"></div>
+                        <div class="moonfinPickerFoot">
+                            <button type="button" class="moonfinPickerCancel" data-picker="cancel">Cancel</button>
+                            <button type="button" class="raised button-submit moonfinPickerUse" data-picker="use">Use settings</button>
+                        </div>
+                    </div>
             </div>
         </div>
     </div>

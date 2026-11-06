@@ -5,7 +5,11 @@ namespace Emby.Plugins.Moonfin.Api
 {
     [Route("/Moonfin/Ping", "GET")]
     [Authenticated]
-    public class GetPingRequest : IReturn<object> { }
+    public class GetPingRequest : IReturn<object>
+    {
+        /// <summary>A device profile name, so defaultSettings carries that device's defaults over Global's.</summary>
+        public string? Profile { get; set; }
+    }
 
     [Route("/Moonfin/Settings/Stream", "GET")]
     [Authenticated]
@@ -118,6 +122,20 @@ namespace Emby.Plugins.Moonfin.Api
     {
         public string? UserId { get; set; }
         public bool Overwrite { get; set; }
+    }
+
+    [Route("/Moonfin/Admin/ApplyDefaults", "POST")]
+    [Authenticated(Roles = "Admin")]
+    public class ApplyDefaultsRequest : IReturn<object>, IRequiresRequestStream
+    {
+        public System.IO.Stream RequestStream { get; set; } = null!;
+    }
+
+    [Route("/Moonfin/Admin/CopySettings", "POST")]
+    [Authenticated(Roles = "Admin")]
+    public class CopySettingsRequest : IReturn<object>, IRequiresRequestStream
+    {
+        public System.IO.Stream RequestStream { get; set; } = null!;
     }
 
     [Route("/Moonfin/Broadcast", "POST")]

@@ -7,10 +7,13 @@ using Emby.Plugins.Moonfin.Models;
 using Emby.Plugins.Moonfin.Services;
 using MediaBrowser.Common;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Services;
+using Moonfin.Calendar;
 
 namespace Emby.Plugins.Moonfin.Api
 {
@@ -92,10 +95,17 @@ namespace Emby.Plugins.Moonfin.Api
                 // messages button.
                 messagesSupported = true,
                 pinSupported = true,
+                smartSearchEnabled = config?.SmartSearchEnabled ?? false,
                 incompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
                 extendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
                 clientLogSupported = config?.EnableClientLogUpload ?? false,
-                defaultSettings = config?.DefaultUserSettings
+                calendarAvailable = seerrEnabled
+                    && !string.IsNullOrEmpty(config?.GetEffectiveSeerrUrl())
+                    && ArrCalendarWindow.Refusal(config?.CalendarAdminsOnly == true, AuthHelpers.IsCurrentUserAdmin(Request, _authContext)) == null,
+                calendarDaysBack = Math.Max(0, config?.CalendarDaysBack ?? 14),
+                calendarDaysAhead = Math.Max(0, config?.CalendarDaysAhead ?? 90),
+                calendarReminders = true,
+                defaultSettings = MoonfinSettingsService.AdminDefaultsFor(request.Profile, config)
             });
         }
 
@@ -195,7 +205,7 @@ namespace Emby.Plugins.Moonfin.Api
             var resolved = await Settings.GetResolvedProfileAsync(userId.Value, profile).ConfigureAwait(false);
             if (resolved == null)
             {
-                var adminDefaults = config.DefaultUserSettings;
+                var adminDefaults = Settings.AdminDefaultsFor(profile);
                 if (adminDefaults != null) return Json(adminDefaults);
                 return Json(404, new { Error = "No settings found" });
             }
@@ -242,7 +252,7 @@ namespace Emby.Plugins.Moonfin.Api
 
             var profileName = string.IsNullOrWhiteSpace(request.Profile) ? "global" : request.Profile.ToLowerInvariant();
             var resolved = await Settings.GetResolvedProfileAsync(userId.Value, profileName).ConfigureAwait(false)
-                ?? Plugin.Instance?.Configuration?.DefaultUserSettings
+                ?? Settings.AdminDefaultsFor(profileName)
                 ?? new MoonfinSettingsProfile();
             var blur = Math.Max(0, Math.Min(MaxDetailsBackdropBlur, ResolveBackdropBlur(resolved)));
             return Json(new { Profile = profileName, DetailsScreenBlur = blur.ToString() });
@@ -272,7 +282,7 @@ namespace Emby.Plugins.Moonfin.Api
 
             var profileName = string.IsNullOrWhiteSpace(request.Profile) ? "global" : request.Profile.ToLowerInvariant();
             var resolved = await Settings.GetResolvedProfileAsync(userId.Value, profileName).ConfigureAwait(false)
-                ?? Plugin.Instance?.Configuration?.DefaultUserSettings
+                ?? Settings.AdminDefaultsFor(profileName)
                 ?? new MoonfinSettingsProfile();
             var opacity = Math.Max(0, Math.Min(100, resolved.DetailsBackdropOpacity ?? 90));
             return Json(new { Profile = profileName, DetailsScreenOpacity = opacity });
@@ -300,55 +310,131 @@ namespace Emby.Plugins.Moonfin.Api
             return Json(Plugin.Instance?.Configuration?.DefaultUserSettings ?? (object)new MoonfinSettingsProfile());
         }
 
-        public async Task<object> Post(PushDefaultsRequest request)
+        // The two PushDefaults routes stay for older callers, the admin page posts to Admin/ApplyDefaults.
+        public Task<object> Post(PushDefaultsRequest request)
+            => ApplyDefaultsAsync(request.Overwrite || ReadBoolQuery("overwrite"), null, null, null);
+
+        public Task<object> Post(PushDefaultsToUserRequest request)
         {
-            if (Plugin.Instance?.Configuration?.EnableSettingsSync != true)
+            if (!Guid.TryParse(request.UserId, out var userId) || userId == Guid.Empty)
+                return Task.FromResult(Json(400, new { error = "A valid userId is required" }));
+            return ApplyDefaultsAsync(request.Overwrite || ReadBoolQuery("overwrite"), new List<Guid> { userId }, null, null);
+        }
+
+        public async Task<object> Post(ApplyDefaultsRequest request)
+        {
+            var body = await MoonfinJson.ReadBodyAsync<ApplyDefaultsBody>(request.RequestStream).ConfigureAwait(false);
+            if (body == null) return Json(400, new { error = "A request body is required" });
+
+            List<Guid>? userIds = null;
+            if (body.UserIds != null)
+            {
+                userIds = new List<Guid>();
+                foreach (var raw in body.UserIds)
+                {
+                    if (!Guid.TryParse(raw, out var id) || id == Guid.Empty)
+                        return Json(400, new { error = "A valid userId is required" });
+                    userIds.Add(id);
+                }
+                if (userIds.Count == 0) return Json(400, new { error = "A valid userId is required" });
+            }
+
+            return await ApplyDefaultsAsync(body.Overwrite, userIds, body.Profiles, body.Keys).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Pushes the admin defaults onto users' existing settings. Merge writes the set defaults of
+        /// the chosen profiles, optionally only some keys, and keeps everything else a user chose.
+        /// Overwrite resets each user to a clean file holding only those defaults, and for all users
+        /// also removes the files of users that no longer exist.
+        /// </summary>
+        private async Task<object> ApplyDefaultsAsync(bool overwrite, List<Guid>? userIds, List<string>? requestedProfiles, List<string>? keys)
+        {
+            var config = Plugin.Instance?.Configuration;
+            if (config?.EnableSettingsSync != true)
                 return Json(503, new { error = "Settings sync is disabled" });
 
-            var defaults = Plugin.Instance?.Configuration?.DefaultUserSettings;
-            if (defaults == null) return Json(400, new { error = "No default user settings configured" });
+            var profiles = ProfilesOrAll(requestedProfiles);
+            if (profiles == null) return Json(400, new { error = UnknownProfileError });
+            if (profiles.All(p => config.GetDefaultsFor(p) == null))
+                return Json(400, new { error = "No default user settings configured" });
 
-            var overwrite = request.Overwrite || ReadBoolQuery("overwrite");
+            if (overwrite && keys != null)
+                return Json(400, new { error = "A full reset applies every default, so it can't take a list of settings" });
 
             int usersAffected;
             var orphansDeleted = 0;
 
             if (overwrite)
             {
-                var serverUserIds = AuthHelpers.GetAllServerUserIds();
-                if (serverUserIds == null)
+                var targets = (IReadOnlyCollection<Guid>?)userIds ?? AuthHelpers.GetAllServerUserIds();
+                if (targets == null)
                     return Json(503, new { error = "User manager unavailable" });
 
-                (usersAffected, orphansDeleted) = await Settings.ResetAllUsersToDefaultsAsync(defaults, serverUserIds, deleteOrphans: true).ConfigureAwait(false);
+                (usersAffected, orphansDeleted) = await Settings.ResetUsersToDefaultsAsync(config, profiles, targets, deleteOrphans: userIds == null).ConfigureAwait(false);
             }
             else
             {
-                usersAffected = await Settings.MergeDefaultsToAllUsersAsync(defaults).ConfigureAwait(false);
+                usersAffected = await Settings.MergeDefaultsAsync(config, profiles, keys, userIds).ConfigureAwait(false);
             }
 
-            PluginServices.HiddenLibraries?.ApplyToAll();
-            var liveRefreshDeliveries = Settings.BroadcastSystemEvent("settingsUpdated");
+            // Hidden libraries are part of the defaults as a whole, not a setting someone can pick.
+            if (keys == null)
+            {
+                if (userIds == null) PluginServices.HiddenLibraries?.ApplyToAll();
+                else foreach (var userId in userIds) PluginServices.HiddenLibraries?.ApplyTo(userId);
+            }
+
+            var liveRefreshDeliveries = 0;
+            if (userIds == null) liveRefreshDeliveries = Settings.BroadcastSystemEvent("settingsUpdated");
+            else foreach (var userId in userIds) Settings.NotifySettingsChanged(userId);
+
             return Json(new { success = true, overwrite, usersAffected, orphansDeleted, liveRefreshDeliveries });
         }
 
-        public async Task<object> Post(PushDefaultsToUserRequest request)
+        /// <summary>
+        /// Copies one user's saved Moonfin settings onto other users. Merge keeps each target's values
+        /// for whatever the copy leaves out, replace makes every copied profile an exact copy. API keys
+        /// and hidden items always stay with their owner.
+        /// </summary>
+        public async Task<object> Post(CopySettingsRequest request)
         {
             if (Plugin.Instance?.Configuration?.EnableSettingsSync != true)
                 return Json(503, new { error = "Settings sync is disabled" });
 
-            var defaults = Plugin.Instance?.Configuration?.DefaultUserSettings;
-            if (defaults == null) return Json(400, new { error = "No default user settings configured" });
-            if (!Guid.TryParse(request.UserId, out var userId) || userId == Guid.Empty)
-                return Json(400, new { error = "A valid userId is required" });
+            var body = await MoonfinJson.ReadBodyAsync<CopySettingsBody>(request.RequestStream).ConfigureAwait(false);
+            if (body == null) return Json(400, new { error = "A request body is required" });
 
-            var overwrite = request.Overwrite || ReadBoolQuery("overwrite");
-            if (overwrite)
-                await Settings.ResetUserToDefaultsAsync(userId, defaults).ConfigureAwait(false);
-            else
-                await Settings.MergeDefaultsToUserAsync(userId, defaults).ConfigureAwait(false);
+            Guid.TryParse(body.FromUserId, out var fromUserId);
+            var targets = new List<Guid>();
+            foreach (var raw in body.ToUserIds ?? new List<string>())
+            {
+                if (Guid.TryParse(raw, out var id) && id != Guid.Empty && id != fromUserId && !targets.Contains(id)) targets.Add(id);
+            }
+            if (fromUserId == Guid.Empty || targets.Count == 0)
+                return Json(400, new { error = "A user to copy from and at least one other user to copy to are required" });
 
-            PluginServices.HiddenLibraries?.ApplyTo(userId);
-            return Json(new { success = true, overwrite });
+            var profiles = ProfilesOrAll(body.Profiles);
+            if (profiles == null) return Json(400, new { error = UnknownProfileError });
+
+            if (body.Replace && body.Keys != null)
+                return Json(400, new { error = "Replace copies whole profiles, so it can't take a list of settings" });
+
+            if (await Settings.GetUserSettingsAsync(fromUserId).ConfigureAwait(false) == null)
+                return Json(404, new { error = "That user has no saved Moonfin settings" });
+
+            var usersAffected = await Settings.CopySettingsAsync(fromUserId, targets, profiles, body.Keys, body.Replace).ConfigureAwait(false);
+            return Json(new { success = true, replace = body.Replace, usersAffected });
+        }
+
+        private static readonly string UnknownProfileError =
+            "Unknown profile. Valid profiles: " + string.Join(", ", MoonfinUserSettings.ValidProfiles);
+
+        // The requested profile names, every profile when none were given, or null when one isn't valid.
+        private static List<string>? ProfilesOrAll(List<string>? requested)
+        {
+            if (requested == null || requested.Count == 0) return MoonfinUserSettings.ValidProfiles.ToList();
+            return requested.All(p => Array.Exists(MoonfinUserSettings.ValidProfiles, v => string.Equals(v, p, StringComparison.OrdinalIgnoreCase))) ? requested : null;
         }
 
         public async Task<object> Post(BroadcastRequest request)
@@ -482,7 +568,7 @@ namespace Emby.Plugins.Moonfin.Api
             var profile = request.Profile ?? "global";
             var resolved = await Settings.GetResolvedProfileAsync(user.Id, profile).ConfigureAwait(false);
             var isFallback = resolved == null;
-            var settings = resolved ?? Plugin.Instance?.Configuration?.DefaultUserSettings ?? new MoonfinSettingsProfile();
+            var settings = resolved ?? Settings.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 
             var sourceType = isFallback ? "library" : (settings.MediaBarSourceType ?? "library");
             var limit = isFallback ? 5 : (settings.MediaBarItemCount ?? 10);
@@ -492,10 +578,21 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(new { Items = Array.Empty<object>(), TotalRecordCount = 0 });
 
             List<BaseItem> items;
+            var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
             if (sourceType == "collection" && settings.MediaBarCollectionIds != null && settings.MediaBarCollectionIds.Count > 0)
                 items = QueryItems(settings.MediaBarCollectionIds, limit, user, excludedNames);
+            else if (sourceType == "recentlyAdded")
+                items = QueryItems(libraryIds, limit, user, excludedNames, ItemSortBy.DateCreated);
+            else if (sourceType == "recentlyReleased")
+                items = QueryItems(libraryIds, limit, user, excludedNames, ItemSortBy.PremiereDate);
+            else if (sourceType == "newReleases")
+                items = QueryNewReleaseSeries(libraryIds, settings.MediaBarNewReleaseDays ?? 30, limit, user, excludedNames);
             else
-                items = QueryItems(isFallback ? null : settings.MediaBarLibraryIds, limit, user, excludedNames);
+                items = QueryItems(libraryIds, limit, user, excludedNames);
+
+            // When nothing that aired in the window has a backdrop, the bar shows random titles instead, the way the app does.
+            if (sourceType == "newReleases" && !items.Any(HasBackdropImage))
+                items = QueryItems(libraryIds, limit, user, excludedNames);
 
             var dtos = items.Where(HasBackdropImage).Select(i => MapItemToDto(i, user)).ToList();
             return Json(new { Items = dtos, TotalRecordCount = dtos.Count });
@@ -541,11 +638,19 @@ namespace Emby.Plugins.Moonfin.Api
         }
 
 
-        /// <summary>Queries random visible Movies/Series, optionally constrained to the given container GUIDs, with genre-name exclusion.</summary>
-        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames)
+        /// <summary>
+        /// Queries visible Movies/Series, optionally constrained to the given container GUIDs, with
+        /// genre-name exclusion. Shuffled, or newest first by <paramref name="orderBy"/>. A release date
+        /// still to come isn't recently released.
+        /// </summary>
+        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null)
         {
             var lm = LibraryManager;
             if (lm == null) return new List<BaseItem>();
+
+            var candidates = Math.Max(limit * 4, 50);
+            // Excluded genres are dropped after the query, so a newest-first list reads further ahead to still fill up.
+            if (orderBy != null && excludedNames != null) candidates *= 5;
 
             var query = new InternalItemsQuery
             {
@@ -553,7 +658,7 @@ namespace Emby.Plugins.Moonfin.Api
                 Recursive = true,
                 IsVirtualItem = false,
                 User = user,
-                Limit = Math.Max(limit * 4, 50)
+                Limit = candidates
             };
 
             if (containerGuids != null && containerGuids.Count > 0)
@@ -563,8 +668,14 @@ namespace Emby.Plugins.Moonfin.Api
                 query.AncestorIds = ancestorIds;
             }
 
+            if (orderBy != null)
+            {
+                query.OrderBy = new[] { (orderBy, SortOrder.Descending) };
+                if (orderBy == ItemSortBy.PremiereDate) query.MaxPremiereDate = DateTimeOffset.UtcNow;
+            }
+
             var items = lm.GetItemsResult(query).Items
-                .Where(i => i.IsVisible(user))
+                .Where(i => i.IsVisible(user) && HasBackdropImage(i))
                 .ToList();
 
             IEnumerable<BaseItem> seq = items;
@@ -572,6 +683,8 @@ namespace Emby.Plugins.Moonfin.Api
                 seq = seq.Where(i => i.Genres == null || !i.Genres.Any(excludedNames.Contains));
 
             var list = seq.ToList();
+            if (orderBy != null) return list.Take(limit).ToList();
+
             var rng = new Random();
             for (var i = list.Count - 1; i > 0; i--)
             {
@@ -579,6 +692,61 @@ namespace Emby.Plugins.Moonfin.Api
                 var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
             }
             return list.Take(limit).ToList();
+        }
+
+        /// <summary>
+        /// Series with an episode on the server that aired within the last <paramref name="days"/> days,
+        /// newest first. A series' own premiere date is its first season's, so the episodes are queried
+        /// and brought back to their series.
+        /// </summary>
+        private List<BaseItem> QueryNewReleaseSeries(List<string>? libraryGuids, int days, int limit, User user, HashSet<string>? excludedNames)
+        {
+            var lm = LibraryManager;
+            if (lm == null) return new List<BaseItem>();
+
+            // The window comes from synced settings, so keep it to the 7 to 90 days the apps offer.
+            days = Math.Clamp(days, 7, 90);
+            var now = DateTimeOffset.UtcNow;
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Episode" },
+                Recursive = true,
+                IsVirtualItem = false,
+                User = user,
+                MinPremiereDate = now.AddDays(-days),
+                MaxPremiereDate = now,
+                OrderBy = new[] { (ItemSortBy.PremiereDate, SortOrder.Descending) },
+                Limit = 300
+            };
+
+            if (libraryGuids != null && libraryGuids.Count > 0)
+            {
+                var ancestorIds = ResolveInternalIds(libraryGuids, user);
+                if (ancestorIds.Length == 0) return new List<BaseItem>();
+                query.AncestorIds = ancestorIds;
+            }
+
+            var seen = new HashSet<long>();
+            var series = new List<BaseItem>();
+            // Hidden or excluded series, or ones without a backdrop, can use up a whole page of episodes, so a few more pages are read before giving up.
+            for (var page = 0; page < 3 && series.Count < limit; page++)
+            {
+                query.StartIndex = page * 300;
+                var episodes = lm.GetItemsResult(query).Items;
+                foreach (var episode in episodes.OfType<Episode>())
+                {
+                    if (!seen.Add(episode.SeriesId)) continue;
+                    var item = lm.GetItemById(episode.SeriesId);
+                    if (item == null || !item.IsVisible(user) || !HasBackdropImage(item)) continue;
+                    if (excludedNames != null && item.Genres != null && item.Genres.Any(excludedNames.Contains)) continue;
+                    series.Add(item);
+                    if (series.Count >= limit) break;
+                }
+
+                if (episodes.Length < 300) break;
+            }
+
+            return series;
         }
 
         /// <summary>Resolves client GUID strings to Emby internal (long) ids, dropping items the user can't see.</summary>

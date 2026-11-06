@@ -32,9 +32,29 @@ public class MdbListController : ControllerBase
     private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromMinutes(10);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTimeOffset At, string Error)> _negativeCache = new();
 
+    // A dropped connection or timeout usually clears within the minute, so Watching Now
+    // remembers it only briefly, which still spares the requests queued behind it.
+    private static readonly TimeSpan ConnectionFailureTtl = TimeSpan.FromSeconds(30);
+
     // Debounced disk flush for on-demand cache writes (the batch task also flushes).
     private static readonly TimeSpan FlushDebounce = TimeSpan.FromSeconds(30);
     private static DateTimeOffset _lastFlushRequest = DateTimeOffset.MinValue;
+
+    private sealed class WatchingNowCacheEntry
+    {
+        public DateTimeOffset CachedAt { get; }
+        public MdbListWatchingNowResponse Data { get; }
+
+        public WatchingNowCacheEntry(DateTimeOffset cachedAt, MdbListWatchingNowResponse data)
+        {
+            CachedAt = cachedAt;
+            Data = data;
+        }
+    }
+
+    private static WatchingNowCacheEntry? _watchingNowCache;
+    private static readonly TimeSpan WatchingNowCacheTtl = TimeSpan.FromMinutes(4.5);
+    private static readonly SemaphoreSlim _watchingNowLock = new(1, 1);
 
     public MdbListController(MoonfinSettingsService settingsService, MdbListCacheService cacheService, MdbListListsCacheService listsCacheService, IHttpClientFactory httpClientFactory)
     {
@@ -323,6 +343,129 @@ public class MdbListController : ControllerBase
             Slug = slug,
             Items = items
         });
+    }
+
+    /// <summary>
+    /// Fetches currently watching items and site statistics from MDBList.
+    /// </summary>
+    [HttpGet("WatchingNow")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<MdbListWatchingNowResponse>> GetWatchingNow(
+        [FromQuery] string? profile,
+        CancellationToken cancellationToken)
+    {
+        var userId = this.GetUserIdFromClaims();
+        string? apiKey = null;
+        if (userId.HasValue)
+        {
+            var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, NormalizeProfileName(profile));
+            apiKey = resolved?.MdblistApiKey;
+        }
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            apiKey = MoonfinPlugin.Instance?.Configuration?.MdblistApiKey;
+        }
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return Ok(new MdbListWatchingNowResponse
+            {
+                Error = "No MDBList API key configured. Add your key in Moonfin Settings, or ask your server admin to set a server-wide key."
+            });
+        }
+
+        var snapshot = Volatile.Read(ref _watchingNowCache);
+        if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CachedAt < WatchingNowCacheTtl)
+        {
+            return Ok(snapshot.Data);
+        }
+
+        var negKey = $"watching_now:{apiKey.Trim()}";
+        if (_negativeCache.TryGetValue(negKey, out var negative))
+        {
+            if (DateTimeOffset.UtcNow - negative.At < NegativeCacheTtl)
+            {
+                return Ok(new MdbListWatchingNowResponse { Error = negative.Error });
+            }
+            _negativeCache.TryRemove(negKey, out _);
+        }
+
+        await _watchingNowLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            snapshot = Volatile.Read(ref _watchingNowCache);
+            if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CachedAt < WatchingNowCacheTtl)
+            {
+                return Ok(snapshot.Data);
+            }
+
+            if (_negativeCache.TryGetValue(negKey, out negative))
+            {
+                if (DateTimeOffset.UtcNow - negative.At < NegativeCacheTtl)
+                {
+                    return Ok(new MdbListWatchingNowResponse { Error = negative.Error });
+                }
+                _negativeCache.TryRemove(negKey, out _);
+            }
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
+
+            var url = $"https://api.mdblist.com/watching/now?apikey={Uri.EscapeDataString(apiKey)}";
+            using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                var statusCode = (int)response.StatusCode;
+                var err = $"MDBList API returned {statusCode}: {errBody}";
+                if (statusCode == 429 || statusCode >= 500)
+                {
+                    _negativeCache[negKey] = (DateTimeOffset.UtcNow, err);
+                }
+                return Ok(new MdbListWatchingNowResponse
+                {
+                    Error = err
+                });
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var result = JsonSerializer.Deserialize<MdbListWatchingNowResponse>(json, JsonOptions);
+
+            if (result?.Items != null && result.Items.Count > 0)
+            {
+                Volatile.Write(ref _watchingNowCache, new WatchingNowCacheEntry(DateTimeOffset.UtcNow, result));
+                return Ok(result);
+            }
+
+            if (result != null && !string.IsNullOrWhiteSpace(result.Error))
+            {
+                return Ok(result);
+            }
+
+            return Ok(new MdbListWatchingNowResponse
+            {
+                Error = "Failed to deserialize MDBList response."
+            });
+        }
+        catch (Exception ex)
+        {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                // Dated so it lapses after ConnectionFailureTtl rather than the full window.
+                _negativeCache[negKey] = (DateTimeOffset.UtcNow - NegativeCacheTtl + ConnectionFailureTtl, ex.Message);
+            }
+
+            return Ok(new MdbListWatchingNowResponse
+            {
+                Error = ex.Message
+            });
+        }
+        finally
+        {
+            _watchingNowLock.Release();
+        }
     }
 
     private static readonly string[] DefaultRatingSources = ["imdb", "tmdb", "tomatoes", "metacritic"];
@@ -646,4 +789,60 @@ public class MdbListItemProviderIds
 
     [JsonPropertyName("Tvdb")]
     public string? Tvdb { get; set; }
+}
+
+public class MdbListWatchingNowResponse
+{
+    [JsonPropertyName("built_at")]
+    public string? BuiltAt { get; set; }
+
+    [JsonPropertyName("mode")]
+    public string? Mode { get; set; }
+
+    [JsonPropertyName("users")]
+    public int Users { get; set; }
+
+    [JsonPropertyName("movies")]
+    public int Movies { get; set; }
+
+    [JsonPropertyName("shows")]
+    public int Shows { get; set; }
+
+    [JsonPropertyName("items")]
+    public List<MdbListWatchingNowItem> Items { get; set; } = new();
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+}
+
+public class MdbListWatchingNowItem
+{
+    [JsonPropertyName("public_id")]
+    public string? PublicId { get; set; }
+
+    [JsonPropertyName("tmdb_id")]
+    public long? TmdbId { get; set; }
+
+    [JsonPropertyName("imdb_id")]
+    public string? ImdbId { get; set; }
+
+    [JsonPropertyName("media_type")]
+    public string MediaType { get; set; } = string.Empty;
+
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [JsonPropertyName("year")]
+    public int? Year { get; set; }
+
+    [JsonPropertyName("backdrop")]
+    [JsonConverter(typeof(TolerantStringConverter))]
+    public string? Backdrop { get; set; }
+
+    [JsonPropertyName("logo")]
+    [JsonConverter(typeof(TolerantStringConverter))]
+    public string? Logo { get; set; }
+
+    [JsonPropertyName("watchers")]
+    public int Watchers { get; set; }
 }

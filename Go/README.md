@@ -40,7 +40,7 @@ It's the same page as Moonbase on Jellyfin, with Silo's name in place of Jellyfi
 - Seerr is called Requests, because Moonfin uses Silo's own requests.
 - The Home rows builder has a Silo tab with Silo's own rows, like Recommended for you, Trending on this server and Seasonal picks.
 
-**Defaults.** A setting a user hasn't set comes from your default. The apps save every setting at their first sync, so changing a default later doesn't change it for users who already synced. **Apply Defaults To Users** on the Actions tab copies your defaults into everyone's settings, or resets them to your defaults with overwrite on. The **Defaults For** picker on the User defaults tab sets separate defaults for desktop, mobile and TV, which apply over the ones for all devices.
+**Defaults.** A setting a user hasn't set comes from your default. The apps save every setting at their first sync, so changing a default later doesn't change it for users who already synced. The **Global**, **TV**, **Desktop** and **Mobile** buttons on the User defaults tab pick which defaults you're editing, and a device's defaults apply over the Global ones. **Apply Defaults To Users** on the Actions tab copies your defaults into users' settings, for everyone or the accounts and profiles you pick, and for every set default or only the settings you pick. **Full reset** starts them over from your defaults instead. **Copy A User's Settings** copies one profile's settings onto others.
 
 **Staying signed in.** The page stays signed in for as long as your Silo login lasts. If your login runs out anyway, Save says so and keeps your changes. Open Moonbase again in the same browser tab within an hour and they come back, ready to save. If Save fails for any other reason, leave the page open and try again.
 
@@ -48,7 +48,7 @@ It's the same page as Moonbase on Jellyfin, with Silo's name in place of Jellyfi
 
 **API keys.** The MDBList and TMDB keys reach every signed-in user, the same as on Jellyfin, since Moonfin calls TMDB directly for some rows. Don't use keys you wouldn't hand to your users.
 
-**Removing a user.** Silo doesn't tell Moonbase when an account or profile is deleted. Pick it on the Actions tab and use **Remove Selected User's Data** to remove what Moonbase kept for it.
+**Removing a user.** Silo doesn't tell Moonbase when an account or profile is deleted. Pick it under **Remove A User's Data** on the Actions tab and use **Remove Selected User's Data** to remove what Moonbase kept for it.
 
 ### Known limits
 
@@ -127,8 +127,10 @@ Moonfin looks for Moonbase on port 32500 of your Plex server's address. If it ru
 - Plex's remote access only covers Plex itself. To use Moonbase away from home, put it behind a reverse proxy with HTTPS, or reach it over a VPN, and set that address in Moonfin. Don't forward port 32500 to the internet, since Moonfin sends your Plex token to Moonbase and plain HTTP would expose it.
 - The Moonfin web app on HTTPS can't reach Moonbase over plain HTTP, so it needs the HTTPS address too.
 - It does what Moonbase for Silo does: settings sync, admin defaults, MDBList and TMDB, messages, uploaded themes and each user's collection order. Similar items, custom rows, curated MDBList rows, the seasonal row and the Seerr proxy aren't available.
+- Smart search works on Plex too, turned on in the Smart Search tab, and covers your movies, shows, the people credited on them, and music. Each person sees only what Plex lets them open. Titles you don't have don't show up, since there's no Seerr proxy. It runs the same engine as the Jellyfin plugin, which is why the image carries a small .NET helper next to Moonbase. The index rebuilds a minute after the container starts and every night at 3:00.
+- Poster labels work on Plex too, set up in the Labels tab. Moonbase reads each file's tracks from Plex as the person asking, so people only get labels for what they can open. Anime episode labels aren't available, and the Labels tab's test draws on a blank poster, since the page can't load Plex artwork.
 - A settings change reaches other devices at their next sync.
 
 ### Data
 
-`/config` holds Moonbase's data and `owner-token`, the server owner's Plex token from the admin sign-in. Treat `owner-token` like a password. Removing the volume removes everything. Signing out the "Moonbase" device in your Plex account's authorized devices revokes the token.
+`/config` holds Moonbase's data and `owner-token`, the server owner's Plex token from the admin sign-in. With smart search on, `smart-search/` in it holds the model and the index, about 135 MB with the English model or 535 MB with Multilingual. Treat `owner-token` like a password. Removing the volume removes everything. Signing out the "Moonbase" device in your Plex account's authorized devices revokes the token.

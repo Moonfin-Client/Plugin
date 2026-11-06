@@ -17,15 +17,11 @@ public interface IUserDirectory
 
 /// <summary>
 /// Lists users from the user manager, which is bound by reflection because the User entity it
-/// hands out changed between 10.10 and 10.11. The DTO kept its shape, so everything read here
-/// comes from that.
+/// hands out changed between 10.10 and 10.11, and its list of users moved from a property to a
+/// method in 12.2. The DTO kept its shape, so everything read here comes from that.
 /// </summary>
 public class UserDirectory : IUserDirectory
 {
-    private static readonly PropertyInfo? UsersProperty = Type
-        .GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller")?
-        .GetProperty("Users");
-
     private static readonly MethodInfo? GetUserDtoMethod = Type
         .GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller")?
         .GetMethods()
@@ -45,16 +41,23 @@ public class UserDirectory : IUserDirectory
     public IReadOnlyList<DirectoryUser> Users()
     {
         var result = new List<DirectoryUser>();
-        if (UsersProperty == null || GetUserDtoMethod == null)
+        if (GetUserDtoMethod == null)
         {
+            WarnOnce("its user manager has no GetUserDto");
             return result;
         }
 
         try
         {
             var userManager = UserReflection.UserManager(_serviceProvider);
-            if (userManager == null || UsersProperty.GetValue(userManager) is not IEnumerable users)
+            if (userManager == null)
             {
+                return result;
+            }
+
+            if (UserReflection.AllUsers(_serviceProvider) is not IEnumerable users)
+            {
+                WarnOnce("its user manager has neither GetUsers() nor Users");
                 return result;
             }
 
@@ -76,4 +79,15 @@ public class UserDirectory : IUserDirectory
 
         return result;
     }
+
+    // Logged once rather than on every call, since nothing changes until the server does
+    private void WarnOnce(string why)
+    {
+        if (Interlocked.Exchange(ref _warned, 1) == 0)
+        {
+            _logger.LogWarning("Could not list the users on the server: {Why}", why);
+        }
+    }
+
+    private static int _warned;
 }
