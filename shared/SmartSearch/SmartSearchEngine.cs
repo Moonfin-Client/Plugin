@@ -145,7 +145,7 @@ public sealed class SmartSearchEngine
     {
         var snapshot = _snapshot;
         var model = _model();
-        var query = SmartQuery.Parse(text, snapshot.People, DateTime.UtcNow.Year);
+        var query = SmartQuery.Parse(text, snapshot.People, DateTime.Today);
         var vector = Encoder(model).Embed(model.QueryPrefix + text);
         var library = For(model, snapshot.Library).Rank(vector, query, model, true, snapshot.Votes, snapshot.Credits).Take(candidates).ToList();
         var catalog = For(model, snapshot.Catalog).Rank(vector, query, model, false)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -14,14 +15,17 @@ using System.Threading.Tasks;
 namespace Moonfin.SmartSearch;
 
 /// <summary>
-/// The TMDB titles smart search can offer through Seerr: the most voted movies and shows, each
-/// with its keywords and top cast. Details are cached by id, so a refresh only asks TMDB about
-/// titles it hasn't seen.
+/// The TMDB titles smart search can offer through Seerr: the most voted movies and shows, plus the
+/// most popular from the past year and the year ahead, which haven't had time to collect votes. Each
+/// has its keywords and top cast. Details are cached by id, so a refresh only asks TMDB about titles
+/// it hasn't seen, and about recent ones, whose dates, cast and keywords still change.
 /// </summary>
 public static class TmdbCatalog
 {
     private const int MoviePages = 500;
     private const int TvPages = 250;
+    private const int RecentMoviePages = 20;
+    private const int RecentTvPages = 10;
     private const int Parallelism = 6;
 
     private static readonly Dictionary<int, string> Genres = new Dictionary<int, string>
@@ -43,18 +47,33 @@ public static class TmdbCatalog
     {
         var titles = new List<JsonObject>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var pages = Enumerable.Range(1, MoviePages).Select(p => ("movie", p)).Concat(Enumerable.Range(1, TvPages).Select(p => ("tv", p))).ToList();
+        var recent = new HashSet<string>(StringComparer.Ordinal);
+        var from = DateTime.Today.AddYears(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var to = DateTime.Today.AddYears(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var pages = Enumerable.Range(1, MoviePages).Select(p => (Type: "movie", Filter: $"sort_by=vote_count.desc&page={p}", Recent: false))
+            .Concat(Enumerable.Range(1, TvPages).Select(p => (Type: "tv", Filter: $"sort_by=vote_count.desc&page={p}", Recent: false)))
+            // Theatrical and digital releases only, so a festival premiere doesn't count as the release.
+            .Concat(Enumerable.Range(1, RecentMoviePages).Select(p => (Type: "movie", Filter: $"sort_by=popularity.desc&with_release_type=2%7C3%7C4&release_date.gte={from}&release_date.lte={to}&page={p}", Recent: true)))
+            // By premiere, since talk shows and soaps air every day but aren't new.
+            .Concat(Enumerable.Range(1, RecentTvPages).Select(p => (Type: "tv", Filter: $"sort_by=popularity.desc&first_air_date.gte={from}&first_air_date.lte={to}&page={p}", Recent: true)))
+            .ToList();
         var done = 0;
         foreach (var batch in pages.Select((page, i) => (page, i)).GroupBy(x => x.i / Parallelism))
         {
-            var results = await Task.WhenAll(batch.Select(x => DiscoverAsync(http, apiKey, x.page.Item1, x.page.Item2, cancellationToken))).ConfigureAwait(false);
-            foreach (var list in results)
+            var results = await Task.WhenAll(batch.Select(async x => (x.page.Recent, List: await DiscoverAsync(http, apiKey, x.page.Type, x.page.Filter, cancellationToken).ConfigureAwait(false)))).ConfigureAwait(false);
+            foreach (var (isRecent, list) in results)
             {
                 foreach (var title in list)
                 {
-                    if (seen.Add(Key(title)))
+                    var key = Key(title);
+                    if (seen.Add(key))
                     {
                         titles.Add(title);
+                    }
+
+                    if (isRecent)
+                    {
+                        recent.Add(key);
                     }
                 }
             }
@@ -64,11 +83,11 @@ public static class TmdbCatalog
         }
 
         var cache = LoadDetails(detailsCachePath);
-        var missing = titles.Where(t => !cache.ContainsKey(Key(t))).ToList();
+        var toFetch = titles.Where(t => recent.Contains(Key(t)) || !cache.ContainsKey(Key(t))).ToList();
         var fetched = 0;
         using (var gate = new SemaphoreSlim(Parallelism))
         {
-            await Task.WhenAll(missing.Select(async title =>
+            await Task.WhenAll(toFetch.Select(async title =>
             {
                 await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
@@ -85,7 +104,7 @@ public static class TmdbCatalog
                     var n = Interlocked.Increment(ref fetched);
                     if (n % 200 == 0)
                     {
-                        progress?.Report(0.3 + 0.2 * n / Math.Max(1, missing.Count));
+                        progress?.Report(0.3 + 0.2 * n / Math.Max(1, toFetch.Count));
                     }
                 }
             })).ConfigureAwait(false);
@@ -110,6 +129,7 @@ public static class TmdbCatalog
                 Title = name,
                 YearMin = year,
                 YearMax = year,
+                Released = DateNumber(isMovie && !string.IsNullOrEmpty(details?.Released) ? details!.Released : date),
                 Votes = (int?)title["voteCount"] ?? 0,
                 TmdbId = title["id"]!.ToString(),
                 People = cast.Select(SmartQuery.NormalizeName).ToArray(),
@@ -124,9 +144,14 @@ public static class TmdbCatalog
 
     private static string Key(JsonObject title) => title["mediaType"] + ":" + title["id"];
 
-    private static async Task<List<JsonObject>> DiscoverAsync(HttpClient http, string apiKey, string type, int page, CancellationToken cancellationToken)
+    private static int DateNumber(string? date) =>
+        date != null && date.Length >= 10 && DateTime.TryParseExact(date.Substring(0, 10), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? SmartQuery.DateNumber(d)
+            : 0;
+
+    private static async Task<List<JsonObject>> DiscoverAsync(HttpClient http, string apiKey, string type, string filter, CancellationToken cancellationToken)
     {
-        var url = $"https://api.themoviedb.org/3/discover/{type}?sort_by=vote_count.desc&include_adult=false&language=en-US&page={page}";
+        var url = $"https://api.themoviedb.org/3/discover/{type}?{filter}&include_adult=false&language=en-US";
         var body = await GetAsync(http, apiKey, url, cancellationToken).ConfigureAwait(false);
         var list = new List<JsonObject>();
         if (body?["results"] is not JsonArray results)
@@ -168,7 +193,8 @@ public static class TmdbCatalog
 
     private static async Task<TitleDetails?> DetailsAsync(HttpClient http, string apiKey, string type, long id, CancellationToken cancellationToken)
     {
-        var body = await GetAsync(http, apiKey, $"https://api.themoviedb.org/3/{type}/{id}?append_to_response=keywords,credits&language=en-US", cancellationToken).ConfigureAwait(false);
+        var movie = type == "movie";
+        var body = await GetAsync(http, apiKey, $"https://api.themoviedb.org/3/{type}/{id}?append_to_response=keywords,credits{(movie ? ",release_dates" : string.Empty)}&language=en-US", cancellationToken).ConfigureAwait(false);
         if (body == null)
         {
             return null;
@@ -181,6 +207,15 @@ public static class TmdbCatalog
         {
             Keywords = keywords?.Select(k => k?["name"]?.ToString() ?? string.Empty).Where(k => k.Length > 0).Take(12).ToArray() ?? Array.Empty<string>(),
             Cast = cast?.Select(c => c?["name"]?.ToString() ?? string.Empty).Where(c => c.Length > 0).Take(5).ToArray() ?? Array.Empty<string>(),
+            Released = movie
+                ? ((body["release_dates"]?["results"] as JsonArray) ?? new JsonArray())
+                    .SelectMany(country => (country?["release_dates"] as JsonArray) ?? new JsonArray())
+                    .Where(r => (int?)r?["type"] is 2 or 3 or 4)
+                    .Select(r => r?["release_date"]?.ToString() ?? string.Empty)
+                    .Where(d => d.Length >= 10)
+                    .OrderBy(d => d, StringComparer.Ordinal)
+                    .FirstOrDefault() ?? string.Empty
+                : string.Empty,
         };
     }
 
@@ -227,7 +262,7 @@ public static class TmdbCatalog
             {
                 foreach (var pair in saved)
                 {
-                    cache[pair.Key] = new TitleDetails { Keywords = Strings(pair.Value?["Keywords"]), Cast = Strings(pair.Value?["Cast"]) };
+                    cache[pair.Key] = new TitleDetails { Keywords = Strings(pair.Value?["Keywords"]), Cast = Strings(pair.Value?["Cast"]), Released = pair.Value?["Released"]?.ToString() ?? string.Empty };
                 }
             }
         }
@@ -244,7 +279,7 @@ public static class TmdbCatalog
         var saved = new JsonObject();
         foreach (var pair in details)
         {
-            saved[pair.Key] = new JsonObject { ["Keywords"] = JsonList(pair.Value.Keywords), ["Cast"] = JsonList(pair.Value.Cast) };
+            saved[pair.Key] = new JsonObject { ["Keywords"] = JsonList(pair.Value.Keywords), ["Cast"] = JsonList(pair.Value.Cast), ["Released"] = pair.Value.Released };
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -261,5 +296,7 @@ public static class TmdbCatalog
         public string[] Keywords { get; set; } = Array.Empty<string>();
 
         public string[] Cast { get; set; } = Array.Empty<string>();
+
+        public string Released { get; set; } = string.Empty;
     }
 }

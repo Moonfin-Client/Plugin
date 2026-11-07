@@ -23,6 +23,12 @@ public sealed class SmartEntry
 
     public int YearMax { get; set; }
 
+    /// <summary>
+    /// Release date as yyyymmdd, 0 when unknown. Only catalog titles have one. For a movie it's the
+    /// first theatrical or digital release, for a show its premiere.
+    /// </summary>
+    public int Released { get; set; }
+
     /// <summary>TMDB vote count, -1 when unknown. Feeds the popularity prior.</summary>
     public int Votes { get; set; } = -1;
 
@@ -62,7 +68,7 @@ public readonly struct SmartHit
 /// <summary>A list of embedded entries, saved as one binary file, and the ranking over it.</summary>
 public sealed class SmartIndex
 {
-    private const int FileVersion = 2;
+    private const int FileVersion = 3;
 
     // Weights for what the embedding alone can't see, tuned by hand on a set of vague queries.
     public const float PopularityWeight = 0.25f;
@@ -112,6 +118,7 @@ public sealed class SmartIndex
                 Title = reader.ReadString(),
                 YearMin = reader.ReadInt32(),
                 YearMax = reader.ReadInt32(),
+                Released = reader.ReadInt32(),
                 Votes = reader.ReadInt32(),
                 TmdbId = reader.ReadString(),
                 People = new string[reader.ReadInt32()],
@@ -154,6 +161,7 @@ public sealed class SmartIndex
                 writer.Write(e.Title);
                 writer.Write(e.YearMin);
                 writer.Write(e.YearMax);
+                writer.Write(e.Released);
                 writer.Write(e.Votes);
                 writer.Write(e.TmdbId);
                 writer.Write(e.People.Length);
@@ -199,6 +207,11 @@ public sealed class SmartIndex
         var hits = new List<SmartHit>(Entries.Count);
         foreach (var e in Entries)
         {
+            if (query.HasDates && !WithinDates(e, query))
+            {
+                continue;
+            }
+
             var similarity = (BertEncoder.Dot(queryVector, e.Vector) - model.SimilarityOffset) * model.SimilarityScale;
             var score = similarity;
 
@@ -239,7 +252,7 @@ public sealed class SmartIndex
                 score -= MismatchPenalty;
             }
 
-            if (query.HasYears && e.YearMin > 0)
+            if (!query.HasDates && query.HasYears && e.YearMin > 0)
             {
                 var inRange = e.YearMax >= query.YearMin && e.YearMin <= query.YearMax;
                 // An artist's years come from the albums on the server, which can miss when they started.
@@ -266,6 +279,15 @@ public sealed class SmartIndex
         hits.Sort((a, b) => b.Score.CompareTo(a.Score));
         return hits;
     }
+
+    /// <summary>
+    /// Whether an entry fits "new" or "upcoming". Entries without a date go by their first year, so a show
+    /// counts from its premiere, and anything with neither, like a person, is left out.
+    /// </summary>
+    private static bool WithinDates(SmartEntry e, SmartQuery query) =>
+        e.Released > 0
+            ? e.Released >= query.DateMin && e.Released <= query.DateMax
+            : e.YearMin >= query.YearMin && e.YearMin <= query.YearMax;
 
     /// <summary>TMDB ids repeat across movies and shows, so titles are told apart by kind too.</summary>
     public static string TitleKey(string kind, string tmdbId) => kind + ":" + tmdbId;

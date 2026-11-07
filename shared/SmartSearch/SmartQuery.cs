@@ -9,8 +9,9 @@ namespace Moonfin.SmartSearch;
 
 /// <summary>
 /// The structured hints a plain sentence carries, read with rules rather than a model: a year
-/// range ("90s", "late 2000s", "before 1980"), the kinds of item it asks for ("movies", "band",
-/// "actor") and the people it names, matched against names the index knows, typos included.
+/// range ("90s", "late 2000s", "before 1980") or how recent ("new", "upcoming"), the kinds of
+/// item it asks for ("movies", "band", "actor") and the people it names, matched against names
+/// the index knows, typos included.
 /// </summary>
 public sealed class SmartQuery
 {
@@ -46,6 +47,13 @@ public sealed class SmartQuery
     private static readonly Regex Year = new Regex(
         @"\b(?:(before|after|since|until|pre|post)\s+)?((?:19|20)\d\d)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // "new" only counts as the first word, since titles like "a new hope" and "brave new world" use it too.
+    private static readonly Regex Recent = new Regex(
+        @"^new\b(?!\s+(?:york|jersey|zealand|orleans|mexico|england|amsterdam)\b)|\bbrand[\s-]+new\b|\b(?:newest|latest|recent|recently)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex Upcoming = new Regex(@"\b(?:upcoming|coming\s+soon)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private SmartQuery(string text)
     {
         Text = text;
@@ -59,6 +67,12 @@ public sealed class SmartQuery
     /// <summary>Last year asked for, 0 when the query names none.</summary>
     public int YearMax { get; private set; }
 
+    /// <summary>First release date asked for as yyyymmdd, 0 when the query isn't about how recent.</summary>
+    public int DateMin { get; private set; }
+
+    /// <summary>Last release date asked for as yyyymmdd, 0 when the query isn't about how recent.</summary>
+    public int DateMax { get; private set; }
+
     /// <summary>Item kinds the query asks for. Empty means any.</summary>
     public HashSet<string> Kinds { get; } = new HashSet<string>(StringComparer.Ordinal);
 
@@ -67,13 +81,15 @@ public sealed class SmartQuery
 
     public bool HasYears => YearMin > 0;
 
+    public bool HasDates => DateMin > 0;
+
     /// <summary>True when the query is little more than the names in it, like "tom hanks".</summary>
     public bool NameOnly { get; private set; }
 
-    public static SmartQuery Parse(string text, PeopleDirectory people, int currentYear)
+    public static SmartQuery Parse(string text, PeopleDirectory people, DateTime today)
     {
         var query = new SmartQuery(text.Trim());
-        query.ReadYears(currentYear);
+        query.ReadYears(today);
 
         var words = Words(query.Text);
         foreach (var word in words)
@@ -122,8 +138,11 @@ public sealed class SmartQuery
     /// <summary>A name in the form the directory and queries compare.</summary>
     public static string NormalizeName(string name) => string.Join(" ", Words(name));
 
-    private void ReadYears(int currentYear)
+    public static int DateNumber(DateTime date) => date.Year * 10000 + date.Month * 100 + date.Day;
+
+    private void ReadYears(DateTime today)
     {
+        var currentYear = today.Year;
         var decade = Decade.Match(Text);
         if (decade.Success)
         {
@@ -161,6 +180,19 @@ public sealed class SmartQuery
                 "since" => (value, currentYear + 1),
                 _ => (value, value),
             };
+            return;
+        }
+
+        // Entries without a release date, like library items, fall back to the years.
+        if (Upcoming.IsMatch(Text))
+        {
+            (DateMin, DateMax) = (DateNumber(today.AddDays(1)), 99991231);
+            (YearMin, YearMax) = (currentYear + 1, 9999);
+        }
+        else if (Recent.IsMatch(Text))
+        {
+            (DateMin, DateMax) = (DateNumber(today.AddYears(-1)), DateNumber(today));
+            (YearMin, YearMax) = (currentYear - 1, currentYear);
         }
     }
 }
