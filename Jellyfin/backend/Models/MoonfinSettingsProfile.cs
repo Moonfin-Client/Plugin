@@ -33,6 +33,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("showBookDiscoverTab")]
     public bool? ShowBookDiscoverTab { get; set; }
 
+    [JsonPropertyName("bookFoldersAsSeries")]
+    public bool? BookFoldersAsSeries { get; set; }
+
     [JsonPropertyName("seerrRows")]
     public SeerrRowsConfig? SeerrRows { get; set; }
 
