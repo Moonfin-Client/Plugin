@@ -570,7 +570,7 @@ namespace Emby.Plugins.Moonfin.Api
             var isFallback = resolved == null;
             var settings = resolved ?? Settings.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 
-            var sourceType = isFallback ? "library" : (settings.MediaBarSourceType ?? "library");
+            var sourceType = isFallback ? "random" : (settings.MediaBarSourceType ?? "random");
             var limit = isFallback ? 5 : (settings.MediaBarItemCount ?? 10);
             var excludedNames = ResolveExcludedGenreNames(settings.MediaBarExcludedGenres);
 
@@ -578,21 +578,23 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(new { Items = Array.Empty<object>(), TotalRecordCount = 0 });
 
             List<BaseItem> items;
-            var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
-            if (sourceType == "collection" && settings.MediaBarCollectionIds != null && settings.MediaBarCollectionIds.Count > 0)
-                items = QueryItems(settings.MediaBarCollectionIds, limit, user, excludedNames);
-            else if (sourceType == "recentlyAdded")
-                items = QueryItems(libraryIds, limit, user, excludedNames, ItemSortBy.DateCreated);
+            // The picked libraries and collections draw as one pool whatever the source type, and the
+            // library and collection sources from before fall through to the random draw.
+            var parentIds = isFallback
+                ? null
+                : (settings.MediaBarLibraryIds ?? new List<string>()).Concat(settings.MediaBarCollectionIds ?? new List<string>()).ToList();
+            if (sourceType == "recentlyAdded")
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated);
             else if (sourceType == "recentlyReleased")
-                items = QueryItems(libraryIds, limit, user, excludedNames, ItemSortBy.PremiereDate);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate);
             else if (sourceType == "newReleases")
-                items = QueryNewReleaseSeries(libraryIds, settings.MediaBarNewReleaseDays ?? 30, limit, user, excludedNames);
+                items = QueryNewReleaseSeries(parentIds, settings.MediaBarNewReleaseDays ?? 30, limit, user, excludedNames);
             else
-                items = QueryItems(libraryIds, limit, user, excludedNames);
+                items = QueryItems(parentIds, limit, user, excludedNames);
 
             // When nothing that aired in the window has a backdrop, the bar shows random titles instead, the way the app does.
             if (sourceType == "newReleases" && !items.Any(HasBackdropImage))
-                items = QueryItems(libraryIds, limit, user, excludedNames);
+                items = QueryItems(parentIds, limit, user, excludedNames);
 
             var dtos = items.Where(HasBackdropImage).Select(i => MapItemToDto(i, user)).ToList();
             return Json(new { Items = dtos, TotalRecordCount = dtos.Count });

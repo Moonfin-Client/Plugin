@@ -3543,14 +3543,13 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarSourceType">Media Bar Source</label>
                                 <select id="DefaultMediaBarSourceType" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="library">Library (Random)</option>
-                                    <option value="collection">Collections / Playlists</option>
+                                    <option value="random">Random</option>
                                     <option value="recentlyAdded">Recently Added</option>
                                     <option value="recentlyReleased">Recently Released</option>
                                     <option value="newReleases">New Seasons &amp; Episodes</option>
                                 </select>
                             </div>
-                            <div id="DefaultLibraryPickerSection" style="display:none;">
+                            <div id="DefaultLibraryPickerSection">
                                 <div class="inputContainer">
                                     <label class="inputLabel inputLabelUnfocused">Default Libraries</label>
                                     <div id="DefaultLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
@@ -3558,7 +3557,7 @@
                             </div>
 
 
-                            <div id="DefaultCollectionPickerSection" style="display:none;">
+                            <div id="DefaultCollectionPickerSection">
                                 <div class="inputContainer">
                                     <label class="inputLabel inputLabelUnfocused">Default Collections / Playlists</label>
                                     <div id="DefaultCollectionPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
@@ -11370,7 +11369,8 @@
                     setNullableBoolSelect('#DefaultShowServerMessagesButton', defaults.showServerMessagesButton);
                     setNullableBoolSelect('#DefaultShowFriendsButton', defaults.showFriendsButton);
 
-                    setSelectValue('#DefaultMediaBarSourceType', defaults.mediaBarSourceType, 'Configured source');
+                    // The library and collection sources from before are the random draw now.
+                    setSelectValue('#DefaultMediaBarSourceType', ['library', 'collection'].indexOf(defaults.mediaBarSourceType) !== -1 ? 'random' : defaults.mediaBarSourceType, 'Configured source');
                     loadAdminGenrePicker(defaults.mediaBarExcludedGenres || []);
                     setSelectValue('#DefaultMediaBarMode', defaults.mediaBarMode, 'Configured mode');
                     setSelectValue('#DefaultMediaBarContentType', defaults.mediaBarContentType, 'Configured content type');
@@ -11621,25 +11621,8 @@
                         defaults.osdButtonOrderTv || defaults.osdButtonOrderMobile || defaults.osdButtonOrderDesktop || null,
                         defaults.hiddenOsdButtonsTv || defaults.hiddenOsdButtonsMobile || defaults.hiddenOsdButtonsDesktop || null);
 
-                    var sourceSelect = document.querySelector('#DefaultMediaBarSourceType');
-                    var collectionPickerSection = document.querySelector('#DefaultCollectionPickerSection');
-                    var libraryPickerSection = document.querySelector('#DefaultLibraryPickerSection');
-                    function togglePickerVisibility(keepPicks) {
-                        var isCollection = sourceSelect.value === 'collection';
-                        var isLibrary = ['library', 'recentlyAdded', 'recentlyReleased', 'newReleases'].indexOf(sourceSelect.value) !== -1;
-                        collectionPickerSection.style.display = isCollection ? '' : 'none';
-                        libraryPickerSection.style.display = isLibrary ? '' : 'none';
-                        if (isCollection) {
-                            loadAdminCollectionPicker(defaults.mediaBarCollectionIds || []);
-                        }
-                        // The library picks load with the profile, even while hidden, so changing the source keeps any that aren't saved yet.
-                        if (keepPicks !== true) {
-                            loadAdminLibraryPicker(defaults.mediaBarLibraryIds || []);
-                        }
-                    }
-                    // Assigned rather than added, so a refill doesn't stack one handler per profile.
-                    sourceSelect.onchange = function () { togglePickerVisibility(true); };
-                    togglePickerVisibility();
+                    loadAdminLibraryPicker(defaults.mediaBarLibraryIds || []);
+                    loadAdminCollectionPicker(defaults.mediaBarCollectionIds || []);
                     applyFieldDependencies();
                     afterDefaultsPopulated(defaults);
                 }

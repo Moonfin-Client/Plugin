@@ -2879,7 +2879,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultShowDownloadsButton', defaults.showDownloadsButton);
         setNullableBoolSelect(view, '#DefaultShowServerMessagesButton', defaults.showServerMessagesButton);
 
-        setSelectValue(view, '#DefaultMediaBarSourceType', defaults.mediaBarSourceType, 'Configured source');
+        // The library and collection sources from before are the random draw now.
+        setSelectValue(view, '#DefaultMediaBarSourceType', ['library', 'collection'].indexOf(defaults.mediaBarSourceType) !== -1 ? 'random' : defaults.mediaBarSourceType, 'Configured source');
         loadAdminGenrePicker(view, defaults.mediaBarExcludedGenres || []);
         setSelectValue(view, '#DefaultMediaBarMode', defaults.mediaBarMode, 'Configured mode');
         setSelectValue(view, '#DefaultMediaBarContentType', defaults.mediaBarContentType, 'Configured content type');
@@ -3130,21 +3131,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             defaults.osdButtonOrderTv || defaults.osdButtonOrderMobile || defaults.osdButtonOrderDesktop || null,
             defaults.hiddenOsdButtonsTv || defaults.hiddenOsdButtonsMobile || defaults.hiddenOsdButtonsDesktop || null);
 
-        var sourceSelect = view.querySelector('#DefaultMediaBarSourceType');
-        var collectionPickerSection = view.querySelector('#DefaultCollectionPickerSection');
-        var libraryPickerSection = view.querySelector('#DefaultLibraryPickerSection');
-        function togglePickerVisibility(keepPicks) {
-            var isCollection = sourceSelect.value === 'collection';
-            var isLibrary = ['library', 'recentlyAdded', 'recentlyReleased', 'newReleases'].indexOf(sourceSelect.value) !== -1;
-            collectionPickerSection.style.display = isCollection ? '' : 'none';
-            libraryPickerSection.style.display = isLibrary ? '' : 'none';
-            if (isCollection) loadAdminCollectionPicker(view, defaults.mediaBarCollectionIds || []);
-            // The library picks load with the profile, even while hidden, so changing the source keeps any that aren't saved yet.
-            if (keepPicks !== true) loadAdminLibraryPicker(view, defaults.mediaBarLibraryIds || []);
-        }
-        // Assigned rather than added, so a refill doesn't stack one handler per profile.
-        sourceSelect.onchange = function () { togglePickerVisibility(true); };
-        togglePickerVisibility();
+        loadAdminLibraryPicker(view, defaults.mediaBarLibraryIds || []);
+        loadAdminCollectionPicker(view, defaults.mediaBarCollectionIds || []);
         applyFieldDependencies(view);
         afterDefaultsPopulated(view, defaults);
     }

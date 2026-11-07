@@ -3695,14 +3695,13 @@
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarSourceType">Media Bar Source</label>
                                 <select id="DefaultMediaBarSourceType" is="emby-select">
                                     <option value="">Not set (user decides)</option>
-                                    <option value="library">Library (Random)</option>
-                                    <option value="collection">Collections / Playlists</option>
+                                    <option value="random">Random</option>
                                     <option value="recentlyAdded">Recently Added</option>
                                     <option value="recentlyReleased">Recently Released</option>
                                     <option value="newReleases">New Seasons &amp; Episodes</option>
                                 </select>
                             </div>
-                            <div id="DefaultLibraryPickerSection" style="display:none;">
+                            <div id="DefaultLibraryPickerSection">
                                 <div class="inputContainer">
                                     <label class="inputLabel inputLabelUnfocused">Default Libraries</label>
                                     <div id="DefaultLibraryPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>
@@ -3710,7 +3709,7 @@
                             </div>
 
 
-                            <div id="DefaultCollectionPickerSection" style="display:none;">
+                            <div id="DefaultCollectionPickerSection">
                                 <div class="inputContainer">
                                     <label class="inputLabel inputLabelUnfocused">Default Collections / Playlists</label>
                                     <div id="DefaultCollectionPicker" style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;"></div>

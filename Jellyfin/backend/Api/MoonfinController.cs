@@ -1244,7 +1244,7 @@ public class MoonfinController : ControllerBase
         var isFallback = resolved == null;
         var settings = resolved ?? _settingsService.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 
-        var sourceType = isFallback ? "library" : (settings.MediaBarSourceType ?? "library");
+        var sourceType = isFallback ? "random" : (settings.MediaBarSourceType ?? "random");
         var limit = isFallback ? 5 : (settings.MediaBarItemCount ?? 10);
         var excludedGenres = settings.MediaBarExcludedGenres;
         var queryUser = ResolveQueryUser(userId.Value);
@@ -1258,28 +1258,22 @@ public class MoonfinController : ControllerBase
             });
         }
 
-        List<BaseItem> items;
-
-        if (sourceType == "collection" && settings.MediaBarCollectionIds is { Count: > 0 })
+        // The picked libraries and collections draw as one pool whatever the source type, and the
+        // library and collection sources from before fall through to the random draw.
+        var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
+        var collectionIds = isFallback ? null : settings.MediaBarCollectionIds;
+        var items = sourceType switch
         {
-            items = GetCollectionItems(settings.MediaBarCollectionIds, limit, queryUser, excludedGenres);
-        }
-        else
-        {
-            var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
-            items = sourceType switch
-            {
-                "recentlyAdded" => GetLibraryItems(libraryIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated),
-                "recentlyReleased" => GetLibraryItems(libraryIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate),
-                "newReleases" => GetNewReleaseSeries(libraryIds, settings.MediaBarNewReleaseDays ?? 30, limit, queryUser, excludedGenres),
-                _ => GetLibraryItems(libraryIds, limit, queryUser, excludedGenres)
-            };
+            "recentlyAdded" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated),
+            "recentlyReleased" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate),
+            "newReleases" => GetNewReleaseSeries(libraryIds, collectionIds, settings.MediaBarNewReleaseDays ?? 30, limit, queryUser, excludedGenres),
+            _ => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres)
+        };
 
-            // When nothing that aired in the window has a backdrop, the bar shows random titles instead, the way the app does.
-            if (sourceType == "newReleases" && !items.Any(HasBackdropImage))
-            {
-                items = GetLibraryItems(libraryIds, limit, queryUser, excludedGenres);
-            }
+        // When nothing that aired in the window has a backdrop, the bar shows random titles instead, the way the app does.
+        if (sourceType == "newReleases" && !items.Any(HasBackdropImage))
+        {
+            items = GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres);
         }
 
         var dtos = items
@@ -1420,10 +1414,11 @@ public class MoonfinController : ControllerBase
     }
 
     /// <summary>
-    /// Queries Movie/Series items, shuffled or newest first by <paramref name="order"/>, optionally
-    /// filtered to specific libraries and with genre exclusions applied at the database level.
+    /// Queries Movie/Series items from the picked libraries and collections as one pool, shuffled or
+    /// newest first by <paramref name="order"/>, with genre exclusions applied at the database level.
+    /// With nothing picked it reads every library.
     /// </summary>
-    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random)
+    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, List<string>? collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random)
     {
         var includedGenreIds = GetIncludedGenreIds(excludedGenreIds, queryUser);
 
@@ -1432,7 +1427,8 @@ public class MoonfinController : ControllerBase
         // Titles without a backdrop are left off the bar, so a newest-first list reads further ahead to still fill it.
         var fetchLimit = order == ItemSortBy.Random ? limit : Math.Max(limit * 4, 50);
 
-        if (libraryIds is not { Count: > 0 })
+        var collectionCount = collectionIds?.Count ?? 0;
+        if (libraryIds is not { Count: > 0 } && collectionCount == 0)
         {
             var query = new InternalItemsQuery
             {
@@ -1452,13 +1448,14 @@ public class MoonfinController : ControllerBase
                 .ToList();
         }
 
-        var allowedLibraryIds = VisibleLibraryIds(libraryIds, queryUser);
-        if (allowedLibraryIds.Count == 0) return [];
+        List<Guid> allowedLibraryIds = libraryIds is { Count: > 0 } ? VisibleLibraryIds(libraryIds, queryUser) : [];
+        List<BaseItem> collectionItems = collectionCount > 0 ? GetCollectionItems(collectionIds!, int.MaxValue, queryUser, excludedGenreIds) : [];
+        if (allowedLibraryIds.Count == 0 && collectionItems.Count == 0) return [];
 
         var allItems = new List<BaseItem>();
         var seenIds = new HashSet<Guid>();
         // Newest first has to compare every library's newest, so each gives the full count.
-        var perLibraryLimit = order == ItemSortBy.Random ? Math.Max(1, limit / allowedLibraryIds.Count + 1) : fetchLimit;
+        var perLibraryLimit = order == ItemSortBy.Random ? Math.Max(1, limit / (allowedLibraryIds.Count + collectionCount) + 1) : fetchLimit;
 
         foreach (var parentGuid in allowedLibraryIds)
         {
@@ -1482,6 +1479,16 @@ public class MoonfinController : ControllerBase
                 if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
                 allItems.Add(item);
             }
+        }
+
+        // A random draw gives each collection the share a library gets, so one big collection
+        // doesn't crowd the libraries out.
+        var fromCollections = order == ItemSortBy.Random
+            ? collectionItems.OrderBy(_ => Random.Shared.Next()).Take(perLibraryLimit * collectionCount)
+            : collectionItems.Where(item => order != ItemSortBy.PremiereDate || item.PremiereDate <= DateTime.UtcNow);
+        foreach (var item in fromCollections)
+        {
+            if (seenIds.Add(item.Id)) allItems.Add(item);
         }
 
         if (order != ItemSortBy.Random)
@@ -1526,7 +1533,7 @@ public class MoonfinController : ControllerBase
     /// newest first. A series' own premiere date is its first season's, so the episodes are queried
     /// and brought back to their series.
     /// </summary>
-    private List<BaseItem> GetNewReleaseSeries(List<string>? libraryIds, int days, int limit, object queryUser, List<string>? excludedGenreIds = null)
+    private List<BaseItem> GetNewReleaseSeries(List<string>? libraryIds, List<string>? collectionIds, int days, int limit, object queryUser, List<string>? excludedGenreIds = null)
     {
         var excludedNames = ResolveExcludedGenreNames(excludedGenreIds);
 
@@ -1543,11 +1550,17 @@ public class MoonfinController : ControllerBase
             Recursive = true
         };
 
-        if (libraryIds is { Count: > 0 })
+        if (libraryIds is { Count: > 0 } || collectionIds is { Count: > 0 })
         {
-            var allowedLibraryIds = VisibleLibraryIds(libraryIds, queryUser);
-            if (allowedLibraryIds.Count == 0) return [];
-            episodeQuery.AncestorIds = allowedLibraryIds.ToArray();
+            List<Guid> ancestorIds = libraryIds is { Count: > 0 } ? VisibleLibraryIds(libraryIds, queryUser) : [];
+            // A collection links its series rather than holding their episodes, so its series stand in for it.
+            if (collectionIds is { Count: > 0 })
+            {
+                ancestorIds.AddRange(GetCollectionItems(collectionIds, int.MaxValue, queryUser).OfType<Series>().Select(item => item.Id));
+            }
+
+            if (ancestorIds.Count == 0) return [];
+            episodeQuery.AncestorIds = ancestorIds.ToArray();
         }
 
         if (!UserReflection.ApplyUser(episodeQuery, queryUser)) return [];
