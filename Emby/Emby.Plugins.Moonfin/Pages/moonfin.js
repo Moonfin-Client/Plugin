@@ -2837,6 +2837,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultDetailsBackdropEnabled', defaults.detailsBackdropEnabled);
         setSelectValue(view, '#DefaultDetailsBackdropSize', defaults.detailsBackdropSize, 'Configured size');
         setNullableBoolSelect(view, '#DefaultShowBookDiscoverTab', defaults.showBookDiscoverTab);
+        setNullableBoolSelect(view, '#DefaultBookFoldersAsSeries' defaults.bookFoldersAsSeries);
         bindNullableRangeInput(view, '#DefaultBrowsingBlur');
         setNullableRangeInput(view, '#DefaultBrowsingBlur', defaults.browsingBlur);
         bindNullableRangeInput(view, '#DefaultDetailsScreenBlur');
@@ -3275,6 +3276,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.detailsBackdropEnabled = getNullableBoolSelect(view, '#DefaultDetailsBackdropEnabled');
         d.detailsBackdropSize = view.querySelector('#DefaultDetailsBackdropSize').value || null;
         d.showBookDiscoverTab = getNullableBoolSelect(view, '#DefaultShowBookDiscoverTab');
+        d.bookFoldersAsSeries = getNullableBoolSelect(view, '#DefaultBookFoldersAsSeries');
         d.browsingBlur = getNullableRangeInputAsText(view, '#DefaultBrowsingBlur');
         d.detailsScreenBlur = getNullableRangeInputAsText(view, '#DefaultDetailsScreenBlur');
         d.themeMusicEnabled = getNullableBoolSelect(view, '#DefaultThemeMusicEnabled');
