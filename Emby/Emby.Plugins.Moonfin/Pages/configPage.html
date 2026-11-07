@@ -4401,6 +4401,17 @@
                                     The discovery tab in book and audiobook libraries, which browses titles from Open Library and LibriVox. This is the default only. A user can still turn it back on for themselves.
                                 </div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultBookFoldersAsSeries">Treat Book Folders as Series</label>
+                                <select id="DefaultBookFoldersAsSeries" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">
+                                    By default, Moonfin uses book items' metadata to determine series information. Enabling this will use the folders the books sit in as series instead. Check your book library's folder structure and metadata before setting this. 
+                                </div>
+                            </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Library Visibility</h4>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Hidden libraries</label>
