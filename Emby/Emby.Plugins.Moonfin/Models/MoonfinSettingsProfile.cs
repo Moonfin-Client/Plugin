@@ -388,6 +388,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("keyboardStyle")] public string? KeyboardStyle { get; set; }
         [JsonPropertyName("clockBehavior")] public string? ClockBehavior { get; set; }
         [JsonPropertyName("use24HourClock")] public bool? Use24HourClock { get; set; }
+        [JsonPropertyName("dateFormat")] public string? DateFormat { get; set; }
         [JsonPropertyName("homeRowInfoOverlay")] public bool? HomeRowInfoOverlay { get; set; }
         [JsonPropertyName("showSeerrButton")] public bool? ShowSeerrButton { get; set; }
         [JsonPropertyName("showLiveTvButton")] public bool? ShowLiveTvButton { get; set; }
