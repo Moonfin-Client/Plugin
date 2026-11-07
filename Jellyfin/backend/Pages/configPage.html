@@ -4128,6 +4128,15 @@
                                 <div id="DefaultSeasonalRowHolidays" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
                                 <div class="fieldDescription">Untick a holiday to hide its row for users who haven't chosen for themselves.</div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeasonalRowAllYear">Seasonal Row All Year</label>
+                                <select id="DefaultSeasonalRowAllYear" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">On</option>
+                                    <option value="false">Off</option>
+                                </select>
+                                <div class="fieldDescription">Show the row outside the holiday dates too, a different ticked holiday each day. A holiday that's in season still comes first.</div>
+                            </div>
 
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultEnableRadarrCalendar">Radarr Calendar</label>
@@ -6332,7 +6341,7 @@
                 { parent: 'DefaultHomeRowsImageTypeOverride', fields: ['DefaultHomeRowsImageType'] },
                 { parent: 'DefaultHomeRowsImageTypeOverride', off: ['true'], fields: ['DefaultHomeRowImageTypesSection'] },
                 { parent: 'DefaultMediaPreviewMode', off: ['off'], fields: ['DefaultPreviewAudioEnabled'] },
-                { parent: 'DefaultSeasonalRowEnabled', fields: ['DefaultSeasonalRowCountry', 'DefaultSeasonalRowHolidays'] },
+                { parent: 'DefaultSeasonalRowEnabled', fields: ['DefaultSeasonalRowCountry', 'DefaultSeasonalRowHolidays', 'DefaultSeasonalRowAllYear'] },
                 { parent: 'DefaultDetailScreenStyle', off: ['modern', 'spotlight', 'nouveau', 'minimalist', 'stage', 'premiere', 'quickLook', 'frost'], fields: ['DefaultDetailUseSeriesThumbnails'] },
                 { parent: 'DefaultDetailScreenStyle', off: ['classic', 'spotlight', 'nouveau', 'minimalist', 'stage', 'premiere', 'quickLook', 'frost'], fields: ['DefaultDetailExpandedTabs'] },
                 { parent: 'DefaultThemeMusicEnabled', fields: ['DefaultThemeMusicVolume', 'DefaultThemeMusicOnHomeRows', 'DefaultThemeMusicLoop'] },
@@ -11395,6 +11404,7 @@
                     setNullableBoolSelect('#DefaultSeasonalRowEnabled', defaults.seasonalRowEnabled);
                     setSelectValue('#DefaultSeasonalRowCountry', defaults.seasonalRowCountry, 'Configured country');
                     renderSeasonalHolidayChecks(defaults.seasonalRowHiddenHolidays);
+                    setNullableBoolSelect('#DefaultSeasonalRowAllYear', defaults.seasonalRowAllYear);
 
                     setSelectValue('#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
                     setNullableBoolSelect('#DefaultModernCardsOnMyMediaRow', defaults.modernCardsOnMyMediaRow);
@@ -12394,6 +12404,7 @@
                     ds.seasonalRowEnabled = getNullableBoolSelect('#DefaultSeasonalRowEnabled');
                     ds.seasonalRowCountry = document.querySelector('#DefaultSeasonalRowCountry').value || null;
                     ds.seasonalRowHiddenHolidays = readSeasonalHiddenHolidays();
+                    ds.seasonalRowAllYear = getNullableBoolSelect('#DefaultSeasonalRowAllYear');
 
                     // Clients store this one as text, unlike the millisecond fields below.
                     ds.resumeSubtractDuration = document.querySelector('#DefaultResumeSubtractDuration').value || null;

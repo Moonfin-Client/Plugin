@@ -594,7 +594,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultHomeRowsImageTypeOverride', fields: ['DefaultHomeRowsImageType'] },
         { parent: 'DefaultHomeRowsImageTypeOverride', off: ['true'], fields: ['DefaultHomeRowImageTypesSection'] },
         { parent: 'DefaultMediaPreviewMode', off: ['off'], fields: ['DefaultPreviewAudioEnabled'] },
-        { parent: 'DefaultSeasonalRowEnabled', fields: ['DefaultSeasonalRowCountry', 'DefaultSeasonalRowHolidays'] },
+        { parent: 'DefaultSeasonalRowEnabled', fields: ['DefaultSeasonalRowCountry', 'DefaultSeasonalRowHolidays', 'DefaultSeasonalRowAllYear'] },
         { parent: 'DefaultDetailScreenStyle', off: ['modern', 'spotlight', 'nouveau', 'minimalist', 'stage', 'premiere', 'quickLook', 'frost'], fields: ['DefaultDetailUseSeriesThumbnails'] },
         { parent: 'DefaultDetailScreenStyle', off: ['classic', 'spotlight', 'nouveau', 'minimalist', 'stage', 'premiere', 'quickLook', 'frost'], fields: ['DefaultDetailExpandedTabs'] },
         { parent: 'DefaultThemeMusicEnabled', fields: ['DefaultThemeMusicVolume', 'DefaultThemeMusicOnHomeRows', 'DefaultThemeMusicLoop'] },
@@ -2905,6 +2905,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultSeasonalRowEnabled', defaults.seasonalRowEnabled);
         setSelectValue(view, '#DefaultSeasonalRowCountry', defaults.seasonalRowCountry, 'Configured country');
         renderSeasonalHolidayChecks(view, defaults.seasonalRowHiddenHolidays);
+        setNullableBoolSelect(view, '#DefaultSeasonalRowAllYear', defaults.seasonalRowAllYear);
 
         setSelectValue(view, '#DefaultResumeSubtractDuration', defaults.resumeSubtractDuration != null ? String(defaults.resumeSubtractDuration) : '', 'Configured rewind');
         setSelectValue(view, '#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
@@ -3351,6 +3352,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.seasonalRowEnabled = getNullableBoolSelect(view, '#DefaultSeasonalRowEnabled');
         d.seasonalRowCountry = view.querySelector('#DefaultSeasonalRowCountry').value || null;
         d.seasonalRowHiddenHolidays = readSeasonalHiddenHolidays(view);
+        d.seasonalRowAllYear = getNullableBoolSelect(view, '#DefaultSeasonalRowAllYear');
 
         // Clients store this one as text, unlike the millisecond fields below.
         d.resumeSubtractDuration = view.querySelector('#DefaultResumeSubtractDuration').value || null;

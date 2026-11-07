@@ -13,6 +13,9 @@ public sealed class SeasonalSelectorTests
     private static string[] Ids(DateTime date, string? country, IEnumerable<string>? hidden = null) =>
         SeasonalSelector.Active(Holidays, date, country, hidden).Select(a => a.Holiday.Id).ToArray();
 
+    private static string[] AllYearIds(DateTime date, string? country, IEnumerable<string>? hidden = null) =>
+        SeasonalSelector.Active(Holidays, date, country, hidden, allYear: true).Select(a => a.Holiday.Id).ToArray();
+
     [Fact]
     public void ACanadianViewerInEarlyOctoberGetsThanksgivingBeforeHalloween()
     {
@@ -77,6 +80,40 @@ public sealed class SeasonalSelectorTests
         Assert.Equal(new[] { "lunarNewYear" }, Ids(new DateTime(2028, 1, 26), "SG"));
         Assert.Equal(new[] { "lunarNewYear", "valentines" }, Ids(new DateTime(2027, 2, 6), "VN"));
         Assert.Equal(new[] { "valentines" }, Ids(new DateTime(2027, 2, 6), "GB"));
+    }
+
+    [Fact]
+    public void AllYearPutsTheHolidayInSeasonFirstAndThenEveryOther()
+    {
+        var ids = AllYearIds(new DateTime(2026, 10, 8), "US");
+
+        Assert.Equal("halloween", ids[0]);
+        Assert.Equal(Holidays.Count, ids.Length);
+        Assert.Equal(ids.Length, ids.Distinct().Count());
+    }
+
+    [Fact]
+    public void AllYearIgnoresCountryButNeverBringsBackAHiddenHoliday()
+    {
+        var ids = AllYearIds(new DateTime(2026, 7, 15), "US", new[] { "christmas" });
+
+        Assert.DoesNotContain("christmas", ids);
+        Assert.Contains("lunarNewYear", ids);
+        Assert.Contains("diwali", ids);
+        Assert.Equal(Holidays.Count - 1, ids.Length);
+        Assert.Empty(Ids(new DateTime(2026, 7, 15), "US", new[] { "christmas" }));
+    }
+
+    [Fact]
+    public void AllYearKeepsOneOrderAllDayAndSpreadsTheDaysAcrossHolidays()
+    {
+        Assert.Equal(AllYearIds(new DateTime(2026, 7, 15, 1, 0, 0), "US"), AllYearIds(new DateTime(2026, 7, 15, 23, 0, 0), "US"));
+
+        var firsts = Enumerable.Range(0, 90)
+            .Select(day => AllYearIds(new DateTime(2026, 7, 1).AddDays(day), "US")[0])
+            .Distinct()
+            .Count();
+        Assert.Equal(Holidays.Count, firsts);
     }
 
     [Fact]

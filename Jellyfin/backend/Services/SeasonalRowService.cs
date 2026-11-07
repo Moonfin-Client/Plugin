@@ -68,13 +68,13 @@ public class SeasonalRowService
         _logger = logger;
     }
 
-    public async Task<SeasonalRowResponse> BuildAsync(Guid userId, string? requestedCountry, DateTime now, CancellationToken cancellationToken)
+    public async Task<SeasonalRowResponse> BuildAsync(Guid userId, string? requestedCountry, bool allYear, DateTime now, CancellationToken cancellationToken)
     {
         var country = SeasonalCountry.Resolve(requestedCountry, _configManager.Configuration.MetadataCountryCode);
         var response = new SeasonalRowResponse { Country = country };
 
         var profile = await _settings.GetResolvedProfileAsync(userId, "global").ConfigureAwait(false);
-        var active = SeasonalSelector.Active(_holidays, now, country, profile?.SeasonalRowHiddenHolidays);
+        var active = SeasonalSelector.Active(_holidays, now, country, profile?.SeasonalRowHiddenHolidays, allYear);
         if (active.Count == 0)
         {
             return response;

@@ -86,6 +86,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("seasonalRowCountry")] public string? SeasonalRowCountry { get; set; }
         /// <summary>Holiday ids the user switched off.</summary>
         [JsonPropertyName("seasonalRowHiddenHolidays")] public List<string>? SeasonalRowHiddenHolidays { get; set; }
+        [JsonPropertyName("seasonalRowAllYear")] public bool? SeasonalRowAllYear { get; set; }
         [JsonPropertyName("homeBackdropEnabled")] public bool? HomeBackdropEnabled { get; set; }
         [JsonPropertyName("homeBackdropStyle")] public string? HomeBackdropStyle { get; set; }
         [JsonPropertyName("detailsBackdropEnabled")] public bool? DetailsBackdropEnabled { get; set; }

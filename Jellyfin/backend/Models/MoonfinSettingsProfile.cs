@@ -283,6 +283,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("seasonalRowHiddenHolidays")]
     public List<string>? SeasonalRowHiddenHolidays { get; set; }
 
+    [JsonPropertyName("seasonalRowAllYear")]
+    public bool? SeasonalRowAllYear { get; set; }
+
     [JsonPropertyName("homeBackdropEnabled")]
     public bool? HomeBackdropEnabled { get; set; }
 

@@ -4280,6 +4280,15 @@
                                 <div id="DefaultSeasonalRowHolidays" style="border:1px solid rgba(128,128,128,0.3);border-radius:4px;padding:6px;margin-top:6px;"></div>
                                 <div class="fieldDescription">Untick a holiday to hide its row for users who haven't chosen for themselves.</div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeasonalRowAllYear">Seasonal Row All Year</label>
+                                <select id="DefaultSeasonalRowAllYear" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">On</option>
+                                    <option value="false">Off</option>
+                                </select>
+                                <div class="fieldDescription">Show the row outside the holiday dates too, a different ticked holiday each day. A holiday that's in season still comes first.</div>
+                            </div>
 
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultEnableRadarrCalendar">Radarr Calendar</label>

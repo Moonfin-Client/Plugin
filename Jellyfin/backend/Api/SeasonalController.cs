@@ -26,10 +26,11 @@ public class SeasonalController : ControllerBase
     /// <summary>
     /// The seasonal Home row for the calling user. <paramref name="country"/> is the viewer's
     /// ISO alpha-2 code, ZZ for someone who picked "Other", or empty to fall back to the server's.
+    /// <paramref name="allYear"/> shows a row outside the holiday dates too.
     /// </summary>
     [HttpGet("Row")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<ActionResult<SeasonalRowResponse>> GetRow([FromQuery] string? country, CancellationToken cancellationToken)
+    public async Task<ActionResult<SeasonalRowResponse>> GetRow([FromQuery] string? country, [FromQuery] bool allYear, CancellationToken cancellationToken)
     {
         var userId = this.GetUserIdFromClaims();
         if (userId == null)
@@ -39,7 +40,7 @@ public class SeasonalController : ControllerBase
 
         try
         {
-            return Ok(await _rows.BuildAsync(userId.Value, country, DateTime.Now, cancellationToken).ConfigureAwait(false));
+            return Ok(await _rows.BuildAsync(userId.Value, country, allYear, DateTime.Now, cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

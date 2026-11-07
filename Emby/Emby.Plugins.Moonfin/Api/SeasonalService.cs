@@ -35,7 +35,7 @@ namespace Emby.Plugins.Moonfin.Api
 
             try
             {
-                return Json(await Rows.BuildAsync(user, request.Country, DateTime.Now, CancellationToken.None).ConfigureAwait(false));
+                return Json(await Rows.BuildAsync(user, request.Country, request.AllYear, DateTime.Now, CancellationToken.None).ConfigureAwait(false));
             }
             catch (Exception)
             {
