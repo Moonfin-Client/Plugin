@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moonfin.Calendar;
 using Moonfin.LiveTv;
+using Moonfin.MiniGames;
 using Moonfin.Pin;
 using Moonfin.Romm;
 using Moonfin.Server.Services;
@@ -26,6 +27,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddScoped<IEventConsumer<UserCreatedEventArgs>, DefaultHiddenLibrariesOnUserCreated>();
         serviceCollection.AddSingleton<IPinStore, FilePinStore>();
         serviceCollection.AddSingleton<PinService>(sp => new PinService(sp.GetRequiredService<IPinStore>()));
+        serviceCollection.AddSingleton(_ => new MiniGameScoreService(new FileMiniGameScoreStore(
+            Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), "minigames"),
+            new JellyfinStateFile())));
         serviceCollection.AddSingleton<MoonfinThemeValidator>();
         serviceCollection.AddSingleton<MoonfinThemeStore>();
         serviceCollection.AddSingleton<SeerrSessionService>();

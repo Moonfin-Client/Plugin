@@ -85,6 +85,7 @@ func (s *Server) routes() {
 	s.smartRoutes()
 	s.calendarRoutes()
 	s.posterBadgeRoutes()
+	s.miniGameRoutes()
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
