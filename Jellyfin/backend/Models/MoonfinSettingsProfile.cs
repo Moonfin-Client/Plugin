@@ -596,6 +596,24 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("subtitlesTextWeight")]
     public int? SubtitlesTextWeight { get; set; }
 
+    [JsonPropertyName("subtitlesStrokeWidth")]
+    public int? SubtitlesStrokeWidth { get; set; }
+
+    [JsonPropertyName("subtitlesShadow")]
+    public bool? SubtitlesShadow { get; set; }
+
+    [JsonPropertyName("subtitlesShadowIntensity")]
+    public int? SubtitlesShadowIntensity { get; set; }
+
+    [JsonPropertyName("subtitlesShadowOffset")]
+    public int? SubtitlesShadowOffset { get; set; }
+
+    [JsonPropertyName("subtitlesShadowBlur")]
+    public int? SubtitlesShadowBlur { get; set; }
+
+    [JsonPropertyName("subtitlesFont")]
+    public string? SubtitlesFont { get; set; }
+
     [JsonPropertyName("subtitlesHdrSeparate")]
     public bool? SubtitlesHdrSeparate { get; set; }
 
