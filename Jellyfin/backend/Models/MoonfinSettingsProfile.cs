@@ -503,6 +503,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("screensaverDimming")]
     public int? ScreensaverDimming { get; set; }
 
+    [JsonPropertyName("screensaverDuringAudio")]
+    public bool? ScreensaverDuringAudio { get; set; }
+
+    [JsonPropertyName("sleepAfterIdle")]
+    public int? SleepAfterIdle { get; set; }
+
     [JsonPropertyName("screensaverClockMode")]
     public string? ScreensaverClockMode { get; set; }
 
@@ -646,6 +652,9 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("skipForwardLength")]
     public int? SkipForwardLength { get; set; }
+
+    [JsonPropertyName("controlsHideDelay")]
+    public int? ControlsHideDelay { get; set; }
 
     [JsonPropertyName("osdLockEnabled")]
     public bool? OsdLockEnabled { get; set; }

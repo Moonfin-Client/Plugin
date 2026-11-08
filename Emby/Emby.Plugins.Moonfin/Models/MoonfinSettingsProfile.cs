@@ -174,6 +174,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("screensaverMode")] public string? ScreensaverMode { get; set; }
         [JsonPropertyName("screensaverTimeout")] public string? ScreensaverTimeout { get; set; }
         [JsonPropertyName("screensaverDimming")] public int? ScreensaverDimming { get; set; }
+        [JsonPropertyName("screensaverDuringAudio")] public bool? ScreensaverDuringAudio { get; set; }
+        [JsonPropertyName("sleepAfterIdle")] public int? SleepAfterIdle { get; set; }
         [JsonPropertyName("screensaverClockMode")] public string? ScreensaverClockMode { get; set; }
         [JsonPropertyName("screensaverMaxAgeRating")] public string? ScreensaverMaxAgeRating { get; set; }
         [JsonPropertyName("screensaverRequireRating")] public bool? ScreensaverRequireRating { get; set; }
@@ -226,6 +228,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("unpauseRewindDuration")] public int? UnpauseRewindDuration { get; set; }
         [JsonPropertyName("skipBackLength")] public int? SkipBackLength { get; set; }
         [JsonPropertyName("skipForwardLength")] public int? SkipForwardLength { get; set; }
+        [JsonPropertyName("controlsHideDelay")] public int? ControlsHideDelay { get; set; }
         [JsonPropertyName("osdLockEnabled")] public bool? OsdLockEnabled { get; set; }
         [JsonPropertyName("showChapterMarkers")] public bool? ShowChapterMarkers { get; set; }
         [JsonPropertyName("detailButtonOrderTv")] public List<string>? DetailButtonOrderTv { get; set; }

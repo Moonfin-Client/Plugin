@@ -2912,6 +2912,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
         setSelectValue(view, '#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
         setSelectValue(view, '#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
+        setSelectValue(view, '#DefaultControlsHideDelay', defaults.controlsHideDelay != null ? String(defaults.controlsHideDelay) : '', 'Configured delay');
 
         fillLanguageSelect(view, '#DefaultDefaultAudioLanguage');
         fillLanguageSelect(view, '#DefaultDefaultSubtitleLanguage');
@@ -3361,6 +3362,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.unpauseRewindDuration = getNullableIntInput(view, '#DefaultUnpauseRewindDuration');
         d.skipBackLength = getNullableIntInput(view, '#DefaultSkipBackLength');
         d.skipForwardLength = getNullableIntInput(view, '#DefaultSkipForwardLength');
+        d.controlsHideDelay = getNullableIntInput(view, '#DefaultControlsHideDelay');
 
         d.defaultAudioLanguage = view.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
         d.fallbackAudioLanguage = view.querySelector('#DefaultFallbackAudioLanguage').value.trim() || null;

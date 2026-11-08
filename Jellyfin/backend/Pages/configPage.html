@@ -4729,6 +4729,16 @@
                                     <option value="30000">30 seconds</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultControlsHideDelay">Hide Controls After</label>
+                                <select id="DefaultControlsHideDelay" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="1000">1 second</option>
+                                    <option value="3000">3 seconds</option>
+                                    <option value="5000">5 seconds</option>
+                                </select>
+                                <div class="fieldDescription">How long the player controls stay on screen after the last button press, tap or mouse move.</div>
+                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Player Buttons</h4>
                             <div class="inputContainer">
@@ -11473,6 +11483,7 @@
                     setSelectValue('#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
                     setSelectValue('#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
                     setSelectValue('#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
+                    setSelectValue('#DefaultControlsHideDelay', defaults.controlsHideDelay != null ? String(defaults.controlsHideDelay) : '', 'Configured delay');
 
                     fillLanguageSelect('#DefaultDefaultAudioLanguage');
                     fillLanguageSelect('#DefaultDefaultSubtitleLanguage');
@@ -12424,6 +12435,7 @@
                     ds.unpauseRewindDuration = getNullableIntInput('#DefaultUnpauseRewindDuration');
                     ds.skipBackLength = getNullableIntInput('#DefaultSkipBackLength');
                     ds.skipForwardLength = getNullableIntInput('#DefaultSkipForwardLength');
+                    ds.controlsHideDelay = getNullableIntInput('#DefaultControlsHideDelay');
 
                     ds.defaultAudioLanguage = document.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
                     ds.fallbackAudioLanguage = document.querySelector('#DefaultFallbackAudioLanguage').value.trim() || null;
