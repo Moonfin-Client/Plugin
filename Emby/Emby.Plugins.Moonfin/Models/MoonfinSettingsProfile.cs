@@ -229,6 +229,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("skipBackLength")] public int? SkipBackLength { get; set; }
         [JsonPropertyName("skipForwardLength")] public int? SkipForwardLength { get; set; }
         [JsonPropertyName("controlsHideDelay")] public int? ControlsHideDelay { get; set; }
+        [JsonPropertyName("hdrControlsDimming")] public int? HdrControlsDimming { get; set; }
         [JsonPropertyName("osdLockEnabled")] public bool? OsdLockEnabled { get; set; }
         [JsonPropertyName("showChapterMarkers")] public bool? ShowChapterMarkers { get; set; }
         [JsonPropertyName("detailButtonOrderTv")] public List<string>? DetailButtonOrderTv { get; set; }

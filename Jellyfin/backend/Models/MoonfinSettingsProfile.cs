@@ -656,6 +656,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("controlsHideDelay")]
     public int? ControlsHideDelay { get; set; }
 
+    [JsonPropertyName("hdrControlsDimming")]
+    public int? HdrControlsDimming { get; set; }
+
     [JsonPropertyName("osdLockEnabled")]
     public bool? OsdLockEnabled { get; set; }
 

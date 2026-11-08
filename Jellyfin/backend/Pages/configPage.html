@@ -4739,6 +4739,21 @@
                                 </select>
                                 <div class="fieldDescription">How long the player controls stay on screen after the last button press, tap or mouse move.</div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHdrControlsDimming">Dim Controls in HDR</label>
+                                <select id="DefaultHdrControlsDimming" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">Off</option>
+                                    <option value="10">10%</option>
+                                    <option value="20">20%</option>
+                                    <option value="30">30%</option>
+                                    <option value="40">40%</option>
+                                    <option value="50">50%</option>
+                                    <option value="60">60%</option>
+                                    <option value="70">70%</option>
+                                </select>
+                                <div class="fieldDescription">How much the player controls dim while HDR video plays, since white looks far brighter next to it.</div>
+                            </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Player Buttons</h4>
                             <div class="inputContainer">
@@ -11484,6 +11499,7 @@
                     setSelectValue('#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
                     setSelectValue('#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
                     setSelectValue('#DefaultControlsHideDelay', defaults.controlsHideDelay != null ? String(defaults.controlsHideDelay) : '', 'Configured delay');
+                    setSelectValue('#DefaultHdrControlsDimming', defaults.hdrControlsDimming != null ? String(defaults.hdrControlsDimming) : '', 'Configured dimming');
 
                     fillLanguageSelect('#DefaultDefaultAudioLanguage');
                     fillLanguageSelect('#DefaultDefaultSubtitleLanguage');
@@ -12436,6 +12452,7 @@
                     ds.skipBackLength = getNullableIntInput('#DefaultSkipBackLength');
                     ds.skipForwardLength = getNullableIntInput('#DefaultSkipForwardLength');
                     ds.controlsHideDelay = getNullableIntInput('#DefaultControlsHideDelay');
+                    ds.hdrControlsDimming = getNullableIntInput('#DefaultHdrControlsDimming');
 
                     ds.defaultAudioLanguage = document.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
                     ds.fallbackAudioLanguage = document.querySelector('#DefaultFallbackAudioLanguage').value.trim() || null;
