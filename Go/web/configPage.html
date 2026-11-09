@@ -1992,6 +1992,10 @@
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">family_restroom</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Accounts</span><span class="moonfinNavSub">Server PINs</span></span>
                         </button>
+                        <button type="button" class="moonfinNavItem" data-tab="watchParties">
+                            <span class="material-icons moonfinNavIcon" aria-hidden="true">groups</span>
+                            <span class="moonfinNavText"><span class="moonfinNavLabel">Watch Parties</span><span class="moonfinNavSub">Settings &amp; live rooms</span></span>
+                        </button>
                         <button type="button" class="moonfinNavItem" data-tab="actions">
                             <span class="material-icons moonfinNavIcon" aria-hidden="true">campaign</span>
                             <span class="moonfinNavText"><span class="moonfinNavLabel">Actions</span><span class="moonfinNavSub">Apply Defaults &amp; Broadcast</span></span>
@@ -2746,7 +2750,7 @@
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
                                 </select>
-                                <div class="fieldDescription">Only shows while SyncPlay is on under Playback.</div>
+                                <div class="fieldDescription">Only shows while Watch Parties is on under Playback.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultEnableFolderView">Enable Folder View</label>
@@ -4894,15 +4898,41 @@
                                     <option value="veryLong">After 8 episodes</option>
                                 </select>
                             </div>
-                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">SyncPlay</h4>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Watch Parties</h4>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultSyncPlayEnabled">Enable SyncPlay</label>
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSyncPlayEnabled">Watch Parties</label>
                                 <select id="DefaultSyncPlayEnabled" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
                                 </select>
-                                <div class="fieldDescription">Group watching. The SyncPlay button under Navigation only shows while this is on.</div>
+                                <div class="fieldDescription">Watching together, with Moonbase parties or SyncPlay. The SyncPlay button under Navigation only shows while this is on.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultWatchPartyService">Start Parties With</label>
+                                <select id="DefaultWatchPartyService" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="moonbase">Watch Party (Moonbase)</option>
+                                    <option value="syncplay">SyncPlay</option>
+                                </select>
+                                <div class="fieldDescription">What a user starts. Rooms of both kinds show up in the app either way.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultWatchPartyChatOverlay">Show Chat Over the Video</label>
+                                <select id="DefaultWatchPartyChatOverlay" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultWatchPartyAlerts">Party Alerts</label>
+                                <select id="DefaultWatchPartyAlerts" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">A notification when someone starts a party the user can watch. Only sent while Party alerts is on in the Watch Parties tab.</div>
                             </div>
                         </div>
 
@@ -5587,6 +5617,59 @@
                         </div>
                         <div id="AdminPinList"></div>
                         <div id="AdminPinResult" class="fieldDescription" style="display:none; margin-top:0.8em;"></div>
+                    </div>
+
+                    </section>
+                    <section class="moonfinTabPanel" data-tab="watchParties">
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Watch Parties</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="WatchPartiesEnabled" is="emby-checkbox" />
+                                <span>Turn on Watch Parties</span>
+                            </label>
+                            <div class="fieldDescription">Moonfin users on this server can start and join parties that Moonbase hosts.</div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="WatchPartyEveryoneControl" is="emby-checkbox" />
+                                <span>Let hosts turn on Everyone can control playback</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="WatchPartyChat" is="emby-checkbox" />
+                                <span>Chat</span>
+                            </label>
+                            <div class="fieldDescription">Kept in memory while the room is open. Never written to disk or logs.</div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="WatchPartyReactions" is="emby-checkbox" />
+                                <span>Reactions</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="WatchPartyAlerts" is="emby-checkbox" />
+                                <span>Party alerts</span>
+                            </label>
+                            <div class="fieldDescription">Users who opt in get a notification when someone starts a party they can watch.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="WatchPartyMaxMembers">People per room</label>
+                            <input is="emby-input" type="number" id="WatchPartyMaxMembers" min="2" max="100" step="1" />
+                        </div>
+                        <div class="fieldDescription">Chat over the video and party alerts are each user's own settings. Their defaults are under User defaults &gt; Playback &gt; Watch Parties.</div>
+                    </div>
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Live rooms</h3>
+                        <div id="WatchPartyRoomsSummary" class="fieldDescription" style="margin-bottom: 0.8em;"></div>
+                        <div id="WatchPartyRoomsList" class="moonfinWatchPartyRooms"></div>
+                        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6em; margin-top:0.8em;">
+                            <button is="emby-button" type="button" id="WatchPartyRoomsRefresh" class="raised"><span>Refresh</span></button>
+                        </div>
+                        <div class="fieldDescription" style="margin-top: 0.8em;">Rooms live in memory, so a restart of Moonbase ends them.</div>
                     </div>
 
                     </section>
@@ -6300,6 +6383,7 @@
                 { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
                 { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
                 { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
+                { parent: 'WatchPartiesEnabled', fields: ['WatchPartyEveryoneControl', 'WatchPartyChat', 'WatchPartyReactions', 'WatchPartyAlerts', 'WatchPartyMaxMembers'] },
                 { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
                 { parent: 'AnimeMarkersEnabled', fields: ['AnimeMarkerRecapLookup', 'AnimeMarkerShowFiller', 'AnimeMarkerMaxAgeDays'] },
                 { parent: 'AnimeAudioMarkersEnabled', fields: ['AnimeAudioMarkersMovies', 'AnimeAudioSeparateDualAudio', 'AnimeAudioLabelStyle'] },
@@ -8762,6 +8846,57 @@
                 }
             }
 
+            var WATCH_PARTY_STATES = { waiting: 'Starting', paused: 'Paused', playing: 'Playing' };
+
+            function watchPartyAdminCall(type, path, body) {
+                return ApiClient.ajax({
+                    type: type,
+                    url: ApiClient.getUrl('Moonfin/Admin/WatchParty/' + path),
+                    data: body ? JSON.stringify(body) : undefined,
+                    contentType: 'application/json',
+                    dataType: type === 'GET' ? 'json' : undefined
+                });
+            }
+
+            function loadWatchPartyRooms() {
+                var list = document.querySelector('#WatchPartyRoomsList');
+                var summary = document.querySelector('#WatchPartyRoomsSummary');
+                if (!list) {
+                    return Promise.resolve();
+                }
+
+                return watchPartyAdminCall('GET', 'Rooms').then(function(data) {
+                    var rooms = (data && data.rooms) || [];
+                    summary.textContent = rooms.length === 0
+                        ? 'No rooms are open.'
+                        : rooms.length + ' open';
+                    list.innerHTML = rooms.map(function(room) {
+                        var status = room.phase === 'playing' ? (WATCH_PARTY_STATES[room.playback_state] || 'Playing') : 'In the lobby';
+                        var started = new Date(room.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        var people = room.members.length === 1 ? '1 person' : room.members.length + ' people';
+                        var members = room.members.map(function(member) {
+                            var action = member.is_host
+                                ? '<span class="fieldDescription">Host</span>'
+                                : '<button is="emby-button" type="button" class="raised" data-wp-remove="' + esc(member.member_id) + '" data-wp-room="' + esc(room.room_id) + '"><span>Remove</span></button>';
+                            return '<div style="display:flex;align-items:center;gap:0.8em;padding:0.3em 0;">'
+                                + '<span style="flex:1;">' + esc(member.display_name) + (member.connected ? '' : ' <span class="fieldDescription">(away)</span>') + '</span>'
+                                + action + '</div>';
+                        }).join('');
+                        return '<div class="moonfinWatchPartyRoom" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:0.8em;margin-bottom:0.6em;">'
+                            + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.8em;">'
+                            + '<strong style="flex:1;min-width:12em;">' + esc(room.content_label || 'Nothing picked yet') + '</strong>'
+                            + '<span>' + esc(room.host_name) + ' hosts · ' + people + ' · since ' + esc(started) + '</span>'
+                            + '<span>' + status + (room.has_pin ? ' · PIN' : '') + '</span>'
+                            + '<button is="emby-button" type="button" class="raised" data-wp-close="' + esc(room.room_id) + '"><span>Close room</span></button>'
+                            + '</div>'
+                            + '<details style="margin-top:0.5em;"><summary>People</summary>' + members + '</details>'
+                            + '</div>';
+                    }).join('');
+                }, function() {
+                    summary.textContent = "Couldn't load the rooms.";
+                });
+            }
+
             function loadAdminPins() {
                 var list = document.querySelector('#AdminPinList');
                 if (!list) {
@@ -11218,6 +11353,7 @@
                     loadMessagesList();
                 });
                 loadAdminPins();
+                loadWatchPartyRooms();
                 updateDownloadsTabVisibility();
 
                 loadConfigBackupStatus();
@@ -11250,6 +11386,12 @@
                     document.querySelector('#LiveTvDetectIncompleteRecordings').checked = config.LiveTvDetectIncompleteRecordings !== false;
                     document.querySelector('#SmartSearchEnabled').checked = config.SmartSearchEnabled === true;
                     document.querySelector('#SmartSearchModel').value = config.SmartSearchModel || 'english';
+                    document.querySelector('#WatchPartiesEnabled').checked = config.WatchPartiesEnabled !== false;
+                    document.querySelector('#WatchPartyEveryoneControl').checked = config.WatchPartyEveryoneControl !== false;
+                    document.querySelector('#WatchPartyChat').checked = config.WatchPartyChat !== false;
+                    document.querySelector('#WatchPartyReactions').checked = config.WatchPartyReactions !== false;
+                    document.querySelector('#WatchPartyAlerts').checked = config.WatchPartyAlerts !== false;
+                    document.querySelector('#WatchPartyMaxMembers').value = config.WatchPartyMaxMembers || 20;
                     document.querySelector('#LiveTvAutoRecordCompleteShowing').checked = config.LiveTvAutoRecordCompleteShowing === true;
                     document.querySelector('#LiveTvIncompleteThresholdPercent').value = config.LiveTvIncompleteThresholdPercent || 90;
                     document.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
@@ -11444,6 +11586,9 @@
                     setNullableBoolSelect('#DefaultShowFavoritesButton', defaults.showFavoritesButton);
                     setNullableBoolSelect('#DefaultShowSyncPlayButton', defaults.showSyncPlayButton);
                     setNullableBoolSelect('#DefaultSyncPlayEnabled', defaults.syncPlayEnabled);
+                    setSelectValue('#DefaultWatchPartyService', defaults.watchPartyService, 'Configured service');
+                    setNullableBoolSelect('#DefaultWatchPartyChatOverlay', defaults.watchPartyChatOverlay);
+                    setNullableBoolSelect('#DefaultWatchPartyAlerts', defaults.watchPartyAlerts);
                     setNullableBoolSelect('#DefaultShowLibrariesInToolbar', defaults.showLibrariesInToolbar);
                     setNullableBoolSelect('#DefaultShowLibrariesIndividually', defaults.showLibrariesIndividually);
 
@@ -12189,6 +12334,12 @@
                         config.LiveTvDetectIncompleteRecordings = document.querySelector('#LiveTvDetectIncompleteRecordings').checked;
                         config.SmartSearchEnabled = document.querySelector('#SmartSearchEnabled').checked;
                         config.SmartSearchModel = document.querySelector('#SmartSearchModel').value || 'english';
+                        config.WatchPartiesEnabled = document.querySelector('#WatchPartiesEnabled').checked;
+                        config.WatchPartyEveryoneControl = document.querySelector('#WatchPartyEveryoneControl').checked;
+                        config.WatchPartyChat = document.querySelector('#WatchPartyChat').checked;
+                        config.WatchPartyReactions = document.querySelector('#WatchPartyReactions').checked;
+                        config.WatchPartyAlerts = document.querySelector('#WatchPartyAlerts').checked;
+                        config.WatchPartyMaxMembers = wholeNumberIn(document.querySelector('#WatchPartyMaxMembers').value, 2, 100, 20);
                         config.LiveTvAutoRecordCompleteShowing = document.querySelector('#LiveTvAutoRecordCompleteShowing').checked;
                         config.LiveTvIncompleteThresholdPercent = Math.min(100, Math.max(50, parseInt(document.querySelector('#LiveTvIncompleteThresholdPercent').value, 10) || 90));
                         config.LiveTvDeleteIncompleteCopies = document.querySelector('#LiveTvDeleteIncompleteCopies').checked;
@@ -12496,6 +12647,9 @@
                     ds.showFavoritesButton = getNullableBoolSelect('#DefaultShowFavoritesButton');
                     ds.showSyncPlayButton = getNullableBoolSelect('#DefaultShowSyncPlayButton');
                     ds.syncPlayEnabled = getNullableBoolSelect('#DefaultSyncPlayEnabled');
+                    ds.watchPartyService = document.querySelector('#DefaultWatchPartyService').value || null;
+                    ds.watchPartyChatOverlay = getNullableBoolSelect('#DefaultWatchPartyChatOverlay');
+                    ds.watchPartyAlerts = getNullableBoolSelect('#DefaultWatchPartyAlerts');
                     ds.showLibrariesInToolbar = getNullableBoolSelect('#DefaultShowLibrariesInToolbar');
                     ds.showLibrariesIndividually = getNullableBoolSelect('#DefaultShowLibrariesIndividually');
                     ds.mdblistEnabled = getNullableBoolSelect('#DefaultMdblistEnabled');
@@ -13304,6 +13458,22 @@
                         startSyncsPolling();
                     } else {
                         stopSyncsPolling();
+                    }
+                });
+            }
+
+            var watchPartyNav = document.querySelector('.moonfinNavItem[data-tab="watchParties"]');
+            if (watchPartyNav) {
+                watchPartyNav.addEventListener('click', loadWatchPartyRooms);
+                document.querySelector('#WatchPartyRoomsRefresh').addEventListener('click', loadWatchPartyRooms);
+                document.querySelector('#WatchPartyRoomsList').addEventListener('click', function(e) {
+                    var close = e.target.closest('[data-wp-close]');
+                    var remove = e.target.closest('[data-wp-remove]');
+                    if (close && confirm('Close this room for everyone in it?')) {
+                        watchPartyAdminCall('POST', 'Rooms/' + encodeURIComponent(close.getAttribute('data-wp-close')) + '/Close').then(loadWatchPartyRooms, loadWatchPartyRooms);
+                    } else if (remove) {
+                        watchPartyAdminCall('POST', 'Rooms/' + encodeURIComponent(remove.getAttribute('data-wp-room')) + '/Remove', { member_id: remove.getAttribute('data-wp-remove') })
+                            .then(loadWatchPartyRooms, loadWatchPartyRooms);
                     }
                 });
             }

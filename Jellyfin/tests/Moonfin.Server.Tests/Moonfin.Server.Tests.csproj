@@ -44,6 +44,7 @@
     <Compile Include="../../../shared/Romm.Tests/*.cs" Link="Romm/%(Filename)%(Extension)" />
     <Compile Include="../../../shared/Games.Tests/*.cs" Link="Games/%(Filename)%(Extension)" />
     <Compile Include="../../../shared/PosterBadges.Tests/*.cs" Link="PosterBadges/%(Filename)%(Extension)" />
+    <Compile Include="../../../shared/WatchParty.Tests/*.cs" Link="WatchParty/%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

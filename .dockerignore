@@ -3,6 +3,8 @@
 !Go/
 !shared/SmartSearch/
 !shared/PosterBadges/flags/
+!shared/WatchParty/invite.html
+!shared/WatchParty/preview.png
 Go/dist/
 Go/smartsearch/bin/
 Go/smartsearch/obj/

@@ -20,5 +20,7 @@ func Defaults() map[string]any {
 		"GamesLaunchBoxEnabled":  true, "GamesLaunchBoxUrl": "https://gamesdb.launchbox-app.com/Metadata.zip",
 		"SmartSearchEnabled": false, "SmartSearchModel": "english",
 		"CalendarDaysBack": 14, "CalendarDaysAhead": 90, "CalendarAdminsOnly": false, "CalendarCacheMinutes": 5,
+		"WatchPartiesEnabled": true, "WatchPartyChat": true, "WatchPartyReactions": true, "WatchPartyAlerts": true,
+		"WatchPartyEveryoneControl": true, "WatchPartyMaxMembers": 20,
 	}
 }

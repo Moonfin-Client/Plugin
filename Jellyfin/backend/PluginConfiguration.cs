@@ -150,6 +150,21 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public bool LiveTvDeleteIncompleteCopies { get; set; }
 
+    /// <summary>Watch parties that Moonbase hosts. Rooms live in memory and chat is never written down.</summary>
+    public bool WatchPartiesEnabled { get; set; } = true;
+
+    public bool WatchPartyChat { get; set; } = true;
+
+    public bool WatchPartyReactions { get; set; } = true;
+
+    /// <summary>Lets users who opted in get a push when someone starts a party they can watch.</summary>
+    public bool WatchPartyAlerts { get; set; } = true;
+
+    /// <summary>Whether hosts may turn on "Everyone can control playback".</summary>
+    public bool WatchPartyEveryoneControl { get; set; } = true;
+
+    public int WatchPartyMaxMembers { get; set; } = 20;
+
     // ---------------------------------------------------------------------
     // Anime filler, canon and recap markers
     // ---------------------------------------------------------------------

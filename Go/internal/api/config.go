@@ -8,6 +8,7 @@ import (
 
 	"github.com/Moonfin-Client/Plugin/Go/internal/pluginconfig"
 	"github.com/Moonfin-Client/Plugin/Go/internal/settings"
+	"github.com/Moonfin-Client/Plugin/Go/internal/watchparty"
 )
 
 // Config is what the routes need from the plugin configuration.
@@ -30,6 +31,8 @@ type Config struct {
 	CalendarCacheMinutes int
 	CalendarAdminsOnly   bool
 	Sonarr, Radarr       arrServer
+	// WatchParty is the Watch Parties tab. Only the Plex companion hosts parties.
+	WatchParty watchparty.Settings
 }
 
 // DefaultsFor is the admin's defaults for one profile.
@@ -113,7 +116,22 @@ func configFrom(c M) Config {
 	cfg.CalendarAdminsOnly, _ = c["CalendarAdminsOnly"].(bool)
 	cfg.Sonarr = arrServerFrom(c, "Sonarr")
 	cfg.Radarr = arrServerFrom(c, "Radarr")
+	cfg.WatchParty = watchparty.DefaultSettings()
+	for key, dst := range map[string]*bool{
+		"WatchPartiesEnabled": &cfg.WatchParty.Enabled, "WatchPartyChat": &cfg.WatchParty.Chat,
+		"WatchPartyReactions": &cfg.WatchParty.Reactions, "WatchPartyAlerts": &cfg.WatchParty.Alerts,
+		"WatchPartyEveryoneControl": &cfg.WatchParty.EveryoneControl,
+	} {
+		if v, ok := c[key].(bool); ok {
+			*dst = v
+		}
+	}
+	cfg.WatchParty.MaxMembers = wholeNumber(c["WatchPartyMaxMembers"], cfg.WatchParty.MaxMembers)
 	return cfg
+}
+
+func (s *Server) WatchPartySettings(ctx context.Context) watchparty.Settings {
+	return s.config(ctx).WatchParty
 }
 
 // wholeNumber reads a number of at least 0 the page saved, or def when there is none.

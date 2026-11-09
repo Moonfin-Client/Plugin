@@ -41,6 +41,9 @@ type Config struct {
 	SmartSearchHelper string
 	// FlagsDir holds the poster label flags. Empty serves none.
 	FlagsDir string
+	// WatchPartyDir holds the watch party invite page and its preview image
+	// from shared/WatchParty.
+	WatchPartyDir string
 }
 
 // How long a checked token is trusted before Plex is asked again.
@@ -56,6 +59,8 @@ type Companion struct {
 	known     map[[32]byte]known
 	machineID string
 	owner     string
+
+	party *partyState
 }
 
 type known struct {
@@ -89,6 +94,7 @@ func New(cfg Config) (*Companion, error) {
 		SmartSearch: helper,
 		FlagsDir:    cfg.FlagsDir,
 	})
+	c.startWatchParties()
 	return c, nil
 }
 
@@ -112,7 +118,7 @@ func (c *Companion) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// token header, never a cookie, so any origin may call.
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Plex-Token")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Plex-Token, X-Plex-Client-Identifier, X-Moonfin-Room-Token")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
 			w.Header().Set("Access-Control-Max-Age", "600")
 			w.WriteHeader(http.StatusNoContent)
@@ -134,6 +140,9 @@ func (c *Companion) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/admin/signin", http.StatusFound)
 			return
 		}
+	}
+	if c.serveWatchParty(w, r) {
+		return
 	}
 	c.api.ServeHTTP(w, r)
 }

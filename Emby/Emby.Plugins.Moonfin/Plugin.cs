@@ -18,6 +18,7 @@ using Moonfin.Calendar;
 using Moonfin.MiniGames;
 using Moonfin.Pin;
 using Moonfin.Romm;
+using Moonfin.WatchParty;
 
 namespace Emby.Plugins.Moonfin
 {
@@ -68,6 +69,7 @@ namespace Emby.Plugins.Moonfin
         public MiniGameScoreService? MiniGames { get; private set; }
         public SmartSearchIndexService? SmartSearch { get; private set; }
         public CalendarReminderStore? CalendarReminders { get; private set; }
+        public WatchPartyEngine? WatchParty { get; private set; }
 
         public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogManager logManager)
             : base(applicationPaths, xmlSerializer)
@@ -222,6 +224,10 @@ namespace Emby.Plugins.Moonfin
             MiniGames = new MiniGameScoreService(new FileMiniGameScoreStore(Path.Combine(DataFolderPath, "minigames"), new EmbyStateFile()));
             SmartSearch = new SmartSearchIndexService(appHost.Resolve<ILibraryManager>(), DataFolderPath, logManager.GetLogger("MoonfinSmartSearch"));
             CalendarReminders = new CalendarReminderStore(Path.Combine(DataFolderPath, "calendar-reminders"), new EmbyStateFile());
+            WatchParty = new WatchPartyEngine(
+                new WatchPartyHost(appHost.Resolve<ILibraryManager>(), appHost.Resolve<IUserManager>(), SettingsService, PushDelivery, logManager.GetLogger("MoonfinWatchParty")),
+                WatchPartyHost.Settings);
+            WatchParty.StartTimer();
 
             // Ensure a webhook secret exists before provisioning tries to publish it.
             if (Configuration.EnsureWebhookSecret())

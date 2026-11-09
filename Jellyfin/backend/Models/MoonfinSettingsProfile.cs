@@ -826,6 +826,18 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("syncPlayExtraTimeOffset")]
     public double? SyncPlayExtraTimeOffset { get; set; }
 
+    // Watch Parties. syncPlayEnabled above is their master toggle.
+
+    /// <summary>What a Jellyfin user starts: "moonbase" or "syncplay".</summary>
+    [JsonPropertyName("watchPartyService")]
+    public string? WatchPartyService { get; set; }
+
+    [JsonPropertyName("watchPartyChatOverlay")]
+    public bool? WatchPartyChatOverlay { get; set; }
+
+    [JsonPropertyName("watchPartyAlerts")]
+    public bool? WatchPartyAlerts { get; set; }
+
     // Downloads. Paths and concurrency stay device local, the behaviour toggles sync.
 
     [JsonPropertyName("defaultDownloadQuality")]

@@ -25,9 +25,11 @@
                 'Live TV Recordings',
                 'Web Plugin Status',
                 'Active Downloads',
-                'Calendar'
+                'Calendar',
+                'Watch Parties',
+                'Live rooms'
             ],
-            hiddenFields: ['DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
                 'DefaultShowCalendarButton', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll'],
             unsupported: {
                 'IMDb Charts': 'Not supported on Silo yet: Silo doesn’t let plugins read its library, which the charts are matched against. These settings do nothing on Silo for now.',
@@ -50,7 +52,7 @@
             sessionEnded: 'You’re signed out of Moonbase. Sign in again with your Plex account. Changes you tried to save are kept and come back when you do.',
             signInUrl: 'admin/signin',
             hidden: [],
-            hiddenFields: [],
+            hiddenFields: ['DefaultWatchPartyService'],
             unsupported: {
                 'Connecting to this server': 'Moonbase for Plex doesn’t host Moonfin web, so these settings do nothing on Plex.',
                 'Seerr Integration': 'The Seerr proxy isn’t part of Moonbase for Plex. These settings do nothing on Plex.',

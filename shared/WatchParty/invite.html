@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Join a watch party</title>
+<meta property="og:title" content="Join a watch party">
+<meta property="og:description" content="Open in Moonfin to join. Room code {{shown}}.">
+<meta property="og:image" content="{{image}}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:site_name" content="Moonfin">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Join a watch party">
+<meta name="twitter:description" content="Open in Moonfin to join. Room code {{shown}}.">
+<meta name="twitter:image" content="{{image}}">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101010;color:#fff;font-family:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:#33b7e4;text-decoration:none}
+main{max-width:560px;margin:0 auto;padding:28px 20px 40px;display:flex;flex-direction:column;gap:22px}
+.brand{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:700}
+.brand svg{width:34px;height:34px}
+.host{margin-left:auto;font-size:13px;font-weight:400;color:#a8a8a8}
+h1{margin:0;font-size:28px;font-weight:700;line-height:1.2}
+p{margin:0;font-size:15px;color:#bdbdbd;line-height:1.5}
+b{color:#fff;font-weight:500}
+.open{height:52px;border-radius:12px;background:#007ba6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500}
+.open:hover{background:#0090c2;color:#fff}
+.code{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:#1a1a1a}
+.code span{flex:1}
+.code small{display:block;font-size:12px;color:#a8a8a8}
+.code strong{display:block;font-size:26px;font-weight:700;letter-spacing:.14em;margin-top:2px}
+button{font:inherit;height:38px;padding:0 14px;border-radius:8px;background:#2a2a2a;color:#fff;border:0;font-size:14px;font-weight:500;cursor:pointer}
+.hint{margin-top:-6px;font-size:13px;color:#a8a8a8}
+.new{border-top:1px solid #222;padding-top:20px;display:flex;flex-direction:column;gap:16px}
+h2{margin:0;font-size:17px;font-weight:500}
+.step{display:flex;gap:14px;align-items:flex-start;font-size:15px;line-height:1.45}
+.n{width:28px;height:28px;border-radius:50%;background:#2a2a2a;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none}
+.step>span:last-child{padding-top:4px;display:flex;flex-direction:column;gap:10px}
+.stores{display:flex;gap:8px;flex-wrap:wrap}
+.store{height:42px;padding:0 14px;border-radius:10px;background:#1e1e1e;border:1px solid #333;display:inline-flex;align-items:center;font-size:14px;font-weight:500;color:#fff}
+@media (min-width:700px){main{padding-top:64px}h1{font-size:34px}}
+</style>
+</head>
+<body>
+<main>
+<div class="brand">
+<svg viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="302.974" y1="208.6414" x2="709.6098" y2="615.2772"><stop offset="0.1" stop-color="#AA5CC3"/><stop offset="0.3988" stop-color="#7672CB"/><stop offset="0.8944" stop-color="#00A4DC"/></linearGradient></defs><path fill="url(#g)" d="M580.593,137.312c0.236,1.437-1.764,1.397-2.792,1.682c-9.692,2.687-20.11,4.17-29.967,7.043c-121.791,35.504-202.149,150.49-179.921,278.449c12.427,71.54,55.048,119.207,132.449,97.079c88.146-25.199,99.429-101.063,147.839-164.161c20.295-26.453,44.824-49.573,71.482-69.518c4.092-3.062,44.959-31.555,46.91-29.58c-4.974,18.877-12.625,36.926-17.711,55.778c-17.376,64.396-23.167,162.393,67.715,164.225l-10.013,39.99c-16.446-7.617-33.575-13.262-51.63-15.857c-31.725-4.561-68.255-0.546-99.549,6.166c-81.083,17.391-149.924,71.416-231.798,89.202c-65.253,14.176-171.515,7.963-199.029-64.993c-32.857-87.123-17.129-196.894,34.796-273.239C329.708,156.173,458.551,108.174,580.593,137.312z"/><path fill="#00A4DC" d="M796.599,546.311c-8.783,22.644-20.315,44.297-34.604,63.909c-16.913-7.035-35.708-8.954-53.939-7.959c-101.271,5.523-183.793,95.852-288.454,89.052l14.808,4.677c94.845,28.604,181.214-45.296,270.697-49.677c3.07-0.15,25.483-0.402,25.47,2.49c-42.221,42.774-97.662,73.834-156.791,86.189c-120.75,25.23-242.358-26.603-312.177-126.206l0.484-1.478c25.284,19.74,57.578,33.429,89.297,38.703c134.365,22.345,209.318-77.749,329.022-102.394C719.682,535.531,757.934,534.758,796.599,546.311z"/></svg>
+Moonfin<span class="host">{{host}}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<h1>You're invited to a watch party</h1>
+<p>Someone on <b>{{name}}</b> wants to watch with you. You'll need your account on this server to join.</p>
+</div>
+<a class="open" href="{{link}}">Open in Moonfin</a>
+<div class="code">
+<span><small>Room code</small><strong>{{shown}}</strong></span>
+<button type="button" id="copy" data-code="{{code}}">Copy</button>
+</div>
+<p class="hint">Nothing happened? Open Moonfin, go to Watch Parties and enter the code. On a TV, do the same with the remote.</p>
+<div class="new">
+<h2>New to Moonfin?</h2>
+<div class="step"><span class="n">1</span><span>Install Moonfin<span class="stores"><a class="store" href="https://play.google.com/store/apps/details?id=org.moonfin.androidtv">Google Play</a><a class="store" href="https://apps.apple.com/app/moonfin/id6761283970">App Store</a><a class="store" href="https://moonfin.io">Other devices</a></span></span></div>
+<div class="step"><span class="n">2</span><span>Add this server, <b>{{host}}</b>, and sign in with your account</span></div>
+<div class="step"><span class="n">3</span><span>Come back here and tap Open in Moonfin</span></div>
+</div>
+</main>
+<script>
+document.getElementById('copy').addEventListener('click', function () {
+  var button = this;
+  var code = button.getAttribute('data-code');
+  var done = function () { button.textContent = 'Copied'; setTimeout(function () { button.textContent = 'Copy'; }, 2000); };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(code).then(done, function () {});
+    return;
+  }
+  var field = document.createElement('textarea');
+  field.value = code;
+  document.body.appendChild(field);
+  field.select();
+  try { document.execCommand('copy'); done(); } catch (e) {}
+  document.body.removeChild(field);
+});
+</script>
+</body>
+</html>

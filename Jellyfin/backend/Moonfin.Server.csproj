@@ -67,6 +67,9 @@
     <Compile Include="../../shared/Games/*.cs" Link="Games/%(Filename)%(Extension)" />
     <Compile Include="../../shared/SmartSearch/*.cs" Link="SmartSearch/%(Filename)%(Extension)" />
     <Compile Include="../../shared/PosterBadges/*.cs" Link="PosterBadges/%(Filename)%(Extension)" />
+    <Compile Include="../../shared/WatchParty/*.cs" Link="WatchParty/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../shared/WatchParty/preview.png" LogicalName="Moonfin.WatchParty.preview.png" />
+    <EmbeddedResource Include="../../shared/WatchParty/invite.html" LogicalName="Moonfin.WatchParty.invite.html" />
     <EmbeddedResource Include="../../shared/Seasonal/seasonal-holidays.json" LogicalName="Moonfin.Seasonal.holidays.json" />
   </ItemGroup>
 

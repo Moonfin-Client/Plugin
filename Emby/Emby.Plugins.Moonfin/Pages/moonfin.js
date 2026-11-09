@@ -364,6 +364,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             try { window.localStorage.setItem('moonfinAdminActiveTab', tabId); } catch (e) {}
 
             if (tabId === 'syncs') { startSyncsPolling(); } else { stopSyncsPolling(); }
+            if (tabId === 'watchParties') { loadWatchPartyRooms(view); }
         }
 
         // Active Downloads tab: polls the transcodes endpoint every few seconds while the tab is
@@ -555,7 +556,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
     // has to come after the rule that hides its parent.
     var FIELD_DEPENDENCIES = [
-        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
+        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
         { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
         { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
         { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
@@ -563,6 +564,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
         { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
         { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
+        { parent: 'WatchPartiesEnabled', fields: ['WatchPartyEveryoneControl', 'WatchPartyChat', 'WatchPartyReactions', 'WatchPartyAlerts', 'WatchPartyMaxMembers'] },
         { parent: 'AnimeMarkersEnabled', fields: ['AnimeMarkerRecapLookup', 'AnimeMarkerShowFiller', 'AnimeMarkerMaxAgeDays'] },
         { parent: 'AnimeAudioMarkersEnabled', fields: ['AnimeAudioMarkersMovies', 'AnimeAudioSeparateDualAudio', 'AnimeAudioLabelStyle'] },
         { parent: ['AnimeMarkersEnabled', 'AnimeAudioMarkersEnabled'], fields: ['AnimeMarkerLibraryPicker', 'AnimeAudioTrustSelectedLibraries', 'AnimeMarkerPlacement', 'AnimeMarkerDiagBtn', 'AnimeMarkerPreviewName', 'AnimeMarkerVerboseLogging', 'AnimeMarkerLogBtn'] },
@@ -2781,6 +2783,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#LiveTvDetectIncompleteRecordings').checked = config.LiveTvDetectIncompleteRecordings !== false;
             view.querySelector('#SmartSearchEnabled').checked = config.SmartSearchEnabled === true;
             view.querySelector('#SmartSearchModel').value = config.SmartSearchModel || 'english';
+            view.querySelector('#WatchPartiesEnabled').checked = config.WatchPartiesEnabled !== false;
+            view.querySelector('#WatchPartyEveryoneControl').checked = config.WatchPartyEveryoneControl !== false;
+            view.querySelector('#WatchPartyChat').checked = config.WatchPartyChat !== false;
+            view.querySelector('#WatchPartyReactions').checked = config.WatchPartyReactions !== false;
+            view.querySelector('#WatchPartyAlerts').checked = config.WatchPartyAlerts !== false;
+            view.querySelector('#WatchPartyMaxMembers').value = config.WatchPartyMaxMembers || 20;
             view.querySelector('#LiveTvAutoRecordCompleteShowing').checked = config.LiveTvAutoRecordCompleteShowing === true;
             view.querySelector('#LiveTvIncompleteThresholdPercent').value = config.LiveTvIncompleteThresholdPercent || 90;
             view.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
@@ -2992,6 +3000,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultShowLibrariesIndividually', defaults.showLibrariesIndividually);
         setNullableBoolSelect(view, '#DefaultShowSyncPlayButton', defaults.showSyncPlayButton);
         setNullableBoolSelect(view, '#DefaultSyncPlayEnabled', defaults.syncPlayEnabled);
+        setNullableBoolSelect(view, '#DefaultWatchPartyChatOverlay', defaults.watchPartyChatOverlay);
+        setNullableBoolSelect(view, '#DefaultWatchPartyAlerts', defaults.watchPartyAlerts);
 
         setNullableBoolSelect(view, '#DefaultMdblistEnabled', defaults.mdblistEnabled);
         setNullableBoolSelect(view, '#DefaultTmdbEpisodeRatingsEnabled', defaults.tmdbEpisodeRatingsEnabled);
@@ -3200,6 +3210,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.LiveTvDetectIncompleteRecordings = view.querySelector('#LiveTvDetectIncompleteRecordings').checked;
             config.SmartSearchEnabled = view.querySelector('#SmartSearchEnabled').checked;
             config.SmartSearchModel = view.querySelector('#SmartSearchModel').value || 'english';
+            config.WatchPartiesEnabled = view.querySelector('#WatchPartiesEnabled').checked;
+            config.WatchPartyEveryoneControl = view.querySelector('#WatchPartyEveryoneControl').checked;
+            config.WatchPartyChat = view.querySelector('#WatchPartyChat').checked;
+            config.WatchPartyReactions = view.querySelector('#WatchPartyReactions').checked;
+            config.WatchPartyAlerts = view.querySelector('#WatchPartyAlerts').checked;
+            config.WatchPartyMaxMembers = wholeNumberIn(view.querySelector('#WatchPartyMaxMembers').value, 2, 100, 20);
             config.LiveTvAutoRecordCompleteShowing = view.querySelector('#LiveTvAutoRecordCompleteShowing').checked;
             config.LiveTvIncompleteThresholdPercent = Math.min(100, Math.max(50, parseInt(view.querySelector('#LiveTvIncompleteThresholdPercent').value, 10) || 90));
             config.LiveTvDeleteIncompleteCopies = view.querySelector('#LiveTvDeleteIncompleteCopies').checked;
@@ -3444,6 +3460,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.showLibrariesIndividually = getNullableBoolSelect(view, '#DefaultShowLibrariesIndividually');
         d.showSyncPlayButton = getNullableBoolSelect(view, '#DefaultShowSyncPlayButton');
         d.syncPlayEnabled = getNullableBoolSelect(view, '#DefaultSyncPlayEnabled');
+        d.watchPartyChatOverlay = getNullableBoolSelect(view, '#DefaultWatchPartyChatOverlay');
+        d.watchPartyAlerts = getNullableBoolSelect(view, '#DefaultWatchPartyAlerts');
 
         d.mdblistEnabled = getNullableBoolSelect(view, '#DefaultMdblistEnabled');
         d.tmdbEpisodeRatingsEnabled = getNullableBoolSelect(view, '#DefaultTmdbEpisodeRatingsEnabled');
@@ -5520,6 +5538,70 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
     }
 
+    var WATCH_PARTY_STATES = { waiting: 'Starting', paused: 'Paused', playing: 'Playing' };
+
+    function loadWatchPartyRooms(view) {
+        var list = view.querySelector('#WatchPartyRoomsList');
+        var summary = view.querySelector('#WatchPartyRoomsSummary');
+        if (!list) return;
+
+        var serverUrl = ApiClient.serverAddress ? ApiClient.serverAddress() : '';
+        function call(method, path, body) {
+            return fetch(serverUrl + '/Moonfin/Admin/WatchParty/' + path, {
+                method: method,
+                headers: moonfinAuthHeaders(),
+                body: body ? JSON.stringify(body) : undefined
+            }).then(parseJsonResponse);
+        }
+
+        function reload() { loadWatchPartyRooms(view); }
+
+        if (list.dataset.bound !== 'true') {
+            list.dataset.bound = 'true';
+            view.querySelector('#WatchPartyRoomsRefresh').addEventListener('click', reload);
+            list.addEventListener('click', function (e) {
+                var close = e.target.closest('[data-wp-close]');
+                var remove = e.target.closest('[data-wp-remove]');
+                if (close && confirm('Close this room for everyone in it?')) {
+                    call('POST', 'Rooms/' + encodeURIComponent(close.getAttribute('data-wp-close')) + '/Close').then(reload, reload);
+                } else if (remove) {
+                    call('POST', 'Rooms/' + encodeURIComponent(remove.getAttribute('data-wp-room')) + '/Remove', { member_id: remove.getAttribute('data-wp-remove') }).then(reload, reload);
+                }
+            });
+        }
+
+        call('GET', 'Rooms').then(function (data) {
+            var rooms = (data && data.rooms) || [];
+            summary.textContent = rooms.length === 0
+                ? 'No rooms are open.'
+                : (rooms.length === 1 ? '1 open' : rooms.length + ' open');
+            list.innerHTML = rooms.map(function (room) {
+                var status = room.phase === 'playing' ? (WATCH_PARTY_STATES[room.playback_state] || 'Playing') : 'In the lobby';
+                var started = new Date(room.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                var people = room.members.length === 1 ? '1 person' : room.members.length + ' people';
+                var members = room.members.map(function (member) {
+                    var action = member.is_host
+                        ? '<span class="fieldDescription">Host</span>'
+                        : '<button is="emby-button" type="button" class="raised" data-wp-remove="' + esc(member.member_id) + '" data-wp-room="' + esc(room.room_id) + '"><span>Remove</span></button>';
+                    return '<div style="display:flex;align-items:center;gap:0.8em;padding:0.3em 0;">'
+                        + '<span style="flex:1;">' + esc(member.display_name) + (member.connected ? '' : ' <span class="fieldDescription">(away)</span>') + '</span>'
+                        + action + '</div>';
+                }).join('');
+                return '<div style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:0.8em;margin-bottom:0.6em;">'
+                    + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.8em;">'
+                    + '<strong style="flex:1;min-width:12em;">' + esc(room.content_label || 'Nothing picked yet') + '</strong>'
+                    + '<span>' + esc(room.host_name) + ' hosts · ' + people + ' · since ' + esc(started) + '</span>'
+                    + '<span>' + status + (room.has_pin ? ' · PIN' : '') + '</span>'
+                    + '<button is="emby-button" type="button" class="raised" data-wp-close="' + esc(room.room_id) + '"><span>Close room</span></button>'
+                    + '</div>'
+                    + '<details style="margin-top:0.5em;"><summary>People</summary>' + members + '</details>'
+                    + '</div>';
+            }).join('');
+        }, function () {
+            summary.textContent = "Couldn't load the rooms.";
+        });
+    }
+
     function loadAdminPins(view) {
         var list = view.querySelector('#AdminPinList');
         if (!list) return;
@@ -6710,6 +6792,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             loadMessagesList(view);
         });
         loadAdminPins(view);
+        loadWatchPartyRooms(view);
         updateDownloadsTabVisibility(view);
         loadConfig(view);
         loadActionUsers(view);

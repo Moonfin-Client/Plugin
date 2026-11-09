@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -17,6 +18,9 @@ import (
 type fakePlex struct {
 	pms, tv  *httptest.Server
 	approved string // the token plex.tv hands back for the sign-in PIN
+	// metadataCalls counts item lookups. Item 100 is a movie everyone can
+	// play, item 200 an episode only the owner can.
+	metadataCalls atomic.Int32
 }
 
 func newFakePlex(t *testing.T) *fakePlex {
@@ -41,6 +45,24 @@ func newFakePlex(t *testing.T) *fakePlex {
 				return
 			}
 			io.WriteString(w, `{"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie"},{"key":"2","title":"TV","type":"show"}]}}`)
+		case "/library/metadata/100", "/library/metadata/200":
+			f.metadataCalls.Add(1)
+			switch {
+			case token != "owner" && token != "member" && token != "managed":
+				w.WriteHeader(http.StatusUnauthorized)
+			case r.URL.Path == "/library/metadata/100":
+				io.WriteString(w, `{"MediaContainer":{"Metadata":[{"ratingKey":"100","type":"movie","title":"Avatar","year":2022,"duration":192000}]}}`)
+			case token == "owner":
+				io.WriteString(w, `{"MediaContainer":{"Metadata":[{"ratingKey":"200","type":"episode","title":"Pilot","grandparentTitle":"Arcane","parentIndex":2,"index":1}]}}`)
+			default:
+				w.WriteHeader(http.StatusForbidden)
+			}
+		case "/":
+			if token != "owner" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			io.WriteString(w, `{"MediaContainer":{"friendlyName":"Lakeside"}}`)
 		default:
 			http.NotFound(w, r)
 		}

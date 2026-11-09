@@ -10,6 +10,7 @@ using Moonfin.MiniGames;
 using Moonfin.Pin;
 using Moonfin.Romm;
 using Moonfin.Server.Services;
+using Moonfin.WatchParty;
 
 namespace Moonfin.Server;
 
@@ -99,6 +100,13 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<LaunchBoxService>();
         serviceCollection.AddSingleton<UserBookmarksService>();
         serviceCollection.AddSingleton<SmartSearchService>();
+        serviceCollection.AddSingleton<WatchPartyHost>();
+        serviceCollection.AddSingleton(provider =>
+        {
+            var engine = new WatchPartyEngine(provider.GetRequiredService<WatchPartyHost>(), WatchPartyHost.Settings);
+            engine.StartTimer();
+            return engine;
+        });
         serviceCollection.AddHttpClient();
 
         // The custom row scrapes need a browser user agent to get a normal page back, and a

@@ -288,6 +288,11 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("syncPlayMinDelaySkipToSync")] public double? SyncPlayMinDelaySkipToSync { get; set; }
         [JsonPropertyName("syncPlayExtraTimeOffset")] public double? SyncPlayExtraTimeOffset { get; set; }
 
+        // Watch Parties. syncPlayEnabled above is their master toggle. watchPartyService only means something on Jellyfin.
+        [JsonPropertyName("watchPartyService")] public string? WatchPartyService { get; set; }
+        [JsonPropertyName("watchPartyChatOverlay")] public bool? WatchPartyChatOverlay { get; set; }
+        [JsonPropertyName("watchPartyAlerts")] public bool? WatchPartyAlerts { get; set; }
+
         // Downloads. Paths and concurrency stay device local, the behaviour toggles sync.
         [JsonPropertyName("defaultDownloadQuality")] public string? DefaultDownloadQuality { get; set; }
         [JsonPropertyName("downloadWifiOnly")] public bool? DownloadWifiOnly { get; set; }

@@ -21,7 +21,8 @@ func main() {
 		slog.Error("Set PLEX_URL to your Plex server's address, for example http://192.168.1.10:32400")
 		os.Exit(2)
 	}
-	c, err := plex.New(plex.Config{PMS: pms, DataDir: envOr("MOONBASE_DATA", "/config"), Version: version, SmartSearchHelper: smartSearchHelper(), FlagsDir: besideProgram("MOONBASE_FLAGS", "flags")})
+	c, err := plex.New(plex.Config{PMS: pms, DataDir: envOr("MOONBASE_DATA", "/config"), Version: version, SmartSearchHelper: smartSearchHelper(), FlagsDir: besideProgram("MOONBASE_FLAGS", "flags"),
+		WatchPartyDir: besideProgram("MOONBASE_WATCHPARTY", "watchparty")})
 	if err != nil {
 		slog.Error("start Moonbase", "error", err)
 		os.Exit(1)
