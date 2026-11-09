@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using MediaBrowser.Common;
 using MediaBrowser.Controller.Entities;
@@ -71,9 +72,10 @@ namespace Emby.Plugins.Moonfin.Api
                 var userData = udm.GetUserData(user, item);
                 if (userData?.Rating == null) continue;
 
+                // Emby clients address items by internal id, so that is the key they match ratings on.
                 items.Add(new
                 {
-                    ItemId = item.Id.ToString("N"),
+                    ItemId = item.InternalId.ToString(CultureInfo.InvariantCulture),
                     Rating = userData.Rating,
                     Likes = userData.Rating >= LikedRatingThreshold
                 });
@@ -115,12 +117,20 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(503, new { Error = "The library is not ready yet." });
             }
 
-            if (!Guid.TryParse(itemId, out var guid))
+            BaseItem? item;
+            if (long.TryParse(itemId, NumberStyles.None, CultureInfo.InvariantCulture, out var internalId))
+            {
+                item = internalId > 0 ? lm.GetItemById(internalId) : null;
+            }
+            else if (Guid.TryParse(itemId, out var guid))
+            {
+                item = lm.GetItemById(guid);
+            }
+            else
             {
                 return Json(400, new { Error = "That is not an item id." });
             }
 
-            var item = lm.GetItemById(guid);
             if (item == null || !item.IsVisible(user))
             {
                 return Json(404, new { Error = "No such item." });
@@ -137,7 +147,7 @@ namespace Emby.Plugins.Moonfin.Api
 
             return Json(new
             {
-                ItemId = item.Id.ToString("N"),
+                ItemId = item.InternalId.ToString(CultureInfo.InvariantCulture),
                 Rating = rating,
                 // A cleared rating is neither liked nor disliked, so the thumb
                 // goes back null rather than reading as a dislike.
