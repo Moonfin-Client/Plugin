@@ -28,7 +28,15 @@ public sealed class LocalItemIdServiceTests : IDisposable
         {
             _queries.Add(query);
             var kind = query.IncludeItemTypes.Single();
-            return _libraryItems.Where(item => (kind == BaseItemKind.Series) == item is Series).ToList();
+            // Behaves like Jellyfin 10.10: only the first provider is read, and its value is
+            // matched as a substring of the item's provider ids.
+            var (key, value) = query.HasAnyProviderId!.First();
+            var limit = query.Limit ?? int.MaxValue;
+            return _libraryItems
+                .Where(item => (kind == BaseItemKind.Series) == item is Series)
+                .Where(item => string.Join('|', item.ProviderIds.Select(p => p.Key + "=" + p.Value)).Contains(key + "=" + value, StringComparison.OrdinalIgnoreCase))
+                .Take(limit)
+                .ToList();
         };
         _library.ItemByIdHandler = id => _libraryItems.FirstOrDefault(item => item.Id == id);
         _customRows = new CustomRowCacheService(NullLogger<CustomRowCacheService>.Instance, _dataPath);
@@ -74,9 +82,9 @@ public sealed class LocalItemIdServiceTests : IDisposable
     }
 
     [Fact]
-    public void ResolveAsksForTheEntrysKindAndAllItsIds()
+    public void ResolveAsksOneProviderAtATimeBestFirst()
     {
-        var show = AddSeries(tmdb: "1399", tvdb: "121361");
+        var show = AddSeries(tvdb: "121361");
         var item = new CustomRowItem
         {
             Type = "Series",
@@ -85,13 +93,53 @@ public sealed class LocalItemIdServiceTests : IDisposable
 
         _service.Resolve([item]);
 
-        var query = Assert.Single(_queries);
-        Assert.Equal([BaseItemKind.Series], query.IncludeItemTypes);
-        Assert.False(query.IsVirtualItem);
-        Assert.Equal("1399", query.HasAnyProviderId["Tmdb"]);
-        Assert.Equal("tt0944947", query.HasAnyProviderId["Imdb"]);
-        Assert.Equal("121361", query.HasAnyProviderId["Tvdb"]);
+        Assert.Equal(["Tmdb", "Imdb", "Tvdb"], _queries.Select(q => Assert.Single(q.HasAnyProviderId!).Key));
+        Assert.All(_queries, query =>
+        {
+            Assert.Equal([BaseItemKind.Series], query.IncludeItemTypes);
+            Assert.False(query.IsVirtualItem);
+        });
         Assert.Equal(show.Id.ToString("N"), item.LocalItemId);
+    }
+
+    [Fact]
+    public void ResolveFindsATitleTheLibraryKnowsOnlyByALaterProvider()
+    {
+        // Jellyfin 10.10 reads only the first provider of a query, so the IMDb id needs its own.
+        var movie = AddMovie(imdb: "tt0133093");
+        var item = ListMovie(tmdb: "603", imdb: "tt0133093");
+
+        _service.Resolve([item]);
+
+        Assert.Equal(movie.Id.ToString("N"), item.LocalItemId);
+    }
+
+    [Fact]
+    public void ResolveFindsTheExactMatchBehindManyLooseOnes()
+    {
+        for (var i = 0; i < 30; i++)
+        {
+            AddMovie(tmdb: "603" + i);
+        }
+
+        var exact = AddMovie(tmdb: "603");
+        var item = ListMovie(tmdb: "603");
+
+        _service.Resolve([item]);
+
+        Assert.Null(Assert.Single(_queries).Limit);
+        Assert.Equal(exact.Id.ToString("N"), item.LocalItemId);
+    }
+
+    [Fact]
+    public void ResolveStopsAtTheFirstProviderThatMatches()
+    {
+        AddMovie(tmdb: "603", imdb: "tt0133093");
+        var item = ListMovie(tmdb: "603", imdb: "tt0133093");
+
+        _service.Resolve([item]);
+
+        Assert.Equal("Tmdb", Assert.Single(Assert.Single(_queries).HasAnyProviderId!).Key);
     }
 
     [Fact]
@@ -168,6 +216,18 @@ public sealed class LocalItemIdServiceTests : IDisposable
 
         Assert.Null(Assert.Single(response).LocalItemId);
         Assert.Equal(movie.Id.ToString("N"), cached.LocalItemId);
+    }
+
+    [Fact]
+    public void AFailedUserLookupSendsTheTitlesWithoutIds()
+    {
+        var service = new LocalItemIdService(_library, _customRows, _imdb, new ThrowingServices(), NullLogger<LocalItemIdService>.Instance);
+        var cached = ListMovie(tmdb: "603");
+        cached.LocalItemId = AddMovie(tmdb: "603").Id.ToString("N");
+
+        var response = service.ForResponse([cached], Guid.NewGuid(), includeLocalItemIds: true);
+
+        Assert.Null(Assert.Single(response).LocalItemId);
     }
 
     [Fact]
@@ -262,5 +322,10 @@ public sealed class LocalItemIdServiceTests : IDisposable
     private sealed class NoServices : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;
+    }
+
+    private sealed class ThrowingServices : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => throw new InvalidOperationException("database unavailable");
     }
 }

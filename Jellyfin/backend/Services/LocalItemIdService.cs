@@ -23,10 +23,6 @@ namespace Moonfin.Server.Services;
 /// </summary>
 public class LocalItemIdService
 {
-    // HasAnyProviderId matches each provider loosely on some server versions, so a few
-    // candidates are read and checked against the exact ids.
-    private const int CandidateLimit = 20;
-
     private readonly ILibraryManager _libraryManager;
     private readonly CustomRowCacheService _customRowCache;
     private readonly ImdbListsCacheService _imdbCache;
@@ -154,7 +150,19 @@ public class LocalItemIdService
             return items.Select(item => item.WithLocalItemId(null)).ToList();
         }
 
-        var user = UserReflection.ResolveUser(_services, userId);
+        object? user;
+        try
+        {
+            user = UserReflection.ResolveUser(_services, userId);
+        }
+        catch (Exception ex)
+        {
+            // Newer servers read the user from the database, which can fail. The titles then
+            // go out without ids, as for any user that can't be resolved.
+            _logger.LogDebug(ex, "User lookup failed for user {UserId}", userId);
+            user = null;
+        }
+
         var visible = new Dictionary<string, bool>();
         return items.Select(item =>
         {
@@ -198,47 +206,64 @@ public class LocalItemIdService
 
     private string? FindInLibrary(TitleIds ids)
     {
-        var wanted = new Dictionary<string, string>();
-        if (ids.Tmdb != null) wanted[MetadataProvider.Tmdb.ToString()] = ids.Tmdb;
-        if (ids.Imdb != null) wanted[MetadataProvider.Imdb.ToString()] = ids.Imdb;
-        if (ids.Tvdb != null) wanted[MetadataProvider.Tvdb.ToString()] = ids.Tvdb;
+        // One query per provider, best first. Jellyfin 10.10 reads only the first entry of
+        // HasAnyProviderId, so asking for all of them at once could miss a title the library
+        // only knows by a later one.
+        var wanted = new List<KeyValuePair<string, string>>();
+        if (ids.Tmdb != null) wanted.Add(new(MetadataProvider.Tmdb.ToString(), ids.Tmdb));
+        if (ids.Imdb != null) wanted.Add(new(MetadataProvider.Imdb.ToString(), ids.Imdb));
+        if (ids.Tvdb != null) wanted.Add(new(MetadataProvider.Tvdb.ToString(), ids.Tvdb));
 
         try
         {
-            // HasAnyProviderId holds one value per provider, so each title is its own query.
-            // GetItemList changed its return type in Jellyfin 10.11, so a compiled call only
-            // binds on the version it was built against. GetItemsResult has the same signature
-            // everywhere and answers the same question.
-            var candidates = _libraryManager.GetItemsResult(new InternalItemsQuery
+            foreach (var provider in wanted)
             {
-                HasAnyProviderId = wanted,
-                IncludeItemTypes = [ids.Series ? BaseItemKind.Series : BaseItemKind.Movie],
-                IsVirtualItem = false,
-                Recursive = true,
-                Limit = CandidateLimit,
-                EnableTotalRecordCount = false
-            }).Items;
-
-            BaseItem? best = null;
-            var bestRank = int.MaxValue;
-            foreach (var candidate in candidates)
-            {
-                var candidateIds = IdsOf(candidate);
-                var rank = candidateIds == null ? -1 : ids.MatchRank(candidateIds);
-                if (rank >= 0 && rank < bestRank)
+                var best = BestCandidate(ids, provider);
+                if (best != null)
                 {
-                    best = candidate;
-                    bestRank = rank;
+                    return best.Id.ToString("N");
                 }
             }
 
-            return best?.Id.ToString("N");
+            return null;
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Library lookup failed for list title (tmdb {Tmdb}, imdb {Imdb})", ids.Tmdb, ids.Imdb);
             return null;
         }
+    }
+
+    private BaseItem? BestCandidate(TitleIds ids, KeyValuePair<string, string> provider)
+    {
+        // Jellyfin 10.10 matches the value as a substring (603 also finds 6030), so every
+        // candidate is read, without a limit that could cut off the exact one, and checked
+        // against the exact ids. GetItemList changed its return type in Jellyfin 10.11, so a
+        // compiled call only binds on the version it was built against. GetItemsResult has the
+        // same signature everywhere and answers the same question.
+        var candidates = _libraryManager.GetItemsResult(new InternalItemsQuery
+        {
+            HasAnyProviderId = new Dictionary<string, string> { [provider.Key] = provider.Value },
+            IncludeItemTypes = [ids.Series ? BaseItemKind.Series : BaseItemKind.Movie],
+            IsVirtualItem = false,
+            Recursive = true,
+            EnableTotalRecordCount = false
+        }).Items;
+
+        BaseItem? best = null;
+        var bestRank = int.MaxValue;
+        foreach (var candidate in candidates)
+        {
+            var candidateIds = IdsOf(candidate);
+            var rank = candidateIds == null ? -1 : ids.MatchRank(candidateIds);
+            if (rank >= 0 && rank < bestRank)
+            {
+                best = candidate;
+                bestRank = rank;
+            }
+        }
+
+        return best;
     }
 
     private bool Exists(string localId)
