@@ -42,6 +42,34 @@ namespace Emby.Plugins.Moonfin.Api
         public string? Unmonitored { get; set; }
     }
 
+    [Route("/Moonfin/Seerr/Radarr/Queue", "GET")]
+    [Authenticated]
+    public class GetRadarrQueueRequest : IReturn<object>
+    {
+        public string? TmdbId { get; set; }
+    }
+
+    [Route("/Moonfin/Seerr/Sonarr/Queue", "GET")]
+    [Authenticated]
+    public class GetSonarrQueueRequest : IReturn<object>
+    {
+        public string? TvdbId { get; set; }
+    }
+
+    [Route("/Moonfin/Seerr/Radarr/Queue/{Id}", "DELETE")]
+    [Authenticated(Roles = "Admin")]
+    public class RemoveRadarrQueueItemRequest : IReturn<object>
+    {
+        public int Id { get; set; }
+    }
+
+    [Route("/Moonfin/Seerr/Sonarr/Queue/{Id}", "DELETE")]
+    [Authenticated(Roles = "Admin")]
+    public class RemoveSonarrQueueItemRequest : IReturn<object>
+    {
+        public int Id { get; set; }
+    }
+
     [Route("/Moonfin/Seerr/Api/{Path*}", "GET")]
     [Authenticated]
     public class SeerrProxyGetRequest : IReturn<object>

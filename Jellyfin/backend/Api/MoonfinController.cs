@@ -153,6 +153,7 @@ public class MoonfinController : ControllerBase
             CalendarDaysBack = Math.Max(0, config?.CalendarDaysBack ?? 14),
             CalendarDaysAhead = Math.Max(0, config?.CalendarDaysAhead ?? 90),
             CalendarReminders = true,
+            ArrQueueAvailable = config?.SeerrEnabled == true && !string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()),
             SocketRelay = config?.EnableSocketRelay ?? false,
             DefaultSettings = _settingsService.AdminDefaultsFor(profile)
         });
@@ -1878,6 +1879,13 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("calendarReminders")]
     public bool? CalendarReminders { get; set; }
+
+    /// <summary>
+    /// True when this plugin has the Seerr/Radarr/Queue and Seerr/Sonarr/Queue endpoints and Seerr
+    /// is set up for them. Removing a download from the queue is for server admins only.
+    /// </summary>
+    [JsonPropertyName("arrQueueAvailable")]
+    public bool? ArrQueueAvailable { get; set; }
 
     [JsonPropertyName("defaultSettings")]
     public MoonfinSettingsProfile? DefaultSettings { get; set; }

@@ -125,6 +125,40 @@ namespace Emby.Plugins.Moonfin.Api
         public Task<object?> Get(GetRadarrCalendarRequest request) => GetArrCalendar("radarr", request.Start, request.End, request.Unmonitored);
         public Task<object?> Get(GetSonarrCalendarRequest request) => GetArrCalendar("sonarr", request.Start, request.End, request.Unmonitored);
 
+        public Task<object?> Get(GetRadarrQueueRequest request) => GetArrQueue("radarr", request.TmdbId);
+        public Task<object?> Get(GetSonarrQueueRequest request) => GetArrQueue("sonarr", request.TvdbId);
+        public Task<object?> Delete(RemoveRadarrQueueItemRequest request) => RemoveArrQueueItem("radarr", request.Id);
+        public Task<object?> Delete(RemoveSonarrQueueItemRequest request) => RemoveArrQueueItem("sonarr", request.Id);
+
+        private async Task<object?> GetArrQueue(string service, string? titleId)
+        {
+            var config = Plugin.Instance?.Configuration;
+            if (config?.SeerrEnabled != true || string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()))
+            { Request.Response.StatusCode = 503; return MoonfinJson.Result(Request, ResultFactory, new { error = "Seerr integration is not enabled" }); }
+
+            var result = await Session.GetArrQueueAsync(service, titleId, AuthHelpers.IsCurrentUserAdmin(Request, _authContext)).ConfigureAwait(false);
+            return ArrResult(result);
+        }
+
+        private async Task<object?> RemoveArrQueueItem(string service, int id)
+        {
+            var config = Plugin.Instance?.Configuration;
+            if (config?.SeerrEnabled != true || string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()))
+            { Request.Response.StatusCode = 503; return MoonfinJson.Result(Request, ResultFactory, new { error = "Seerr integration is not enabled" }); }
+
+            var result = await Session.RemoveArrQueueItemAsync(service, id).ConfigureAwait(false);
+            return ArrResult(result);
+        }
+
+        private object? ArrResult(SeerrProxyResponse result)
+        {
+            Request.Response.StatusCode = result.StatusCode;
+            if (result.Body == null) return null;
+
+            var contentType = string.IsNullOrWhiteSpace(result.ContentType) ? "application/json" : result.ContentType;
+            return ResultFactory.GetResult(Request, new MemoryStream(result.Body), contentType, null);
+        }
+
         private async Task<object?> GetArrCalendar(string service, string? start, string? end, string? unmonitored)
         {
             var config = Plugin.Instance?.Configuration;

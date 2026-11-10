@@ -142,6 +142,7 @@ func (s *Server) routes() {
 	s.reminderRoutes()
 	s.notificationRoutes()
 	s.customRowRoutes()
+	s.arrQueueRoutes()
 	s.seerrRoutes()
 	s.posterBadgeRoutes()
 	s.miniGameRoutes()

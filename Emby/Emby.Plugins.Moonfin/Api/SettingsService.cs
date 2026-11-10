@@ -106,6 +106,8 @@ namespace Emby.Plugins.Moonfin.Api
                 calendarDaysBack = Math.Max(0, config?.CalendarDaysBack ?? 14),
                 calendarDaysAhead = Math.Max(0, config?.CalendarDaysAhead ?? 90),
                 calendarReminders = true,
+                // Older plugins leave this out, so the app shows no download queue details.
+                arrQueueAvailable = seerrEnabled && !string.IsNullOrEmpty(config?.GetEffectiveSeerrUrl()),
                 defaultSettings = MoonfinSettingsService.AdminDefaultsFor(request.Profile, config)
             });
         }

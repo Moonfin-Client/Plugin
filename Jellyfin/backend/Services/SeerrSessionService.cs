@@ -993,19 +993,81 @@ public class SeerrSessionService
 
     private async Task<SeerrProxyResponse> FetchArrCalendarFromSeerrAsync(string service, bool isSonarr, string query)
     {
+        var (server, error) = await ResolveArrServerAsync(service, isSonarr);
+        if (server == null)
+        {
+            return error!;
+        }
+
+        return await FetchArrCalendarAsync(_httpClientFactory, _logger, service, server.Bases, server.ApiKey, query);
+    }
+
+    /// <summary>
+    /// The queue entries for one title on the default Radarr or Sonarr, read through the same Seerr
+    /// connection as the calendar. Never cached, since a download's state is what's being asked.
+    /// </summary>
+    public async Task<SeerrProxyResponse> GetArrQueueAsync(string service, string? titleId, bool isAdmin)
+    {
+        var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
+        var (server, error) = await ResolveArrServerAsync(service, isSonarr);
+        if (server == null)
+        {
+            return QueueError(error!);
+        }
+
+        return ToProxyResponse(await ArrQueue.ReadAsync(ArrSender(service, server), isSonarr, titleId, isAdmin));
+    }
+
+    /// <summary>Drops a stuck download, blocklists its release and lets the arr grab another.</summary>
+    public async Task<SeerrProxyResponse> RemoveArrQueueItemAsync(string service, int queueId)
+    {
+        var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
+        var (server, error) = await ResolveArrServerAsync(service, isSonarr);
+        if (server == null)
+        {
+            return QueueError(error!);
+        }
+
+        _logger.LogInformation("Removing {Service} queue entry {QueueId} and blocklisting its release", service, queueId);
+        return ToProxyResponse(await ArrQueue.RemoveAsync(ArrSender(service, server), isSonarr, queueId));
+    }
+
+    private ArrSend ArrSender(string service, ArrServerConnection server) =>
+        async (method, pathAndQuery, body) =>
+        {
+            var response = await TrySendArrAsync(_httpClientFactory, _logger, service, server.Bases, server.ApiKey, method, pathAndQuery, body);
+            return response == null ? ArrAnswer.Unreachable : new ArrAnswer(response.StatusCode, response.Body);
+        };
+
+    // Seerr refusing the admin session would reach the client as its own sign-in failing.
+    private static SeerrProxyResponse QueueError(SeerrProxyResponse error) =>
+        error.StatusCode is 401 or 403
+            ? CalendarError(503, "The admin Seerr session couldn't read the arr settings")
+            : error;
+
+    private static SeerrProxyResponse ToProxyResponse(ArrAnswer answer) => new()
+    {
+        StatusCode = answer.StatusCode,
+        Body = answer.Body,
+        ContentType = "application/json"
+    };
+
+    /// <summary>The default Sonarr or Radarr as Seerr has it, read through an admin Seerr session.</summary>
+    private async Task<(ArrServerConnection? Server, SeerrProxyResponse? Error)> ResolveArrServerAsync(string service, bool isSonarr)
+    {
         var settingsPath = isSonarr ? "settings/sonarr" : "settings/radarr";
 
         var adminSession = EnumerateSessions().FirstOrDefault(
             s => s.SeerrUserId == OwnerSeerrUserId || (s.Permissions & AdminBit) != 0);
         if (adminSession == null)
         {
-            return CalendarError(503, "No admin Seerr session is available to read the arr settings");
+            return (null, CalendarError(503, "No admin Seerr session is available to read the arr settings"));
         }
 
         var settings = await ProxyRequestAsync(adminSession.JellyfinUserId, HttpMethod.Get, settingsPath);
         if (settings.Body == null || settings.StatusCode != 200)
         {
-            return settings;
+            return (null, settings);
         }
 
         JsonElement server;
@@ -1014,24 +1076,26 @@ public class SeerrSessionService
             using var doc = JsonDocument.Parse(settings.Body);
             if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
             {
-                return CalendarError(404, $"No {service} server is configured in Seerr");
+                return (null, CalendarError(404, $"No {service} server is configured in Seerr"));
             }
             server = SelectArrServer(doc.RootElement).Clone();
         }
         catch (JsonException)
         {
-            return CalendarError(502, "Could not read the arr settings from Seerr");
+            return (null, CalendarError(502, "Could not read the arr settings from Seerr"));
         }
 
         var hostname = server.TryGetProperty("hostname", out var h) ? h.GetString() ?? string.Empty : string.Empty;
         if (hostname.Length == 0)
         {
-            return CalendarError(404, $"No {service} host is configured in Seerr");
+            return (null, CalendarError(404, $"No {service} host is configured in Seerr"));
         }
 
         var apiKey = server.TryGetProperty("apiKey", out var k) ? k.GetString() ?? string.Empty : string.Empty;
-        return await FetchArrCalendarAsync(_httpClientFactory, _logger, service, ArrCalendarBases(server, isSonarr), apiKey, query);
+        return (new ArrServerConnection(ArrCalendarBases(server, isSonarr), apiKey), null);
     }
+
+    private sealed record ArrServerConnection(List<string> Bases, string ApiKey);
 
     /// <summary>
     /// The server the calendar is read from. Seerr marks a default server for regular and for 4K
@@ -1088,10 +1152,6 @@ public class SeerrSessionService
         return bases;
     }
 
-    /// <summary>
-    /// Asks each address in turn and returns the first answer. Only a server that can't be reached
-    /// moves on to the next address, so an error the server itself sends back is passed on as is.
-    /// </summary>
     internal static async Task<SeerrProxyResponse> FetchArrCalendarAsync(
         IHttpClientFactory httpClientFactory,
         ILogger logger,
@@ -1099,6 +1159,24 @@ public class SeerrSessionService
         IReadOnlyList<string> bases,
         string apiKey,
         string query,
+        Func<string, Task<IPAddress[]>>? resolveHost = null) =>
+        await TrySendArrAsync(httpClientFactory, logger, service, bases, apiKey, HttpMethod.Get, "api/v3/calendar?" + query, null, resolveHost)
+            ?? CalendarError(502, $"Could not reach the {service} server");
+
+    /// <summary>
+    /// Asks each address in turn and returns the first answer. Only a server that can't be reached
+    /// moves on to the next address, so an error the server itself sends back is passed on as is.
+    /// Null when no address could be reached.
+    /// </summary>
+    internal static async Task<SeerrProxyResponse?> TrySendArrAsync(
+        IHttpClientFactory httpClientFactory,
+        ILogger logger,
+        string service,
+        IReadOnlyList<string> bases,
+        string apiKey,
+        HttpMethod method,
+        string pathAndQuery,
+        byte[]? jsonBody,
         Func<string, Task<IPAddress[]>>? resolveHost = null)
     {
         Exception? lastError = null;
@@ -1120,8 +1198,14 @@ public class SeerrSessionService
             {
                 using var client = httpClientFactory.CreateClient();
                 client.Timeout = TimeSpan.FromSeconds(15);
-                using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/v3/calendar?{query}");
+                using var request = new HttpRequestMessage(method, $"{baseUrl}/{pathAndQuery}");
                 request.Headers.Add("X-Api-Key", apiKey);
+                if (jsonBody != null)
+                {
+                    request.Content = new ByteArrayContent(jsonBody);
+                    request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+                }
+
                 using var arrResponse = await client.SendAsync(request);
                 var arrBody = await arrResponse.Content.ReadAsByteArrayAsync();
                 return new SeerrProxyResponse
@@ -1138,8 +1222,8 @@ public class SeerrSessionService
             }
         }
 
-        logger.LogWarning(lastError, "Failed to fetch {Service} calendar", service);
-        return CalendarError(502, $"Could not reach the {service} server");
+        logger.LogWarning(lastError, "Failed to reach {Service}", service);
+        return null;
     }
 
     /// <summary>
