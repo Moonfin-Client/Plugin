@@ -36,6 +36,18 @@
   ],
   "http_routes": [
     {
+      "id": "web",
+      "method": "GET",
+      "path": "/Moonfin/Web",
+      "access": "public"
+    },
+    {
+      "id": "web-files",
+      "method": "GET",
+      "path": "/Moonfin/Web/*",
+      "access": "public"
+    },
+    {
       "id": "moonfin",
       "method": "*",
       "path": "/Moonfin/*",

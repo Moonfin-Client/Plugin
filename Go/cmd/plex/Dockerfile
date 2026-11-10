@@ -6,6 +6,7 @@ WORKDIR /src
 COPY Go/go.mod Go/go.sum ./
 RUN go mod download
 COPY Go/ .
+COPY Jellyfin/frontend web/moonfin/
 ARG VERSION=0.0.0-dev
 ARG TARGETOS
 ARG TARGETARCH

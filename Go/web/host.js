@@ -54,7 +54,7 @@
             hidden: ['Active Downloads'],
             hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay'],
             unsupported: {
-                'Connecting to this server': 'Moonbase for Plex doesn’t host Moonfin web, so these settings do nothing on Plex.',
+                'Connecting to this server': 'Moonbase for Plex serves Moonfin Web at /Moonfin/Web/ on its own port, 32500 by default. With Default Server URL empty, the app offers the Plex address Moonbase uses.',
                 'Seerr Integration': 'The Seerr proxy isn’t part of Moonbase for Plex. These settings do nothing on Plex.',
                 'IMDb Charts': 'Not available on Plex. These settings do nothing on Plex.',
                 'Recommendations': 'Not available on Plex. These settings do nothing on Plex.',

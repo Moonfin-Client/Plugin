@@ -63,7 +63,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 <body style="font-family:system-ui;margin:2rem;max-width:40rem">
 <h1>Moonbase %s</h1>
 <p>Moonbase is installed. Sign in with a Moonfin app and it will sync this profile's settings.</p>
-</body>`, html.EscapeString(s.version))
+%s</body>`, html.EscapeString(s.version), webLink(s.hasWebApp()))
 }
 
 // pingDefaults is the admin's defaults for one device profile, laid over the
@@ -73,4 +73,15 @@ func pingDefaults(cfg Config, profile string) M {
 		return cfg.DefaultsFor(p)
 	}
 	return cfg.Defaults
+}
+
+// webLink links the page to Moonfin Web. The page's own address may or may
+// not end in a slash, so the link is worked out in the browser.
+func webLink(has bool) string {
+	if !has {
+		return ""
+	}
+	return `<p><a id="web" href="Moonfin/Web/">Open Moonfin Web</a></p>
+<script>document.getElementById('web').href = location.pathname.replace(/\/?$/, '/') + 'Moonfin/Web/';</script>
+`
 }

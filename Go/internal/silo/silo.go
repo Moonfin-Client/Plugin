@@ -34,11 +34,12 @@ type Plugin struct {
 
 func New(version string) *Plugin {
 	return &Plugin{Server: api.NewServer(version, api.Host{
-		Name:         "Silo",
-		KV:           &store.Packed{KV: hostKV{}, Pack: api.PerProfileKey},
-		Catalog:      &hostCatalog{host: connectedHost, genres: map[string]cachedGenres{}},
-		Identify:     Identify,
-		AdminBackURL: "/admin/plugins",
+		Name:          "Silo",
+		KV:            &store.Packed{KV: hostKV{}, Pack: api.PerProfileKey},
+		Catalog:       &hostCatalog{host: connectedHost, genres: map[string]cachedGenres{}},
+		Identify:      Identify,
+		AdminBackURL:  "/admin/plugins",
+		WebPluginMode: true,
 	})}
 }
 

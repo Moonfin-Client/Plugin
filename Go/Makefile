@@ -4,10 +4,13 @@
 VERSION ?= $(shell sed -n 's/^  "version": "\(.*\)",$$/\1/p' cmd/silo/manifest.json)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 PLATFORMS := linux/amd64 linux/arm64
+# Moonfin Web, embedded so Moonbase can serve it. Point this at another
+# bundle to build with that one.
+WEB_BUNDLE ?= ../Jellyfin/frontend
 
-.PHONY: build smartsearch test dist silo-index plex-image clean
+.PHONY: build smartsearch test dist silo-index plex-image clean web-bundle
 
-build:
+build: web-bundle
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/moonbase ./cmd/silo
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/moonbase-plex ./cmd/plex
 
@@ -19,7 +22,7 @@ test:
 	go vet ./...
 	go test -race ./...
 
-dist:
+dist: web-bundle
 	rm -f dist/Moonbase.Silo-* dist/SHA256SUMS
 	@for p in $(PLATFORMS); do \
 		GOOS=$${p%/*} GOARCH=$${p#*/} CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" \
@@ -38,6 +41,13 @@ silo-index: dist
 
 plex-image:
 	$(or $(DOCKER),docker) build --build-arg VERSION=$(VERSION) -f cmd/plex/Dockerfile -t moonbase-plex:$(VERSION) ..
+
+# The bundle isn't in the repository, so a checkout without it still builds,
+# with the theme editor and no web app, the same as the Jellyfin plugin.
+web-bundle:
+	find web/moonfin -mindepth 1 ! -name .keep -delete
+	cp -R $(WEB_BUNDLE)/. web/moonfin/
+	@test -f web/moonfin/index.html || echo "No Moonfin Web in $(WEB_BUNDLE), so this build serves none."
 
 clean:
 	rm -rf dist

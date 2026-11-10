@@ -102,6 +102,8 @@ To hide the button while keeping the plugin, add this to Branding > Custom CSS:
 
 On Emby, the web app is served the same way at `/Moonfin/Web/`, but there's no header button because Emby has no equivalent injection path.
 
+On Silo, Moonbase serves it too: open it from Plugin Apps > **Moonfin**. On Plex, it's at `http://<host>:32500/Moonfin/Web/`, on the same port as Moonbase's admin page.
+
 <img width="1521" height="164" alt="Moonfin header button" src="https://github.com/user-attachments/assets/bcb69e4b-edbe-4d1f-b9f1-dc81822d55d9" />
 
 </details>

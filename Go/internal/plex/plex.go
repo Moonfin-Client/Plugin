@@ -94,6 +94,7 @@ func New(cfg Config) (*Companion, error) {
 		SmartSearch: helper,
 		FlagsDir:    cfg.FlagsDir,
 		Pins:        true,
+		WebServer:   cfg.PMS,
 	})
 	c.startWatchParties()
 	return c, nil

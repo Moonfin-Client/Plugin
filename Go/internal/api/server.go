@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -33,6 +34,12 @@ type Host struct {
 	// Pins serves Moonbase's own per-account PINs. Silo keeps PINs on its
 	// profiles, and the apps use those when these routes answer 404.
 	Pins bool
+	// WebPluginMode tells Moonfin Web it was served by the server it signs in
+	// to, so it connects there. WebServer is the address it offers otherwise.
+	WebPluginMode bool
+	WebServer     string
+	// Web is the Moonfin Web bundle. Nil uses the one built in.
+	Web fs.FS
 }
 
 var ErrSignedOut = errors.New("caller isn't signed in")
@@ -48,6 +55,11 @@ type Server struct {
 	pins     bool
 	mux      *http.ServeMux
 	ext      external
+
+	web           fs.FS
+	webTag        string
+	webServer     string
+	webPluginMode bool
 
 	// mu serializes every read-modify-write of stored settings.
 	mu sync.Mutex
@@ -72,7 +84,12 @@ func NewServer(version string, h Host) *Server {
 		version = "0.0.0-dev"
 	}
 	s := &Server{version: version, name: h.Name, backURL: h.AdminBackURL, kv: h.KV, catalog: h.Catalog,
-		identify: h.Identify, flagsDir: h.FlagsDir, pins: h.Pins, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}}}
+		identify: h.Identify, flagsDir: h.FlagsDir, pins: h.Pins, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}},
+		web: h.Web, webServer: h.WebServer, webPluginMode: h.WebPluginMode}
+	if s.web == nil {
+		s.web = bundledWeb()
+	}
+	s.webTag = bundleTag(s.web)
 	s.smart.helper = h.SmartSearch
 	s.routes()
 	if h.SmartSearch != nil {
@@ -86,6 +103,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /Moonfin/Whoami", s.user(s.handleWhoami))
 	s.mux.HandleFunc("GET /Moonfin/Genres", s.user(s.handleGenres))
 	s.mux.HandleFunc("POST /Moonfin/ClientLog/Document", s.user(s.handleClientLog))
+	s.webRoutes()
 	s.mux.HandleFunc("GET /{$}", s.user(s.handleHome))
 	s.settingsRoutes()
 	s.externalRoutes()

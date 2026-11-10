@@ -1,10 +1,12 @@
 # Only the Plex image is built from here, and it needs just these.
 *
 !Go/
+!Jellyfin/frontend/
 !shared/SmartSearch/
 !shared/PosterBadges/flags/
 !shared/WatchParty/invite.html
 !shared/WatchParty/preview.png
 Go/dist/
+Go/web/moonfin/
 Go/smartsearch/bin/
 Go/smartsearch/obj/

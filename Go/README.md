@@ -11,6 +11,8 @@ Moonbase is the server side of the Moonfin apps. On Jellyfin and Emby it's a plu
 - Shows server messages from the admin.
 - Offers up to 5 custom themes the admin uploads.
 - Keeps each user's own order for a collection.
+- Takes the apps' diagnostic and crash reports into Moonbase's log, while **Enable client log upload** on the Help tab is on.
+- Serves Moonfin Web, which signs in to Silo. Plugin Apps > **Moonfin** links to it.
 - Keeps a Watch Party's subtitle choice and each member's avatar, which Silo's rooms don't.
 
 ### Requirements
@@ -35,7 +37,7 @@ Open the **Moonbase** page from the menu at the top right of Silo's plugin page 
 
 It's the same page as Moonbase on Jellyfin, with Silo's name in place of Jellyfin's:
 
-- Sections for things Silo does itself, like Seerr, Live TV and hosting the web app, are hidden. Their settings are kept.
+- Sections for things Silo does itself, like Seerr and Live TV, are hidden. So are the web app's connection settings, since Moonfin Web on Silo always signs in to Silo. Their settings are kept.
 - Sections Silo can't support yet say so at the top, and do nothing on Silo for now.
 - Seerr is called Requests, because Moonfin uses Silo's own requests.
 - The Home rows builder has a Silo tab with Silo's own rows, like Recommended for you, Trending on this server and Seasonal picks.
@@ -126,7 +128,8 @@ Moonfin looks for Moonbase on port 32500 of your Plex server's address. If it ru
 
 - Plex's remote access only covers Plex itself. To use Moonbase away from home, put it behind a reverse proxy with HTTPS, or reach it over a VPN, and set that address in Moonfin. Don't forward port 32500 to the internet, since Moonfin sends your Plex token to Moonbase and plain HTTP would expose it.
 - The Moonfin web app on HTTPS can't reach Moonbase over plain HTTP, so it needs the HTTPS address too.
-- It does what Moonbase for Silo does: settings sync, admin defaults, MDBList and TMDB, messages, uploaded themes and each user's collection order. Similar items, custom rows, curated MDBList rows, the seasonal row and the Seerr proxy aren't available.
+- Moonbase serves Moonfin Web at `http://<host>:32500/Moonfin/Web/`. It offers the Plex server at `PLEX_URL`, or the **Default Server URL** set on the Web Client tab, and you sign in with your Plex account.
+- It does what Moonbase for Silo does: settings sync, admin defaults, MDBList and TMDB, messages, uploaded themes, app reports and each user's collection order. It also keeps each account's sign-in PIN, so a PIN set in one app holds in the others. Similar items, custom rows, curated MDBList rows, the seasonal row and the Seerr proxy aren't available.
 - Smart search works on Plex too, turned on in the Smart Search tab, and covers your movies, shows, the people credited on them, and music. Each person sees only what Plex lets them open. Titles you don't have don't show up, since there's no Seerr proxy. It runs the same engine as the Jellyfin plugin, which is why the image carries a small .NET helper next to Moonbase. The index rebuilds a minute after the container starts and every night at 3:00.
 - Poster labels work on Plex too, set up in the Labels tab. Moonbase reads each file's tracks from Plex as the person asking, so people only get labels for what they can open. Anime episode labels aren't available, and the Labels tab's test draws on a blank poster, since the page can't load Plex artwork.
 - A settings change reaches other devices at their next sync.

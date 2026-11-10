@@ -36,6 +36,10 @@ type Config struct {
 	// ClientLogUpload is EnableClientLogUpload, whether the apps may send
 	// their reports to the log.
 	ClientLogUpload bool
+	// The Web Client tab: the server Moonfin Web offers or always uses, and
+	// whether it looks for servers on the network.
+	WebDefaultServerURL, WebForcedServerURL string
+	WebRtcScan                              bool
 }
 
 // DefaultsFor is the admin's defaults for one profile.
@@ -102,13 +106,18 @@ func (s *Server) config(ctx context.Context) Config {
 }
 
 func configFrom(c M) Config {
-	cfg := Config{EnableSettingsSync: true, ClientLogUpload: true}
+	cfg := Config{EnableSettingsSync: true, ClientLogUpload: true, WebRtcScan: true}
 	if v, ok := c["EnableSettingsSync"].(bool); ok {
 		cfg.EnableSettingsSync = v
 	}
 	if v, ok := c["EnableClientLogUpload"].(bool); ok {
 		cfg.ClientLogUpload = v
 	}
+	if v, ok := c["WebEnableWebRtcScan"].(bool); ok {
+		cfg.WebRtcScan = v
+	}
+	cfg.WebDefaultServerURL = strings.TrimSpace(str(c["WebDefaultServerUrl"]))
+	cfg.WebForcedServerURL = strings.TrimSpace(str(c["WebForcedServerUrl"]))
 	cfg.MdblistAPIKey = strings.TrimSpace(str(c["MdblistApiKey"]))
 	cfg.TmdbAPIKey = strings.TrimSpace(str(c["TmdbApiKey"]))
 	cfg.SeerrDisplayName = strings.TrimSpace(str(c["SeerrDisplayName"]))
