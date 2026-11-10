@@ -6,8 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using Moonfin.Server.Models;
-using Moonfin.Server.Services;
+using Moonfin.Bookmarks;
 
 namespace Moonfin.Server.Api;
 
@@ -19,11 +18,11 @@ namespace Moonfin.Server.Api;
 [Produces(MediaTypeNames.Application.Json)]
 public class UserBookmarksController : ControllerBase
 {
-    private readonly UserBookmarksService _bookmarksService;
+    private readonly UserBookmarkStore _bookmarksService;
     private readonly ILogger<UserBookmarksController> _logger;
 
     public UserBookmarksController(
-        UserBookmarksService bookmarksService,
+        UserBookmarkStore bookmarksService,
         ILogger<UserBookmarksController> logger)
     {
         _bookmarksService = bookmarksService;

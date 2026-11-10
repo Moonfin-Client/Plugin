@@ -14,6 +14,7 @@ using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
+using Moonfin.Bookmarks;
 using Moonfin.Calendar;
 using Moonfin.MiniGames;
 using Moonfin.Pin;
@@ -69,6 +70,7 @@ namespace Emby.Plugins.Moonfin
         public MiniGameScoreService? MiniGames { get; private set; }
         public SmartSearchIndexService? SmartSearch { get; private set; }
         public CalendarReminderStore? CalendarReminders { get; private set; }
+        public UserBookmarkStore? Bookmarks { get; private set; }
         public ConfigBackupService? ConfigBackup { get; private set; }
         public WatchPartyEngine? WatchParty { get; private set; }
 
@@ -225,6 +227,7 @@ namespace Emby.Plugins.Moonfin
             MiniGames = new MiniGameScoreService(new FileMiniGameScoreStore(Path.Combine(DataFolderPath, "minigames"), new EmbyStateFile()));
             SmartSearch = new SmartSearchIndexService(appHost.Resolve<ILibraryManager>(), DataFolderPath, logManager.GetLogger("MoonfinSmartSearch"));
             CalendarReminders = new CalendarReminderStore(Path.Combine(DataFolderPath, "calendar-reminders"), new EmbyStateFile());
+            Bookmarks = new UserBookmarkStore(Path.Combine(DataFolderPath, "Bookmarks"), new EmbyStateFile());
             ConfigBackup = new ConfigBackupService(
                 ConfigurationFilePath,
                 Path.Combine(DataFolderPath, "config-backup", Path.GetFileName(ConfigurationFilePath)),
