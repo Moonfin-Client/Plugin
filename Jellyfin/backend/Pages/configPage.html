@@ -5711,7 +5711,14 @@
                             <label class="inputLabel inputLabelUnfocused" for="WatchPartyMaxMembers">People per room</label>
                             <input is="emby-input" type="number" id="WatchPartyMaxMembers" min="2" max="100" step="1" />
                         </div>
-                        <div class="fieldDescription">
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="EnableSocketRelay" is="emby-checkbox" />
+                                <span>SyncPlay relay for Roku</span>
+                            </label>
+                            <div class="fieldDescription">Roku can't open secure sockets, so on an https server it gets SyncPlay messages through Moonbase instead.</div>
+                        </div>
+                        <div class="fieldDescription" id="WatchPartiesNote">
                             Whether Jellyfin users start Watch Parties or SyncPlay, chat over the video and party alerts are each user's own settings.
                             Their defaults are under User defaults &gt; Playback &gt; Watch Parties, and rooms of both kinds show up in the app.
                         </div>
@@ -5723,7 +5730,7 @@
                         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6em; margin-top:0.8em;">
                             <button is="emby-button" type="button" id="WatchPartyRoomsRefresh" class="raised"><span>Refresh</span></button>
                         </div>
-                        <div class="fieldDescription" style="margin-top: 0.8em;">SyncPlay groups are Jellyfin's own and aren't listed here. Rooms live in memory, so a server restart ends them.</div>
+                        <div class="fieldDescription" id="WatchPartyRoomsNote" style="margin-top: 0.8em;">SyncPlay groups are Jellyfin's own and aren't listed here. Rooms live in memory, so a server restart ends them.</div>
                     </div>
 
                     </section>
@@ -6874,9 +6881,10 @@
                             var g = genres[i];
                             var gId = g.id || g.Id;
                             var gName = g.name || g.Name;
-                            var isChecked = selectedIds.indexOf(gId) !== -1;
+                            // The apps match excluded genres by name. Older saves hold ids, so those still tick.
+                            var isChecked = selectedIds.indexOf(gName) !== -1 || selectedIds.indexOf(gId) !== -1;
                             html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
-                                '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gId) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                                '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gName) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
                                 '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(gName) + '</div></div></label>';
                         }
                         picker.innerHTML = html;
@@ -8650,7 +8658,32 @@
                 return [];
             }
 
+            // Uploaded themes join the App Theme default as "custom:<id>", stored as customThemeId.
+            function fillUploadedThemes(items) {
+                var select = document.querySelector('#DefaultVisualTheme');
+                var group = document.querySelector('#MoonfinUploadedThemes');
+                if (!group) {
+                    group = document.createElement('optgroup');
+                    group.id = 'MoonfinUploadedThemes';
+                    group.label = 'Uploaded';
+                    select.appendChild(group);
+                }
+                var current = select.value;
+                group.innerHTML = '';
+                (items || []).forEach(function(item) {
+                    var id = item.id || item.Id;
+                    if (!id) return;
+                    var option = document.createElement('option');
+                    option.value = 'custom:' + id;
+                    option.textContent = item.displayName || item.DisplayName || id;
+                    group.appendChild(option);
+                });
+                group.hidden = !group.children.length;
+                select.value = current;
+            }
+
             function renderAdminThemesList(items) {
+                fillUploadedThemes(items);
                 var container = document.querySelector('#AdminThemesList');
                 if (!container) {
                     return;
@@ -11451,6 +11484,7 @@
                     document.querySelector('#WatchPartyReactions').checked = config.WatchPartyReactions !== false;
                     document.querySelector('#WatchPartyAlerts').checked = config.WatchPartyAlerts !== false;
                     document.querySelector('#WatchPartyMaxMembers').value = config.WatchPartyMaxMembers || 20;
+                    document.querySelector('#EnableSocketRelay').checked = config.EnableSocketRelay !== false;
                     document.querySelector('#LiveTvAutoRecordCompleteShowing').checked = config.LiveTvAutoRecordCompleteShowing === true;
                     document.querySelector('#LiveTvIncompleteThresholdPercent').value = config.LiveTvIncompleteThresholdPercent || 90;
                     document.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
@@ -11492,6 +11526,7 @@
                         defaultsState.profiles[name] = (name === 'global' ? config.DefaultUserSettings : deviceDefaults[name]) || {};
                     });
                     defaultsState.active = 'global';
+                    fillUploadedThemes(config.UploadedThemes);
                     populateDefaults(defaultsState.profiles.global);
                     refreshDefaultsActions();
 
@@ -11503,7 +11538,7 @@
                 function populateDefaults(defaults) {
                     defaultsState.generation++;
                     setSelectValue('#DefaultInterfaceStyle', defaults.interfaceStyle, 'Configured style');
-                    setSelectValue('#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
+                    setSelectValue('#DefaultVisualTheme', defaults.customThemeId ? 'custom:' + defaults.customThemeId : defaults.visualTheme, 'Configured theme');
                     setSelectValue('#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
                     setNullableBoolSelect('#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
                     setNullableBoolSelect('#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
@@ -12403,6 +12438,7 @@
                         config.WatchPartyReactions = document.querySelector('#WatchPartyReactions').checked;
                         config.WatchPartyAlerts = document.querySelector('#WatchPartyAlerts').checked;
                         config.WatchPartyMaxMembers = wholeNumberIn(document.querySelector('#WatchPartyMaxMembers').value, 2, 100, 20);
+                        config.EnableSocketRelay = document.querySelector('#EnableSocketRelay').checked;
                         config.LiveTvAutoRecordCompleteShowing = document.querySelector('#LiveTvAutoRecordCompleteShowing').checked;
                         config.LiveTvIncompleteThresholdPercent = Math.min(100, Math.max(50, parseInt(document.querySelector('#LiveTvIncompleteThresholdPercent').value, 10) || 90));
                         config.LiveTvDeleteIncompleteCopies = document.querySelector('#LiveTvDeleteIncompleteCopies').checked;
@@ -12456,6 +12492,11 @@
                         config.DefaultDeviceSettings = {};
                         DEFAULTS_PROFILE_NAMES.slice(1).forEach(function(name) {
                             var profile = defaultsState.profiles[name];
+                            // A built-in theme for a device has to clear an uploaded one set for all
+                            // devices, or the uploaded one would still win.
+                            if (profile.visualTheme && !profile.customThemeId) {
+                                profile.customThemeId = defaultsState.profiles.global.customThemeId ? '' : null;
+                            }
                             config.DefaultDeviceSettings[name] = countSetDefaults(profile) > 0 ? profile : null;
                         });
 
@@ -12479,7 +12520,10 @@
                 // Reads the User defaults form into ds, the profile being edited.
                 function collectDefaults(ds) {
                     ds.interfaceStyle = document.querySelector('#DefaultInterfaceStyle').value || null;
-                    ds.visualTheme = document.querySelector('#DefaultVisualTheme').value || null;
+                    var theme = document.querySelector('#DefaultVisualTheme').value;
+                    var uploadedTheme = theme.indexOf('custom:') === 0;
+                    ds.visualTheme = uploadedTheme ? null : theme || null;
+                    ds.customThemeId = uploadedTheme ? theme.slice(7) : null;
                     ds.detailScreenStyle = document.querySelector('#DefaultDetailScreenStyle').value || null;
                     ds.detailExpandedTabs = getNullableBoolSelect('#DefaultDetailExpandedTabs');
                     ds.detailShowTechnicalDetails = getNullableBoolSelect('#DefaultDetailShowTechnicalDetails');

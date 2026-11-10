@@ -93,6 +93,7 @@ func New(cfg Config) (*Companion, error) {
 		Identify:    c.Identify,
 		SmartSearch: helper,
 		FlagsDir:    cfg.FlagsDir,
+		Pins:        true,
 	})
 	c.startWatchParties()
 	return c, nil
@@ -387,6 +388,44 @@ func (c *Companion) Libraries(ctx context.Context, caller api.Identity) ([]api.L
 	out := []api.Library{}
 	for _, d := range v.MediaContainer.Directory {
 		out = append(out, api.Library{ID: d.Key, Name: d.Title, MediaType: plexTypes[d.Type]})
+	}
+	return out, nil
+}
+
+// Genres lists the genres of the caller's movie and show libraries, asking
+// Plex as the caller. Ids are the app's own for a Plex genre, "genre-" and
+// the tag's key, which Plex keeps the same in every library.
+func (c *Companion) Genres(ctx context.Context, caller api.Identity) ([]api.Genre, error) {
+	libs, err := c.Libraries(ctx, caller)
+	if err != nil {
+		return nil, err
+	}
+	out := []api.Genre{}
+	for _, l := range libs {
+		if l.MediaType != "movie" && l.MediaType != "tv" {
+			continue
+		}
+		status, body, err := c.get(ctx, c.cfg.PMS+"/library/sections/"+url.PathEscape(l.ID)+"/genre", caller.Token)
+		if err != nil || status != http.StatusOK {
+			return nil, fmt.Errorf("list genres of library %s: status %d, %v", l.ID, status, err)
+		}
+		var v struct {
+			MediaContainer struct {
+				Directory []struct {
+					Key   json.RawMessage `json:"key"`
+					Title string          `json:"title"`
+				} `json:"Directory"`
+			} `json:"MediaContainer"`
+		}
+		if err := json.Unmarshal(body, &v); err != nil {
+			return nil, err
+		}
+		for _, d := range v.MediaContainer.Directory {
+			// PMS sends the key as a string, but a number reads the same.
+			if key := strings.Trim(string(d.Key), `"`); key != "" {
+				out = append(out, api.Genre{ID: "genre-" + key, Name: d.Title})
+			}
+		}
 	}
 	return out, nil
 }

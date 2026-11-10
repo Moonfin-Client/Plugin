@@ -2023,6 +2023,16 @@
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Connecting to this server</h3>
                         <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="PublicServerUrl">Public Server URL (Optional)</label>
+                            <input type="url" id="PublicServerUrl" is="emby-input" placeholder="https://jellyfin.example.com" />
+                            <div class="fieldDescription">
+                                The address people and services outside your network reach this Jellyfin server at.
+                                Watch party invite links point here, and Seerr sends its request notifications here.
+                                Leave it empty to use Jellyfin's published server URL, or else the address each request came in at.
+                                Use the base URL, for example <code>https://jellyfin.example.com</code>.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="WebDefaultServerUrl">Default Server URL (Optional)</label>
                             <input type="url" id="WebDefaultServerUrl" is="emby-input" placeholder="https://jellyfin.example.com" />
                             <div class="fieldDescription">
@@ -2093,15 +2103,11 @@
                                 The icon is always auto-detected regardless of this setting.
                             </div>
                         </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="PublicServerUrl">Public Server URL (Optional)</label>
-                            <input type="url" id="PublicServerUrl" is="emby-input" placeholder="https://jellyfin.example.com" />
+                        <div class="inputContainer" id="SeerrWebhookBlock">
                             <div class="fieldDescription">
-                                <strong>The address Seerr uses to reach this Jellyfin server</strong> for request
-                                notifications (the webhook Seerr calls back). Set this when Seerr and Jellyfin run in
-                                separate containers or hosts, since the server otherwise can only guess a local address
-                                that Seerr may not be able to reach. Use the base URL, for example
-                                <code>http://192.168.1.10:8096</code> or <code>https://jellyfin.example.com</code>.
+                                Seerr sends request notifications back to this server at the Public Server URL under
+                                Web Client, or at a local address the server guesses when that's empty. Set it when
+                                Seerr and Jellyfin run in separate containers or hosts.
                                 <br /><br />
                                 <span id="WebhookProvisioningStatus" style="color: rgba(255,255,255,0.6);"></span>
                                 <br />
@@ -4132,6 +4138,15 @@
                                 <div id="DefaultSeasonalRowHolidays" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:6px;margin-top:6px;"></div>
                                 <div class="fieldDescription">Untick a holiday to hide its row for users who haven't chosen for themselves.</div>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSeasonalRowAllYear">Seasonal Row All Year</label>
+                                <select id="DefaultSeasonalRowAllYear" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">On</option>
+                                    <option value="false">Off</option>
+                                </select>
+                                <div class="fieldDescription">Show the row outside the holiday dates too, a different ticked holiday each day. A holiday that's in season still comes first.</div>
+                            </div>
 
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultEnableRadarrCalendar">Radarr Calendar</label>
@@ -4251,6 +4266,17 @@
                                 </select>
                                 <div class="fieldDescription">
                                     The discovery tab in book and audiobook libraries, which browses titles from Open Library and LibriVox. This is the default only. A user can still turn it back on for themselves.
+                                </div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultBookFoldersAsSeries">Treat Book Folders as Series</label>
+                                <select id="DefaultBookFoldersAsSeries" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">
+                                    By default, Moonfin uses book items' metadata to determine series information. Enabling this will use the folders the books sit in as series instead. Check your book library's folder structure and metadata before setting this. 
                                 </div>
                             </div>
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Library Visibility</h4>
@@ -4712,6 +4738,31 @@
                                     <option value="15000">15 seconds</option>
                                     <option value="30000">30 seconds</option>
                                 </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultControlsHideDelay">Hide Controls After</label>
+                                <select id="DefaultControlsHideDelay" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="1000">1 second</option>
+                                    <option value="3000">3 seconds</option>
+                                    <option value="5000">5 seconds</option>
+                                </select>
+                                <div class="fieldDescription">How long the player controls stay on screen after the last button press, tap or mouse move.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHdrControlsDimming">Dim Controls in HDR</label>
+                                <select id="DefaultHdrControlsDimming" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">Off</option>
+                                    <option value="10">10%</option>
+                                    <option value="20">20%</option>
+                                    <option value="30">30%</option>
+                                    <option value="40">40%</option>
+                                    <option value="50">50%</option>
+                                    <option value="60">60%</option>
+                                    <option value="70">70%</option>
+                                </select>
+                                <div class="fieldDescription">How much the player controls dim while HDR video plays, since white looks far brighter next to it.</div>
                             </div>
 
                             <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Player Buttons</h4>
@@ -5660,16 +5711,26 @@
                             <label class="inputLabel inputLabelUnfocused" for="WatchPartyMaxMembers">People per room</label>
                             <input is="emby-input" type="number" id="WatchPartyMaxMembers" min="2" max="100" step="1" />
                         </div>
-                        <div class="fieldDescription">Chat over the video and party alerts are each user's own settings. Their defaults are under User defaults &gt; Playback &gt; Watch Parties.</div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="EnableSocketRelay" is="emby-checkbox" />
+                                <span>SyncPlay relay for Roku</span>
+                            </label>
+                            <div class="fieldDescription">Roku can't open secure sockets, so on an https server it gets SyncPlay messages through Moonbase instead.</div>
+                        </div>
+                        <div class="fieldDescription" id="WatchPartiesNote">
+                            Whether Jellyfin users start Watch Parties or SyncPlay, chat over the video and party alerts are each user's own settings.
+                            Their defaults are under User defaults &gt; Playback &gt; Watch Parties, and rooms of both kinds show up in the app.
+                        </div>
                     </div>
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Live rooms</h3>
                         <div id="WatchPartyRoomsSummary" class="fieldDescription" style="margin-bottom: 0.8em;"></div>
-                        <div id="WatchPartyRoomsList" class="moonfinWatchPartyRooms"></div>
+                        <div id="WatchPartyRoomsList"></div>
                         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6em; margin-top:0.8em;">
                             <button is="emby-button" type="button" id="WatchPartyRoomsRefresh" class="raised"><span>Refresh</span></button>
                         </div>
-                        <div class="fieldDescription" style="margin-top: 0.8em;">Rooms live in memory, so a restart of Moonbase ends them.</div>
+                        <div class="fieldDescription" id="WatchPartyRoomsNote" style="margin-top: 0.8em;">SyncPlay groups are Jellyfin's own and aren't listed here. Rooms live in memory, so a server restart ends them.</div>
                     </div>
 
                     </section>
@@ -6381,7 +6442,7 @@
             // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
             // has to come after the rule that hides its parent.
             var FIELD_DEPENDENCIES = [
-                { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'PublicServerUrl', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
+                { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'SeerrWebhookBlock', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
                 { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
                 { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
@@ -6421,7 +6482,7 @@
                 { parent: 'DefaultHomeRowsImageTypeOverride', fields: ['DefaultHomeRowsImageType'] },
                 { parent: 'DefaultHomeRowsImageTypeOverride', off: ['true'], fields: ['DefaultHomeRowImageTypesSection'] },
                 { parent: 'DefaultMediaPreviewMode', off: ['off'], fields: ['DefaultPreviewAudioEnabled'] },
-                { parent: 'DefaultSeasonalRowEnabled', fields: ['DefaultSeasonalRowCountry', 'DefaultSeasonalRowHolidays'] },
+                { parent: 'DefaultSeasonalRowEnabled', fields: ['DefaultSeasonalRowCountry', 'DefaultSeasonalRowHolidays', 'DefaultSeasonalRowAllYear'] },
                 { parent: 'DefaultDetailScreenStyle', off: ['modern', 'spotlight', 'nouveau', 'minimalist', 'stage', 'premiere', 'quickLook', 'frost'], fields: ['DefaultDetailUseSeriesThumbnails'] },
                 { parent: 'DefaultDetailScreenStyle', off: ['classic', 'spotlight', 'nouveau', 'minimalist', 'stage', 'premiere', 'quickLook', 'frost'], fields: ['DefaultDetailExpandedTabs'] },
                 { parent: 'DefaultThemeMusicEnabled', fields: ['DefaultThemeMusicVolume', 'DefaultThemeMusicOnHomeRows', 'DefaultThemeMusicLoop'] },
@@ -6820,9 +6881,10 @@
                             var g = genres[i];
                             var gId = g.id || g.Id;
                             var gName = g.name || g.Name;
-                            var isChecked = selectedIds.indexOf(gId) !== -1;
+                            // The apps match excluded genres by name. Older saves hold ids, so those still tick.
+                            var isChecked = selectedIds.indexOf(gName) !== -1 || selectedIds.indexOf(gId) !== -1;
                             html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
-                                '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gId) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                                '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gName) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
                                 '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(gName) + '</div></div></label>';
                         }
                         picker.innerHTML = html;
@@ -8596,7 +8658,32 @@
                 return [];
             }
 
+            // Uploaded themes join the App Theme default as "custom:<id>", stored as customThemeId.
+            function fillUploadedThemes(items) {
+                var select = document.querySelector('#DefaultVisualTheme');
+                var group = document.querySelector('#MoonfinUploadedThemes');
+                if (!group) {
+                    group = document.createElement('optgroup');
+                    group.id = 'MoonfinUploadedThemes';
+                    group.label = 'Uploaded';
+                    select.appendChild(group);
+                }
+                var current = select.value;
+                group.innerHTML = '';
+                (items || []).forEach(function(item) {
+                    var id = item.id || item.Id;
+                    if (!id) return;
+                    var option = document.createElement('option');
+                    option.value = 'custom:' + id;
+                    option.textContent = item.displayName || item.DisplayName || id;
+                    group.appendChild(option);
+                });
+                group.hidden = !group.children.length;
+                select.value = current;
+            }
+
             function renderAdminThemesList(items) {
+                fillUploadedThemes(items);
                 var container = document.querySelector('#AdminThemesList');
                 if (!container) {
                     return;
@@ -8874,7 +8961,7 @@
                     var rooms = (data && data.rooms) || [];
                     summary.textContent = rooms.length === 0
                         ? 'No rooms are open.'
-                        : rooms.length + ' open';
+                        : (rooms.length === 1 ? '1 open' : rooms.length + ' open') + ' · Moonbase rooms only';
                     list.innerHTML = rooms.map(function(room) {
                         var status = room.phase === 'playing' ? (WATCH_PARTY_STATES[room.playback_state] || 'Playing') : 'In the lobby';
                         var started = new Date(room.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -8887,7 +8974,7 @@
                                 + '<span style="flex:1;">' + esc(member.display_name) + (member.connected ? '' : ' <span class="fieldDescription">(away)</span>') + '</span>'
                                 + action + '</div>';
                         }).join('');
-                        return '<div class="moonfinWatchPartyRoom" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:0.8em;margin-bottom:0.6em;">'
+                        return '<div style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:0.8em;margin-bottom:0.6em;">'
                             + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.8em;">'
                             + '<strong style="flex:1;min-width:12em;">' + esc(room.content_label || 'Nothing picked yet') + '</strong>'
                             + '<span>' + esc(room.host_name) + ' hosts · ' + people + ' · since ' + esc(started) + '</span>'
@@ -11397,6 +11484,7 @@
                     document.querySelector('#WatchPartyReactions').checked = config.WatchPartyReactions !== false;
                     document.querySelector('#WatchPartyAlerts').checked = config.WatchPartyAlerts !== false;
                     document.querySelector('#WatchPartyMaxMembers').value = config.WatchPartyMaxMembers || 20;
+                    document.querySelector('#EnableSocketRelay').checked = config.EnableSocketRelay !== false;
                     document.querySelector('#LiveTvAutoRecordCompleteShowing').checked = config.LiveTvAutoRecordCompleteShowing === true;
                     document.querySelector('#LiveTvIncompleteThresholdPercent').value = config.LiveTvIncompleteThresholdPercent || 90;
                     document.querySelector('#LiveTvDeleteIncompleteCopies').checked = config.LiveTvDeleteIncompleteCopies === true;
@@ -11438,6 +11526,7 @@
                         defaultsState.profiles[name] = (name === 'global' ? config.DefaultUserSettings : deviceDefaults[name]) || {};
                     });
                     defaultsState.active = 'global';
+                    fillUploadedThemes(config.UploadedThemes);
                     populateDefaults(defaultsState.profiles.global);
                     refreshDefaultsActions();
 
@@ -11449,13 +11538,14 @@
                 function populateDefaults(defaults) {
                     defaultsState.generation++;
                     setSelectValue('#DefaultInterfaceStyle', defaults.interfaceStyle, 'Configured style');
-                    setSelectValue('#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
+                    setSelectValue('#DefaultVisualTheme', defaults.customThemeId ? 'custom:' + defaults.customThemeId : defaults.visualTheme, 'Configured theme');
                     setSelectValue('#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
                     setNullableBoolSelect('#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
                     setNullableBoolSelect('#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
                     setSelectValue('#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
                     setNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
                     setNullableBoolSelect('#DefaultShowBookDiscoverTab', defaults.showBookDiscoverTab);
+                    setNullableBoolSelect('#DefaultBookFoldersAsSeries', defaults.bookFoldersAsSeries);
                     // One picker stands in for all three form factors.
                     loadButtonPicker('#DefaultDetailMetadataList', DETAIL_METADATA,
                         defaults.detailMetadataOrderTv || defaults.detailMetadataOrderMobile || defaults.detailMetadataOrderDesktop || null,
@@ -11542,6 +11632,7 @@
                     setNullableBoolSelect('#DefaultSeasonalRowEnabled', defaults.seasonalRowEnabled);
                     setSelectValue('#DefaultSeasonalRowCountry', defaults.seasonalRowCountry, 'Configured country');
                     renderSeasonalHolidayChecks(defaults.seasonalRowHiddenHolidays);
+                    setNullableBoolSelect('#DefaultSeasonalRowAllYear', defaults.seasonalRowAllYear);
 
                     setSelectValue('#DefaultHomeRowsStyle', defaults.homeRowsStyle, 'Configured style');
                     setNullableBoolSelect('#DefaultModernCardsOnMyMediaRow', defaults.modernCardsOnMyMediaRow);
@@ -11601,6 +11692,8 @@
                     setSelectValue('#DefaultUnpauseRewindDuration', defaults.unpauseRewindDuration != null ? String(defaults.unpauseRewindDuration) : '', 'Configured rewind');
                     setSelectValue('#DefaultSkipBackLength', defaults.skipBackLength != null ? String(defaults.skipBackLength) : '', 'Configured skip');
                     setSelectValue('#DefaultSkipForwardLength', defaults.skipForwardLength != null ? String(defaults.skipForwardLength) : '', 'Configured skip');
+                    setSelectValue('#DefaultControlsHideDelay', defaults.controlsHideDelay != null ? String(defaults.controlsHideDelay) : '', 'Configured delay');
+                    setSelectValue('#DefaultHdrControlsDimming', defaults.hdrControlsDimming != null ? String(defaults.hdrControlsDimming) : '', 'Configured dimming');
 
                     fillLanguageSelect('#DefaultDefaultAudioLanguage');
                     fillLanguageSelect('#DefaultDefaultSubtitleLanguage');
@@ -12345,6 +12438,7 @@
                         config.WatchPartyReactions = document.querySelector('#WatchPartyReactions').checked;
                         config.WatchPartyAlerts = document.querySelector('#WatchPartyAlerts').checked;
                         config.WatchPartyMaxMembers = wholeNumberIn(document.querySelector('#WatchPartyMaxMembers').value, 2, 100, 20);
+                        config.EnableSocketRelay = document.querySelector('#EnableSocketRelay').checked;
                         config.LiveTvAutoRecordCompleteShowing = document.querySelector('#LiveTvAutoRecordCompleteShowing').checked;
                         config.LiveTvIncompleteThresholdPercent = Math.min(100, Math.max(50, parseInt(document.querySelector('#LiveTvIncompleteThresholdPercent').value, 10) || 90));
                         config.LiveTvDeleteIncompleteCopies = document.querySelector('#LiveTvDeleteIncompleteCopies').checked;
@@ -12398,6 +12492,11 @@
                         config.DefaultDeviceSettings = {};
                         DEFAULTS_PROFILE_NAMES.slice(1).forEach(function(name) {
                             var profile = defaultsState.profiles[name];
+                            // A built-in theme for a device has to clear an uploaded one set for all
+                            // devices, or the uploaded one would still win.
+                            if (profile.visualTheme && !profile.customThemeId) {
+                                profile.customThemeId = defaultsState.profiles.global.customThemeId ? '' : null;
+                            }
                             config.DefaultDeviceSettings[name] = countSetDefaults(profile) > 0 ? profile : null;
                         });
 
@@ -12421,7 +12520,10 @@
                 // Reads the User defaults form into ds, the profile being edited.
                 function collectDefaults(ds) {
                     ds.interfaceStyle = document.querySelector('#DefaultInterfaceStyle').value || null;
-                    ds.visualTheme = document.querySelector('#DefaultVisualTheme').value || null;
+                    var theme = document.querySelector('#DefaultVisualTheme').value;
+                    var uploadedTheme = theme.indexOf('custom:') === 0;
+                    ds.visualTheme = uploadedTheme ? null : theme || null;
+                    ds.customThemeId = uploadedTheme ? theme.slice(7) : null;
                     ds.detailScreenStyle = document.querySelector('#DefaultDetailScreenStyle').value || null;
                     ds.detailExpandedTabs = getNullableBoolSelect('#DefaultDetailExpandedTabs');
                     ds.detailShowTechnicalDetails = getNullableBoolSelect('#DefaultDetailShowTechnicalDetails');
@@ -12457,6 +12559,7 @@
                     ds.detailsBackdropEnabled = getNullableBoolSelect('#DefaultDetailsBackdropEnabled');
                     ds.detailsBackdropSize = document.querySelector('#DefaultDetailsBackdropSize').value || null;
                     ds.showBookDiscoverTab = getNullableBoolSelect('#DefaultShowBookDiscoverTab');
+                    ds.bookFoldersAsSeries = getNullableBoolSelect('#DefaultBookFoldersAsSeries');
                     ds.browsingBlur = getNullableRangeInputAsText('#DefaultBrowsingBlur');
                     ds.detailsScreenBlur = getNullableRangeInputAsText('#DefaultDetailsScreenBlur');
                     ds.themeMusicEnabled = getNullableBoolSelect('#DefaultThemeMusicEnabled');
@@ -12550,12 +12653,15 @@
                     ds.seasonalRowEnabled = getNullableBoolSelect('#DefaultSeasonalRowEnabled');
                     ds.seasonalRowCountry = document.querySelector('#DefaultSeasonalRowCountry').value || null;
                     ds.seasonalRowHiddenHolidays = readSeasonalHiddenHolidays();
+                    ds.seasonalRowAllYear = getNullableBoolSelect('#DefaultSeasonalRowAllYear');
 
                     // Clients store this one as text, unlike the millisecond fields below.
                     ds.resumeSubtractDuration = document.querySelector('#DefaultResumeSubtractDuration').value || null;
                     ds.unpauseRewindDuration = getNullableIntInput('#DefaultUnpauseRewindDuration');
                     ds.skipBackLength = getNullableIntInput('#DefaultSkipBackLength');
                     ds.skipForwardLength = getNullableIntInput('#DefaultSkipForwardLength');
+                    ds.controlsHideDelay = getNullableIntInput('#DefaultControlsHideDelay');
+                    ds.hdrControlsDimming = getNullableIntInput('#DefaultHdrControlsDimming');
 
                     ds.defaultAudioLanguage = document.querySelector('#DefaultDefaultAudioLanguage').value.trim() || null;
                     ds.fallbackAudioLanguage = document.querySelector('#DefaultFallbackAudioLanguage').value.trim() || null;

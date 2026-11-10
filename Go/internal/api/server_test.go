@@ -25,6 +25,10 @@ func (fakeCatalog) Libraries(context.Context, Identity) ([]Library, error) {
 	return []Library{{ID: "1", Name: "Movies", MediaType: "movie"}}, nil
 }
 
+func (fakeCatalog) Genres(context.Context, Identity) ([]Genre, error) {
+	return []Genre{{ID: "g2", Name: "drama"}, {ID: "g1", Name: "Action"}, {ID: "g2", Name: "drama"}, {ID: "g3", Name: " "}, {ID: "g4", Name: "Comedy"}}, nil
+}
+
 // caller is the identity Silo's proxy stamps on a request. The zero value is
 // an anonymous caller. admin is Silo's acting-admin decision, so an admin
 // account's child profile reaches the plugin as a user.
@@ -166,6 +170,18 @@ func TestAuthorizationMatrix(t *testing.T) {
 		if got, _ := call(t, s, tc.c, tc.method, tc.path, "", nil); got != tc.want {
 			t.Errorf("%+v %s %s = %d, want %d", tc.c, tc.method, tc.path, got, tc.want)
 		}
+	}
+}
+
+func TestGenresAreDedupedAndSortedByName(t *testing.T) {
+	s := newTestServer()
+	if code, _ := call(t, s, anon, "GET", "/Moonfin/Genres", "", nil); code != 401 {
+		t.Fatalf("anonymous = %d", code)
+	}
+	body := readAll(t, serve(context.Background(), s, userKids, "GET", "/Moonfin/Genres", "", nil))
+	want := `{"Items":[{"Id":"g1","Name":"Action"},{"Id":"g4","Name":"Comedy"},{"Id":"g2","Name":"drama"}]}`
+	if strings.TrimSpace(string(body)) != want {
+		t.Fatalf("genres = %s, want %s", body, want)
 	}
 }
 

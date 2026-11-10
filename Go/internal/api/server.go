@@ -30,6 +30,9 @@ type Host struct {
 	// FlagsDir holds the poster label flags as flag-xx.svg and .webp. Empty
 	// serves none.
 	FlagsDir string
+	// Pins serves Moonbase's own per-account PINs. Silo keeps PINs on its
+	// profiles, and the apps use those when these routes answer 404.
+	Pins bool
 }
 
 var ErrSignedOut = errors.New("caller isn't signed in")
@@ -42,6 +45,7 @@ type Server struct {
 	catalog  Catalog
 	identify func(*http.Request) (Identity, error)
 	flagsDir string
+	pins     bool
 	mux      *http.ServeMux
 	ext      external
 
@@ -55,6 +59,12 @@ type Server struct {
 	smart smartState
 
 	arrCache ttlCache
+
+	// pinMu serializes PIN changes apart from mu, since each check runs a
+	// deliberately slow hash.
+	pinMu sync.Mutex
+
+	logUploads uploadBudgets
 }
 
 func NewServer(version string, h Host) *Server {
@@ -62,7 +72,7 @@ func NewServer(version string, h Host) *Server {
 		version = "0.0.0-dev"
 	}
 	s := &Server{version: version, name: h.Name, backURL: h.AdminBackURL, kv: h.KV, catalog: h.Catalog,
-		identify: h.Identify, flagsDir: h.FlagsDir, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}}}
+		identify: h.Identify, flagsDir: h.FlagsDir, pins: h.Pins, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}}}
 	s.smart.helper = h.SmartSearch
 	s.routes()
 	if h.SmartSearch != nil {
@@ -74,6 +84,8 @@ func NewServer(version string, h Host) *Server {
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /Moonfin/Ping", s.user(s.handlePing))
 	s.mux.HandleFunc("GET /Moonfin/Whoami", s.user(s.handleWhoami))
+	s.mux.HandleFunc("GET /Moonfin/Genres", s.user(s.handleGenres))
+	s.mux.HandleFunc("POST /Moonfin/ClientLog/Document", s.user(s.handleClientLog))
 	s.mux.HandleFunc("GET /{$}", s.user(s.handleHome))
 	s.settingsRoutes()
 	s.externalRoutes()
@@ -86,6 +98,9 @@ func (s *Server) routes() {
 	s.calendarRoutes()
 	s.posterBadgeRoutes()
 	s.miniGameRoutes()
+	if s.pins {
+		s.pinRoutes()
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }

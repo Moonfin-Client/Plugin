@@ -286,6 +286,14 @@ namespace Emby.Plugins.Moonfin
         public List<string> GameLibraryIds { get; set; } = new List<string>();
 
         /// <summary>
+        /// Serves Moonfin Web cross-origin isolated so PSP games can start in it. The player sends
+        /// the isolation headers itself, but the web app embeds it in an iframe, and an iframe is
+        /// only isolated when the page above it is. Off by default, since anything cross-origin
+        /// added to the web client then has to allow isolation too.
+        /// </summary>
+        public bool GamesIsolateWebApp { get; set; } = false;
+
+        /// <summary>
         /// Address of a RomM server whose games fill <see cref="GamesRommLibraryId"/>. The plugin
         /// talks to RomM itself, so apps never need to reach it.
         /// </summary>

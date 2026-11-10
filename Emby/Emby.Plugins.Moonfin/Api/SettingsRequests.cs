@@ -109,6 +109,14 @@ namespace Emby.Plugins.Moonfin.Api
     [Authenticated]
     public class GetDefaultsRequest : IReturn<object> { }
 
+    [Route("/Moonfin/Admin/ConfigBackup", "GET")]
+    [Authenticated(Roles = "Admin")]
+    public class GetConfigBackupRequest : IReturn<object> { }
+
+    [Route("/Moonfin/Admin/RestoreConfig", "POST")]
+    [Authenticated(Roles = "Admin")]
+    public class RestoreConfigRequest : IReturn<object> { }
+
     [Route("/Moonfin/Admin/PushDefaults", "POST")]
     [Authenticated(Roles = "Admin")]
     public class PushDefaultsRequest : IReturn<object>

@@ -45,6 +45,16 @@ func newFakePlex(t *testing.T) *fakePlex {
 				return
 			}
 			io.WriteString(w, `{"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie"},{"key":"2","title":"TV","type":"show"}]}}`)
+		case "/library/sections/1/genre", "/library/sections/2/genre":
+			if token != "owner" && token != "member" && token != "managed" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if r.URL.Path == "/library/sections/1/genre" {
+				io.WriteString(w, `{"MediaContainer":{"Directory":[{"fastKey":"/library/sections/1/all?genre=10","key":"10","title":"Drama","type":"genre"},{"key":"11","title":"action"}]}}`)
+				return
+			}
+			io.WriteString(w, `{"MediaContainer":{"Directory":[{"key":"10","title":"Drama"},{"key":"12","title":"Animation"}]}}`)
 		case "/library/metadata/100", "/library/metadata/200":
 			f.metadataCalls.Add(1)
 			switch {
@@ -143,6 +153,30 @@ func TestOwnerIsAdminAndSeesLibraries(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "owner") {
 		t.Fatal("a reply must never carry the token")
+	}
+}
+
+// Plex keeps one key for a genre in every library, so a genre two libraries
+// share is listed once, under the id the app uses.
+func TestGenresComeFromTheCallersLibraries(t *testing.T) {
+	c := newCompanion(t, newFakePlex(t), t.TempDir())
+	w, _ := send(c, withToken("GET", "/Moonfin/Genres", "owner", ""))
+	want := `{"Items":[{"Id":"genre-11","Name":"action"},{"Id":"genre-12","Name":"Animation"},{"Id":"genre-10","Name":"Drama"}]}`
+	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != want {
+		t.Fatalf("genres = %d %s", w.Code, w.Body)
+	}
+}
+
+func TestPinsAreServedOnPlex(t *testing.T) {
+	c := newCompanion(t, newFakePlex(t), t.TempDir())
+	if w, body := send(c, withToken("GET", "/Moonfin/Pin", "owner", "")); w.Code != 200 || body["enabled"] != false {
+		t.Fatalf("PIN status = %d %v", w.Code, body)
+	}
+	if w, body := send(c, withToken("PUT", "/Moonfin/Pin", "owner", `{"pin":"2468"}`)); w.Code != 200 || body["enabled"] != true {
+		t.Fatalf("set PIN = %d %v", w.Code, body)
+	}
+	if w, body := send(c, withToken("POST", "/Moonfin/Pin/Verify", "owner", `{"pin":"2468"}`)); w.Code != 200 || body["valid"] != true {
+		t.Fatalf("verify PIN = %d %v", w.Code, body)
 	}
 }
 

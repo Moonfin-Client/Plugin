@@ -27,18 +27,18 @@
                 'Active Downloads',
                 'Calendar',
                 'Watch Parties',
-                'Live rooms'
+                'Live rooms',
+                'PINs'
             ],
-            hiddenFields: ['DefaultWatchPartyService', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
                 'DefaultShowCalendarButton', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll'],
             unsupported: {
-                'IMDb Charts': 'Not supported on Silo yet: Silo doesn’t let plugins read its library, which the charts are matched against. These settings do nothing on Silo for now.',
-                'Anime Filler & Recap Markers': 'Not supported on Silo yet: Silo doesn’t let plugins read its library. These settings do nothing on Silo for now.',
-                'Retro Games (EmulatorJS)': 'Not supported on Silo yet: Silo doesn’t let plugins read game files. These settings do nothing on Silo for now.',
-                'MDBList Integration': 'Ratings work on Silo. The official MDBList lists aren’t supported on Silo yet, because Silo doesn’t let plugins read its library.',
-                'PINs': 'Not supported on Silo yet: Moonbase doesn’t keep PINs on Silo. Apps use the PIN stored on the device.',
+                'IMDb Charts': 'Not supported on Silo yet. These settings do nothing on Silo for now.',
+                'Anime Filler & Recap Markers': 'Not supported on Silo yet. These settings do nothing on Silo for now.',
+                'Retro Games (EmulatorJS)': 'Not supported on Silo yet. These settings do nothing on Silo for now.',
+                'MDBList Integration': 'Ratings work on Silo. The official MDBList lists aren’t supported on Silo yet.',
                 'Uploaded Themes': 'Moonbase on Silo keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.',
-                'Smart Search': 'Not supported on Silo yet: Silo doesn’t let plugins read its library. These settings do nothing on Silo for now.'
+                'Smart Search': 'Not supported on Silo yet. These settings do nothing on Silo for now.'
             },
             liveTv: false,
             ownRequests: true,
@@ -52,7 +52,7 @@
             sessionEnded: 'You’re signed out of Moonbase. Sign in again with your Plex account. Changes you tried to save are kept and come back when you do.',
             signInUrl: 'admin/signin',
             hidden: ['Active Downloads'],
-            hiddenFields: ['DefaultWatchPartyService'],
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay'],
             unsupported: {
                 'Connecting to this server': 'Moonbase for Plex doesn’t host Moonfin web, so these settings do nothing on Plex.',
                 'Seerr Integration': 'The Seerr proxy isn’t part of Moonbase for Plex. These settings do nothing on Plex.',
@@ -150,18 +150,20 @@
             if (draft) {
                 lastConfig = draft;
                 fillArrFields(draft);
-                return Promise.resolve(themeView(draft));
+                fillLogUploadField(draft);
+                return Promise.resolve(clone(draft));
             }
             return this.getJSON(getUrl('Moonfin/Admin/Configuration')).then(function (config) {
                 lastConfig = config;
                 fillArrFields(config);
-                return themeView(config);
+                fillLogUploadField(config);
+                return clone(config);
             }, function (error) {
                 // Saving reads the configuration first. Once the launch cookie
                 // has run out, carry on from the copy already loaded so the
                 // save fails on its own request and keeps the changes.
                 var status = error && error.status;
-                if (status === 401 && lastConfig) return themeView(lastConfig);
+                if (status === 401 && lastConfig) return clone(lastConfig);
                 // The page has no failure handler of its own, so its loading
                 // overlay would stay up over the settings.
                 Dashboard.hideLoadingMsg();
@@ -170,8 +172,8 @@
             });
         },
         updatePluginConfiguration: function (id, config) {
-            config = themeStore(config);
             readArrFields(config);
+            readLogUploadField(config);
             return send('POST', getUrl('Moonfin/Admin/Configuration'), JSON.stringify(config), 'application/json').then(function () {
                 clearDraft();
             }, function (error) {
@@ -222,63 +224,6 @@
 
     var lastConfig = null;
     var draftOffered = false;
-
-    // An uploaded default theme is stored as customThemeId and shown in the App
-    // Theme list as "custom:<id>", in the shared defaults and in each device's.
-    function themeView(config) {
-        var view = clone(config);
-        [view.DefaultUserSettings].concat(Object.values(view.DefaultDeviceSettings || {})).forEach(function (defaults) {
-            if (defaults && defaults.customThemeId) defaults.visualTheme = 'custom:' + defaults.customThemeId;
-        });
-        fillUploadedThemes(config.UploadedThemes);
-        return view;
-    }
-
-    function themeStore(config) {
-        var global = config.DefaultUserSettings || {};
-        storeTheme(global, null);
-        var devices = config.DefaultDeviceSettings || {};
-        Object.keys(devices).forEach(function (d) {
-            if (devices[d]) storeTheme(devices[d], global);
-        });
-        return config;
-    }
-
-    function storeTheme(defaults, global) {
-        var theme = defaults.visualTheme || '';
-        var custom = theme.indexOf('custom:') === 0;
-        defaults.customThemeId = custom ? theme.slice(7) : null;
-        if (custom) defaults.visualTheme = null;
-        // A built-in theme for a device has to clear the uploaded one set for
-        // all devices, or that one would still win.
-        if (global && theme && !custom && global.customThemeId) defaults.customThemeId = '';
-    }
-
-    // Uploaded themes join the App Theme default as "custom:<id>".
-    function fillUploadedThemes(items) {
-        var select = document.getElementById('DefaultVisualTheme');
-        if (!select) return;
-        var group = document.getElementById('MoonbaseUploadedThemes');
-        if (!group) {
-            group = document.createElement('optgroup');
-            group.id = 'MoonbaseUploadedThemes';
-            group.label = 'Uploaded';
-            select.appendChild(group);
-        }
-        // Saving reads the configuration again after the admin picked a theme.
-        var current = select.value;
-        group.innerHTML = '';
-        (items || []).forEach(function (item) {
-            var id = item.id || item.Id;
-            if (!id) return;
-            var option = document.createElement('option');
-            option.value = 'custom:' + id;
-            option.textContent = item.displayName || item.DisplayName || id;
-            group.appendChild(option);
-        });
-        group.hidden = !group.children.length;
-        select.value = current;
-    }
 
     function clone(value) {
         return JSON.parse(JSON.stringify(value));
@@ -622,9 +567,49 @@
         });
     }
 
+    // Jellyfin keeps app reports itself, so its page has no switch for them.
+    // Moonbase takes them here, so the Help tab gets one.
+    var logUploadFilled = false;
+
+    function addLogUploadField(page) {
+        var help = page.querySelector('.moonfinTabPanel[data-tab="help"]');
+        if (!help) return;
+        var card = document.createElement('div');
+        card.className = 'verticalSection';
+        card.innerHTML = '<h3 class="sectionTitle">Diagnostics</h3>'
+            + '<div class="checkboxContainer checkboxContainer-withDescription">'
+            + '<label class="emby-checkbox-label"><input type="checkbox" id="EnableClientLogUpload" is="emby-checkbox" /><span>Enable client log upload</span></label>'
+            + '<div class="fieldDescription"></div></div>';
+        card.querySelector('.fieldDescription').textContent = 'Lets Moonfin apps send diagnostic and crash reports to Moonbase, which writes them to its log. This is what makes the app’s Send report to server button work. Reports have server addresses, IP addresses and access tokens stripped out before they leave the device.';
+        help.insertBefore(card, help.firstChild);
+    }
+
+    function fillLogUploadField(config) {
+        var box = document.getElementById('EnableClientLogUpload');
+        if (!box || logUploadFilled) return;
+        logUploadFilled = true;
+        box.checked = config.EnableClientLogUpload !== false;
+    }
+
+    function readLogUploadField(config) {
+        var box = document.getElementById('EnableClientLogUpload');
+        if (box) config.EnableClientLogUpload = box.checked;
+    }
+
+    // Both texts describe Jellyfin's SyncPlay, which neither host has.
+    var watchPartyNotes = {
+        WatchPartiesNote: 'Chat over the video and party alerts are each user’s own settings. Their defaults are under User defaults > Playback > Watch Parties.',
+        WatchPartyRoomsNote: 'Rooms live in memory, so a restart of Moonbase ends them.'
+    };
+
     document.addEventListener('DOMContentLoaded', function () {
         var page = document.getElementById('MoonfinConfigPage');
         if (host.arr) addArrFields(page);
+        addLogUploadField(page);
+        Object.keys(watchPartyNotes).forEach(function (id) {
+            var note = document.getElementById(id);
+            if (note) note.textContent = watchPartyNotes[id];
+        });
         upgrade(document);
         renameServer(page);
         adaptSections(page);
@@ -634,12 +619,6 @@
             // The page's globals changed: the builder keeps the Jellyfin rows.
             console.error('Moonbase: adapting the Home rows builder failed', e);
         }
-        // The App Theme default follows uploads and deletes on the Themes tab.
-        var renderThemes = window.renderAdminThemesList;
-        window.renderAdminThemesList = function (items) {
-            renderThemes(items);
-            fillUploadedThemes(items);
-        };
         new MutationObserver(function (records) {
             records.forEach(function (record) { upgrade(record.target); });
         }).observe(page, { childList: true, subtree: true });

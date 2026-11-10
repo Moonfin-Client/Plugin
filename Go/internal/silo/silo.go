@@ -11,10 +11,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	pluginv1 "github.com/Silo-Server/silo-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
 	"github.com/Silo-Server/silo-plugin-sdk/pkg/pluginsdk/runtime"
+	"github.com/Silo-Server/silo-plugin-sdk/pkg/pluginsdk/runtimehost"
 
 	"github.com/Moonfin-Client/Plugin/Go/internal/api"
 	"github.com/Moonfin-Client/Plugin/Go/internal/store"
@@ -31,7 +36,7 @@ func New(version string) *Plugin {
 	return &Plugin{Server: api.NewServer(version, api.Host{
 		Name:         "Silo",
 		KV:           &store.Packed{KV: hostKV{}, Pack: api.PerProfileKey},
-		Catalog:      hostCatalog{},
+		Catalog:      &hostCatalog{host: connectedHost, genres: map[string]cachedGenres{}},
 		Identify:     Identify,
 		AdminBackURL: "/admin/plugins",
 	})}
@@ -121,10 +126,41 @@ func (hostKV) Put(ctx context.Context, key string, value []byte) error {
 	return host.WriteInstanceState(ctx, key, value)
 }
 
-type hostCatalog struct{}
+// siloHost is the part of the Silo host the catalog reads.
+type siloHost interface {
+	ListLibraries(ctx context.Context, userID string) ([]*pluginv1.Library, error)
+	ListLibraryMedia(ctx context.Context, req runtimehost.ListLibraryMediaRequest) (*runtimehost.ListLibraryMediaResponse, error)
+}
 
-func (hostCatalog) Libraries(ctx context.Context, caller api.Identity) ([]api.Library, error) {
-	host := runtime.Host()
+// connectedHost is the Silo host, or nil until it connects.
+func connectedHost() siloHost {
+	if host := runtime.Host(); host != nil {
+		return host
+	}
+	return nil
+}
+
+type hostCatalog struct {
+	host func() siloHost
+
+	mu     sync.Mutex
+	genres map[string]cachedGenres
+}
+
+type cachedGenres struct {
+	at     time.Time
+	genres []api.Genre
+}
+
+// genresTTL is how long a set of libraries keeps its genres, since collecting
+// them reads every item in those libraries.
+const (
+	genresTTL      = 5 * time.Minute
+	genresPageSize = 500
+)
+
+func (c *hostCatalog) Libraries(ctx context.Context, caller api.Identity) ([]api.Library, error) {
+	host := c.host()
 	if host == nil {
 		return nil, ErrHostUnavailable
 	}
@@ -138,3 +174,79 @@ func (hostCatalog) Libraries(ctx context.Context, caller api.Identity) ([]api.Li
 	}
 	return out, nil
 }
+
+// Genres collects the genres of every item in the caller's libraries. Silo
+// names genres only, so each id is the one the app makes from the name.
+func (c *hostCatalog) Genres(ctx context.Context, caller api.Identity) ([]api.Genre, error) {
+	libs, err := c.Libraries(ctx, caller)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(libs))
+	for _, l := range libs {
+		ids = append(ids, l.ID)
+	}
+	// No library ids would ask Silo for every library.
+	if len(ids) == 0 {
+		return []api.Genre{}, nil
+	}
+	slices.Sort(ids)
+	key := strings.Join(ids, "\x00")
+	c.mu.Lock()
+	hit, ok := c.genres[key]
+	c.mu.Unlock()
+	if ok && time.Since(hit.at) < genresTTL {
+		return hit.genres, nil
+	}
+	genres, err := walkGenres(ctx, c.host(), ids)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	for k, e := range c.genres {
+		if time.Since(e.at) >= genresTTL {
+			delete(c.genres, k)
+		}
+	}
+	c.genres[key] = cachedGenres{at: time.Now(), genres: genres}
+	c.mu.Unlock()
+	return genres, nil
+}
+
+func walkGenres(ctx context.Context, host siloHost, libraryIDs []string) ([]api.Genre, error) {
+	if host == nil {
+		return nil, ErrHostUnavailable
+	}
+	out := []api.Genre{}
+	seen := map[string]bool{}
+	token := ""
+	for {
+		page, err := host.ListLibraryMedia(ctx, runtimehost.ListLibraryMediaRequest{LibraryIDs: libraryIDs, PageSize: genresPageSize, PageToken: token})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range page.Items {
+			for _, name := range item.Genres {
+				if folded := strings.ToLower(name); name != "" && !seen[folded] {
+					seen[folded] = true
+					out = append(out, api.Genre{ID: genreID(name), Name: name})
+				}
+			}
+		}
+		// A host that hands back the token it was given would page forever.
+		if page.NextPageToken == "" || page.NextPageToken == token {
+			return out, nil
+		}
+		token = page.NextPageToken
+	}
+}
+
+// genreID is the app's id for a Silo genre, the name percent-encoded the way
+// Dart's Uri.encodeComponent does it.
+func genreID(name string) string {
+	return "silo-genre:" + encodeComponent.Replace(url.QueryEscape(name))
+}
+
+// encodeComponent turns url.QueryEscape's output into encodeComponent's,
+// which writes a space as %20 and leaves !'()* as they are.
+var encodeComponent = strings.NewReplacer("+", "%20", "%21", "!", "%27", "'", "%28", "(", "%29", ")", "%2A", "*")

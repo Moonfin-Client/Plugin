@@ -2209,6 +2209,17 @@
         <div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
             <div class="content-primary">
                 <form id="MoonfinConfigForm">
+                    <div id="MoonfinConfigResetBanner" style="display:none; margin:0 0 1.2em 0; padding:1em 1.2em; border:1px solid rgba(245,158,11,0.6); border-left-width:4px; border-radius:4px; background:rgba(245,158,11,0.08);">
+                        <div style="font-weight:600; margin-bottom:0.4em;">These settings look like they were reset</div>
+                        <div class="fieldDescription" style="margin-bottom:0.8em;">
+                            Moonbase is running on default settings, but a backup holding real ones is still on disk at
+                            <code id="MoonfinConfigBackupPath"></code>. Restoring copies it back over the live file. The
+                            server has to be restarted afterwards for it to take effect. Per-user settings are stored
+                            separately and aren't affected by this.
+                        </div>
+                        <button is="emby-button" type="button" id="MoonfinRestoreConfigBtn" class="raised">Restore these settings</button>
+                        <div id="MoonfinRestoreConfigResult" class="fieldDescription" style="display:none; margin-top:0.6em;"></div>
+                    </div>
                     <div class="sectionTitleContainer flex align-items-center">
                         <h2 class="sectionTitle">Moonfin Settings</h2>
                     </div>
@@ -2368,6 +2379,19 @@
                                 <strong>Optional override.</strong> The name shown in the UI (e.g., "Requests", "Media Requests").
                                 Leave blank to auto-detect from the configured URL.
                                 The icon is always auto-detected regardless of this setting.
+                            </div>
+                        </div>
+                        <div class="inputContainer" id="SeerrWebhookBlock">
+                            <div class="fieldDescription">
+                                Seerr sends request notifications back to this server at the Public Server URL under
+                                Web Client, or at a local address the server guesses when that's empty. Set it when
+                                Seerr and Emby run in separate containers or hosts.
+                                <br /><br />
+                                <span id="WebhookProvisioningStatus"></span>
+                                <br />
+                                <button is="emby-button" type="button" id="ReprovisionWebhookBtn" class="raised" style="margin-top: 8px;">
+                                    Re-provision webhook
+                                </button>
                             </div>
                         </div>
                         <div style="background-color: rgba(0, 164, 220, 0.1); border: 1px solid rgba(0, 164, 220, 0.3); border-radius: 10px; padding: 1em 1.5em; margin: 1em 0;">
@@ -2623,6 +2647,18 @@
                             Box art is fetched automatically from the keyless
                             <a href="https://thumbnails.libretro.com/" target="_blank">libretro thumbnail server</a>
                             (matched by game name); no API keys or accounts are needed.
+                        </div>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="GamesIsolateWebApp" is="emby-checkbox" />
+                                <span>Isolate the web app for PSP games</span>
+                            </label>
+                            <div class="fieldDescription">
+                                PSP games need cross-origin isolation to start in Moonfin Web, and the player only gets
+                                it when the whole app is isolated. Turn this on if PSP games stop with an error, then
+                                reload Moonfin Web. Once it's on, anything cross-origin you've added to the web client
+                                has to allow isolation too.
+                            </div>
                         </div>
                     </div>
 

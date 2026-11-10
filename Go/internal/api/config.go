@@ -33,6 +33,9 @@ type Config struct {
 	Sonarr, Radarr       arrServer
 	// WatchParty is the Watch Parties tab. Only the Plex companion hosts parties.
 	WatchParty watchparty.Settings
+	// ClientLogUpload is EnableClientLogUpload, whether the apps may send
+	// their reports to the log.
+	ClientLogUpload bool
 }
 
 // DefaultsFor is the admin's defaults for one profile.
@@ -99,9 +102,12 @@ func (s *Server) config(ctx context.Context) Config {
 }
 
 func configFrom(c M) Config {
-	cfg := Config{EnableSettingsSync: true}
+	cfg := Config{EnableSettingsSync: true, ClientLogUpload: true}
 	if v, ok := c["EnableSettingsSync"].(bool); ok {
 		cfg.EnableSettingsSync = v
+	}
+	if v, ok := c["EnableClientLogUpload"].(bool); ok {
+		cfg.ClientLogUpload = v
 	}
 	cfg.MdblistAPIKey = strings.TrimSpace(str(c["MdblistApiKey"]))
 	cfg.TmdbAPIKey = strings.TrimSpace(str(c["TmdbApiKey"]))

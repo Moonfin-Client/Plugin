@@ -14,7 +14,7 @@ func Defaults() map[string]any {
 		"AnimeAudioMarkersMovies": false, "AnimeAudioSeparateDualAudio": false, "AnimeAudioTrustSelectedLibraries": false,
 		"AnimeMarkerPlacement": "below", "AnimeMarkerShowFiller": true, "AnimeMarkerShowMixed": true,
 		"AnimeMarkerShowRecap": true, "AnimeMarkerShowMangaCanon": false, "AnimeMarkerShowAnimeCanon": false,
-		"WebEnableWebRtcScan": true, "PushRelayUrl": "https://push.moonfin.io/send",
+		"WebEnableWebRtcScan": true, "EnableClientLogUpload": true, "PushRelayUrl": "https://push.moonfin.io/send",
 		"GamesEnabled": false, "GameLibraryIds": []any{}, "GamesIsolateWebApp": false, "GamesMetadataEnabled": true,
 		"GamesMetadataDbUrlBase": "https://cdn.jsdelivr.net/gh/libretro/libretro-database@master/rdb/",
 		"GamesLaunchBoxEnabled":  true, "GamesLaunchBoxUrl": "https://gamesdb.launchbox-app.com/Metadata.zip",

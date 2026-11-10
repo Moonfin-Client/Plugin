@@ -556,7 +556,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
     // has to come after the rule that hides its parent.
     var FIELD_DEPENDENCIES = [
-        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
+        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'SeerrWebhookBlock', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
         { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
         { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
         { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
@@ -812,9 +812,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     var g = genres[i];
                     var gId = g.id || g.Id;
                     var gName = g.name || g.Name;
-                    var isChecked = selectedIds.indexOf(gId) !== -1;
+                    // The apps match excluded genres by name. Older saves hold ids, so those still tick.
+                    var isChecked = selectedIds.indexOf(gName) !== -1 || selectedIds.indexOf(gId) !== -1;
                     html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;' + (isChecked ? 'background:rgba(0,164,220,0.1);' : '') + '">' +
-                        '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gId) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
+                        '<input type="checkbox" class="adminGenreCb" data-id="' + esc(gName) + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:#00a4dc;width:16px;height:16px;">' +
                         '<div style="flex:1;min-width:0;"><div style="font-size:0.9em;color:rgba(128,128,128,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(gName) + '</div></div></label>';
                 }
                 picker.innerHTML = html;
@@ -2615,7 +2616,32 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         return [];
     }
 
+    // Uploaded themes join the App Theme default as "custom:<id>", stored as customThemeId.
+    function fillUploadedThemes(view, items) {
+        var select = view.querySelector('#DefaultVisualTheme');
+        var group = view.querySelector('#MoonfinUploadedThemes');
+        if (!group) {
+            group = document.createElement('optgroup');
+            group.id = 'MoonfinUploadedThemes';
+            group.label = 'Uploaded';
+            select.appendChild(group);
+        }
+        var current = select.value;
+        group.innerHTML = '';
+        (items || []).forEach(function (item) {
+            var id = item.id || item.Id;
+            if (!id) return;
+            var option = document.createElement('option');
+            option.value = 'custom:' + id;
+            option.textContent = item.displayName || item.DisplayName || id;
+            group.appendChild(option);
+        });
+        group.hidden = !group.children.length;
+        select.value = current;
+    }
+
     function renderAdminThemesList(view, items) {
+        fillUploadedThemes(view, items);
         var container = view.querySelector('#AdminThemesList');
         if (!container) return;
         if (!items || items.length === 0) {
@@ -2735,6 +2761,73 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         console.error('Moonfin config page error:', error);
     }
 
+    function loadConfigBackupStatus(view) {
+        var banner = view.querySelector('#MoonfinConfigResetBanner');
+        ApiClient.getJSON(ApiClient.getUrl('Moonfin/Admin/ConfigBackup')).then(function (status) {
+            if (!status || !status.looksReset) {
+                banner.style.display = 'none';
+                return;
+            }
+            view.querySelector('#MoonfinConfigBackupPath').textContent = status.backupPath || 'the Moonfin data folder';
+            banner.style.display = '';
+        }, function () {
+            banner.style.display = 'none';
+        });
+    }
+
+    function restoreConfigFromBackup(view) {
+        if (!window.confirm('Copy the backup over the current Moonbase settings? The server has to be restarted afterwards.')) {
+            return;
+        }
+        var button = view.querySelector('#MoonfinRestoreConfigBtn');
+        var result = view.querySelector('#MoonfinRestoreConfigResult');
+        button.disabled = true;
+        ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('Moonfin/Admin/RestoreConfig'), dataType: 'json' }).then(function (response) {
+            result.style.display = '';
+            result.textContent = (response && response.message) || 'Configuration restored. Restart the server for it to take effect.';
+        }, function () {
+            button.disabled = false;
+            result.style.display = '';
+            result.textContent = 'Couldn\'t restore the backup. Check the server log for details.';
+        });
+    }
+
+    function loadWebhookProvisioningStatus(view) {
+        var note = view.querySelector('#WebhookProvisioningStatus');
+        note.textContent = '';
+        ApiClient.getJSON(ApiClient.getUrl('Moonfin/Notifications/WebhookInfo')).then(function (info) {
+            var msg = 'Webhook provisioning status: ' + (info && info.status ? info.status : 'Unknown') + '.';
+            if (info && info.message) {
+                msg += ' ' + info.message;
+            }
+            if (info && typeof info.currentTypes === 'number') {
+                msg += ' Current event types in Seerr: ' + info.currentTypes
+                    + ' (3918 = the four request events plus the four issue events).';
+            } else if (info && info.currentTypes === null) {
+                msg += ' Current event types in Seerr couldn\'t be read.';
+            }
+            if (info && info.likelyUnreachable) {
+                msg += ' The server could only find a loopback address, which Seerr likely can\'t reach.'
+                    + ' Set the Public Server URL under Web Client.';
+            }
+            note.textContent = msg;
+        }, function () {
+            note.textContent = '';
+        });
+    }
+
+    function reprovisionWebhook(view) {
+        var btn = view.querySelector('#ReprovisionWebhookBtn');
+        btn.disabled = true;
+        ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('Moonfin/Notifications/Reprovision') }).then(function () {
+            loadWebhookProvisioningStatus(view);
+        }, function () {
+            view.querySelector('#WebhookProvisioningStatus').textContent = 'Re-provisioning failed.';
+        }).then(function () {
+            btn.disabled = false;
+        });
+    }
+
     function loadConfig(view) {
         loading.show();
         ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
@@ -2744,6 +2837,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#SeerrUrl').value = config.SeerrUrl || '';
             view.querySelector('#SeerrDisplayName').value = config.SeerrDisplayName || '';
             view.querySelector('#PublicServerUrl').value = config.PublicServerUrl || '';
+            loadWebhookProvisioningStatus(view);
             view.querySelector('#CalendarAdminsOnly').value = config.CalendarAdminsOnly === true ? 'true' : 'false';
             view.querySelector('#CalendarDaysBack').value = config.CalendarDaysBack != null ? config.CalendarDaysBack : 14;
             view.querySelector('#CalendarDaysAhead').value = config.CalendarDaysAhead != null ? config.CalendarDaysAhead : 90;
@@ -2797,6 +2891,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             loadLibraryPicker(view, '#DefaultHiddenFromLatestLibraryPicker', 'defaultHiddenFromLatestLibraryCb', config.DefaultHiddenFromLatestLibraryIds || []);
 
             view.querySelector('#GamesEnabled').checked = config.GamesEnabled === true;
+            view.querySelector('#GamesIsolateWebApp').checked = config.GamesIsolateWebApp === true;
             loadGameLibraryPicker(view, config.GameLibraryIds || []);
             initGameCores(view, view.__moonfinState);
             view.querySelector('#GamesRommUrl').value = config.GamesRommUrl || '';
@@ -2809,6 +2904,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 defaultsState.profiles[name] = (name === 'global' ? camelKeysDeep(config.DefaultUserSettings) : deviceDefaults[name]) || {};
             });
             defaultsState.active = 'global';
+            fillUploadedThemes(view, config.UploadedThemes);
             populateDefaults(view, defaultsState.profiles.global);
             refreshDefaultsActions(view);
 
@@ -2821,7 +2917,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     function populateDefaults(view, defaults) {
         defaultsState.generation++;
         setSelectValue(view, '#DefaultInterfaceStyle', defaults.interfaceStyle, 'Configured style');
-        setSelectValue(view, '#DefaultVisualTheme', defaults.visualTheme, 'Configured theme');
+        setSelectValue(view, '#DefaultVisualTheme', defaults.customThemeId ? 'custom:' + defaults.customThemeId : defaults.visualTheme, 'Configured theme');
         setSelectValue(view, '#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
         setNullableBoolSelect(view, '#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
         setNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
@@ -3231,6 +3327,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             }
 
             config.GamesEnabled = view.querySelector('#GamesEnabled').checked;
+            config.GamesIsolateWebApp = view.querySelector('#GamesIsolateWebApp').checked;
             config.GameLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.gameLibraryCb:checked'))
                 .map(function (cb) { return cb.getAttribute('data-id'); });
             config.GamesRommUrl = view.querySelector('#GamesRommUrl').value.trim() || null;
@@ -3242,6 +3339,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.DefaultDeviceSettings = {};
             DEFAULTS_PROFILE_NAMES.slice(1).forEach(function (name) {
                 var profile = defaultsState.profiles[name];
+                // A built-in theme for a device has to clear an uploaded one set for all
+                // devices, or the uploaded one would still win.
+                if (profile.visualTheme && !profile.customThemeId) {
+                    profile.customThemeId = defaultsState.profiles.global.customThemeId ? '' : null;
+                }
                 config.DefaultDeviceSettings[name] = countSetDefaults(profile) > 0 ? profile : null;
             });
 
@@ -3259,7 +3361,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // Reads the User defaults form into d, the profile being edited.
     function collectDefaults(view, d) {
         d.interfaceStyle = view.querySelector('#DefaultInterfaceStyle').value || null;
-        d.visualTheme = view.querySelector('#DefaultVisualTheme').value || null;
+        var theme = view.querySelector('#DefaultVisualTheme').value;
+        var uploadedTheme = theme.indexOf('custom:') === 0;
+        d.visualTheme = uploadedTheme ? null : theme || null;
+        d.customThemeId = uploadedTheme ? theme.slice(7) : null;
         d.detailScreenStyle = view.querySelector('#DefaultDetailScreenStyle').value || null;
         d.detailExpandedTabs = getNullableBoolSelect(view, '#DefaultDetailExpandedTabs');
         d.detailShowTechnicalDetails = getNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails');
@@ -6777,6 +6882,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var animeLogBtn = view.querySelector('#AnimeMarkerLogBtn');
         if (animeLogBtn) animeLogBtn.addEventListener('click', function () { loadAnimeMarkerLog(view); });
 
+        view.querySelector('#ReprovisionWebhookBtn').addEventListener('click', function () { reprovisionWebhook(view); });
+        view.querySelector('#MoonfinRestoreConfigBtn').addEventListener('click', function () { restoreConfigFromBackup(view); });
+
         var animeClearLogBtn = view.querySelector('#AnimeMarkerClearLogBtn');
         if (animeClearLogBtn) animeClearLogBtn.addEventListener('click', function () { clearAnimeMarkerLog(view); });
     }
@@ -6802,6 +6910,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         loadAdminPins(view);
         loadWatchPartyRooms(view);
         updateDownloadsTabVisibility(view);
+        loadConfigBackupStatus(view);
         loadConfig(view);
         loadActionUsers(view);
     };

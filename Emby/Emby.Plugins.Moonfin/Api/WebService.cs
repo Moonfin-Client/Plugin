@@ -155,6 +155,13 @@ namespace Emby.Plugins.Moonfin.Api
 
         private object ServeFile(string fullPath)
         {
+            if (Plugin.Instance?.Configuration?.GamesIsolateWebApp == true
+                && string.Equals(Path.GetFileName(fullPath), "index.html", StringComparison.OrdinalIgnoreCase))
+            {
+                Request.Response.AddHeader("Cross-Origin-Opener-Policy", "same-origin");
+                Request.Response.AddHeader("Cross-Origin-Embedder-Policy", "credentialless");
+            }
+
             var html = RewriteBaseHref(fullPath);
             if (html == null)
             {

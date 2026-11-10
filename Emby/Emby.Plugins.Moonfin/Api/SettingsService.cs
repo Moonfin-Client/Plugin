@@ -311,6 +311,33 @@ namespace Emby.Plugins.Moonfin.Api
         }
 
         // The two PushDefaults routes stay for older callers, the admin page posts to Admin/ApplyDefaults.
+        public object Get(GetConfigBackupRequest request)
+        {
+            var backup = Plugin.Instance?.ConfigBackup;
+            return Json(new { looksReset = backup?.ConfigurationLooksReset ?? false, backupPath = backup?.BackupPath });
+        }
+
+        // Deliberately manual, so an admin who reset the settings on purpose doesn't have that undone.
+        public object Post(RestoreConfigRequest request)
+        {
+            var backup = Plugin.Instance?.ConfigBackup;
+            try
+            {
+                if (backup == null || !backup.Restore())
+                    return Json(404, new { error = "No configuration backup was found." });
+            }
+            catch (Exception ex)
+            {
+                return Json(500, new { error = ex.Message });
+            }
+            return Json(new
+            {
+                restored = true,
+                restartRequired = true,
+                message = "Configuration restored. Restart the server for it to take effect.",
+            });
+        }
+
         public Task<object> Post(PushDefaultsRequest request)
             => ApplyDefaultsAsync(request.Overwrite || ReadBoolQuery("overwrite"), null, null, null);
 
