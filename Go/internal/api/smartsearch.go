@@ -188,7 +188,7 @@ func (s *Server) handleSmartSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// There's no Seerr proxy on these hosts, so titles the library lacks have nowhere to go.
+	// Smart search here has no catalog of titles outside the library, so the Seerr list stays empty.
 	body := M{"Ready": true, "Items": items, "Seerr": []any{}}
 	if debug {
 		body["Query"] = found.Query

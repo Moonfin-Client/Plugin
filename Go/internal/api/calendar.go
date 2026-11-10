@@ -15,7 +15,7 @@ import (
 )
 
 // The Sonarr and Radarr calendars, read straight from the arr servers the
-// admin set up, since this Moonbase has no Seerr proxy to get them from.
+// admin set up.
 
 // ArrCatalog is what a host gives the calendar. Hosts whose catalog can't
 // look titles up leave it out, and the calendar stays off there.

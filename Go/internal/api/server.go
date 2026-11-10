@@ -40,6 +40,9 @@ type Host struct {
 	WebServer     string
 	// Web is the Moonfin Web bundle. Nil uses the one built in.
 	Web fs.FS
+	// SeerrPlexLogin lets callers sign in to Seerr with their Plex account,
+	// since UserID is their plex.tv account id.
+	SeerrPlexLogin bool
 }
 
 var ErrSignedOut = errors.New("caller isn't signed in")
@@ -77,6 +80,10 @@ type Server struct {
 	pinMu sync.Mutex
 
 	logUploads uploadBudgets
+
+	// seerrMu guards the stored Seerr sessions.
+	seerrMu        sync.Mutex
+	seerrPlexLogin bool
 }
 
 func NewServer(version string, h Host) *Server {
@@ -85,7 +92,7 @@ func NewServer(version string, h Host) *Server {
 	}
 	s := &Server{version: version, name: h.Name, backURL: h.AdminBackURL, kv: h.KV, catalog: h.Catalog,
 		identify: h.Identify, flagsDir: h.FlagsDir, pins: h.Pins, mux: http.NewServeMux(), ext: newExternal(), arrCache: ttlCache{m: map[string]cached{}},
-		web: h.Web, webServer: h.WebServer, webPluginMode: h.WebPluginMode}
+		web: h.Web, webServer: h.WebServer, webPluginMode: h.WebPluginMode, seerrPlexLogin: h.SeerrPlexLogin}
 	if s.web == nil {
 		s.web = bundledWeb()
 	}
@@ -114,6 +121,7 @@ func (s *Server) routes() {
 	s.watchPartyRoutes()
 	s.smartRoutes()
 	s.calendarRoutes()
+	s.seerrRoutes()
 	s.posterBadgeRoutes()
 	s.miniGameRoutes()
 	if s.pins {

@@ -813,8 +813,6 @@ func clone(m M) M {
 	return out
 }
 
-// handleSeerrConfig always reports Seerr off, since this Moonbase has no Seerr
-// proxy.
 func (s *Server) handleSeerrConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := s.config(r.Context())
 	userEnabled := true
@@ -829,5 +827,5 @@ func (s *Server) handleSeerrConfig(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = "Seerr"
 	}
-	writeJSON(w, http.StatusOK, M{"Enabled": false, "DisplayName": name, "Variant": "seerr", "UserEnabled": userEnabled})
+	writeJSON(w, http.StatusOK, M{"Enabled": seerrOn(cfg), "Url": seerrURLIfOn(cfg), "DisplayName": name, "Variant": "seerr", "UserEnabled": userEnabled})
 }

@@ -87,14 +87,15 @@ func New(cfg Config) (*Companion, error) {
 		helper = smartsearch.New(cfg.SmartSearchHelper, cfg.DataDir)
 	}
 	c.api = api.NewServer(cfg.Version, api.Host{
-		Name:        "Plex",
-		KV:          store.FileKV{Dir: storeDir},
-		Catalog:     c,
-		Identify:    c.Identify,
-		SmartSearch: helper,
-		FlagsDir:    cfg.FlagsDir,
-		Pins:        true,
-		WebServer:   cfg.PMS,
+		Name:           "Plex",
+		KV:             store.FileKV{Dir: storeDir},
+		Catalog:        c,
+		Identify:       c.Identify,
+		SmartSearch:    helper,
+		FlagsDir:       cfg.FlagsDir,
+		Pins:           true,
+		WebServer:      cfg.PMS,
+		SeerrPlexLogin: true,
 	})
 	c.startWatchParties()
 	return c, nil

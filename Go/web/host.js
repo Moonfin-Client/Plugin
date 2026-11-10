@@ -52,10 +52,10 @@
             sessionEnded: 'You’re signed out of Moonbase. Sign in again with your Plex account. Changes you tried to save are kept and come back when you do.',
             signInUrl: 'admin/signin',
             hidden: ['Active Downloads'],
-            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay'],
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay', 'SeerrWebhookBlock'],
             unsupported: {
                 'Connecting to this server': 'Moonbase for Plex serves Moonfin Web at /Moonfin/Web/ on its own port, 32500 by default. With Default Server URL empty, the app offers the Plex address Moonbase uses.',
-                'Seerr Integration': 'The Seerr proxy isn’t part of Moonbase for Plex. These settings do nothing on Plex.',
+                'Seerr Integration': 'Moonfin apps sign each person in to Seerr with their own Plex account, so Seerr has to use Plex sign-in and know them as a user of this server.',
                 'IMDb Charts': 'Not available on Plex. These settings do nothing on Plex.',
                 'Recommendations': 'Not available on Plex. These settings do nothing on Plex.',
                 'Anime Filler & Recap Markers': 'Not available on Plex. These settings do nothing on Plex.',
@@ -63,7 +63,7 @@
                 'Uploaded Themes': 'Moonbase for Plex keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.',
                 'Web Plugin Status': 'Plex Web can’t load Moonfin add-ons, so this doesn’t apply on Plex.',
                 'MDBList Integration': 'Ratings work on Plex. The official MDBList lists don’t.',
-                'Smart Search': 'Works on Plex for your library. Titles you don’t have don’t show up, since the Seerr proxy isn’t part of Moonbase for Plex. The index rebuilds a minute after Moonbase starts and every night at 3:00.',
+                'Smart Search': 'Works on Plex for your library. Titles you don’t have don’t show up on Plex yet. The index rebuilds a minute after Moonbase starts and every night at 3:00.',
                 'Calendar': 'Moonbase for Plex reads the calendar straight from Sonarr and Radarr, so set their addresses and API keys below. Reminders aren’t available on Plex.'
             },
             arr: true,
@@ -517,8 +517,8 @@
         };
     }
 
-    // Moonbase for Plex has no Seerr proxy to reach Sonarr and Radarr through,
-    // so the Calendar section gets their addresses and keys. A saved key comes
+    // Moonbase for Plex reads the calendar straight from Sonarr and Radarr, so
+    // the Calendar section gets their addresses and keys. A saved key comes
     // back as a mask, and saving the mask keeps the key.
     var arrInputs = ['SonarrUrl', 'SonarrApiKey', 'RadarrUrl', 'RadarrApiKey'];
     var arrFilled = false;

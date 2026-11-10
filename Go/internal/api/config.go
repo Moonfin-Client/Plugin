@@ -17,6 +17,9 @@ type Config struct {
 	MdblistAPIKey      string
 	TmdbAPIKey         string
 	SeerrDisplayName   string
+	SeerrEnabled       bool
+	// SeerrURL is the normalized Seerr address, empty when it isn't usable.
+	SeerrURL           string
 	SmartSearchEnabled bool
 	// SmartSearchModel is "english" or "multilingual".
 	SmartSearchModel string
@@ -121,6 +124,8 @@ func configFrom(c M) Config {
 	cfg.MdblistAPIKey = strings.TrimSpace(str(c["MdblistApiKey"]))
 	cfg.TmdbAPIKey = strings.TrimSpace(str(c["TmdbApiKey"]))
 	cfg.SeerrDisplayName = strings.TrimSpace(str(c["SeerrDisplayName"]))
+	cfg.SeerrEnabled, _ = c["SeerrEnabled"].(bool)
+	cfg.SeerrURL = normalizeSeerrURL(str(c["SeerrUrl"]))
 	cfg.SmartSearchEnabled, _ = c["SmartSearchEnabled"].(bool)
 	cfg.SmartSearchModel = str(c["SmartSearchModel"])
 	cfg.Defaults, _ = c["DefaultUserSettings"].(M)
