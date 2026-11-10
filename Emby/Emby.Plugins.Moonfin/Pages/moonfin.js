@@ -2847,6 +2847,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#MdblistOfficialListsMaxItems').value = config.MdblistOfficialListsMaxItems || 250;
             view.querySelector('#TmdbApiKey').value = config.TmdbApiKey || '';
             view.querySelector('#ImdbListsEnabled').checked = config.ImdbListsEnabled !== false;
+            view.querySelector('#RecommendationsProviderEnabled').checked = config.RecommendationsProviderEnabled !== false;
             view.querySelector('#StudioLogosEnabled').checked = config.StudioLogosEnabled !== false;
             view.querySelector('#StudioLogosMaxAgeDays').value = config.StudioLogosMaxAgeDays || 30;
             view.querySelector('#AnimeMarkersEnabled').checked = config.AnimeMarkersEnabled === true;
@@ -3270,6 +3271,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.MdblistOfficialListsMaxItems = parseInt(view.querySelector('#MdblistOfficialListsMaxItems').value, 10) || 250;
             config.TmdbApiKey = (view.querySelector('#TmdbApiKey').value || '').trim() || null;
             config.ImdbListsEnabled = view.querySelector('#ImdbListsEnabled').checked;
+            config.RecommendationsProviderEnabled = view.querySelector('#RecommendationsProviderEnabled').checked;
             config.StudioLogosEnabled = view.querySelector('#StudioLogosEnabled').checked;
             config.StudioLogosMaxAgeDays = parseInt(view.querySelector('#StudioLogosMaxAgeDays').value, 10) || 30;
             config.AnimeMarkersEnabled = view.querySelector('#AnimeMarkersEnabled').checked;

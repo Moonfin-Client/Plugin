@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
@@ -11,44 +10,18 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+using Moonfin.Recommendations;
 
 namespace Moonfin.Server.Services;
 
 /// <summary>
-/// Server side scoring for Moonfin Recommends.
-///
-/// Scoring runs in two passes. The first scores every candidate on metadata that already sits on
-/// the item, which costs nothing extra. The second takes only the best of those and adds cast and
-/// crew overlap, which needs a database read per item on Jellyfin 10.x. Splitting it keeps the
-/// people reads bounded no matter how large the library is.
+/// Gathers candidates from the library for Moonfin Recommends and ranks them with the shared
+/// scoring.
 /// </summary>
 public class MoonfinSimilarItemsService
 {
-    private const int MaxCandidatesPerQuery = 400;
-    private const int PeopleScoringPoolSize = 60;
-    private const int SparseCandidateThreshold = 20;
-    private const int SparseFallbackCount = 40;
-    private const int DefaultLimit = 20;
-    private const int MaxLimit = 200;
-
-    private const double GenrePoints = 7.0;
-    private const double GenreCap = 35.0;
-    private const double TagPoints = 4.0;
-    private const double TagCap = 20.0;
-    private const double YearMaxPoints = 10.0;
-    private const int YearDecayRange = 15;
-    private const double RatingMaxPoints = 10.0;
-    private const double TitleMatchPoints = 25.0;
-
     private readonly ILibraryManager _libraryManager;
     private readonly ILogger<MoonfinSimilarItemsService> _logger;
-
-    private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "the", "and", "with", "from", "under", "over", "about", "chapter", "part", "movie", "film"
-    };
-
-    private static readonly Regex NonWordRegex = new(@"[^\w\s]", RegexOptions.Compiled);
 
     private static readonly MethodInfo? _internalItemsQuerySetUser = typeof(InternalItemsQuery).GetMethod("SetUser", BindingFlags.Public | BindingFlags.Instance);
     private static readonly PropertyInfo? _internalItemsQueryOrderBy = typeof(InternalItemsQuery).GetProperty(nameof(InternalItemsQuery.OrderBy));
@@ -76,9 +49,7 @@ public class MoonfinSimilarItemsService
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(item);
-        var effectiveLimit = limit.GetValueOrDefault(DefaultLimit);
-        if (effectiveLimit <= 0) effectiveLimit = DefaultLimit;
-        if (effectiveLimit > MaxLimit) effectiveLimit = MaxLimit;
+        var effectiveLimit = SimilarScoring.EffectiveLimit(limit);
 
         var isSeries = item is Series;
         if (item is not Movie && !isSeries)
@@ -86,7 +57,7 @@ public class MoonfinSimilarItemsService
             return Task.FromResult<IReadOnlyList<BaseItem>>(Array.Empty<BaseItem>());
         }
 
-        var seed = new SeedProfile(item, GetItemPeople(item));
+        var seed = new SimilarSeed(Facts(item), Credits(GetItemPeople(item)));
 
         var excludedIds = new HashSet<Guid>(excludeItemIds ?? Array.Empty<Guid>())
         {
@@ -106,48 +77,38 @@ public class MoonfinSimilarItemsService
             CollectCandidates(candidatesMap, excludedIds, targetType, user, q => q.Tags = seed.Tags.ToArray());
         }
 
-        if (candidatesMap.Count < SparseCandidateThreshold)
+        if (candidatesMap.Count < SimilarScoring.SparseCandidateThreshold)
         {
-            CollectCandidates(candidatesMap, excludedIds, targetType, user, null, SparseFallbackCount);
+            CollectCandidates(candidatesMap, excludedIds, targetType, user, null, SimilarScoring.SparseFallbackCount);
         }
 
-        var scored = new List<(BaseItem Item, double Score)>(candidatesMap.Count);
-        foreach (var candidate in candidatesMap.Values)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            scored.Add((candidate, ScoreMetadata(candidate, seed)));
-        }
-
-        var pool = scored
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.Item.PremiereDate ?? DateTime.MinValue)
-            .Take(Math.Max(effectiveLimit, PeopleScoringPoolSize))
-            .ToList();
-
-        var peopleCount = Math.Min(pool.Count, PeopleScoringPoolSize);
-        if (seed.HasPeople && peopleCount > 0)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var peopleByItem = GetPeopleForItems(pool.Take(peopleCount).Select(x => x.Item).ToList());
-            for (var i = 0; i < peopleCount; i++)
+        var sorted = SimilarScoring.Rank(
+            candidatesMap.Values,
+            seed,
+            effectiveLimit,
+            Facts,
+            i => i.PremiereDate,
+            batch =>
             {
-                var (candidate, score) = pool[i];
-                if (peopleByItem.TryGetValue(candidate.Id, out var people))
-                {
-                    pool[i] = (candidate, score + ScorePeople(people, seed));
-                }
-            }
-        }
-
-        var sorted = pool
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.Item.PremiereDate ?? DateTime.MinValue)
-            .Take(effectiveLimit)
-            .Select(x => x.Item)
-            .ToList();
+                var byItem = GetPeopleForItems(batch);
+                return i => byItem.TryGetValue(i.Id, out var people) ? Credits(people) : null;
+            },
+            cancellationToken);
 
         return Task.FromResult<IReadOnlyList<BaseItem>>(sorted);
     }
+
+    private static SimilarItemFacts Facts(BaseItem item) =>
+        new(item.Name, item.Genres, item.Tags, item.Studios, item.ProductionYear, item.CommunityRating);
+
+    private static IEnumerable<(string? Name, CreditRole Role)> Credits(IEnumerable<PersonInfo> people) =>
+        people.Select(p => ((string?)p.Name, p.Type switch
+        {
+            PersonKind.Actor or PersonKind.GuestStar => CreditRole.Actor,
+            PersonKind.Director => CreditRole.Director,
+            PersonKind.Writer => CreditRole.Writer,
+            _ => CreditRole.Other
+        }));
 
     private void CollectCandidates(
         Dictionary<Guid, BaseItem> candidatesMap,
@@ -162,10 +123,9 @@ public class MoonfinSimilarItemsService
             IncludeItemTypes = [targetType],
             IsVirtualItem = false,
             Recursive = true,
-            Limit = limitOverride ?? MaxCandidatesPerQuery,
+            Limit = limitOverride ?? SimilarScoring.MaxCandidatesPerQuery,
             EnableTotalRecordCount = false
         };
-
         applyFilter?.Invoke(query);
 
         // A genre or tag filter matches any of the supplied values, so a popular genre alone can
@@ -265,176 +225,5 @@ public class MoonfinSimilarItemsService
         }
 
         return result;
-    }
-
-    private static void CollectPeople(
-        IEnumerable<PersonInfo> people,
-        HashSet<string> actors,
-        HashSet<string> directors,
-        HashSet<string> writers)
-    {
-        foreach (var person in people)
-        {
-            if (string.IsNullOrEmpty(person.Name)) continue;
-
-            switch (person.Type)
-            {
-                case PersonKind.Actor:
-                case PersonKind.GuestStar:
-                    actors.Add(person.Name);
-                    break;
-                case PersonKind.Director:
-                    directors.Add(person.Name);
-                    break;
-                case PersonKind.Writer:
-                    writers.Add(person.Name);
-                    break;
-            }
-        }
-    }
-
-    private static double ScoreDiminishing(int count, double first, double second, double third = 0.0)
-    {
-        if (count <= 0) return 0.0;
-        if (count == 1) return first;
-        if (count == 2) return first + second;
-        return first + second + third;
-    }
-
-    private static double ScoreMetadata(BaseItem candidate, SeedProfile seed)
-    {
-        double score = 0.0;
-
-        score += Math.Min(CountOverlap(candidate.Genres, seed.Genres) * GenrePoints, GenreCap);
-        score += Math.Min(CountOverlap(candidate.Tags, seed.Tags) * TagPoints, TagCap);
-        score += ScoreDiminishing(CountOverlap(candidate.Studios, seed.Studios), 12.0, 8.0);
-
-        if (candidate.ProductionYear.HasValue && seed.Year.HasValue)
-        {
-            var diff = Math.Abs(candidate.ProductionYear.Value - seed.Year.Value);
-            if (diff < YearDecayRange)
-            {
-                score += YearMaxPoints * (1.0 - ((double)diff / YearDecayRange));
-            }
-        }
-
-        if (candidate.CommunityRating.HasValue)
-        {
-            score += seed.CommunityRating.HasValue
-                ? RatingMaxPoints * Math.Max(0.0, 1.0 - (Math.Abs(candidate.CommunityRating.Value - seed.CommunityRating.Value) / 10.0))
-                : RatingMaxPoints * (candidate.CommunityRating.Value / 10.0);
-        }
-
-        if (seed.Keywords.Count > 0 && IsSequelOrSimilarTitle(seed.Keywords, candidate.Name))
-        {
-            score += TitleMatchPoints;
-        }
-
-        return score;
-    }
-
-    private static double ScorePeople(IEnumerable<PersonInfo> people, SeedProfile seed)
-    {
-        var actors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var directors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var writers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        CollectPeople(people, actors, directors, writers);
-
-        return ScoreDiminishing(actors.Count(seed.Actors.Contains), 10.0, 6.0, 4.0)
-            + ScoreDiminishing(directors.Count(seed.Directors.Contains), 15.0, 10.0, 5.0)
-            + ScoreDiminishing(writers.Count(seed.Writers.Contains), 15.0, 10.0, 5.0);
-    }
-
-    private static int CountOverlap(IReadOnlyList<string>? values, HashSet<string> seedValues)
-    {
-        if (values == null || seedValues.Count == 0) return 0;
-
-        var matches = 0;
-        for (var i = 0; i < values.Count; i++)
-        {
-            if (seedValues.Contains(values[i])) matches++;
-        }
-
-        return matches;
-    }
-
-    private static HashSet<string> ExtractKeyWords(string? title)
-    {
-        var keywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(title)) return keywords;
-
-        var cleaned = NonWordRegex.Replace(title.ToLowerInvariant(), " ");
-        foreach (var word in cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (word.Length >= 4 && !StopWords.Contains(word)) keywords.Add(word);
-        }
-
-        return keywords;
-    }
-
-    private static bool IsSequelOrSimilarTitle(HashSet<string> seedKeywords, string? candidateTitle)
-    {
-        var candidateKeywords = ExtractKeyWords(candidateTitle);
-        if (candidateKeywords.Count == 0) return false;
-
-        if (seedKeywords.IsSubsetOf(candidateKeywords) || candidateKeywords.IsSubsetOf(seedKeywords))
-        {
-            return true;
-        }
-
-        // A single subject word differing only by a short suffix (<= 2 chars), so pluralized
-        // sequels like "Alien" and "Aliens" match, while unrelated titles sharing a common
-        // prefix (such as matching "Alien" to "The Alienist") are excluded.
-        if (seedKeywords.Count == 1 && candidateKeywords.Count == 1)
-        {
-            var a = seedKeywords.First();
-            var b = candidateKeywords.First();
-            var shortWord = a.Length <= b.Length ? a : b;
-            var longWord = a.Length <= b.Length ? b : a;
-            return longWord.StartsWith(shortWord, StringComparison.OrdinalIgnoreCase) && longWord.Length - shortWord.Length <= 2;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// The seed item's metadata, read once so scoring never touches it again per candidate.
-    /// </summary>
-    private sealed class SeedProfile
-    {
-        public SeedProfile(BaseItem item, IReadOnlyList<PersonInfo> people)
-        {
-            Genres = new HashSet<string>(item.Genres ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-            Tags = new HashSet<string>(item.Tags ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-            Studios = new HashSet<string>(item.Studios ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-            Year = item.ProductionYear;
-            CommunityRating = item.CommunityRating;
-            Keywords = ExtractKeyWords(item.Name);
-
-            Actors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            Directors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            Writers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            CollectPeople(people, Actors, Directors, Writers);
-        }
-
-        public HashSet<string> Genres { get; }
-
-        public HashSet<string> Tags { get; }
-
-        public HashSet<string> Studios { get; }
-
-        public int? Year { get; }
-
-        public float? CommunityRating { get; }
-
-        public HashSet<string> Keywords { get; }
-
-        public HashSet<string> Actors { get; }
-
-        public HashSet<string> Directors { get; }
-
-        public HashSet<string> Writers { get; }
-
-        public bool HasPeople => Actors.Count > 0 || Directors.Count > 0 || Writers.Count > 0;
     }
 }

@@ -124,6 +124,9 @@ namespace Emby.Plugins.Moonfin
         /// <summary>Fetch and cache IMDb charts (Top 250, Most Popular, etc.) on a schedule so clients can show them as home rows and custom rows can resolve the imdb source.</summary>
         public bool ImdbListsEnabled { get; set; } = true;
 
+        /// <summary>Rank the similar items Moonfin apps show with Moonfin Recommends. Off hands them back to Emby's own similar items.</summary>
+        public bool RecommendationsProviderEnabled { get; set; } = true;
+
         /// <summary>Pre-warm the studio-logo cache from TMDB on a schedule so detail screens can show production-company logos. Uses the server-wide TMDB key above.</summary>
         public bool StudioLogosEnabled { get; set; } = true;
 

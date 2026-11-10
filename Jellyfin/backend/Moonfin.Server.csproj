@@ -66,6 +66,7 @@
     <Compile Include="../../shared/Romm/*.cs" Link="Romm/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Games/*.cs" Link="Games/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Bookmarks/*.cs" Link="Bookmarks/%(Filename)%(Extension)" />
+    <Compile Include="../../shared/Recommendations/*.cs" Link="Recommendations/%(Filename)%(Extension)" />
     <Compile Include="../../shared/SmartSearch/*.cs" Link="SmartSearch/%(Filename)%(Extension)" />
     <Compile Include="../../shared/PosterBadges/*.cs" Link="PosterBadges/%(Filename)%(Extension)" />
     <Compile Include="../../shared/WatchParty/*.cs" Link="WatchParty/%(Filename)%(Extension)" />
