@@ -153,6 +153,7 @@ public class MoonfinController : ControllerBase
             CalendarDaysBack = Math.Max(0, config?.CalendarDaysBack ?? 14),
             CalendarDaysAhead = Math.Max(0, config?.CalendarDaysAhead ?? 90),
             CalendarReminders = true,
+            SocketRelay = config?.EnableSocketRelay ?? false,
             DefaultSettings = _settingsService.AdminDefaultsFor(profile)
         });
     }
@@ -1853,6 +1854,12 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("recommendationsSupported")]
     public bool? RecommendationsSupported { get; set; }
+
+    /// <summary>
+    /// True when the websocket relay for clients without TLS sockets, such as Roku, is on.
+    /// </summary>
+    [JsonPropertyName("socketRelay")]
+    public bool? SocketRelay { get; set; }
 
     /// <summary>
     /// True when Seerr is set up for the arr calendar and this user passes the admins-only setting.

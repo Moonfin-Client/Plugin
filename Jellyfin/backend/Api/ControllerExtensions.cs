@@ -25,4 +25,10 @@ public static class ControllerExtensions
         var deviceId = controller.User.FindFirst("Jellyfin-DeviceId")?.Value;
         return string.IsNullOrEmpty(deviceId) ? null : deviceId;
     }
+
+    public static string? GetTokenFromClaims(this ControllerBase controller)
+        => controller.User.FindFirst("Jellyfin-Token")?.Value;
+
+    public static bool GetIsApiKeyFromClaims(this ControllerBase controller)
+        => bool.TryParse(controller.User.FindFirst("Jellyfin-IsApiKey")?.Value, out var isApiKey) && isApiKey;
 }

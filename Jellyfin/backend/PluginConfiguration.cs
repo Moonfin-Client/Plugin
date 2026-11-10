@@ -17,6 +17,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableSettingsSync { get; set; } = true;
 
     /// <summary>
+    /// Enable the websocket relay for clients that can't open TLS sockets, such as Roku.
+    /// Lets them receive SyncPlay messages on https servers through long polling.
+    /// </summary>
+    public bool EnableSocketRelay { get; set; } = true;
+
+    /// <summary>
     /// Enable Seerr integration for all users.
     /// </summary>
     public bool SeerrEnabled { get; set; } = false;
