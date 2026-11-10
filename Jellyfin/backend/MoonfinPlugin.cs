@@ -3,6 +3,7 @@ using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.DependencyInjection;
+using Moonfin.Games;
 using Moonfin.Server.Services;
 
 namespace Moonfin.Server;
@@ -25,6 +26,8 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
         Instance = this;
         ServiceProvider = serviceProvider;
+        GamesHost.Config = () => Instance?.Configuration;
+        GamesHost.DataFolderPath = () => Instance?.DataFolderPath;
 
         // Nothing here is allowed to throw. Jellyfin reads an exception out of this constructor
         // as the plugin malfunctioning, writes that into meta.json, and deletes the folder on the

@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Moonfin Game</title>
+    <style>
+      html, body, #game { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+      #moonfin-error { color: #fff; font-family: sans-serif; padding: 24px; line-height: 1.5; }
+      .ejs_virtualGamepad_open {
+        top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+        right: calc(8px + env(safe-area-inset-right, 0px)) !important;
+        width: 40px !important;
+        height: 40px !important;
+        opacity: 0.85 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="moonfin-error" style="display:none"></div>
+    <script>
+      // Query params (URL-encoded): core, rom (with the server's token query), bios, save, sram, name.
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var core = params.get('core');
+        var rom = params.get('rom');
+        if (!core || !rom) {
+          var err = document.getElementById('moonfin-error');
+          err.style.display = 'block';
+          err.textContent = 'Missing required parameters (core, rom).';
+          return;
+        }
+        // Substituted by the server: self-hosted cores when installed, otherwise the CDN.
+        window.EJS_player = '#game';
+        window.EJS_core = core;
+        window.EJS_gameUrl = rom;
+        window.EJS_pathtodata = '__EJS_PATHTODATA__';
+        window.EJS_startOnLoaded = true;
+        window.EJS_threads = !!self.crossOriginIsolated;
+        var bios = params.get('bios');
+        if (bios) { window.EJS_biosUrl = bios; }
+        var save = params.get('save');
+        if (save) { window.EJS_loadStateURL = save; }
+        // A save state already holds the battery save, so a Continue skips it.
+        var sram = params.get('sram');
+        if (sram && !save) { window.moonfinSramUrl = sram; }
+        var name = params.get('name');
+        if (name) { window.EJS_gameName = name; }
+      })();
+    </script>
+    <!-- Must load before EmulatorJS: the native host may call these globals immediately. -->
+    <script src="moonfin-bridge.js"></script>
+    <script>
+      // Load the EmulatorJS loader from the resolved data path (self-host or CDN).
+      (function () {
+        var base = window.EJS_pathtodata;
+        if (!base) { return; }
+        var s = document.createElement('script');
+        s.src = base + 'loader.js';
+        document.body.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

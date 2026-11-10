@@ -6,6 +6,7 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using Moonfin.Games;
 using Moonfin.SmartSearch;
 
 namespace Moonfin.Server.Services;

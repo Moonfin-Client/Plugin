@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moonfin.Games;
 using Moonfin.Server.Models;
 using Moonfin.Server.Services;
 using Xunit;

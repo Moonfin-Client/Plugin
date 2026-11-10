@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moonfin.Games;
 using Moonfin.Server.Services;
 using Xunit;
 

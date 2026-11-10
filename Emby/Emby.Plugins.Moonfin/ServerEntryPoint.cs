@@ -53,6 +53,7 @@ namespace Emby.Plugins.Moonfin
             PluginServices.SessionManager = _sessionManager;
 
             plugin.InitializeServices(_logManager, _appHost);
+            StartGameArtwork(plugin);
 
             // New-media notifications: ItemAdded -> coalesced websocket + push fan-out.
             var pushDelivery = plugin.PushDelivery;
@@ -114,6 +115,19 @@ namespace Emby.Plugins.Moonfin
             }
         }
 
+        private void StartGameArtwork(Plugin plugin)
+        {
+            var artwork = plugin.GameArtwork;
+            if (artwork == null) return;
+            artwork.TaskManager = _taskManager;
+            var logger = _logManager.GetLogger("MoonfinGames");
+            _ = Task.Run(async () =>
+            {
+                try { await artwork.StartAsync(CancellationToken.None).ConfigureAwait(false); }
+                catch (Exception ex) { logger.ErrorException("Starting game artwork reconciliation failed", ex); }
+            });
+        }
+
         private void StartIncompleteRecordings(Plugin plugin)
         {
             var logger = _logManager.GetLogger("MoonfinLiveTvRecordings");
@@ -137,6 +151,9 @@ namespace Emby.Plugins.Moonfin
 
         public void Dispose()
         {
+            try { Plugin.Instance?.GameArtwork?.StopAsync(CancellationToken.None).GetAwaiter().GetResult(); }
+            catch (Exception ex) { _logManager.GetLogger("MoonfinGames").ErrorException("Stopping game artwork reconciliation failed", ex); }
+
             _newMediaNotifier?.Dispose();
             _newMediaNotifier = null;
             _calendarReminders?.Dispose();

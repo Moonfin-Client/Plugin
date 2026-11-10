@@ -8,6 +8,7 @@ using MediaBrowser.Model.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moonfin.Games;
 using Moonfin.Server.Api;
 using Moonfin.Server.Services;
 using Xunit;

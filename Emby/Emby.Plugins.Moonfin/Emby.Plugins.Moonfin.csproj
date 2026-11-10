@@ -35,7 +35,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Pages\configPage.html" />
     <EmbeddedResource Include="Pages\moonfin.js" />
-    <EmbeddedResource Include="EmulatorJS\player.html" />
+    <EmbeddedResource Include="../../shared/EmulatorJS/player.html" LogicalName="Emby.Plugins.Moonfin.EmulatorJS.player.html" />
+    <EmbeddedResource Include="../../shared/EmulatorJS/moonfin-bridge.js" LogicalName="Emby.Plugins.Moonfin.EmulatorJS.moonfin-bridge.js" />
     <EmbeddedResource Include="Web\loader.js" />
     <EmbeddedResource Include="assets\*.png" />
     <EmbeddedResource Include="assets\*.svg" />

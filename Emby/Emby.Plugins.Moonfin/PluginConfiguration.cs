@@ -5,11 +5,12 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using Emby.Plugins.Moonfin.Models;
 using MediaBrowser.Model.Plugins;
+using Moonfin.Games;
 using Moonfin.PosterBadges;
 
 namespace Emby.Plugins.Moonfin
 {
-    public class PluginConfiguration : BasePluginConfiguration
+    public class PluginConfiguration : BasePluginConfiguration, IGamesConfig
     {
         public bool EnableSettingsSync { get; set; } = true;
 

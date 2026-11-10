@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moonfin.Bookmarks;
 using Moonfin.Calendar;
+using Moonfin.Games;
 using Moonfin.LiveTv;
 using Moonfin.MiniGames;
 using Moonfin.Pin;

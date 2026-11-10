@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using MediaBrowser.Model.Entities;
 using Moonfin.Games;
+using Moonfin.Games.Tests;
 using Moonfin.Server.Models;
 using Moonfin.Server.Services;
 using Xunit;

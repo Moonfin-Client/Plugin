@@ -5,6 +5,7 @@ using System.Text;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Model.Drawing;
 using Microsoft.Extensions.Logging;
+using Moonfin.Games;
 using Moonfin.Server.Services;
 using Xunit;
 
@@ -246,7 +247,7 @@ public class GameThumbServiceTests : IDisposable
         var thumbs = new DerivedThumbnailService(
             new NoOpLogger<DerivedThumbnailService>(),
             Path.Combine(_root, "game_thumbs"),
-            encoder,
+            JellyfinThumbnailEncoder.Wrap(encoder),
             encodeConcurrencyForTests: 4,
             derivedThumbBudgetForTests: TimeSpan.FromMilliseconds(50));
 

@@ -31,8 +31,6 @@ namespace Moonfin.Server.Api;
 [Route("Moonfin/Games")]
 public class GamesController : ControllerBase
 {
-    private const int MaxArtworkPriorityItems = 128;
-    private static readonly TimeSpan OriginalManifestRefresh = TimeSpan.FromSeconds(30);
     private readonly GamesService _gamesService;
     private readonly CoresService _coresService;
     private readonly GameArtworkReconciliationService _artwork;
@@ -102,62 +100,9 @@ public class GamesController : ControllerBase
         var artworkBySystem = await _artwork
             .GetSystemArtworkBatchAsync(libraryId, systems.Select(system => system.Id), cancellationToken)
             .ConfigureAwait(false);
-        foreach (var system in systems)
-        {
-            if (!artworkBySystem.TryGetValue(system.Id, out var artwork) || artwork.System.PreviewGameIds.Count == 0)
-            {
-                continue;
-            }
-
-            var panels = BuildPreviewPanels(libraryId, artwork);
-            if (panels.Count > 0)
-            {
-                system.PreviewArtwork = new GameSystemPreviewArtwork
-                {
-                    SelectionGeneration = artwork.System.InventoryGeneration ?? ArtworkGeneration(artwork.System.Generation),
-                    Panels = panels,
-                };
-            }
-        }
+        GameArtworkApi.AttachPreviews(libraryId, systems, artworkBySystem);
 
         return Ok(systems);
-    }
-
-    /// <summary>
-    /// Projects one system's durable preview choice into renderable panels, in the persisted order.
-    /// The renderable boxart entries are indexed once rather than rescanned per panel.
-    /// </summary>
-    private List<GameSystemPreviewPanel> BuildPreviewPanels(string libraryId, GameArtworkSystemReadResult artwork)
-    {
-        var renderableBoxart = new Dictionary<string, GameArtworkReadEntry>(StringComparer.Ordinal);
-        foreach (var entry in artwork.Entries)
-        {
-            if (string.Equals(entry.Role, "boxart", StringComparison.Ordinal) && IsRenderable(entry.Entry))
-            {
-                // TryAdd, not the indexer: the replaced FirstOrDefault took the first match.
-                renderableBoxart.TryAdd(entry.GameId, entry);
-            }
-        }
-
-        var panels = new List<GameSystemPreviewPanel>();
-        foreach (var gameId in artwork.System.PreviewGameIds)
-        {
-            if (panels.Count == 4)
-            {
-                break;
-            }
-
-            if (renderableBoxart.TryGetValue(gameId, out var entry))
-            {
-                panels.Add(new GameSystemPreviewPanel
-                {
-                    GameId = entry.GameId,
-                    Artwork = ToDescriptor(libraryId, entry.GameId, entry.Role, entry.Entry),
-                });
-            }
-        }
-
-        return panels;
     }
 
     /// <summary>Advertises the additive, manifest-driven artwork protocol for newer clients.</summary>
@@ -165,15 +110,7 @@ public class GamesController : ControllerBase
     [Authorize]
     [Produces(MediaTypeNames.Application.Json)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<GameArtworkCapabilities> GetArtworkCapabilities() => Ok(new GameArtworkCapabilities
-    {
-        ProtocolVersion = 3,
-        Manifest = true,
-        VersionedAssets = true,
-        PriorityHints = true,
-        SystemPreviews = true,
-        Dimensions = true,
-    });
+    public ActionResult<GameArtworkCapabilities> GetArtworkCapabilities() => Ok(GameArtworkApi.Capabilities());
 
     /// <summary>Returns one system's locally cataloged artwork state without scheduling provider work.</summary>
     [HttpGet("{libraryId}/ArtworkManifest")]
@@ -208,25 +145,14 @@ public class GamesController : ControllerBase
         // (Task D8, which changes what a "page" of this response even is) and a separate pending
         // change to when `Generation` is bumped. Removing either mechanism unilaterally before
         // those land would be an unreviewed protocol break for the old client.
-        var currentGeneration = ArtworkGeneration(artwork.System.Generation);
+        var currentGeneration = GameArtworkApi.Generation(artwork.System.Generation);
         Response.Headers["ETag"] = "\"" + currentGeneration + "\"";
         if (string.Equals(generation, currentGeneration, StringComparison.Ordinal))
         {
             return StatusCode(StatusCodes.Status304NotModified);
         }
 
-        var entries = artwork.Entries
-            .GroupBy(entry => entry.GameId, StringComparer.Ordinal)
-            .Select(group => new GameArtworkManifestEntry
-            {
-                GameId = group.Key,
-                Artwork = group.ToDictionary(
-                    entry => entry.Role,
-                    entry => ToDescriptor(libraryId, entry.GameId, entry.Role, entry.Entry),
-                    StringComparer.Ordinal),
-            })
-            .ToList();
-        return Ok(new GameArtworkManifest { Generation = currentGeneration, Entries = entries });
+        return Ok(GameArtworkApi.Manifest(libraryId, artwork));
     }
 
     /// <summary>Promotes already cataloged artwork work in client-provided priority order.</summary>
@@ -251,9 +177,9 @@ public class GamesController : ControllerBase
             return BadRequest(new { error = "A systemId is required." });
         }
 
-        if (request.Items.Count > MaxArtworkPriorityItems)
+        if (request.Items.Count > GameArtworkApi.MaxArtworkPriorityItems)
         {
-            return BadRequest(new { error = $"At most {MaxArtworkPriorityItems} artwork priority items may be submitted at once." });
+            return BadRequest(new { error = $"At most {GameArtworkApi.MaxArtworkPriorityItems} artwork priority items may be submitted at once." });
         }
 
         var system = await _artwork.GetSystemArtworkAsync(libraryId, request.SystemId, cancellationToken).ConfigureAwait(false);
@@ -262,7 +188,7 @@ public class GamesController : ControllerBase
             return NotFound();
         }
 
-        if (!string.Equals(request.KnownGeneration, ArtworkGeneration(system.System.Generation), StringComparison.Ordinal))
+        if (!string.Equals(request.KnownGeneration, GameArtworkApi.Generation(system.System.Generation), StringComparison.Ordinal))
         {
             return BadRequest(new { error = "The artwork generation is no longer current." });
         }
@@ -285,7 +211,7 @@ public class GamesController : ControllerBase
             }
 
             var seenRoles = new HashSet<string>(StringComparer.Ordinal);
-            if (item.Roles.Any(role => !IsArtworkRole(role) || !seenRoles.Add(role)))
+            if (item.Roles.Any(role => !GameArtworkApi.IsRole(role) || !seenRoles.Add(role)))
             {
                 return BadRequest(new { error = "Artwork roles must be distinct boxart, snap, or title values." });
             }
@@ -319,7 +245,7 @@ public class GamesController : ControllerBase
             return ArtworkNotFound(confirmedMissing: false);
         }
 
-        if (!IsArtworkRole(role))
+        if (!GameArtworkApi.IsRole(role))
         {
             return ArtworkNotFound(confirmedMissing: false);
         }
@@ -360,8 +286,8 @@ public class GamesController : ControllerBase
             return NotFound();
         }
 
-        var role = NormalizeLegacyRole(type);
-        if (type != null && !IsArtworkRole(type))
+        var role = GameArtworkApi.NormalizeLegacyRole(type);
+        if (type != null && !GameArtworkApi.IsRole(type))
         {
             return BadRequest(new { error = "Artwork type must be boxart, snap, or title." });
         }
@@ -676,7 +602,7 @@ public class GamesController : ControllerBase
             return ArtworkNotFound(confirmedMissing: false);
         }
 
-        var role = NormalizeLegacyRole(type);
+        var role = GameArtworkApi.NormalizeLegacyRole(type);
         var artwork = await _artwork.GetArtworkAsync(libraryId, gameId, role, cancellationToken).ConfigureAwait(false);
         if (artwork == null)
         {
@@ -714,21 +640,11 @@ public class GamesController : ControllerBase
         var asset = _artwork.ResolveLocalArtwork(
             artwork.Entry,
             artwork.Entry.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            WantsFullResolution(full));
+            GameArtworkApi.WantsFullResolution(full));
         return asset == null
             ? ArtworkNotFound(confirmedMissing: false)
             : await ServeArtworkAsync(asset, versionedUrl: false, cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>
-    /// True for <c>full=1</c>/<c>full=true</c> (any other non-empty, non-"0"/"false" value also
-    /// counts, so this is lenient about exactly how a caller spells "yes"). Missing, empty,
-    /// "0", or "false" all mean "give me the default derived thumbnail".
-    /// </summary>
-    private static bool WantsFullResolution(string? full) =>
-        !string.IsNullOrEmpty(full)
-        && full != "0"
-        && !string.Equals(full, "false", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Serves one local artwork asset. <paramref name="versionedUrl"/> distinguishes
@@ -757,30 +673,14 @@ public class GamesController : ControllerBase
             lease.Dispose();
             return Task.CompletedTask;
         });
-        Response.Headers["Cache-Control"] = SelectArtworkCacheControl(versionedUrl, asset.IsThumbnail);
+        Response.Headers["Cache-Control"] = GameArtworkApi.CacheControl(versionedUrl, asset.IsThumbnail);
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         return PhysicalFile(asset.Path, asset.ContentType);
     }
 
-    /// <summary>
-    /// Picks the artwork <c>Cache-Control</c> value. Versioned URLs (the <c>{revision}</c>
-    /// route) may be cached as <c>immutable</c> because a stale copy simply falls out of use
-    /// once the revision segment changes. The legacy, unversioned thumb route has no such
-    /// signal, so it gets a short, must-revalidate lifetime instead -- <c>PhysicalFile</c>
-    /// already emits a Last-Modified header and honors conditional GETs, so revalidation is a
-    /// cheap 304, not a re-fetch.
-    /// </summary>
-    internal static string SelectArtworkCacheControl(bool versionedUrl, bool isThumbnail) =>
-        versionedUrl && isThumbnail
-            ? "private,max-age=31536000,immutable"
-            : versionedUrl
-                ? "private,max-age=7200"
-                : "private,max-age=300,must-revalidate";
-
     private IActionResult RetryableArtworkResponse(int statusCode, TimeSpan retryAfter)
     {
-        var seconds = Math.Max(1, (int)Math.Ceiling(Math.Max(0, retryAfter.TotalSeconds)));
-        Response.Headers["Retry-After"] = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Response.Headers["Retry-After"] = GameArtworkApi.RetryAfterSeconds(retryAfter).ToString(System.Globalization.CultureInfo.InvariantCulture);
         Response.Headers["Cache-Control"] = "no-store";
         return StatusCode(statusCode);
     }
@@ -790,69 +690,6 @@ public class GamesController : ControllerBase
         Response.Headers["Cache-Control"] = confirmedMissing ? "private,max-age=300" : "no-store";
         return NotFound();
     }
-
-    internal static GameArtworkDescriptor ToDescriptor(string libraryId, string gameId, string role, ArtworkCatalogEntry entry)
-    {
-        var descriptor = new GameArtworkDescriptor { State = ArtworkState(entry.State) };
-        if (IsRenderable(entry))
-        {
-            var revision = entry.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            descriptor.Revision = revision;
-            descriptor.Url = $"/Moonfin/Games/{Uri.EscapeDataString(libraryId)}/Artwork/{Uri.EscapeDataString(gameId)}/{role}/{revision}";
-            if (entry.Width is > 0 && entry.Height is > 0)
-            {
-                descriptor.Width = entry.Width;
-                descriptor.Height = entry.Height;
-            }
-        }
-
-        if (entry.State == ArtworkCatalogState.OriginalReady)
-        {
-            var refresh = entry.RetryAfterUtc is { } retryAfter && retryAfter > DateTimeOffset.UtcNow
-                ? retryAfter - DateTimeOffset.UtcNow
-                : OriginalManifestRefresh;
-            descriptor.RefreshAfterSeconds = Math.Max(1, (int)Math.Ceiling(refresh.TotalSeconds));
-        }
-        else if (entry.State == ArtworkCatalogState.Retryable && entry.RetryAfterUtc is { } retryAfter)
-        {
-            descriptor.RetryAfterSeconds = Math.Max(1, (int)Math.Ceiling(Math.Max(0, (retryAfter - DateTimeOffset.UtcNow).TotalSeconds)));
-        }
-        else if (entry.State == ArtworkCatalogState.Pending)
-        {
-            descriptor.RefreshAfterSeconds = 5;
-        }
-
-        return descriptor;
-    }
-
-    private static bool IsRenderable(ArtworkCatalogEntry entry) =>
-        entry.State switch
-        {
-            ArtworkCatalogState.OriginalReady => !string.IsNullOrWhiteSpace(entry.OriginalPath),
-            ArtworkCatalogState.ThumbnailReady => !string.IsNullOrWhiteSpace(entry.ThumbnailPath) || !string.IsNullOrWhiteSpace(entry.OriginalPath),
-            _ => false,
-        };
-
-    private static string ArtworkState(ArtworkCatalogState state) => state switch
-    {
-        ArtworkCatalogState.OriginalReady => "originalReady",
-        ArtworkCatalogState.ThumbnailReady => "thumbnailReady",
-        ArtworkCatalogState.Missing => "missing",
-        ArtworkCatalogState.Retryable => "transientFailure",
-        _ => "pending",
-    };
-
-    private static string ArtworkGeneration(long generation) =>
-        "artwork-" + generation.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-    private static string NormalizeLegacyRole(string? type) =>
-        string.Equals(type, "snap", StringComparison.OrdinalIgnoreCase) ? "snap" :
-        string.Equals(type, "title", StringComparison.OrdinalIgnoreCase) ? "title" : "boxart";
-
-    private static bool IsArtworkRole(string? role) =>
-        string.Equals(role, "boxart", StringComparison.Ordinal) ||
-        string.Equals(role, "snap", StringComparison.Ordinal) ||
-        string.Equals(role, "title", StringComparison.Ordinal);
 
     /// <summary>Streams a BIOS file required by a system's core, HEAD included for the same
     /// cache check EmulatorJS runs on ROMs.</summary>

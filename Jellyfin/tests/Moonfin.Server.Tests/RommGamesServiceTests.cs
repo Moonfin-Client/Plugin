@@ -1,4 +1,5 @@
 using MediaBrowser.Model.Entities;
+using Moonfin.Games;
 using Moonfin.Romm;
 using Moonfin.Server.Services;
 using Xunit;

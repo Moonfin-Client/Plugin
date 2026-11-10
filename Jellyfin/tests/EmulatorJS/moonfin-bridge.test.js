@@ -122,7 +122,7 @@ const context = {
   atob: value => Buffer.from(value, 'base64').toString('binary')
 };
 
-const bridgePath = path.resolve(__dirname, '../../backend/EmulatorJS/moonfin-bridge.js');
+const bridgePath = path.resolve(__dirname, '../../../shared/EmulatorJS/moonfin-bridge.js');
 vm.runInNewContext(fs.readFileSync(bridgePath, 'utf8'), context, { filename: bridgePath });
 
 const entryPoints = [

@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Moonfin.Games;
 using Moonfin.Server.Services;
 using Xunit;
 

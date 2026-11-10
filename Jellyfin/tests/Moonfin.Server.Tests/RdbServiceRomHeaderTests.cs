@@ -1,4 +1,5 @@
 using System.Reflection;
+using Moonfin.Games;
 using Moonfin.Server.Services;
 using Xunit;
 

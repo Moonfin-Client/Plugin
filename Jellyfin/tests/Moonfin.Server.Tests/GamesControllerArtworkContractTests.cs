@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Moonfin.Games;
 using Moonfin.Server.Api;
 using Moonfin.Server.Models;
 using Moonfin.Server.Services;
@@ -47,9 +48,9 @@ public sealed class GamesControllerArtworkContractTests
             Height = 374,
         };
 
-        var renderable = GamesController.ToDescriptor("library-a", "game", "boxart", ready);
-        var unknown = GamesController.ToDescriptor("library-a", "game", "boxart", ready with { Width = null, Height = null });
-        var pending = GamesController.ToDescriptor("library-a", "game", "boxart", ready with { State = ArtworkCatalogState.Pending });
+        var renderable = GameArtworkApi.ToDescriptor("library-a", "game", "boxart", ready);
+        var unknown = GameArtworkApi.ToDescriptor("library-a", "game", "boxart", ready with { Width = null, Height = null });
+        var pending = GameArtworkApi.ToDescriptor("library-a", "game", "boxart", ready with { State = ArtworkCatalogState.Pending });
 
         Assert.Equal((512, 374), (renderable.Width, renderable.Height));
         Assert.Equal("7", renderable.Revision);
@@ -99,7 +100,7 @@ public sealed class GamesControllerArtworkContractTests
     {
         Assert.Equal(
             "private,max-age=31536000,immutable",
-            GamesController.SelectArtworkCacheControl(versionedUrl: true, isThumbnail: true));
+            GameArtworkApi.CacheControl(versionedUrl: true, isThumbnail: true));
     }
 
     [Fact]
@@ -107,7 +108,7 @@ public sealed class GamesControllerArtworkContractTests
     {
         Assert.Equal(
             "private,max-age=7200",
-            GamesController.SelectArtworkCacheControl(versionedUrl: true, isThumbnail: false));
+            GameArtworkApi.CacheControl(versionedUrl: true, isThumbnail: false));
     }
 
     [Theory]
@@ -120,7 +121,7 @@ public sealed class GamesControllerArtworkContractTests
         // of whether the served asset happens to be a thumbnail or the full-resolution original.
         Assert.Equal(
             "private,max-age=300,must-revalidate",
-            GamesController.SelectArtworkCacheControl(versionedUrl: false, isThumbnail: isThumbnail));
+            GameArtworkApi.CacheControl(versionedUrl: false, isThumbnail: isThumbnail));
     }
 
     // --- Authorization contract -------------------------------------------------------------

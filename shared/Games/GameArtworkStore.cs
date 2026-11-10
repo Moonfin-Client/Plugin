@@ -1,0 +1,640 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.Extensions.Logging;
+
+namespace Moonfin.Games;
+
+/// <summary>
+/// Resolves, downloads, and caches the original libretro artwork files.
+/// </summary>
+internal sealed class GameArtworkStore
+{
+    private const int MaxMissEntries = 6096;
+    private const int MaxFuzzyDirectorySuggestions = 3;
+    // Ten probes for the original candidates: the primary plus up to MaxSiblingArtworkNamesPerRequest
+    // siblings (7 asserted names), both fallbacks and the Game Boy filename in the other Game Boy set,
+    // so nothing is ever truncated. Anything added to that list needs a matching rise here, or it
+    // starves the fallbacks and turns artwork that does exist into a terminal Missing. A listing alias
+    // is probed after every original, outside those ten.
+    private const int MaxTotalProbesPerRequest = RdbService.MaxSiblingArtworkNamesPerRequest + 4;
+    private static readonly TimeSpan MissTtl = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(6);
+
+    // A client is waiting on GetThumbPathAsync, so it gives up well inside one ProbeTimeout: a fast
+    // miss plus a background retry beats a long hang.
+    internal static readonly TimeSpan InteractiveRequestBudget = TimeSpan.FromSeconds(3);
+
+    // Nothing waits on a prewarm, and 3s can't cover even one stalled probe of the nine a walk may
+    // make, so long arcade names expired every time and churned on the retry cycle forever. Still
+    // bounded, because a prewarm holds one of only two remote workers while it runs.
+    internal static readonly TimeSpan PrewarmRequestBudget = TimeSpan.FromSeconds(20);
+
+    private static readonly char[] ReservedChars = { '&', '*', '/', ':', '`', '<', '>', '?', '\\', '|', '"' };
+
+    // Ceiling on a single artwork response body, mirroring GamesService.MaxExtractedRomBytes and
+    // GamesController.MaxDatUploadBytes: an explicit, documented limit rather than HttpClient's
+    // ~2 GB default response buffer. ProbeTimeout bounds how long a *stalled* upstream can hold a
+    // request, not how many bytes a *fast* one can push: thumbnails.libretro.com is remote,
+    // third-party, and reachable through a configurable mirror, so a compromised or misconfigured
+    // origin could otherwise stream hundreds of megabytes into the large object heap well inside
+    // six seconds, once per candidate name per request. Real libretro boxarts/snaps/titles are
+    // tens to a few hundred KB; the largest in the set are a couple of MB, so this is generous for
+    // genuine art while bounding worst-case memory and disk per probe.
+    internal const long MaxArtworkBytes = 16L * 1024 * 1024;
+
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger _logger;
+    private readonly RdbService _rdbService;
+    private readonly ThumbnailListingStore _listings;
+    private readonly string _cacheDir;
+    private readonly long _maxArtworkBytes;
+    private readonly ConcurrentDictionary<string, DateTime> _misses = new(StringComparer.Ordinal);
+    private int _missEpoch;
+    private readonly ConcurrentDictionary<string, Lazy<Task<GameArtworkLookupResult>>> _inFlight = new(StringComparer.Ordinal);
+
+    internal event Action<string>? MetadataIndexAvailable;
+
+    internal ThumbnailListingStore ListingsForTests => _listings;
+
+    // maxArtworkBytes defaults to MaxArtworkBytes; the parameter exists so a focused test can drive
+    // the cap with a few kilobytes instead of pushing a real 16 MB body through a fake handler
+    // (mirroring ArcadeArchiveHasher.Read's maxEntryBytes and RdbReader.ReadAll's maxFileBytes seams).
+    internal GameArtworkStore(
+        IHttpClientFactory httpClientFactory,
+        ILogger logger,
+        RdbService rdbService,
+        string cacheDir,
+        long maxArtworkBytes = MaxArtworkBytes)
+    {
+        _httpClientFactory = httpClientFactory;
+        _logger = logger;
+        _rdbService = rdbService;
+        _listings = new ThumbnailListingStore(httpClientFactory, logger, () => rdbService.DataFolderPath);
+        _rdbService.IndexAvailable += platform => MetadataIndexAvailable?.Invoke(platform);
+        _cacheDir = cacheDir;
+        _maxArtworkBytes = maxArtworkBytes;
+    }
+
+    internal async Task<string?> GetThumbPathAsync(
+        string core,
+        bool coreWasDefaulted,
+        string systemName,
+        string romPath,
+        string? title,
+        GameThumbService.ThumbKind kind,
+        CancellationToken cancellationToken)
+    {
+        var result = await LookupThumbAsync(core, coreWasDefaulted, systemName, romPath, title, kind, cancellationToken)
+            .ConfigureAwait(false);
+        if (result.TimedOut)
+        {
+            throw new ThumbLookupTimedOutException(romPath, InteractiveRequestBudget);
+        }
+
+        return result.Path;
+    }
+
+    internal async Task<GameArtworkLookupResult> LookupThumbAsync(
+        string core,
+        bool coreWasDefaulted,
+        string systemName,
+        string romPath,
+        string? title,
+        GameThumbService.ThumbKind kind,
+        CancellationToken cancellationToken,
+        TimeSpan? budget = null,
+        string? remoteUrl = null)
+    {
+        var effectiveBudget = budget ?? InteractiveRequestBudget;
+        using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budgetCts.CancelAfter(effectiveBudget);
+
+        try
+        {
+            return await GetThumbPathCoreAsync(core, coreWasDefaulted, systemName, romPath, title, kind, remoteUrl, budgetCts.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(
+                "Thumbnail lookup for {RomPath} exceeded its {BudgetSeconds}s overall budget; giving up",
+                romPath,
+                effectiveBudget.TotalSeconds);
+            return GameArtworkLookupResult.TransientFailure(effectiveBudget, timedOut: true);
+        }
+    }
+
+    /// <summary>The RDB platforms a lookup for one core tries; shared so update checks cover exactly those.</summary>
+    internal static IReadOnlyList<string> CandidatePlatformsFor(string core, bool coreWasDefaulted, string systemName) =>
+        RdbService.GetCandidatePlatforms(
+            GameSystemCoreResolver.ArtworkCore(core, systemName),
+            coreWasDefaulted,
+            GamesService.FuzzySuggestCores(systemName, MaxFuzzyDirectorySuggestions));
+
+    private async Task<GameArtworkLookupResult> GetThumbPathCoreAsync(
+        string core,
+        bool coreWasDefaulted,
+        string systemName,
+        string romPath,
+        string? title,
+        GameThumbService.ThumbKind kind,
+        string? remoteUrl,
+        CancellationToken cancellationToken)
+    {
+        var sawTransientFailure = false;
+        TimeSpan? retryDelay = null;
+
+        // A RomM game names its own art. It is tried before the libretro names and doesn't
+        // count against their probe budget.
+        if (!string.IsNullOrEmpty(remoteUrl))
+        {
+            var remote = await GetThumbPathForUrlAsync(remoteUrl, kind, cancellationToken).ConfigureAwait(false);
+            if (remote.Outcome == GameArtworkLookupOutcome.Found)
+            {
+                return remote;
+            }
+
+            if (remote.Outcome == GameArtworkLookupOutcome.TransientFailure)
+            {
+                sawTransientFailure = true;
+                retryDelay = remote.RetryDelay;
+            }
+        }
+
+        RdbService.TryGetPlatform(GameSystemCoreResolver.ArtworkCore(core, systemName), out var primaryPlatform);
+        var candidatePlatforms = CandidatePlatformsFor(core, coreWasDefaulted, systemName);
+
+        var romFileName = Path.GetFileNameWithoutExtension(romPath);
+
+        // Every RDB name (primary + siblings), plus the fallbacks.
+        var candidates = new List<(string Name, string Platform)>(RdbService.MaxSiblingArtworkNamesPerRequest + 1 + 3);
+        var nameLookup = await _rdbService
+            .LookupArtworkNameAsync(candidatePlatforms, romPath, title, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Order matters here: the probe budget is spent walking this list in order, so anything
+        // appended past the budget is never probed at all. Names the RDB asserts come first, then
+        // the filename and title fallbacks -- and the budget is sized so that all of them fit.
+        //
+        // Do NOT reintroduce speculative spellings; a `~` -> `-` separator swap was tried here and
+        // removed. Measured against the live libretro inventory cross-referenced with the .rdb, on
+        // both Atari 2600 (32 RDB names carry `~`) and NES, the number of names reachable ONLY via
+        // the swapped spelling was zero: every one that has artwork has it at its exact spelling.
+        // Such a pass cannot add a hit, but it does consume probes -- and interleaving each guess
+        // behind its own name is what pushed the fallbacks past the end of the budget and recorded
+        // terminal Missing for games whose artwork sat under the plain filename.
+        if (nameLookup.Resolution is { } match)
+        {
+            foreach (var candidateName in match.Names)
+            {
+                var name = LibretroThumbName(candidateName);
+                if (name.Length > 0)
+                {
+                    candidates.Add((name, match.Platform));
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(primaryPlatform))
+        {
+            var fileNameCandidate = LibretroThumbName(romFileName);
+            if (fileNameCandidate.Length > 0)
+            {
+                candidates.Add((fileNameCandidate, primaryPlatform));
+            }
+
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                var titleCandidate = LibretroThumbName(title);
+                if (titleCandidate.Length > 0)
+                {
+                    candidates.Add((titleCandidate, primaryPlatform));
+                }
+            }
+
+            // Game Boy and Game Boy Color carts often share a folder, so the filename also gets a
+            // try in the set the folder didn't pick.
+            var otherGameBoySet = primaryPlatform switch
+            {
+                "Nintendo - Game Boy" => "Nintendo - Game Boy Color",
+                "Nintendo - Game Boy Color" => "Nintendo - Game Boy",
+                _ => null,
+            };
+            if (otherGameBoySet != null && fileNameCandidate.Length > 0)
+            {
+                candidates.Add((fileNameCandidate, otherGameBoySet));
+            }
+        }
+
+        var probesRemaining = MaxTotalProbesPerRequest;
+        foreach (var (name, platform) in candidates.Distinct())
+        {
+            if (probesRemaining <= 0)
+            {
+                break;
+            }
+
+            probesRemaining--;
+            var lookup = await GetThumbPathForNameAsync(platform, name, kind, cancellationToken).ConfigureAwait(false);
+            if (lookup.Outcome == GameArtworkLookupOutcome.Found)
+            {
+                return lookup;
+            }
+
+            if (lookup.Outcome == GameArtworkLookupOutcome.TransientFailure)
+            {
+                sawTransientFailure = true;
+                retryDelay ??= lookup.RetryDelay;
+            }
+        }
+
+        if (sawTransientFailure)
+        {
+            return GameArtworkLookupResult.TransientFailure(retryDelay);
+        }
+
+        var listingPending = false;
+        if (nameLookup.Resolution is { PrimaryIsCrcMatch: true, Names.Count: > 0 } crcMatch)
+        {
+            var (aliasResult, pending) = await ProbeListingAliasAsync(crcMatch, kind, candidates, cancellationToken)
+                .ConfigureAwait(false);
+            if (aliasResult != null)
+            {
+                return aliasResult;
+            }
+
+            listingPending = pending;
+        }
+
+        // A raw filename 404 is not authoritative while the RDB that translates a shortname
+        // (for example FBNeo's gauntlet2p) into its canonical thumbnail name is still loading;
+        // likewise while the provider listing that could reveal a differently spelled name is.
+        if (nameLookup.IsIndexPending || listingPending)
+        {
+            _logger.LogDebug(
+                "Deferring {Kind} artwork for {RomPath}: metadata index is pending; scheduling metadata retry instead of recording Missing",
+                kind,
+                romPath);
+            return GameArtworkLookupResult.MetadataPending();
+        }
+
+        return GameArtworkLookupResult.Missing();
+    }
+
+    /// <summary>
+    /// Probes the listed spelling of a checksum-matched primary name that the provider spells
+    /// differently. Returns a result to stop on (Found or transient), and whether the listing is
+    /// still unavailable or awaiting refresh, in which case a 404 everywhere proves nothing.
+    /// </summary>
+    private async Task<(GameArtworkLookupResult? Result, bool ListingPending)> ProbeListingAliasAsync(
+        ArtworkNameResolution match,
+        GameThumbService.ThumbKind kind,
+        List<(string Name, string Platform)> originals,
+        CancellationToken cancellationToken)
+    {
+        var primary = LibretroThumbName(match.Names[0]);
+        if (primary.Length == 0)
+        {
+            return (null, false);
+        }
+
+        var snapshot = _listings.Get(match.Platform, kind);
+        if (snapshot.State == ListingState.Unavailable)
+        {
+            return (null, true);
+        }
+
+        if (snapshot.Listing?.FindAlias(primary) is { } alias && !originals.Contains((alias, match.Platform)))
+        {
+            var lookup = await GetThumbPathForNameAsync(match.Platform, alias, kind, cancellationToken).ConfigureAwait(false);
+            if (lookup.Outcome == GameArtworkLookupOutcome.Found)
+            {
+                return (lookup, false);
+            }
+
+            if (lookup.Outcome == GameArtworkLookupOutcome.TransientFailure)
+            {
+                return (GameArtworkLookupResult.TransientFailure(lookup.RetryDelay), false);
+            }
+        }
+
+        return (null, snapshot.IsRefreshPending);
+    }
+
+    private Task<GameArtworkLookupResult> GetThumbPathForNameAsync(
+        string platform,
+        string name,
+        GameThumbService.ThumbKind kind,
+        CancellationToken cancellationToken) =>
+        GetCachedArtworkAsync(BuildUrl(platform, kind, name), CacheKey(platform, kind, name), kind, name, cancellationToken);
+
+    private Task<GameArtworkLookupResult> GetThumbPathForUrlAsync(
+        string url,
+        GameThumbService.ThumbKind kind,
+        CancellationToken cancellationToken) =>
+        GetCachedArtworkAsync(url, UrlCacheKey(url), kind, url, cancellationToken);
+
+    private async Task<GameArtworkLookupResult> GetCachedArtworkAsync(
+        string url,
+        string cacheKey,
+        GameThumbService.ThumbKind kind,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        if (_misses.TryGetValue(cacheKey, out var missedAt) && DateTime.UtcNow - missedAt < MissTtl)
+        {
+            return GameArtworkLookupResult.Missing();
+        }
+
+        var localPath = Path.Combine(_cacheDir, cacheKey + ".png");
+        if (File.Exists(localPath))
+        {
+            return GameArtworkLookupResult.Found(localPath);
+        }
+
+        // The download deliberately does NOT take the caller's token: it is shared by every waiter
+        // on this cache key, and the caller's token carries a per-request 3s budget
+        // (LookupThumbAsync) that is much shorter than the download's own ProbeTimeout. Cancelling
+        // a shared download because one awaiter gave up would abandon the other waiters and make
+        // the next request start the whole transfer again.
+        var lazy = _inFlight.GetOrAdd(
+            cacheKey,
+            _ => new Lazy<Task<GameArtworkLookupResult>>(
+                () => DownloadAsync(url, kind, name, cacheKey, localPath, CancellationToken.None)));
+
+        // Drop the entry when the *download* finishes, not when this awaiter stops waiting. An
+        // awaiter that hits its budget leaves the transfer running; removing the entry here would
+        // let the next request start a second, concurrent download of the same URL. Mirrors
+        // DerivedThumbnailService's completion-based removal.
+        _ = lazy.Value.ContinueWith(
+            _ => ((ICollection<KeyValuePair<string, Lazy<Task<GameArtworkLookupResult>>>>)_inFlight)
+                .Remove(new KeyValuePair<string, Lazy<Task<GameArtworkLookupResult>>>(cacheKey, lazy)),
+            TaskScheduler.Default);
+
+        try
+        {
+            return await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (lazy.Value.IsCompleted)
+            {
+                ((ICollection<KeyValuePair<string, Lazy<Task<GameArtworkLookupResult>>>>)_inFlight)
+                    .Remove(new KeyValuePair<string, Lazy<Task<GameArtworkLookupResult>>>(cacheKey, lazy));
+            }
+        }
+    }
+
+    private async Task<GameArtworkLookupResult> DownloadAsync(
+        string url,
+        GameThumbService.ThumbKind kind,
+        string name,
+        string cacheKey,
+        string localPath,
+        CancellationToken cancellationToken)
+    {
+        var missEpoch = Volatile.Read(ref _missEpoch);
+        try
+        {
+            // ProbeTimeout as a token, not just as HttpClient.Timeout: with ResponseHeadersRead the
+            // client timeout covers only the response headers, so without this the body read below
+            // would have no deadline at all.
+            using var downloadCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            downloadCts.CancelAfter(ProbeTimeout);
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = ProbeTimeout;
+            client.MaxResponseContentBufferSize = _maxArtworkBytes;
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Moonfin/1.0");
+
+            using var response = await client
+                .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, downloadCts.Token)
+                .ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                AddMiss(cacheKey, missEpoch);
+                return GameArtworkLookupResult.Missing();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return GameArtworkLookupResult.TransientFailure(RetryDelayFor(response));
+            }
+
+            if (response.Content.Headers.ContentLength > _maxArtworkBytes)
+            {
+                return OversizedArtwork(kind, name, response.Content.Headers.ContentLength);
+            }
+
+            return await SaveArtworkAsync(response, kind, name, localPath, downloadCts.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Downloading {Kind} art for {Name} failed", kind, name);
+            return GameArtworkLookupResult.TransientFailure();
+        }
+    }
+
+    /// <summary>
+    /// Streams the response body to a per-attempt temp file and atomically promotes it to
+    /// <paramref name="localPath"/>, rejecting anything past the size cap.
+    /// </summary>
+    private async Task<GameArtworkLookupResult> SaveArtworkAsync(
+        HttpResponseMessage response,
+        GameThumbService.ThumbKind kind,
+        string name,
+        string localPath,
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(_cacheDir);
+
+        // Unique per attempt. A shared "<localPath>.tmp" lets two attempts at the same artwork
+        // write the same file: one of them fails with an IOException (reported as a bogus transient
+        // failure), or -- far worse -- a half-written PNG gets promoted by File.Move and then
+        // served forever, because the File.Exists(localPath) fast path never revalidates it.
+        var temp = localPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        var promoted = false;
+        try
+        {
+            var written = await CopyCappedAsync(response, temp, cancellationToken).ConfigureAwait(false);
+            if (written < 0)
+            {
+                return OversizedArtwork(kind, name, null);
+            }
+
+            GamesCompat.MoveOverwrite(temp, localPath);
+            promoted = true;
+            return GameArtworkLookupResult.Found(localPath);
+        }
+        finally
+        {
+            if (!promoted)
+            {
+                TryDeleteTemp(temp);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Copies the response body into <paramref name="temp"/>, stopping as soon as it passes the
+    /// cap. Returns the byte count written, or -1 when the body exceeded the cap.
+    /// </summary>
+    private async Task<long> CopyCappedAsync(HttpResponseMessage response, string temp, CancellationToken cancellationToken)
+    {
+        // A declared Content-Length is only a fast pre-check -- it can be absent, or simply lie --
+        // so the real ceiling is enforced here against the bytes actually delivered.
+        var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using (source.ConfigureAwait(false))
+        {
+            var destination = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            await using (destination.ConfigureAwait(false))
+            {
+                var buffer = new byte[81920];
+                long total = 0;
+                int read;
+                while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    total += read;
+                    if (total > _maxArtworkBytes)
+                    {
+                        return -1;
+                    }
+
+                    await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                }
+
+                return total;
+            }
+        }
+    }
+
+    private GameArtworkLookupResult OversizedArtwork(GameThumbService.ThumbKind kind, string name, long? declaredLength)
+    {
+        // Deliberately transient rather than Missing: an oversized body says the upstream (or a
+        // configured mirror) is broken or hostile, not that this game has no art, and a Missing
+        // here would be negatively cached by clients that would then never ask again. Retry cost
+        // is bounded by the cap itself.
+        _logger.LogWarning(
+            "{Kind} art for {Name} exceeds the {MaxBytes}-byte cap (declared length {DeclaredLength}); refusing it",
+            kind,
+            name,
+            _maxArtworkBytes,
+            declaredLength);
+        return GameArtworkLookupResult.TransientFailure();
+    }
+
+    private void TryDeleteTemp(string temp)
+    {
+        try
+        {
+            if (File.Exists(temp))
+            {
+                File.Delete(temp);
+            }
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "Removing the partial artwork download at {Temp} failed", temp);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogDebug(ex, "Removing the partial artwork download at {Temp} failed", temp);
+        }
+    }
+
+    private static TimeSpan? RetryDelayFor(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is { } delta && delta > TimeSpan.Zero)
+        {
+            return delta;
+        }
+
+        if (retryAfter?.Date is { } date)
+        {
+            var delay = date - DateTimeOffset.UtcNow;
+            return delay > TimeSpan.Zero ? delay : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>Forgets recorded 404s and provider listings; a probe that started before this call does not record its 404 afterwards.</summary>
+    internal void ClearMissCache()
+    {
+        Interlocked.Increment(ref _missEpoch);
+        _misses.Clear();
+        _listings.Invalidate();
+    }
+
+    private void AddMiss(string cacheKey, int epoch)
+    {
+        if (Volatile.Read(ref _missEpoch) != epoch)
+        {
+            return;
+        }
+
+        if (!_misses.ContainsKey(cacheKey) && _misses.Count >= MaxMissEntries)
+        {
+            _misses.Clear();
+        }
+
+        _misses[cacheKey] = DateTime.UtcNow;
+
+        // A clear that landed between the check and the write must not leave this entry behind.
+        if (Volatile.Read(ref _missEpoch) != epoch)
+        {
+            _misses.TryRemove(cacheKey, out _);
+        }
+    }
+
+    private const string ThumbnailHost = "https://thumbnails.libretro.com/";
+
+    private static string BuildUrl(string platform, GameThumbService.ThumbKind kind, string name) =>
+        BuildListingUrl(platform, kind) + Uri.EscapeDataString(name) + ".png";
+
+    internal static string BuildListingUrl(string platform, GameThumbService.ThumbKind kind) =>
+        ThumbnailHost + Uri.EscapeDataString(platform) + "/" + FolderFor(kind) + "/";
+
+    internal static string FolderFor(GameThumbService.ThumbKind kind) => kind switch
+    {
+        GameThumbService.ThumbKind.Snap => "Named_Snaps",
+        GameThumbService.ThumbKind.Title => "Named_Titles",
+        _ => "Named_Boxarts"
+    };
+
+    private static string LibretroThumbName(string name)
+    {
+        var chars = name.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (Array.IndexOf(ReservedChars, chars[i]) >= 0)
+            {
+                chars[i] = '_';
+            }
+        }
+
+        return new string(chars);
+    }
+
+    private static string CacheKey(string platform, GameThumbService.ThumbKind kind, string name)
+    {
+        // DO NOT change this algorithm. It looks like a gratuitous inconsistency with
+        // ArtworkCatalogKey.Hash (SHA-256) for the same job, but this value is the on-disk
+        // filename: GetThumbPathForNameAsync reads and writes _cacheDir/<key>.png. Switching the
+        // hash renames every cache entry, so every already-downloaded thumbnail on every deployed
+        // server misses and re-downloads from libretro, and the old files are orphaned with no
+        // record of their names to clean them up.
+        //
+        // It is not a security boundary either way -- a collision yields a wrong thumbnail -- so
+        // there is no reason to pay that cost. Two algorithms is the correct answer here.
+        var raw = platform + "|" + FolderFor(kind) + "|" + name;
+        var hash = GamesCompat.Sha1(Encoding.UTF8.GetBytes(raw));
+        return GamesCompat.LowerHex(hash);
+    }
+
+    // Prefixed so a direct URL can never land on a libretro entry's file name.
+    private static string UrlCacheKey(string url) =>
+        "url-" + GamesCompat.LowerHex(GamesCompat.Sha1(Encoding.UTF8.GetBytes(url)));
+}

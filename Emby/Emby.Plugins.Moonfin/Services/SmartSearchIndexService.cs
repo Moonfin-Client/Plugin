@@ -106,7 +106,7 @@ namespace Emby.Plugins.Moonfin.Services
         private SmartLibrary CollectLibrary(CancellationToken cancellationToken)
         {
             var library = new SmartLibrary();
-            var gameRoots = new GamesScanner(_libraryManager, Plugin.Instance?.Romm).GetGameLibraries().SelectMany(l => l.Locations).ToList();
+            var gameRoots = Plugin.Instance?.Games?.GetGameLibraries().SelectMany(l => l.Locations).ToList() ?? new List<string>();
             foreach (var item in Page(new[] { "Movie", "Series" }, cancellationToken))
             {
                 // ROMs in a game library are stored as movies, but they aren't something to watch.

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
 using MediaBrowser.Model.Plugins;
+using Moonfin.Games;
 using Moonfin.PosterBadges;
 using Moonfin.Server.Models;
 
@@ -9,7 +10,7 @@ namespace Moonfin.Server;
 /// <summary>
 /// Admin-level plugin configuration for Moonfin.
 /// </summary>
-public class PluginConfiguration : BasePluginConfiguration
+public class PluginConfiguration : BasePluginConfiguration, IGamesConfig
 {
     /// <summary>
     /// Enable settings sync across Moonfin clients.

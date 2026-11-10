@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Moonfin.Games;
+using Moonfin.Games.Tests;
 using Moonfin.Server.Services;
 using Xunit;
 
