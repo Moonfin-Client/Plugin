@@ -25,6 +25,8 @@ namespace Emby.Plugins.Moonfin.Services
         private readonly ILogger _logger;
         private static readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
 
+        internal Func<bool, Task>? UpgradePreferenceChanged { get; set; }
+
         // Cached once. GetProperties() is called on the warm settings-resolve path.
         private static readonly System.Reflection.PropertyInfo[] ProfileProps = typeof(MoonfinSettingsProfile).GetProperties();
         private static readonly System.Reflection.PropertyInfo[] UserSettingsProps = typeof(MoonfinUserSettings).GetProperties();
@@ -343,6 +345,7 @@ namespace Emby.Plugins.Moonfin.Services
         {
             var filePath = GetUserSettingsPath(userId);
             bool settingsChanged;
+            MoonfinUserSettings? savedSnapshot = null;
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -373,6 +376,7 @@ namespace Emby.Plugins.Moonfin.Services
                 MoveContentHidingToGlobal(finalSettings, storedHiddenContinueWatching, storedHiddenNextUp);
 
                 settingsChanged = SettingsDiffer(beforeComparisonJson, finalSettings);
+                savedSnapshot = finalSettings;
 
                 var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
@@ -380,6 +384,11 @@ namespace Emby.Plugins.Moonfin.Services
             finally
             {
                 _lock.Release();
+            }
+
+            if (savedSnapshot != null)
+            {
+                await SyncRecentRowPreferencesAsync(userId, savedSnapshot, null).ConfigureAwait(false);
             }
 
             // A merge that changed nothing is the client echoing state it already
@@ -392,6 +401,7 @@ namespace Emby.Plugins.Moonfin.Services
         {
             var filePath = GetUserSettingsPath(userId);
             bool settingsChanged;
+            MoonfinUserSettings? savedSnapshot = null;
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -429,6 +439,7 @@ namespace Emby.Plugins.Moonfin.Services
                 MoveContentHidingToGlobal(settings, storedHiddenContinueWatching, storedHiddenNextUp);
 
                 settingsChanged = SettingsDiffer(beforeComparisonJson, settings);
+                savedSnapshot = settings;
 
                 var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, serialized)).ConfigureAwait(false);
@@ -436,6 +447,11 @@ namespace Emby.Plugins.Moonfin.Services
             finally
             {
                 _lock.Release();
+            }
+
+            if (savedSnapshot != null)
+            {
+                await SyncRecentRowPreferencesAsync(userId, savedSnapshot, profileName).ConfigureAwait(false);
             }
 
             // Same echo guard as SaveUserSettingsAsync.
@@ -1259,6 +1275,98 @@ namespace Emby.Plugins.Moonfin.Services
             foreach (var prop in ProfileProps)
                 if (prop.GetValue(profile) != null) return true;
             return false;
+        }
+
+        public bool IsAnyHideUpgradesEnabled()
+        {
+            var config = Plugin.Instance?.Configuration;
+            if (config?.DefaultUserSettings?.HideUpgradesInRecentRows == true ||
+                config?.GetDefaultsFor("tv")?.HideUpgradesInRecentRows == true ||
+                config?.GetDefaultsFor("desktop")?.HideUpgradesInRecentRows == true ||
+                config?.GetDefaultsFor("mobile")?.HideUpgradesInRecentRows == true)
+            {
+                return true;
+            }
+
+            if (!Directory.Exists(_dataPath))
+            {
+                return false;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
+            {
+                var fileName = Path.GetFileNameWithoutExtension(file);
+                if (!Guid.TryParse(fileName, out _))
+                {
+                    continue;
+                }
+
+                var settings = ReadSettingsWithRecovery(file);
+                if (settings == null)
+                {
+                    continue;
+                }
+
+                if (settings.Global?.HideUpgradesInRecentRows == true ||
+                    settings.Tv?.HideUpgradesInRecentRows == true ||
+                    settings.Desktop?.HideUpgradesInRecentRows == true ||
+                    settings.Mobile?.HideUpgradesInRecentRows == true)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private async Task SyncRecentRowPreferencesAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName)
+        {
+            var resolved = ResolveProfile(settings, string.IsNullOrEmpty(activeProfileName) ? "global" : activeProfileName);
+            var hideWatched = resolved.HideWatchedInRecentRows
+                ?? settings.Global?.HideWatchedInRecentRows
+                ?? settings.Tv?.HideWatchedInRecentRows
+                ?? settings.Desktop?.HideWatchedInRecentRows
+                ?? settings.Mobile?.HideWatchedInRecentRows;
+
+            if (hideWatched.HasValue)
+            {
+                try
+                {
+                    var userManager = PluginServices.UserManager;
+                    var user = userManager?.GetUserById(userId);
+                    if (userManager != null && user != null)
+                    {
+                        var userConfig = userManager.GetUserConfiguration(user);
+                        if (userConfig != null && userConfig.HidePlayedInLatest != hideWatched.Value)
+                        {
+                            userConfig.HidePlayedInLatest = hideWatched.Value;
+                            userManager.UpdateConfiguration(user, userConfig);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug("Could not sync HidePlayedInLatest for user " + userId + ": " + ex.Message);
+                }
+            }
+
+            var hideUpgrades = resolved.HideUpgradesInRecentRows
+                ?? settings.Global?.HideUpgradesInRecentRows
+                ?? settings.Tv?.HideUpgradesInRecentRows
+                ?? settings.Desktop?.HideUpgradesInRecentRows
+                ?? settings.Mobile?.HideUpgradesInRecentRows;
+
+            if (hideUpgrades.HasValue && UpgradePreferenceChanged != null)
+            {
+                try
+                {
+                    await UpgradePreferenceChanged(hideUpgrades.Value).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug("Could not apply upgrade date preference for user " + userId + ": " + ex.Message);
+                }
+            }
         }
     }
 }

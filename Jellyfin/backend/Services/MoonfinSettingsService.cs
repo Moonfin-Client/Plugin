@@ -5,7 +5,10 @@ using System.Threading.Channels;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using MediaBrowser.Model.Configuration;
+using MediaBrowser.Model.Dto;
 using Microsoft.Extensions.Logging;
+using Moonfin.Server.Helpers;
 using Moonfin.Server.Models;
 
 namespace Moonfin.Server.Services;
@@ -18,8 +21,22 @@ public class MoonfinSettingsService
     private readonly string _dataPath;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger<MoonfinSettingsService> _logger;
+    private readonly IServiceProvider? _serviceProvider;
     private static readonly SemaphoreSlim _lock = new(1, 1);
     private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<Channel<string>, byte>> _sseChannels = new();
+
+    private static readonly Type? UserManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
+
+    private static readonly MethodInfo? GetUserDtoMethod = UserManagerType?
+        .GetMethods()
+        .Where(m => m.Name == "GetUserDto" && typeof(UserDto).IsAssignableFrom(m.ReturnType))
+        .OrderBy(m => m.GetParameters().Length)
+        .FirstOrDefault();
+
+    private static readonly MethodInfo? UpdateConfigurationMethod = UserManagerType?
+        .GetMethod("UpdateConfigurationAsync", [typeof(Guid), typeof(UserConfiguration)]);
+
+    internal Func<bool, Task>? UpgradePreferenceChanged { get; set; }
 
     // Resolve and merge reflect over every property on each call, and the profile carries a
     // couple of hundred of them, so the lookup is cached rather than repeated per request.
@@ -53,16 +70,17 @@ public class MoonfinSettingsService
         nameof(MoonfinSettingsProfile.MediaBarMdblistRatingSources),
     ];
 
-    public MoonfinSettingsService(ILogger<MoonfinSettingsService> logger)
-        : this(logger, MoonfinPlugin.ResolveDataFolderPath())
+    public MoonfinSettingsService(ILogger<MoonfinSettingsService> logger, IServiceProvider? serviceProvider = null)
+        : this(logger, MoonfinPlugin.ResolveDataFolderPath(), serviceProvider)
     {
     }
 
     /// <summary>Lets tests point the store at a temp directory.</summary>
-    internal MoonfinSettingsService(ILogger<MoonfinSettingsService> logger, string dataPath)
+    internal MoonfinSettingsService(ILogger<MoonfinSettingsService> logger, string dataPath, IServiceProvider? serviceProvider = null)
     {
         _logger = logger;
         _dataPath = dataPath;
+        _serviceProvider = serviceProvider;
 
         _jsonOptions = new JsonSerializerOptions
         {
@@ -353,6 +371,7 @@ public class MoonfinSettingsService
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
+        MoonfinUserSettings? savedSnapshot = null;
 
         await _lock.WaitAsync();
         try
@@ -400,6 +419,7 @@ public class MoonfinSettingsService
                     CustomHomeSectionIds(finalSettings)));
 
             settingsChanged = SettingsDiffer(beforeComparisonJson, finalSettings);
+            savedSnapshot = finalSettings;
 
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
@@ -407,6 +427,11 @@ public class MoonfinSettingsService
         finally
         {
             _lock.Release();
+        }
+
+        if (savedSnapshot != null)
+        {
+            await SyncRecentRowPreferencesAsync(userId, savedSnapshot, null).ConfigureAwait(false);
         }
 
         // A merge that changed nothing is the client echoing state it already
@@ -428,6 +453,7 @@ public class MoonfinSettingsService
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
+        MoonfinUserSettings? savedSnapshot = null;
 
         await _lock.WaitAsync();
         try
@@ -495,6 +521,7 @@ public class MoonfinSettingsService
                     CustomHomeSectionIds(savedProfile)));
 
             settingsChanged = SettingsDiffer(beforeComparisonJson, settings);
+            savedSnapshot = settings;
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
@@ -502,6 +529,11 @@ public class MoonfinSettingsService
         finally
         {
             _lock.Release();
+        }
+
+        if (savedSnapshot != null)
+        {
+            await SyncRecentRowPreferencesAsync(userId, savedSnapshot, profileName).ConfigureAwait(false);
         }
 
         // Same echo guard as SaveUserSettingsAsync.
@@ -1676,5 +1708,102 @@ public class MoonfinSettingsService
         }
 
         return result;
+    }
+
+    public bool IsAnyHideUpgradesEnabled()
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+        if (config?.DefaultUserSettings?.HideUpgradesInRecentRows == true ||
+            config?.GetDefaultsFor("tv")?.HideUpgradesInRecentRows == true ||
+            config?.GetDefaultsFor("desktop")?.HideUpgradesInRecentRows == true ||
+            config?.GetDefaultsFor("mobile")?.HideUpgradesInRecentRows == true)
+        {
+            return true;
+        }
+
+        if (!Directory.Exists(_dataPath))
+        {
+            return false;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
+        {
+            var fileName = Path.GetFileNameWithoutExtension(file);
+            if (!Guid.TryParse(fileName, out _))
+            {
+                continue;
+            }
+
+            var settings = ReadSettingsWithRecovery(file);
+            if (settings == null)
+            {
+                continue;
+            }
+
+            if (settings.Global?.HideUpgradesInRecentRows == true ||
+                settings.Tv?.HideUpgradesInRecentRows == true ||
+                settings.Desktop?.HideUpgradesInRecentRows == true ||
+                settings.Mobile?.HideUpgradesInRecentRows == true)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task SyncRecentRowPreferencesAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName)
+    {
+        var resolved = ResolveProfile(settings, string.IsNullOrEmpty(activeProfileName) ? "global" : activeProfileName);
+        var hideWatched = resolved.HideWatchedInRecentRows
+            ?? settings.Global?.HideWatchedInRecentRows
+            ?? settings.Tv?.HideWatchedInRecentRows
+            ?? settings.Desktop?.HideWatchedInRecentRows
+            ?? settings.Mobile?.HideWatchedInRecentRows;
+
+        if (hideWatched.HasValue && _serviceProvider != null && GetUserDtoMethod != null && UpdateConfigurationMethod != null)
+        {
+            try
+            {
+                var userManager = UserReflection.UserManager(_serviceProvider);
+                var user = UserReflection.ResolveUser(_serviceProvider, userId);
+                if (userManager != null && user != null)
+                {
+                    var args = new object?[GetUserDtoMethod.GetParameters().Length];
+                    args[0] = user;
+                    var userConfig = (GetUserDtoMethod.Invoke(userManager, args) as UserDto)?.Configuration;
+                    if (userConfig != null && userConfig.HidePlayedInLatest != hideWatched.Value)
+                    {
+                        userConfig.HidePlayedInLatest = hideWatched.Value;
+                        if (UpdateConfigurationMethod.Invoke(userManager, [userId, userConfig]) is Task updateTask)
+                        {
+                            await updateTask.ConfigureAwait(false);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not sync HidePlayedInLatest for user {UserId}", userId);
+            }
+        }
+
+        var hideUpgrades = resolved.HideUpgradesInRecentRows
+            ?? settings.Global?.HideUpgradesInRecentRows
+            ?? settings.Tv?.HideUpgradesInRecentRows
+            ?? settings.Desktop?.HideUpgradesInRecentRows
+            ?? settings.Mobile?.HideUpgradesInRecentRows;
+
+        if (hideUpgrades.HasValue && UpgradePreferenceChanged != null)
+        {
+            try
+            {
+                await UpgradePreferenceChanged(hideUpgrades.Value).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
+            }
+        }
     }
 }

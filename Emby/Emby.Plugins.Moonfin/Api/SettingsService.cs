@@ -613,10 +613,11 @@ namespace Emby.Plugins.Moonfin.Api
             var parentIds = isFallback
                 ? null
                 : (settings.MediaBarLibraryIds ?? new List<string>()).Concat(settings.MediaBarCollectionIds ?? new List<string>()).ToList();
+            var hideWatchedInRecent = !isFallback && settings.HideWatchedInRecentRows == true;
             if (sourceType == "recentlyAdded")
-                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated, hideWatchedInRecent);
             else if (sourceType == "recentlyReleased")
-                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate, hideWatchedInRecent);
             else if (sourceType == "newReleases")
                 items = QueryNewReleaseSeries(parentIds, settings.MediaBarNewReleaseDays ?? 30, limit, user, excludedNames);
             else
@@ -675,7 +676,7 @@ namespace Emby.Plugins.Moonfin.Api
         /// genre-name exclusion. Shuffled, or newest first by <paramref name="orderBy"/>. A release date
         /// still to come isn't recently released.
         /// </summary>
-        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null)
+        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null, bool excludePlayed = false)
         {
             var lm = LibraryManager;
             if (lm == null) return new List<BaseItem>();
@@ -692,6 +693,7 @@ namespace Emby.Plugins.Moonfin.Api
                 User = user,
                 Limit = candidates
             };
+            if (excludePlayed) query.IsPlayed = false;
 
             if (containerGuids != null && containerGuids.Count > 0)
             {

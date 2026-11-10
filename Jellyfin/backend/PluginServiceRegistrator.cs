@@ -12,6 +12,7 @@ using Moonfin.MiniGames;
 using Moonfin.Pin;
 using Moonfin.Romm;
 using Moonfin.Server.Services;
+using Moonfin.Upgrades;
 using Moonfin.WatchParty;
 
 namespace Moonfin.Server;
@@ -138,6 +139,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton(_ => new StuckDownloadStore(
             Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), "seerr-stuck-downloads.json"),
             new JellyfinStateFile()));
+        serviceCollection.AddSingleton(_ => new MediaUpgradeLedger(
+            Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), MediaUpgradeLedger.StoreFileName),
+            new JellyfinStateFile()));
+        serviceCollection.AddSingleton<MediaUpgradeService>();
+        serviceCollection.AddHostedService(provider => provider.GetRequiredService<MediaUpgradeService>());
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<GameArtworkReconciliationService>());
 
         // Incomplete Live TV recordings

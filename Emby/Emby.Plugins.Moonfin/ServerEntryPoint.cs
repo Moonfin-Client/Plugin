@@ -9,6 +9,7 @@ using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Tasks;
 using Moonfin.LiveTv;
+using Moonfin.Upgrades;
 
 namespace Emby.Plugins.Moonfin
 {
@@ -25,6 +26,7 @@ namespace Emby.Plugins.Moonfin
         private readonly ITaskManager _taskManager;
         private Services.NewMediaNotifier? _newMediaNotifier;
         private Services.CalendarReminderNotifier? _calendarReminders;
+        private Services.MediaUpgradeService? _mediaUpgrades;
         private Services.DefaultHiddenLibraries? _hiddenLibraries;
         private Services.EmbyLiveTvRecordingHost? _recordingHost;
         private IncompleteRecordingWatcher? _recordingWatcher;
@@ -84,6 +86,20 @@ namespace Emby.Plugins.Moonfin
 
             _hiddenLibraries = new Services.DefaultHiddenLibraries(_userManager, _logManager.GetLogger("Moonfin"));
             PluginServices.HiddenLibraries = _hiddenLibraries;
+
+            if (newMediaSettings != null)
+            {
+                var upgradeLedger = new MediaUpgradeLedger(
+                    System.IO.Path.Combine(plugin.DataFolderPath, MediaUpgradeLedger.StoreFileName),
+                    new Services.EmbyStateFile());
+                _mediaUpgrades = new Services.MediaUpgradeService(
+                    _libraryManager,
+                    newMediaSettings,
+                    upgradeLedger,
+                    _logManager.GetLogger("MoonfinUpgrades"));
+                _mediaUpgrades.Start();
+                PluginServices.MediaUpgrades = _mediaUpgrades;
+            }
 
             StartIncompleteRecordings(plugin);
 
@@ -158,6 +174,9 @@ namespace Emby.Plugins.Moonfin
             _newMediaNotifier = null;
             _calendarReminders?.Dispose();
             _calendarReminders = null;
+            _mediaUpgrades?.Dispose();
+            _mediaUpgrades = null;
+            PluginServices.MediaUpgrades = null;
 
             _hiddenLibraries?.Dispose();
             PluginServices.HiddenLibraries = null;
@@ -179,5 +198,6 @@ namespace Emby.Plugins.Moonfin
         public static ISessionManager? SessionManager { get; set; }
         public static IncompleteRecordingService? IncompleteRecordings { get; set; }
         public static Services.DefaultHiddenLibraries? HiddenLibraries { get; set; }
+        public static Services.MediaUpgradeService? MediaUpgrades { get; set; }
     }
 }

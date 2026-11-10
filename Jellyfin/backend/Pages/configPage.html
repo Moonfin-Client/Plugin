@@ -3240,6 +3240,24 @@
                                 <div class="fieldDescription">How long a show stays in Next Up after it was last watched.</div>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideWatchedInRecentRows">Hide Watched in Recent Rows</label>
+                                <select id="DefaultHideWatchedInRecentRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Hide watched content from Recently Added and Recently Released home rows.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideUpgradesInRecentRows">Hide Upgrades in Recent Rows</label>
+                                <select id="DefaultHideUpgradesInRecentRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Keep upgraded files at their original date added instead of moving them to the front of Recently Added.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultMergeRecentRowsByType">Merge Recent Rows by Type</label>
                                 <select id="DefaultMergeRecentRowsByType" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -11503,6 +11521,8 @@
                     setSelectValue('#DefaultNextUpMaxDays', defaults.nextUpMaxDays, 'Configured max days');
 
                     setNullableBoolSelect('#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
+                    setNullableBoolSelect('#DefaultHideWatchedInRecentRows', defaults.hideWatchedInRecentRows);
+                    setNullableBoolSelect('#DefaultHideUpgradesInRecentRows', defaults.hideUpgradesInRecentRows);
                     setNullableBoolSelect('#DefaultMergeRecentRowsByType', defaults.mergeRecentRowsByType);
                     setSelectValue('#DefaultRecentlyReleasedSeriesType', defaults.recentlyReleasedSeriesType, 'Configured sort');
                     setNullableBoolSelect('#DefaultGroupItemsIntoCollections', defaults.groupItemsIntoCollections);
@@ -12558,6 +12578,8 @@
                     ds.nextUpMaxDays = getNullableIntInput('#DefaultNextUpMaxDays');
 
                     ds.enableMultiServerLibraries = getNullableBoolSelect('#DefaultEnableMultiServerLibraries');
+                    ds.hideWatchedInRecentRows = getNullableBoolSelect('#DefaultHideWatchedInRecentRows');
+                    ds.hideUpgradesInRecentRows = getNullableBoolSelect('#DefaultHideUpgradesInRecentRows');
                     ds.mergeRecentRowsByType = getNullableBoolSelect('#DefaultMergeRecentRowsByType');
                     ds.recentlyReleasedSeriesType = document.querySelector('#DefaultRecentlyReleasedSeriesType').value || null;
                     ds.groupItemsIntoCollections = getNullableBoolSelect('#DefaultGroupItemsIntoCollections');

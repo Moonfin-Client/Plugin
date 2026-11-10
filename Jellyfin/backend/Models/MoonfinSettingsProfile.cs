@@ -1225,6 +1225,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("collectionsRowShowEpisodes")]
     public bool? CollectionsRowShowEpisodes { get; set; }
 
+    [JsonPropertyName("hideWatchedInRecentRows")]
+    public bool? HideWatchedInRecentRows { get; set; }
+
+    [JsonPropertyName("hideUpgradesInRecentRows")]
+    public bool? HideUpgradesInRecentRows { get; set; }
+
     [JsonPropertyName("mergeRecentRowsByType")]
     public bool? MergeRecentRowsByType { get; set; }
 

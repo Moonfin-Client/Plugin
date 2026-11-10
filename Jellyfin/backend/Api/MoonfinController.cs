@@ -1264,10 +1264,11 @@ public class MoonfinController : ControllerBase
         // library and collection sources from before fall through to the random draw.
         var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
         var collectionIds = isFallback ? null : settings.MediaBarCollectionIds;
+        var hideWatchedInRecent = !isFallback && settings.HideWatchedInRecentRows == true;
         var items = sourceType switch
         {
-            "recentlyAdded" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated),
-            "recentlyReleased" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate),
+            "recentlyAdded" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated, hideWatchedInRecent),
+            "recentlyReleased" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate, hideWatchedInRecent),
             "newReleases" => GetNewReleaseSeries(libraryIds, collectionIds, settings.MediaBarNewReleaseDays ?? 30, limit, queryUser, excludedGenres),
             _ => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres)
         };
@@ -1420,7 +1421,7 @@ public class MoonfinController : ControllerBase
     /// newest first by <paramref name="order"/>, with genre exclusions applied at the database level.
     /// With nothing picked it reads every library.
     /// </summary>
-    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, List<string>? collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random)
+    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, List<string>? collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random, bool excludePlayed = false)
     {
         var includedGenreIds = GetIncludedGenreIds(excludedGenreIds, queryUser);
 
@@ -1440,6 +1441,7 @@ public class MoonfinController : ControllerBase
             };
 
             if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+            if (excludePlayed) query.IsPlayed = false;
 
             if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
@@ -1470,6 +1472,7 @@ public class MoonfinController : ControllerBase
             };
 
             if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+            if (excludePlayed) query.IsPlayed = false;
 
             if (!UserReflection.ApplyUser(query, queryUser)) return [];
 

@@ -3081,6 +3081,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultNextUpMaxDays', defaults.nextUpMaxDays, 'Configured max days');
 
         setNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
+        setNullableBoolSelect(view, '#DefaultHideWatchedInRecentRows', defaults.hideWatchedInRecentRows);
+        setNullableBoolSelect(view, '#DefaultHideUpgradesInRecentRows', defaults.hideUpgradesInRecentRows);
         setNullableBoolSelect(view, '#DefaultMergeRecentRowsByType', defaults.mergeRecentRowsByType);
         setSelectValue(view, '#DefaultRecentlyReleasedSeriesType', defaults.recentlyReleasedSeriesType, 'Configured sort');
         setNullableBoolSelect(view, '#DefaultGroupItemsIntoCollections', defaults.groupItemsIntoCollections);
@@ -3530,6 +3532,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.nextUpMaxDays = getNullableIntInput(view, '#DefaultNextUpMaxDays');
 
         d.enableMultiServerLibraries = getNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries');
+        d.hideWatchedInRecentRows = getNullableBoolSelect(view, '#DefaultHideWatchedInRecentRows');
+        d.hideUpgradesInRecentRows = getNullableBoolSelect(view, '#DefaultHideUpgradesInRecentRows');
         d.mergeRecentRowsByType = getNullableBoolSelect(view, '#DefaultMergeRecentRowsByType');
         d.recentlyReleasedSeriesType = view.querySelector('#DefaultRecentlyReleasedSeriesType').value || null;
         d.groupItemsIntoCollections = getNullableBoolSelect(view, '#DefaultGroupItemsIntoCollections');
