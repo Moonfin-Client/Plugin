@@ -5531,9 +5531,17 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function updateDownloadsTabVisibility(view) {
+        var state = view.__moonfinState;
+        if (!state.downloadsTabTimer) {
+            state.downloadsTabTimer = setInterval(function () { updateDownloadsTabVisibility(view); }, 10000);
+        }
         ApiClient.getJSON(ApiClient.getUrl('Moonfin/Transcodes/Active')).then(function (jobs) {
-            setAdminTabVisible(view, 'syncs', !!(jobs && jobs.length));
+            var navItem = view.querySelector('.moonfinNavItem[data-tab="syncs"]');
+            // An open tab stays, so a download finishing doesn't move the admin elsewhere.
+            setAdminTabVisible(view, 'syncs', !!(jobs && jobs.length) || navItem.classList.contains('is-active'));
         }, function () {
+            clearInterval(state.downloadsTabTimer);
+            state.downloadsTabTimer = null;
             setAdminTabVisible(view, 'syncs', true);
         });
     }
@@ -6804,6 +6812,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             clearInterval(view.__moonfinState.timer);
             view.__moonfinState.timer = null;
         }
+        clearInterval(view.__moonfinState.downloadsTabTimer);
+        view.__moonfinState.downloadsTabTimer = null;
         BaseView.prototype.onPause.apply(this, arguments);
     };
 

@@ -51,7 +51,7 @@
             restored: 'Restored the changes you hadn’t saved before your Moonbase sign-in ended. Press Save to keep them.',
             sessionEnded: 'You’re signed out of Moonbase. Sign in again with your Plex account. Changes you tried to save are kept and come back when you do.',
             signInUrl: 'admin/signin',
-            hidden: [],
+            hidden: ['Active Downloads'],
             hiddenFields: ['DefaultWatchPartyService'],
             unsupported: {
                 'Connecting to this server': 'Moonbase for Plex doesn’t host Moonfin web, so these settings do nothing on Plex.',
@@ -62,7 +62,6 @@
                 'Retro Games (EmulatorJS)': 'Not available on Plex. These settings do nothing on Plex.',
                 'Uploaded Themes': 'Moonbase for Plex keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.',
                 'Web Plugin Status': 'Plex Web can’t load Moonfin add-ons, so this doesn’t apply on Plex.',
-                'Active Downloads': 'Not available on Plex.',
                 'MDBList Integration': 'Ratings work on Plex. The official MDBList lists don’t.',
                 'Smart Search': 'Works on Plex for your library. Titles you don’t have don’t show up, since the Seerr proxy isn’t part of Moonbase for Plex. The index rebuilds a minute after Moonbase starts and every night at 3:00.',
                 'Calendar': 'Moonbase for Plex reads the calendar straight from Sonarr and Radarr, so set their addresses and API keys below. Reminders aren’t available on Plex.'

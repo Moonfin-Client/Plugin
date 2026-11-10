@@ -5905,6 +5905,11 @@
                     <section class="moonfinTabPanel" data-tab="syncs">
                         <div class="verticalSection">
                             <h3 class="sectionTitle">Active Downloads</h3>
+                            <div class="fieldDescription" style="margin-bottom: 1em;">
+                                Transcoded downloads Moonfin clients have in progress. Original quality downloads copy
+                                the file as it is, so they don't show here. Regular playback transcodes are hidden too,
+                                since they already show on the Jellyfin dashboard.
+                            </div>
                             <div class="paperList" id="MoonfinActiveSyncsList" style="margin-top:1em; display:flex; flex-direction:column; gap:10px;">
                                 <div style="padding:16px; text-align:center; color:rgba(255,255,255,0.5);">Loading...</div>
                             </div>
@@ -13505,10 +13510,24 @@
                 });
             }
 
+            var downloadsTabTimer = null;
+
             function updateDownloadsTabVisibility() {
+                var navItem = document.querySelector('.moonfinNavItem[data-tab="syncs"]');
+                var page = navItem && navItem.closest('.page');
+                // Stops while the page is gone or hidden, and the next pageshow starts it again.
+                if (!page || !page.getClientRects().length) {
+                    clearInterval(downloadsTabTimer);
+                    downloadsTabTimer = null;
+                    return;
+                }
+                if (!downloadsTabTimer) downloadsTabTimer = setInterval(updateDownloadsTabVisibility, 10000);
                 ApiClient.getJSON(ApiClient.getUrl("Moonfin/Transcodes/Active")).then(function(jobs) {
-                    setAdminTabVisible('syncs', !!(jobs && jobs.length));
+                    // An open tab stays, so a download finishing doesn't move the admin elsewhere.
+                    setAdminTabVisible('syncs', !!(jobs && jobs.length) || navItem.classList.contains('is-active'));
                 }, function() {
+                    clearInterval(downloadsTabTimer);
+                    downloadsTabTimer = null;
                     setAdminTabVisible('syncs', true);
                 });
             }
