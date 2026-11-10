@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common;
@@ -18,11 +20,19 @@ namespace Emby.Plugins.Moonfin.Api
     /// </summary>
     public class TranscodesService : IService, IRequiresRequest, IHasResultFactory
     {
+        private static readonly FieldInfo? PlaySessionsField =
+            typeof(SessionInfo).GetField("_playSessions", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        private static readonly ConcurrentDictionary<string, DateTime> FirstSeenTimes = new ConcurrentDictionary<string, DateTime>();
+
+        private readonly IAuthorizationContext _authContext;
+
         public IRequest Request { get; set; } = null!;
         public IHttpResultFactory ResultFactory { get; set; } = null!;
 
         public TranscodesService(IApplicationHost appHost)
         {
+            _authContext = appHost.Resolve<IAuthorizationContext>();
             ResultFactory = appHost.Resolve<IHttpResultFactory>();
         }
 
@@ -59,6 +69,61 @@ namespace Emby.Plugins.Moonfin.Api
                 .ToList();
 
             return Json(jobs);
+        }
+
+        /// <summary>
+        /// The caller's own transcoded downloads, so an app can show progress and an ETA for the job
+        /// it started. Matched on the device id from the token, which the stream request carried too.
+        /// </summary>
+        public object Get(GetMyTranscodesRequest request)
+        {
+            long deviceId = 0;
+            try { deviceId = _authContext.GetAuthorizationInfo(Request)?.DeviceId ?? 0; }
+            catch { }
+
+            var sessionManager = PluginServices.SessionManager;
+            if (deviceId <= 0 || sessionManager == null) return Json(Array.Empty<object>());
+
+            var jobs = new List<object>();
+            foreach (var session in sessionManager.Sessions)
+            {
+                if (session == null || session.InternalDeviceId != deviceId) continue;
+
+                // Emby keeps a transcode per play session but only exposes the session's latest one,
+                // and the app matches its job by play session id, so the full set is read directly.
+                if (!(PlaySessionsField?.GetValue(session) is ConcurrentDictionary<string, PlaySessionInfo> playSessions))
+                {
+                    Request.Response.StatusCode = 500;
+                    return Json("Could not read active transcode jobs on this server version.");
+                }
+
+                foreach (var playSession in playSessions.Values)
+                {
+                    var ti = playSession.TranscodingInfo;
+                    if (ti == null || IsHls(ti) || (ti.CompletionPercentage ?? 0) >= 100) continue;
+
+                    jobs.Add(new
+                    {
+                        PlaySessionId = playSession.Id,
+                        CompletionPercentage = ti.CompletionPercentage,
+                        PositionTicks = ti.TranscodingPositionTicks,
+                        RuntimeTicks = playSession.NowPlayingItem?.RunTimeTicks ?? playSession.FullNowPlayingItem?.RunTimeTicks,
+                        StartTime = FirstSeen(playSession.Id)
+                    });
+                }
+            }
+
+            return Json(jobs);
+        }
+
+        // Emby doesn't say when a transcode started, so the first time it's seen stands in. The app
+        // polls every few seconds from the moment its download starts, which keeps the ETA close.
+        private static DateTime FirstSeen(string playSessionId)
+        {
+            var now = DateTime.UtcNow;
+            foreach (var stale in FirstSeenTimes.Where(e => now - e.Value > TimeSpan.FromDays(1)).Select(e => e.Key).ToList())
+                FirstSeenTimes.TryRemove(stale, out _);
+            return FirstSeenTimes.GetOrAdd(playSessionId, now);
         }
 
         public async Task<object> Delete(StopTranscodeRequest request)

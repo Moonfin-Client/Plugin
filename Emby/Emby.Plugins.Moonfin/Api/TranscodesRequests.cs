@@ -12,6 +12,13 @@ namespace Emby.Plugins.Moonfin.Api
         public bool IncludePlayback { get; set; }
     }
 
+    // Scoped to the caller's own device, so it needs no admin role.
+    [Route("/Moonfin/Transcodes/Mine", "GET")]
+    [Authenticated]
+    public class GetMyTranscodesRequest : IReturn<object>
+    {
+    }
+
     [Route("/Moonfin/Transcodes/Active/{JobId}", "DELETE")]
     [Authenticated(Roles = "Admin")]
     public class StopTranscodeRequest : IReturn<object>
