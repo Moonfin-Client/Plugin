@@ -43,6 +43,7 @@ namespace Emby.Plugins.Moonfin.Services
             if (config != null && !config.ImdbListsEnabled)
             {
                 _logger.Info("IMDb lists sync skipped: disabled in plugin configuration", 0);
+                await MatchCachedListsAsync(cancellationToken).ConfigureAwait(false);
                 return;
             }
 
@@ -69,6 +70,7 @@ namespace Emby.Plugins.Moonfin.Services
                     var items = await _fetcher.FetchChartAsync(key, cancellationToken).ConfigureAwait(false);
                     if (items != null && items.Count > 0)
                     {
+                        Plugin.Instance?.LocalItems?.Resolve(items);
                         CacheService.SetItems(key, items);
                         var ratings = Plugin.Instance?.TmdbRatings;
                         if (ratings != null && !string.IsNullOrWhiteSpace(config?.TmdbApiKey))
@@ -92,8 +94,30 @@ namespace Emby.Plugins.Moonfin.Services
             }
 
             await CacheService.FlushAsync().ConfigureAwait(false);
+            await MatchCachedListsAsync(cancellationToken).ConfigureAwait(false);
             _logger.Info("IMDb lists sync complete", 0);
             progress.Report(100);
+        }
+
+        /// <summary>
+        /// Emby has no custom rows sync task, so this one matches every cached list to the
+        /// library, custom rows included, even with the IMDb charts turned off. It runs at
+        /// startup, so caches written before lists carried library matches get them right after
+        /// an update. Only the library is asked, never an outside service.
+        /// </summary>
+        private async Task MatchCachedListsAsync(CancellationToken cancellationToken)
+        {
+            var localItems = Plugin.Instance?.LocalItems;
+            if (localItems == null) return;
+
+            try
+            {
+                await localItems.ResolveCachedAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _logger.ErrorException("Matching cached list titles to the library failed", ex);
+            }
         }
 
         public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()

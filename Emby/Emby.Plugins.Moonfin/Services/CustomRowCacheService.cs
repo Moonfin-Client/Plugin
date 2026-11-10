@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 using Emby.Plugins.Moonfin.Models;
 using MediaBrowser.Model.Logging;
@@ -13,6 +14,11 @@ namespace Emby.Plugins.Moonfin.Services
     public class CustomRowCacheService : FileBackedCache<CustomRowCacheEntry>
     {
         public CustomRowCacheService(ILogger logger) : base(logger, "custom_rows_cache.json", "Custom rows") { }
+
+        internal CustomRowCacheService(ILogger logger, string dataPath) : base(logger, "custom_rows_cache.json", "Custom rows", dataPath) { }
+
+        /// <summary>Every cached list, for the pass that matches their titles to the library.</summary>
+        public IEnumerable<List<CustomRowItem>> AllItemLists() => EnsureLoaded().Values.Select(entry => entry.Items).ToList();
 
         // An entry written before rows carried ratings counts as expired, so it's fetched once more.
         public List<CustomRowItem>? TryGet(string cacheKey, TimeSpan maxAge)

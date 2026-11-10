@@ -33,6 +33,8 @@ internal sealed class FakeLibraryManager : ILibraryManager
 
     internal Func<MediaBrowser.Controller.Entities.BaseItem, List<MediaBrowser.Controller.Entities.PersonInfo>>? PeopleHandler { get; set; }
 
+    internal Func<System.Guid, MediaBrowser.Controller.Entities.BaseItem?>? ItemByIdHandler { get; set; }
+
     List<VirtualFolderInfo> ILibraryManager.GetVirtualFolders()
     {
         _beforeGetVirtualFolders?.Invoke();
@@ -145,7 +147,8 @@ internal sealed class FakeLibraryManager : ILibraryManager
 
     MediaBrowser.Controller.Entities.BaseItem ILibraryManager.GetItemById(System.Guid id)
     {
-        throw new NotImplementedException();
+        if (ItemByIdHandler == null) throw new NotImplementedException();
+        return ItemByIdHandler(id)!;
     }
 
     T ILibraryManager.GetItemById<T>(System.Guid id)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 using Emby.Plugins.Moonfin.Models;
 using MediaBrowser.Model.Logging;
@@ -13,6 +14,11 @@ namespace Emby.Plugins.Moonfin.Services
     public class ImdbListsCacheService : FileBackedCache<ImdbListsCacheEntry>
     {
         public ImdbListsCacheService(ILogger logger) : base(logger, "imdb_lists_cache.json", "IMDb lists") { }
+
+        internal ImdbListsCacheService(ILogger logger, string dataPath) : base(logger, "imdb_lists_cache.json", "IMDb lists", dataPath) { }
+
+        /// <summary>Every cached list, for the pass that matches their titles to the library.</summary>
+        public IEnumerable<List<CustomRowItem>> AllItemLists() => EnsureLoaded().Values.Select(entry => entry.Items).ToList();
 
         public List<CustomRowItem>? TryGetItems(string chartType, TimeSpan maxAge)
         {

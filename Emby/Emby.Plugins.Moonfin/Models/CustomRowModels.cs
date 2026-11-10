@@ -30,6 +30,27 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("overview")] public string? Overview { get; set; }
         [JsonPropertyName("genres")] public List<string>? Genres { get; set; }
         [JsonPropertyName("runTimeTicks")] public long? RunTimeTicks { get; set; }
+
+        /// <summary>
+        /// The library item this entry is, as Emby's numeric item id, or null when the library
+        /// lacks it. The cache keeps the match for every user, so the endpoint only hands it to
+        /// clients that ask for it and only when the user can see that item.
+        /// </summary>
+        [JsonPropertyName("localItemId")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? LocalItemId { get; set; }
+
+        /// <summary>
+        /// A copy carrying <paramref name="localItemId"/>, or this item when it already does. The
+        /// cached items are shared by every request, so the endpoint never changes them in place.
+        /// </summary>
+        public CustomRowItem WithLocalItemId(string? localItemId)
+        {
+            if (LocalItemId == localItemId) return this;
+            var copy = (CustomRowItem)MemberwiseClone();
+            copy.LocalItemId = localItemId;
+            return copy;
+        }
     }
 
     public class CustomRowItemProviderIds

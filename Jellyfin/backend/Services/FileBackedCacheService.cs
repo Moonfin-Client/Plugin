@@ -29,10 +29,16 @@ public abstract class FileBackedCacheService<TEntry>
     private ConcurrentDictionary<string, TEntry>? _cache;
 
     protected FileBackedCacheService(ILogger logger, string cacheFileName, string displayName)
+        : this(logger, cacheFileName, displayName, null)
+    {
+    }
+
+    /// <summary>Keeps the cache file in <paramref name="dataPath"/>, so tests don't touch the server's data folder.</summary>
+    protected FileBackedCacheService(ILogger logger, string cacheFileName, string displayName, string? dataPath)
     {
         _logger = logger;
         _displayName = displayName;
-        var dataPath = MoonfinPlugin.Instance?.DataFolderPath
+        dataPath ??= MoonfinPlugin.Instance?.DataFolderPath
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
 
         if (!Directory.Exists(dataPath))

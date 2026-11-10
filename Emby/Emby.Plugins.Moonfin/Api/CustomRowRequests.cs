@@ -18,5 +18,12 @@ namespace Emby.Plugins.Moonfin.Api
 
         /// <summary>Optional language/locale tag for localized titles and artwork (e.g. "fr", "fr-FR", "pt-BR").</summary>
         public string? Language { get; set; }
+
+        /// <summary>
+        /// Opt in to a localItemId on each title the library has and the user can see, so the
+        /// client can show the library copy instead. Clients that don't send it get the response
+        /// unchanged.
+        /// </summary>
+        public bool IncludeLocalItemIds { get; set; }
     }
 }

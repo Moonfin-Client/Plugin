@@ -21,6 +21,7 @@ public class CustomRowController : ControllerBase
     private readonly CustomRowCacheService _cacheService;
     private readonly CustomRowFetchService _fetchService;
     private readonly ServerRatingLimitService _ratingLimits;
+    private readonly LocalItemIdService _localItems;
     private readonly ILogger<CustomRowController> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
@@ -35,14 +36,21 @@ public class CustomRowController : ControllerBase
         CustomRowCacheService cacheService,
         CustomRowFetchService fetchService,
         ServerRatingLimitService ratingLimits,
+        LocalItemIdService localItems,
         ILogger<CustomRowController> logger)
     {
         _cacheService = cacheService;
         _fetchService = fetchService;
         _ratingLimits = ratingLimits;
+        _localItems = localItems;
         _logger = logger;
     }
 
+    /// <param name="includeLocalItemIds">
+    /// Opt in to a <c>localItemId</c> on each title the library has and the user can see, so the
+    /// client can show the library copy instead. Clients that don't send it get the response
+    /// unchanged.
+    /// </param>
     [HttpGet("Items")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -53,6 +61,7 @@ public class CustomRowController : ControllerBase
         [FromQuery] string @params,
         [FromQuery] bool refresh,
         [FromQuery] string? language,
+        [FromQuery] bool includeLocalItemIds,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(@params))
@@ -109,7 +118,7 @@ public class CustomRowController : ControllerBase
                 return Ok(new CustomRowResponse
                 {
                     Success = true,
-                    Items = _ratingLimits.Filter(limit, cachedItems)
+                    Items = _localItems.ForResponse(_ratingLimits.Filter(limit, cachedItems), userId.Value, includeLocalItemIds)
                 });
             }
         }
@@ -126,7 +135,7 @@ public class CustomRowController : ControllerBase
             return Ok(new CustomRowResponse
             {
                 Success = true,
-                Items = _ratingLimits.Filter(limit, items)
+                Items = _localItems.ForResponse(_ratingLimits.Filter(limit, items), userId.Value, includeLocalItemIds)
             });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

@@ -63,6 +63,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<SeasonalRowService>();
         serviceCollection.AddSingleton<CustomRowCacheService>();
         serviceCollection.AddSingleton<CustomRowFetchService>();
+        serviceCollection.AddSingleton<LocalItemIdService>();
         serviceCollection.AddSingleton<CollectionOrderService>();
         serviceCollection.AddSingleton(provider => new RommSource(
             () =>
@@ -131,6 +132,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), "calendar-reminders"),
             new JellyfinStateFile()));
         serviceCollection.AddHostedService<CalendarReminderNotifier>();
+        serviceCollection.AddHostedService<LocalItemArrivalNotifier>();
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<GameArtworkReconciliationService>());
 
         // Incomplete Live TV recordings

@@ -28,6 +28,7 @@ public class CustomRowFetchService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CustomRowFetchService> _logger;
     private readonly ILogger<ImdbListsTask> _taskLogger;
+    private readonly LocalItemIdService _localItems;
 
     private const int MdbListPageSize = 100;
     private const int MdbListMaxItems = 500;
@@ -42,7 +43,8 @@ public class CustomRowFetchService
         TmdbThumbService thumbService,
         IHttpClientFactory httpClientFactory,
         ILogger<CustomRowFetchService> logger,
-        ILogger<ImdbListsTask> taskLogger)
+        ILogger<ImdbListsTask> taskLogger,
+        LocalItemIdService localItems)
     {
         _settingsService = settingsService;
         _imdbCacheService = imdbCacheService;
@@ -51,6 +53,7 @@ public class CustomRowFetchService
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _taskLogger = taskLogger;
+        _localItems = localItems;
     }
 
     private HttpClient CreateClient() => _httpClientFactory.CreateClient("MoonfinHttpClient");
@@ -140,6 +143,7 @@ public class CustomRowFetchService
         var apiKey = await ResolveTmdbApiKey(userId);
         await _ratingService.FillRatingsAsync(items, apiKey, cancellationToken).ConfigureAwait(false);
         await _thumbService.FillDetailsAsync(items, apiKey, cancellationToken).ConfigureAwait(false);
+        _localItems.Resolve(items);
         return items;
     }
 
@@ -864,10 +868,11 @@ public class CustomRowFetchService
             _logger.LogInformation("IMDb chart {Type} cache miss or expired, fetching on-demand", type);
             try
             {
-                var task = new ImdbListsTask(_httpClientFactory, _imdbCacheService, _ratingService, _thumbService, _taskLogger);
+                var task = new ImdbListsTask(_httpClientFactory, _imdbCacheService, _ratingService, _thumbService, _localItems, _taskLogger);
                 var items = await task.FetchChartAsync(type, cancellationToken);
                 if (items != null && items.Count > 0)
                 {
+                    _localItems.Resolve(items);
                     _imdbCacheService.SetItems(type, items);
                     await _imdbCacheService.FlushAsync();
                     return items;

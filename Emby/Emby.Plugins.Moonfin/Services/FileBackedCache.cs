@@ -32,10 +32,16 @@ namespace Emby.Plugins.Moonfin.Services
         private ConcurrentDictionary<string, TEntry>? _cache;
 
         protected FileBackedCache(ILogger logger, string fileName, string logLabel)
+            : this(logger, fileName, logLabel, null)
+        {
+        }
+
+        /// <summary>Keeps the cache file in <paramref name="dataPath"/>, so tests don't touch the server's data folder.</summary>
+        protected FileBackedCache(ILogger logger, string fileName, string logLabel, string? dataPath)
         {
             _logger = logger;
             _logLabel = logLabel;
-            var dataPath = Plugin.Instance?.DataFolderPath
+            dataPath ??= Plugin.Instance?.DataFolderPath
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Emby-Server", "programdata", "plugins", "Moonfin");
 
             if (!Directory.Exists(dataPath)) Directory.CreateDirectory(dataPath);

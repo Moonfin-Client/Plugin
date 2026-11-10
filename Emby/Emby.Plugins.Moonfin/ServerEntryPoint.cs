@@ -25,6 +25,7 @@ namespace Emby.Plugins.Moonfin
         private readonly ITaskManager _taskManager;
         private Services.NewMediaNotifier? _newMediaNotifier;
         private Services.CalendarReminderNotifier? _calendarReminders;
+        private Services.LocalItemArrivalNotifier? _localItemArrivals;
         private Services.DefaultHiddenLibraries? _hiddenLibraries;
         private Services.EmbyLiveTvRecordingHost? _recordingHost;
         private IncompleteRecordingWatcher? _recordingWatcher;
@@ -79,6 +80,15 @@ namespace Emby.Plugins.Moonfin
                     pushDelivery,
                     _logManager.GetLogger("MoonfinCalendar"));
                 _calendarReminders.Start();
+            }
+
+            if (plugin.LocalItems != null)
+            {
+                _localItemArrivals = new Services.LocalItemArrivalNotifier(
+                    _libraryManager,
+                    plugin.LocalItems,
+                    _logManager.GetLogger("MoonfinMdbList"));
+                _localItemArrivals.Start();
             }
 
             _hiddenLibraries = new Services.DefaultHiddenLibraries(_userManager, _logManager.GetLogger("Moonfin"));
@@ -141,6 +151,8 @@ namespace Emby.Plugins.Moonfin
             _newMediaNotifier = null;
             _calendarReminders?.Dispose();
             _calendarReminders = null;
+            _localItemArrivals?.Dispose();
+            _localItemArrivals = null;
 
             _hiddenLibraries?.Dispose();
             PluginServices.HiddenLibraries = null;

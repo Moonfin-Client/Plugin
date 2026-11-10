@@ -14,6 +14,11 @@ public class ImdbListsCacheService : FileBackedCacheService<ImdbListsCacheEntry>
     {
     }
 
+    internal ImdbListsCacheService(ILogger<ImdbListsCacheService> logger, string dataPath)
+        : base(logger, "imdb_lists_cache.json", "IMDb lists", dataPath)
+    {
+    }
+
     public List<CustomRowItem>? TryGetItems(string chartType, TimeSpan maxAge)
     {
         var cache = EnsureLoaded();
@@ -34,6 +39,10 @@ public class ImdbListsCacheService : FileBackedCacheService<ImdbListsCacheEntry>
             CachedAt = DateTimeOffset.UtcNow
         };
     }
+
+    /// <summary>Every cached chart, for the pass that matches their titles to the library.</summary>
+    public IEnumerable<List<CustomRowItem>> AllItemLists() =>
+        EnsureLoaded().Values.Select(entry => entry.Items).ToList();
 
     public bool RatingsFilled(string chartType)
     {

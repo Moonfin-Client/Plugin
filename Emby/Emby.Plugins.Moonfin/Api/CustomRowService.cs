@@ -61,6 +61,9 @@ namespace Emby.Plugins.Moonfin.Api
         private ServerRatingLimitService RatingLimits => Plugin.Instance?.RatingLimits
             ?? throw new InvalidOperationException("ServerRatingLimitService not initialized");
 
+        private LocalItemIdService LocalItems => Plugin.Instance?.LocalItems
+            ?? throw new InvalidOperationException("LocalItemIdService not initialized");
+
         public CustomRowService(IApplicationHost appHost)
         {
             _authContext = appHost.Resolve<IAuthorizationContext>();
@@ -88,13 +91,15 @@ namespace Emby.Plugins.Moonfin.Api
 
             // The caches are shared, so the user's own parental limit is applied to a copy on the way out.
             var limit = RatingLimits.ForUser(user);
+            List<CustomRowItem> ForUser(List<CustomRowItem> rowItems) =>
+                LocalItems.ForResponse(RatingLimits.Filter(limit, rowItems), user, request.IncludeLocalItemIds);
 
             if (source == "imdb")
             {
                 try
                 {
                     var imdbItems = await FetchImdbList(type, userId.Value).ConfigureAwait(false);
-                    return Json(new { success = true, items = RatingLimits.Filter(limit, imdbItems) });
+                    return Json(new { success = true, items = ForUser(imdbItems) });
                 }
                 catch (Exception ex)
                 {
@@ -139,7 +144,7 @@ namespace Emby.Plugins.Moonfin.Api
             {
                 var cached = Cache.TryGet(cacheKey, CacheTtl);
                 if (cached != null)
-                    return Json(new { success = true, items = RatingLimits.Filter(limit, cached) });
+                    return Json(new { success = true, items = ForUser(cached) });
             }
 
             using var client = CreateClient();
@@ -168,6 +173,7 @@ namespace Emby.Plugins.Moonfin.Api
                 var tmdbKey = await ResolveTmdbKey(userId.Value).ConfigureAwait(false);
                 await Ratings.FillRatingsAsync(items, tmdbKey, CancellationToken.None).ConfigureAwait(false);
                 await Thumbs.FillDetailsAsync(items, tmdbKey, CancellationToken.None).ConfigureAwait(false);
+                LocalItems.Resolve(items);
 
                 // Don't cache empty results. An empty row cached for 24h looks like a
                 // broken list when the real cause was an upstream hiccup.
@@ -178,7 +184,7 @@ namespace Emby.Plugins.Moonfin.Api
                     await Cache.FlushAsync().ConfigureAwait(false);
                 }
 
-                return Json(new { success = true, items = RatingLimits.Filter(limit, items) });
+                return Json(new { success = true, items = ForUser(items) });
             }
             catch (Exception ex)
             {
@@ -690,6 +696,7 @@ namespace Emby.Plugins.Moonfin.Api
                     var items = await ImdbFetcher.FetchChartAsync(type, CancellationToken.None).ConfigureAwait(false);
                     if (items != null && items.Count > 0)
                     {
+                        LocalItems.Resolve(items);
                         ImdbCache.SetItems(type, items);
                         await ImdbCache.FlushAsync().ConfigureAwait(false);
                         return items;

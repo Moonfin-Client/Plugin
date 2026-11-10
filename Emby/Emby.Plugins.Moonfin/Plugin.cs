@@ -37,6 +37,7 @@ namespace Emby.Plugins.Moonfin
         public ImdbListsCacheService? ImdbListsCache { get; private set; }
         public ImdbChartFetcher? ImdbChartFetcher { get; private set; }
         public CustomRowCacheService? CustomRowCache { get; private set; }
+        public LocalItemIdService? LocalItems { get; private set; }
         public TmdbRatingCacheService? TmdbRatingCache { get; private set; }
         public TmdbRatingService? TmdbRatings { get; private set; }
         public TmdbThumbService? TmdbThumbs { get; private set; }
@@ -174,6 +175,7 @@ namespace Emby.Plugins.Moonfin
             ImdbListsCache = new ImdbListsCacheService(mdbLogger);
             ImdbChartFetcher = new ImdbChartFetcher(mdbLogger);
             CustomRowCache = new CustomRowCacheService(mdbLogger);
+            LocalItems = new LocalItemIdService(appHost.Resolve<MediaBrowser.Controller.Library.ILibraryManager>(), CustomRowCache, ImdbListsCache, mdbLogger);
             var configManager = appHost.Resolve<IServerConfigurationManager>();
             TmdbRatingCache = new TmdbRatingCacheService(mdbLogger);
             TmdbRatings = new TmdbRatingService(TmdbRatingCache, configManager, mdbLogger);

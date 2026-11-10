@@ -14,6 +14,11 @@ public class CustomRowCacheService : FileBackedCacheService<CustomRowCacheEntry>
     {
     }
 
+    internal CustomRowCacheService(ILogger<CustomRowCacheService> logger, string dataPath)
+        : base(logger, "custom_rows_cache.json", "Custom rows", dataPath)
+    {
+    }
+
     // An entry written before rows carried ratings counts as expired, so it's fetched once more.
     public List<CustomRowItem>? TryGet(string cacheKey, TimeSpan maxAge)
     {
@@ -37,6 +42,10 @@ public class CustomRowCacheService : FileBackedCacheService<CustomRowCacheEntry>
             RatingsFilled = true
         };
     }
+
+    /// <summary>Every cached row, for the pass that matches their titles to the library.</summary>
+    public IEnumerable<List<CustomRowItem>> AllItemLists() =>
+        EnsureLoaded().Values.Select(entry => entry.Items).ToList();
 
     /// <summary>
     /// Removes entries older than <paramref name="maxAge"/> so abandoned row configs
@@ -115,6 +124,31 @@ public class CustomRowItem
 
     [JsonPropertyName("runTimeTicks")]
     public long? RunTimeTicks { get; set; }
+
+    /// <summary>
+    /// The library item this entry is, in Jellyfin's "N" id form, or null when the library
+    /// lacks it. The cache keeps the match for every user, so the endpoint only hands it to
+    /// clients that ask for it and only when the user can see that item.
+    /// </summary>
+    [JsonPropertyName("localItemId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LocalItemId { get; set; }
+
+    /// <summary>
+    /// A copy carrying <paramref name="localItemId"/>, or this item when it already does. The
+    /// cached items are shared by every request, so the endpoint never changes them in place.
+    /// </summary>
+    public CustomRowItem WithLocalItemId(string? localItemId)
+    {
+        if (LocalItemId == localItemId)
+        {
+            return this;
+        }
+
+        var copy = (CustomRowItem)MemberwiseClone();
+        copy.LocalItemId = localItemId;
+        return copy;
+    }
 }
 
 public class CustomRowItemProviderIds

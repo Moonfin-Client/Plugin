@@ -28,21 +28,46 @@ public class CustomRowsSyncTask : IScheduledTask
     private readonly MoonfinSettingsService _settingsService;
     private readonly CustomRowCacheService _cacheService;
     private readonly CustomRowFetchService _fetchService;
+    private readonly LocalItemIdService _localItems;
     private readonly ILogger<CustomRowsSyncTask> _logger;
 
     public CustomRowsSyncTask(
         MoonfinSettingsService settingsService,
         CustomRowCacheService cacheService,
         CustomRowFetchService fetchService,
+        LocalItemIdService localItems,
         ILogger<CustomRowsSyncTask> logger)
     {
         _settingsService = settingsService;
         _cacheService = cacheService;
         _fetchService = fetchService;
+        _localItems = localItems;
         _logger = logger;
     }
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
+    {
+        await RefreshRowsAsync(progress, cancellationToken).ConfigureAwait(false);
+
+        // Rows still fresh enough to skip fetching are matched to the library here too, and so
+        // are the IMDb charts. The task runs at startup, so caches written before lists carried
+        // library matches get them right after an update. Only the library is asked, never an
+        // outside service.
+        try
+        {
+            await _localItems.ResolveCachedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Matching cached list titles to the library failed");
+        }
+    }
+
+    private async Task RefreshRowsAsync(IProgress<double> progress, CancellationToken cancellationToken)
     {
         progress.Report(0);
         _logger.LogInformation("Starting scheduled sync of Moonfin custom home rows...");

@@ -27,6 +27,7 @@ public class ImdbListsTask : IScheduledTask
     private readonly ImdbListsCacheService _cacheService;
     private readonly TmdbRatingService _ratingService;
     private readonly TmdbThumbService _thumbService;
+    private readonly LocalItemIdService _localItems;
     private readonly ILogger<ImdbListsTask> _logger;
 
     private static readonly Dictionary<string, string> ChartMap = new(StringComparer.OrdinalIgnoreCase)
@@ -65,12 +66,14 @@ public class ImdbListsTask : IScheduledTask
         ImdbListsCacheService cacheService,
         TmdbRatingService ratingService,
         TmdbThumbService thumbService,
+        LocalItemIdService localItems,
         ILogger<ImdbListsTask> logger)
     {
         _httpClientFactory = httpClientFactory;
         _cacheService = cacheService;
         _ratingService = ratingService;
         _thumbService = thumbService;
+        _localItems = localItems;
         _logger = logger;
     }
 
@@ -97,6 +100,7 @@ public class ImdbListsTask : IScheduledTask
                 var items = await FetchChartAsync(key, cancellationToken).ConfigureAwait(false);
                 if (items != null && items.Count > 0)
                 {
+                    _localItems.Resolve(items);
                     _cacheService.SetItems(key, items);
                     if (!string.IsNullOrWhiteSpace(config?.TmdbApiKey))
                     {
