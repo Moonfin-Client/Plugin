@@ -51,6 +51,15 @@ jobs:
       - name: Test
         run: make test
 
+      # Moonbase serves Moonfin Web from the latest Moonfin release, with this
+      # repository's theme editor.
+      - name: Add Moonfin Web
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download --repo Moonfin-Client/Moonfin-Core --pattern 'moonfin-web-v*.tar.gz' --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP"/moonfin-web-v*.tar.gz -C ../Jellyfin/frontend --exclude=./theme
+
       - name: Build the Silo plugin and its catalog
         run: make silo-index VERSION="$VERSION" BASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
 
@@ -96,6 +105,13 @@ jobs:
               --notes "Add https://github.com/$GITHUB_REPOSITORY/releases/download/$CATALOG_TAG/index.json as a plugin repository in Silo. It always lists the newest Moonbase for Silo."
           fi
           gh release upload "$CATALOG_TAG" index.json --clobber
+
+      - name: Add Moonfin Web
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download --repo Moonfin-Client/Moonfin-Core --pattern 'moonfin-web-v*.tar.gz' --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP"/moonfin-web-v*.tar.gz -C Jellyfin/frontend --exclude=./theme
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4

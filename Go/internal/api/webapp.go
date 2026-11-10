@@ -114,7 +114,6 @@ func bundleTag(fsys fs.FS) string {
 	return `"` + hex.EncodeToString(sum[:8]) + `"`
 }
 
-// hasWebApp reports whether this build carries Moonfin Web.
 func (s *Server) hasWebApp() bool { return isFile(s.web, "index.html") }
 
 func isFile(fsys fs.FS, name string) bool {
