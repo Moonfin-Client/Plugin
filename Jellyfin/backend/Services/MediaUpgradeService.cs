@@ -23,6 +23,7 @@ public sealed class MediaUpgradeService : IHostedService
     private readonly MediaUpgradeLedger _ledger;
     private readonly ILogger<MediaUpgradeService> _logger;
     private readonly ConcurrentDictionary<Guid, byte> _updating = new();
+    private readonly ConcurrentDictionary<Task, byte> _pendingArrivalUpdates = new();
     private CancellationTokenSource _stopCts = new();
     private Task _startupTask = Task.CompletedTask;
     private int _hideUpgradesCache = -1;
@@ -96,6 +97,17 @@ public sealed class MediaUpgradeService : IHostedService
         }
         catch (ObjectDisposedException)
         {
+        }
+
+        var pending = _pendingArrivalUpdates.Keys.ToArray();
+        if (pending.Length > 0)
+        {
+            var whenAll = Task.WhenAll(pending);
+            var completed = await Task.WhenAny(whenAll, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+            if (completed == whenAll)
+            {
+                await whenAll.ConfigureAwait(false);
+            }
         }
 
         await _settings.StopUpgradePreferenceSyncAsync(cancellationToken).ConfigureAwait(false);
@@ -257,9 +269,12 @@ public sealed class MediaUpgradeService : IHostedService
             }
 
             var hideUpgrades = GetHideUpgradesCached();
-            if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc, id => _libraryManager.GetItemById(id) != null) && desiredUtc.HasValue)
+            var stopToken = _stopCts.Token;
+            if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc, id => _libraryManager.GetItemById(id) != null) && desiredUtc.HasValue && !stopToken.IsCancellationRequested)
             {
-                _ = Task.Run(() => UpdateItemDateAsync(item, desiredUtc.Value, CancellationToken.None));
+                var updateTask = Task.Run(() => UpdateItemDateAsync(item, desiredUtc.Value, stopToken), CancellationToken.None);
+                _pendingArrivalUpdates.TryAdd(updateTask, 0);
+                _ = updateTask.ContinueWith(t => _pendingArrivalUpdates.TryRemove(t, out _), TaskScheduler.Default);
             }
         }
         catch (Exception ex)

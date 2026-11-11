@@ -43,6 +43,7 @@ public class MoonfinSettingsService : IDisposable
     private int _lastAppliedUpgradeState = -1;
     private bool _upgradeWorkerRunning;
     private bool _upgradeSyncStopping;
+    private bool _upgradeSyncPending;
     private CancellationTokenSource _upgradeSyncCts = new();
     private readonly object _upgradeSyncGate = new();
     private Task _upgradeSyncWorker = Task.CompletedTask;
@@ -152,11 +153,15 @@ public class MoonfinSettingsService : IDisposable
     /// <summary>
     /// Loads settings, falling back to the backup copy when the file is missing or unreadable.
     /// </summary>
-    private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath)
+    private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath) =>
+        ReadSettingsWithRecovery(filePath, out _);
+
+    private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath, out Exception? accessError)
     {
         return AtomicFile.ReadWithRecovery(
             filePath,
-            json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions));
+            json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions),
+            out accessError);
     }
 
     public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId)
@@ -166,7 +171,13 @@ public class MoonfinSettingsService : IDisposable
         await _lock.WaitAsync();
         try
         {
-            var settings = ReadSettingsWithRecovery(filePath);
+            var settings = ReadSettingsWithRecovery(filePath, out var accessError);
+            if (accessError != null)
+            {
+                _logger.LogError(accessError, "Failed to read settings for user {UserId} due to access error", userId);
+                throw accessError;
+            }
+
             if (settings == null)
             {
                 return null;
@@ -428,7 +439,12 @@ public class MoonfinSettingsService : IDisposable
 
             if (mergeMode == "merge")
             {
-                var existingSettings = ReadSettingsWithRecovery(filePath);
+                var existingSettings = ReadSettingsWithRecovery(filePath, out var accessError);
+                if (accessError != null)
+                {
+                    _logger.LogError(accessError, "Failed to read existing settings for user {UserId} due to access error; aborting merge", userId);
+                    throw accessError;
+                }
 
                 // Migrate v1 if needed
                 if (existingSettings != null && existingSettings.NeedsMigration)
@@ -503,7 +519,13 @@ public class MoonfinSettingsService : IDisposable
         await _lock.WaitAsync();
         try
         {
-            var settings = ReadSettingsWithRecovery(filePath) ?? new MoonfinUserSettings();
+            var settings = ReadSettingsWithRecovery(filePath, out var accessError);
+            if (accessError != null)
+            {
+                _logger.LogError(accessError, "Failed to read existing settings for user {UserId} due to access error; aborting profile save", userId);
+                throw accessError;
+            }
+            settings ??= new MoonfinUserSettings();
 
             if (settings.NeedsMigration)
             {
@@ -1895,11 +1917,7 @@ public class MoonfinSettingsService : IDisposable
                 return _upgradeSyncWorker;
             }
 
-            var desiredState = IsAnyHideUpgradesEnabled() ? 1 : 0;
-            if (!_upgradeWorkerRunning && _lastAppliedUpgradeState == desiredState)
-            {
-                return _upgradeSyncWorker;
-            }
+            _upgradeSyncPending = true;
 
             if (!_upgradeWorkerRunning)
             {
@@ -1916,9 +1934,22 @@ public class MoonfinSettingsService : IDisposable
     {
         while (true)
         {
-            Func<bool, CancellationToken, Task>? callback;
-            int targetState;
+            lock (_upgradeSyncGate)
+            {
+                if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
+                {
+                    _upgradeWorkerRunning = false;
+                    _upgradeSyncPending = false;
+                    return;
+                }
 
+                _upgradeSyncPending = false;
+            }
+
+            var anyEnabled = IsAnyHideUpgradesEnabled();
+            var targetState = anyEnabled ? 1 : 0;
+
+            Func<bool, CancellationToken, Task>? callback;
             lock (_upgradeSyncGate)
             {
                 if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
@@ -1928,49 +1959,57 @@ public class MoonfinSettingsService : IDisposable
                 }
 
                 callback = _upgradePreferenceChanged;
-                targetState = IsAnyHideUpgradesEnabled() ? 1 : 0;
-                if (callback == null || _lastAppliedUpgradeState == targetState)
+                if (callback == null)
+                {
+                    _upgradeWorkerRunning = false;
+                    return;
+                }
+
+                if (_lastAppliedUpgradeState == targetState && !_upgradeSyncPending)
                 {
                     _upgradeWorkerRunning = false;
                     return;
                 }
             }
 
-            try
+            if (_lastAppliedUpgradeState != targetState)
             {
-                await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
-
-                lock (_upgradeSyncGate)
+                try
                 {
-                    if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
+                    await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
+
+                    lock (_upgradeSyncGate)
+                    {
+                        if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
+                        {
+                            _lastAppliedUpgradeState = -1;
+                            _upgradeWorkerRunning = false;
+                            return;
+                        }
+
+                        _lastAppliedUpgradeState = targetState;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    lock (_upgradeSyncGate)
                     {
                         _lastAppliedUpgradeState = -1;
                         _upgradeWorkerRunning = false;
                         return;
                     }
-
-                    _lastAppliedUpgradeState = targetState;
                 }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                lock (_upgradeSyncGate)
+                catch (Exception ex)
                 {
-                    _lastAppliedUpgradeState = -1;
-                    _upgradeWorkerRunning = false;
+                    lock (_upgradeSyncGate)
+                    {
+                        _lastAppliedUpgradeState = -1;
+                        _upgradeWorkerRunning = false;
+                    }
+
+                    _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
                     return;
                 }
-            }
-            catch (Exception ex)
-            {
-                lock (_upgradeSyncGate)
-                {
-                    _lastAppliedUpgradeState = -1;
-                    _upgradeWorkerRunning = false;
-                }
-
-                _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
-                return;
             }
         }
     }
@@ -1982,6 +2021,7 @@ public class MoonfinSettingsService : IDisposable
         lock (_upgradeSyncGate)
         {
             _upgradeSyncStopping = true;
+            _upgradeSyncPending = false;
             _upgradePreferenceChanged = null;
             ctsToCancel = _upgradeSyncCts;
             workerToDrain = _upgradeSyncWorker;

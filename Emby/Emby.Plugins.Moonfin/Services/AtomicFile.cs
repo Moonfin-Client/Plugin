@@ -96,23 +96,21 @@ namespace Emby.Plugins.Moonfin.Services
                 return fromMain;
             }
 
-            if (mainError != null)
-            {
-                accessError = mainError;
-                return null;
-            }
-
             var backup = BackupPath(path);
             T? fromBackup;
             Exception? backupError;
             if (TryReadAndParse(backup, parse, out fromBackup, out backupError))
             {
                 accessError = null;
-                TryPromoteBackup(path, backup);
+                if (mainError == null)
+                {
+                    TryPromoteBackup(path, backup);
+                }
+
                 return fromBackup;
             }
 
-            accessError = backupError;
+            accessError = mainError ?? backupError;
             return null;
         }
 

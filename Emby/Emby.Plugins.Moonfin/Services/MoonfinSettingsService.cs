@@ -32,6 +32,7 @@ namespace Emby.Plugins.Moonfin.Services
         private int _lastAppliedUpgradeState = -1;
         private bool _upgradeWorkerRunning;
         private bool _upgradeSyncStopping;
+        private bool _upgradeSyncPending;
         private CancellationTokenSource _upgradeSyncCts = new CancellationTokenSource();
         private readonly object _upgradeSyncGate = new object();
         private Task _upgradeSyncWorker = Task.CompletedTask;
@@ -128,11 +129,15 @@ namespace Emby.Plugins.Moonfin.Services
         /// <summary>
         /// Loads settings, falling back to the backup copy when the file is missing or unreadable.
         /// </summary>
-        private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath)
+        private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath) =>
+            ReadSettingsWithRecovery(filePath, out _);
+
+        private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath, out Exception? accessError)
         {
             return AtomicFile.ReadWithRecovery(
                 filePath,
-                json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions));
+                json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions),
+                out accessError);
         }
 
         public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId)
@@ -142,7 +147,18 @@ namespace Emby.Plugins.Moonfin.Services
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
+                var (settings, accessError) = await Task.Run(() =>
+                {
+                    Exception? err;
+                    var s = ReadSettingsWithRecovery(filePath, out err);
+                    return (s, err);
+                }).ConfigureAwait(false);
+                if (accessError != null)
+                {
+                    _logger.ErrorException("Failed to read settings for user " + userId + " due to access error", accessError);
+                    throw accessError;
+                }
+
                 if (settings == null) return null;
 
                 if (settings.NeedsMigration)
@@ -154,7 +170,7 @@ namespace Emby.Plugins.Moonfin.Services
                 }
                 return settings;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
             {
                 _logger.ErrorException("Error reading settings for user " + userId, ex);
                 return null;
@@ -399,7 +415,18 @@ namespace Emby.Plugins.Moonfin.Services
                 string? storedHiddenNextUp = null;
                 if (mergeMode == "merge")
                 {
-                    var existingSettings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
+                    var (existingSettings, accessError) = await Task.Run(() =>
+                    {
+                        Exception? err;
+                        var s = ReadSettingsWithRecovery(filePath, out err);
+                        return (s, err);
+                    }).ConfigureAwait(false);
+                    if (accessError != null)
+                    {
+                        _logger.ErrorException("Failed to read existing settings for user " + userId + " due to access error; aborting merge", accessError);
+                        throw accessError;
+                    }
+
                     if (existingSettings != null && existingSettings.NeedsMigration)
                         existingSettings = MigrateV1ToV2(existingSettings);
                     beforeComparisonJson = SerializeForComparison(existingSettings ?? new MoonfinUserSettings());
@@ -450,8 +477,18 @@ namespace Emby.Plugins.Moonfin.Services
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false)
-                    ?? new MoonfinUserSettings();
+                var (settings, accessError) = await Task.Run(() =>
+                {
+                    Exception? err;
+                    var s = ReadSettingsWithRecovery(filePath, out err);
+                    return (s, err);
+                }).ConfigureAwait(false);
+                if (accessError != null)
+                {
+                    _logger.ErrorException("Failed to read existing settings for user " + userId + " due to access error; aborting profile save", accessError);
+                    throw accessError;
+                }
+                settings ??= new MoonfinUserSettings();
                 if (settings.NeedsMigration) settings = MigrateV1ToV2(settings);
 
                 var beforeComparisonJson = SerializeForComparison(settings);
@@ -1457,11 +1494,7 @@ namespace Emby.Plugins.Moonfin.Services
                     return _upgradeSyncWorker;
                 }
 
-                var desiredState = IsAnyHideUpgradesEnabled() ? 1 : 0;
-                if (!_upgradeWorkerRunning && _lastAppliedUpgradeState == desiredState)
-                {
-                    return _upgradeSyncWorker;
-                }
+                _upgradeSyncPending = true;
 
                 if (!_upgradeWorkerRunning)
                 {
@@ -1478,9 +1511,22 @@ namespace Emby.Plugins.Moonfin.Services
         {
             while (true)
             {
-                Func<bool, CancellationToken, Task>? callback;
-                int targetState;
+                lock (_upgradeSyncGate)
+                {
+                    if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
+                    {
+                        _upgradeWorkerRunning = false;
+                        _upgradeSyncPending = false;
+                        return;
+                    }
 
+                    _upgradeSyncPending = false;
+                }
+
+                var anyEnabled = IsAnyHideUpgradesEnabled();
+                var targetState = anyEnabled ? 1 : 0;
+
+                Func<bool, CancellationToken, Task>? callback;
                 lock (_upgradeSyncGate)
                 {
                     if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
@@ -1490,49 +1536,57 @@ namespace Emby.Plugins.Moonfin.Services
                     }
 
                     callback = _upgradePreferenceChanged;
-                    targetState = IsAnyHideUpgradesEnabled() ? 1 : 0;
-                    if (callback == null || _lastAppliedUpgradeState == targetState)
+                    if (callback == null)
+                    {
+                        _upgradeWorkerRunning = false;
+                        return;
+                    }
+
+                    if (_lastAppliedUpgradeState == targetState && !_upgradeSyncPending)
                     {
                         _upgradeWorkerRunning = false;
                         return;
                     }
                 }
 
-                try
+                if (_lastAppliedUpgradeState != targetState)
                 {
-                    await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
-
-                    lock (_upgradeSyncGate)
+                    try
                     {
-                        if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
+                        await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
+
+                        lock (_upgradeSyncGate)
+                        {
+                            if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
+                            {
+                                _lastAppliedUpgradeState = -1;
+                                _upgradeWorkerRunning = false;
+                                return;
+                            }
+
+                            _lastAppliedUpgradeState = targetState;
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        lock (_upgradeSyncGate)
                         {
                             _lastAppliedUpgradeState = -1;
                             _upgradeWorkerRunning = false;
                             return;
                         }
-
-                        _lastAppliedUpgradeState = targetState;
                     }
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    lock (_upgradeSyncGate)
+                    catch (Exception ex)
                     {
-                        _lastAppliedUpgradeState = -1;
-                        _upgradeWorkerRunning = false;
+                        lock (_upgradeSyncGate)
+                        {
+                            _lastAppliedUpgradeState = -1;
+                            _upgradeWorkerRunning = false;
+                        }
+
+                        _logger.Debug("Could not apply upgrade date preference for user " + userId + ": " + ex.Message);
                         return;
                     }
-                }
-                catch (Exception ex)
-                {
-                    lock (_upgradeSyncGate)
-                    {
-                        _lastAppliedUpgradeState = -1;
-                        _upgradeWorkerRunning = false;
-                    }
-
-                    _logger.Debug("Could not apply upgrade date preference for user " + userId + ": " + ex.Message);
-                    return;
                 }
             }
         }
@@ -1544,6 +1598,7 @@ namespace Emby.Plugins.Moonfin.Services
             lock (_upgradeSyncGate)
             {
                 _upgradeSyncStopping = true;
+                _upgradeSyncPending = false;
                 _upgradePreferenceChanged = null;
                 ctsToCancel = _upgradeSyncCts;
                 workerToDrain = _upgradeSyncWorker;
