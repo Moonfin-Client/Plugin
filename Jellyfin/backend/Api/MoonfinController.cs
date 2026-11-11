@@ -38,6 +38,7 @@ public class MoonfinController : ControllerBase
     private readonly MoonfinSimilarItemsService _similarItemsService;
     private readonly ItemCardDtoMapper _cardMapper;
     private readonly DefaultHiddenLibraries _hiddenLibraries;
+    private readonly MediaUpgradeService? _mediaUpgrades;
     private readonly ILogger<MoonfinController> _logger;
     
     private static readonly Type? _userManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
@@ -55,7 +56,8 @@ public class MoonfinController : ControllerBase
         MoonfinSimilarItemsService similarItemsService,
         ItemCardDtoMapper cardMapper,
         DefaultHiddenLibraries hiddenLibraries,
-        ILogger<MoonfinController> logger)
+        ILogger<MoonfinController> logger,
+        MediaUpgradeService? mediaUpgrades = null)
     {
         _settingsService = settingsService;
         _libraryManager = libraryManager;
@@ -66,6 +68,7 @@ public class MoonfinController : ControllerBase
         _cardMapper = cardMapper;
         _hiddenLibraries = hiddenLibraries;
         _logger = logger;
+        _mediaUpgrades = mediaUpgrades;
     }
 
     /// <summary>
@@ -1274,10 +1277,11 @@ public class MoonfinController : ControllerBase
         var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
         var collectionIds = isFallback ? null : settings.MediaBarCollectionIds;
         var hideWatchedInRecent = !isFallback && settings.HideWatchedInRecentRows == true;
+        var hideUpgradesInRecent = !isFallback && settings.HideUpgradesInRecentRows == true;
         var items = sourceType switch
         {
-            "recentlyAdded" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated, hideWatchedInRecent),
-            "recentlyReleased" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate, hideWatchedInRecent),
+            "recentlyAdded" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated, hideWatchedInRecent, hideUpgradesInRecent),
+            "recentlyReleased" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate, hideWatchedInRecent, hideUpgradesInRecent),
             "newReleases" => GetNewReleaseSeries(libraryIds, collectionIds, settings.MediaBarNewReleaseDays ?? 30, limit, queryUser, excludedGenres),
             _ => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres)
         };
@@ -1425,12 +1429,32 @@ public class MoonfinController : ControllerBase
         return names.Count > 0 ? names : null;
     }
 
+    private DateTime EffectiveDateCreatedFor(BaseItem item, bool hideUpgrades)
+    {
+        var fallbackUtc = item.DateCreated.Kind == DateTimeKind.Utc
+            ? item.DateCreated
+            : item.DateCreated.ToUniversalTime();
+        var upgrades = _mediaUpgrades ?? MoonfinPlugin.Instance?.ServiceProvider?.GetService(typeof(MediaUpgradeService)) as MediaUpgradeService;
+        return upgrades?.EffectiveDateCreated(item.Id, fallbackUtc, hideUpgrades) ?? fallbackUtc;
+    }
+
+    private Guid[] GetUpgradedCandidateIds()
+    {
+        var upgrades = _mediaUpgrades ?? MoonfinPlugin.Instance?.ServiceProvider?.GetService(typeof(MediaUpgradeService)) as MediaUpgradeService;
+        if (upgrades == null) return Array.Empty<Guid>();
+        return upgrades.Ledger.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: false)
+            .Select(entry => entry.ItemId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+    }
+
     /// <summary>
     /// Queries Movie/Series items from the picked libraries and collections as one pool, shuffled or
     /// newest first by <paramref name="order"/>, with genre exclusions applied at the database level.
     /// With nothing picked it reads every library.
     /// </summary>
-    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, List<string>? collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random, bool excludePlayed = false)
+    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, List<string>? collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random, bool excludePlayed = false, bool hideUpgrades = false)
     {
         var includedGenreIds = GetIncludedGenreIds(excludedGenreIds, queryUser);
 
@@ -1447,6 +1471,7 @@ public class MoonfinController : ControllerBase
                 : new[] { new[] { BaseItemKind.Movie, BaseItemKind.Series } };
 
             var candidateItems = new List<BaseItem>();
+            var candidateIds = new HashSet<Guid>();
             foreach (var types in queryItemTypes)
             {
                 var query = new InternalItemsQuery
@@ -1462,7 +1487,43 @@ public class MoonfinController : ControllerBase
                 if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
                 SetMediaBarOrder(query, order);
-                candidateItems.AddRange(_libraryManager.GetItemsResult(query).Items);
+                foreach (var item in _libraryManager.GetItemsResult(query).Items)
+                {
+                    if (candidateIds.Add(item.Id))
+                    {
+                        candidateItems.Add(item);
+                    }
+                }
+            }
+
+            if (order == ItemSortBy.DateCreated)
+            {
+                var missingUpgradedIds = GetUpgradedCandidateIds().Where(id => !candidateIds.Contains(id)).ToArray();
+                if (missingUpgradedIds.Length > 0)
+                {
+                    foreach (var types in queryItemTypes)
+                    {
+                        var upgradeQuery = new InternalItemsQuery
+                        {
+                            ItemIds = missingUpgradedIds,
+                            IncludeItemTypes = types,
+                            Limit = missingUpgradedIds.Length
+                        };
+
+                        if (includedGenreIds != null) upgradeQuery.GenreIds = includedGenreIds;
+                        if (excludePlayed) upgradeQuery.IsPlayed = false;
+                        if (UserReflection.ApplyUser(upgradeQuery, queryUser))
+                        {
+                            foreach (var item in _libraryManager.GetItemsResult(upgradeQuery).Items)
+                            {
+                                if (candidateIds.Add(item.Id))
+                                {
+                                    candidateItems.Add(item);
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             var visibleItems = candidateItems
@@ -1471,7 +1532,7 @@ public class MoonfinController : ControllerBase
             if (order != ItemSortBy.Random)
             {
                 return visibleItems
-                    .OrderByDescending(item => order == ItemSortBy.DateCreated ? item.DateCreated : item.PremiereDate ?? DateTime.MinValue)
+                    .OrderByDescending(item => order == ItemSortBy.DateCreated ? EffectiveDateCreatedFor(item, hideUpgrades) : item.PremiereDate ?? DateTime.MinValue)
                     .Take(limit)
                     .ToList();
             }
@@ -1494,6 +1555,7 @@ public class MoonfinController : ControllerBase
         var seenIds = new HashSet<Guid>();
         // Newest first has to compare every library's newest, so each gives the full count.
         var perLibraryLimit = order == ItemSortBy.Random ? Math.Max(1, limit / (allowedLibraryIds.Count + collectionCount) + 1) : fetchLimit;
+        var upgradedIds = order == ItemSortBy.DateCreated ? GetUpgradedCandidateIds() : Array.Empty<Guid>();
 
         foreach (var parentGuid in allowedLibraryIds)
         {
@@ -1524,6 +1586,33 @@ public class MoonfinController : ControllerBase
                     if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
                     allItems.Add(item);
                 }
+
+                if (upgradedIds.Length > 0)
+                {
+                    var missingInLib = upgradedIds.Where(id => !seenIds.Contains(id)).ToArray();
+                    if (missingInLib.Length > 0)
+                    {
+                        var upgradeQuery = new InternalItemsQuery
+                        {
+                            ItemIds = missingInLib,
+                            IncludeItemTypes = types,
+                            AncestorIds = [parentGuid],
+                            Limit = missingInLib.Length
+                        };
+
+                        if (includedGenreIds != null) upgradeQuery.GenreIds = includedGenreIds;
+                        if (excludePlayed) upgradeQuery.IsPlayed = false;
+                        if (UserReflection.ApplyUser(upgradeQuery, queryUser))
+                        {
+                            foreach (var item in _libraryManager.GetItemsResult(upgradeQuery).Items)
+                            {
+                                if (!seenIds.Add(item.Id)) continue;
+                                if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
+                                allItems.Add(item);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1541,7 +1630,7 @@ public class MoonfinController : ControllerBase
         {
             return allItems
                 .Where(HasBackdropImage)
-                .OrderByDescending(item => order == ItemSortBy.DateCreated ? item.DateCreated : item.PremiereDate ?? DateTime.MinValue)
+                .OrderByDescending(item => order == ItemSortBy.DateCreated ? EffectiveDateCreatedFor(item, hideUpgrades) : item.PremiereDate ?? DateTime.MinValue)
                 .Take(limit)
                 .ToList();
         }

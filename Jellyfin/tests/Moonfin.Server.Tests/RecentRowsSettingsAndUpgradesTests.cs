@@ -586,5 +586,101 @@ public sealed class RecentRowsSettingsAndUpgradesTests
             }
         }
     }
+
+    [Fact]
+    public void SeedAndObserveArrivalKeepDistinctLiveCopiesIndexedAndReplaceRemovedCopy()
+    {
+        var stateFile = new MemoryStateFile();
+        var ledger = new MediaUpgradeLedger("upgrade-dates.json", stateFile);
+        var copy1Id = Guid.NewGuid();
+        var copy2Id = Guid.NewGuid();
+        var replacementId = Guid.NewGuid();
+        var copy1Date = new DateTime(2023, 1, 10, 8, 0, 0, DateTimeKind.Utc);
+        var copy2Date = new DateTime(2024, 6, 1, 8, 0, 0, DateTimeKind.Utc);
+        var upgradeDate = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        ledger.Seed([
+            new MediaUpgradeCandidate
+            {
+                ItemId = copy1Id,
+                IsEpisode = false,
+                TmdbId = "27205",
+                DateCreatedUtc = copy1Date
+            },
+            new MediaUpgradeCandidate
+            {
+                ItemId = copy2Id,
+                IsEpisode = false,
+                TmdbId = "27205",
+                DateCreatedUtc = copy2Date
+            }
+        ]);
+
+        // Both live copies remain tracked distinctly.
+        Assert.Equal(2, ledger.Count);
+
+        ledger.RecordRemoved(new MediaUpgradeCandidate
+        {
+            ItemId = copy1Id,
+            IsEpisode = false,
+            TmdbId = "27205",
+            DateCreatedUtc = copy1Date
+        });
+
+        var isUpgrade = ledger.ObserveArrival(
+            new MediaUpgradeCandidate
+            {
+                ItemId = replacementId,
+                IsEpisode = false,
+                TmdbId = "27205",
+                DateCreatedUtc = upgradeDate
+            },
+            hideUpgradesEnabled: true,
+            out var desiredDateUtc,
+            isItemLive: id => id == copy2Id || id == replacementId);
+
+        Assert.True(isUpgrade);
+        Assert.Equal(copy1Date, desiredDateUtc);
+        Assert.Equal(2, ledger.Count);
+        Assert.Equal(copy2Date, ledger.EffectiveDateCreated(copy2Id, copy2Date, hideUpgradesEnabled: true));
+    }
+
+    [Fact]
+    public void StartupSeedReconcilesRemovedRecordToReplacementAndClassifiesUpgrade()
+    {
+        var stateFile = new MemoryStateFile();
+        var ledger = new MediaUpgradeLedger("upgrade-dates.json", stateFile);
+        var oldId = Guid.NewGuid();
+        var newId = Guid.NewGuid();
+        var originalDate = new DateTime(2024, 1, 1, 10, 0, 0, DateTimeKind.Utc);
+        var upgradeDate = new DateTime(2026, 4, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        ledger.RecordRemoved(new MediaUpgradeCandidate
+        {
+            ItemId = oldId,
+            IsEpisode = false,
+            TmdbId = "603",
+            DateCreatedUtc = originalDate
+        });
+
+        var reloaded = new MediaUpgradeLedger("upgrade-dates.json", stateFile);
+        reloaded.Seed([
+            new MediaUpgradeCandidate
+            {
+                ItemId = newId,
+                IsEpisode = false,
+                TmdbId = "603",
+                DateCreatedUtc = upgradeDate
+            }
+        ]);
+
+        var target = Assert.Single(reloaded.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: true));
+        Assert.Equal(newId, target.ItemId);
+        Assert.Equal(originalDate, target.DesiredDateUtc);
+
+        var restore = Assert.Single(reloaded.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: false));
+        Assert.Equal(newId, restore.ItemId);
+        Assert.Equal(upgradeDate, restore.DesiredDateUtc);
+    }
 }
 

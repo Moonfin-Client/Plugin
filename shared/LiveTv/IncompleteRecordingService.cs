@@ -201,6 +201,11 @@ public sealed class IncompleteRecordingService : IDisposable
             }
 
             var data = Load();
+            if (data == null)
+            {
+                Interlocked.Exchange(ref _nextRunTicks, (Now + IncompleteRecordingRules.SafetyNetInterval).Ticks);
+                return;
+            }
             var now = Now;
             var previousTimers = _timers;
 
@@ -267,6 +272,10 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
+            if (data == null)
+            {
+                return;
+            }
             if (await TryAttachAsync(data, item, Now, cancellationToken).ConfigureAwait(false))
             {
                 Save(data);
@@ -294,6 +303,10 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
+            if (data == null)
+            {
+                return;
+            }
             var records = data.Records.Where(r => !r.Dismissed && r.TaggedItemIds.Contains(item.Id)).ToList();
             if (records.Count == 0 || _host.GetTags(item.Id) is not { } tags || HasIncompleteTag(tags))
             {
@@ -335,6 +348,10 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
+            if (data == null)
+            {
+                return;
+            }
             var now = Now;
             var changed = false;
             foreach (var record in data.Records.Where(r => r.ItemIds.Contains(itemId)).ToList())
@@ -383,6 +400,10 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
+            if (data == null)
+            {
+                return Array.Empty<IncompleteRecordingStateDto>();
+            }
             var ids = itemIds?.ToList() is { Count: > 0 } given
                 ? given
                 : data.Records.Where(r => !r.Dismissed).SelectMany(r => r.ItemIds).ToList();
@@ -429,6 +450,10 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
+            if (data == null)
+            {
+                return false;
+            }
             var record = data.Records.FirstOrDefault(r => r.ItemIds.Contains(itemId));
             if (record == null || !_host.IsVisibleTo(itemId, userId))
             {
@@ -498,6 +523,10 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
+            if (data == null)
+            {
+                return (null, CompleteShowingRefusal.NotFound);
+            }
             var now = Now;
             await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
             var request = FindOpenRequest(data, key);
@@ -545,6 +574,10 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
+            if (data == null)
+            {
+                return new();
+            }
             await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
             return _timersCurrent ? CompleteShowingOptionsCore(data, programId, userId) : new();
         }
@@ -605,6 +638,10 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
+            if (data == null)
+            {
+                return false;
+            }
             await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
             if (!_timersCurrent)
             {
@@ -1780,7 +1817,7 @@ public sealed class IncompleteRecordingService : IDisposable
 
     private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 
-    private IncompleteRecordingStoreData Load()
+    private IncompleteRecordingStoreData? Load()
     {
         if (_data != null)
         {
@@ -1794,8 +1831,8 @@ public sealed class IncompleteRecordingService : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.Warn(ex, "Could not load incomplete recordings from {Path}; starting with an empty store", _storePath);
-            _data = new IncompleteRecordingStoreData();
+            _logger.Warn(ex, "Could not load incomplete recordings from {Path}; deferring processing until the store can be read", _storePath);
+            return null;
         }
 
         RefreshTracked(_data);
@@ -1806,6 +1843,11 @@ public sealed class IncompleteRecordingService : IDisposable
 
     private void Save(IncompleteRecordingStoreData data)
     {
+        if (_data == null)
+        {
+            return;
+        }
+
         RefreshTracked(data);
         try
         {

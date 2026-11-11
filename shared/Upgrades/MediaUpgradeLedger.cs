@@ -96,7 +96,7 @@ public sealed class MediaUpgradeLedger
     private readonly object _gate = new object();
 
     private List<MediaUpgradeRecord>? _records;
-    private Dictionary<string, MediaUpgradeRecord>? _byKey;
+    private Dictionary<string, List<MediaUpgradeRecord>>? _byKey;
     private Dictionary<Guid, MediaUpgradeRecord>? _byItemId;
     private bool _loadAccessErrorLogged;
 
@@ -195,6 +195,16 @@ public sealed class MediaUpgradeLedger
     /// </summary>
     public void Seed(IEnumerable<MediaUpgradeCandidate> candidates)
     {
+        var candidateList = candidates as IReadOnlyCollection<MediaUpgradeCandidate> ?? candidates.ToList();
+        var liveItemIds = new HashSet<Guid>();
+        foreach (var c in candidateList)
+        {
+            if (c.ItemId != Guid.Empty)
+            {
+                liveItemIds.Add(c.ItemId);
+            }
+        }
+
         lock (_gate)
         {
             EnsureLoaded();
@@ -205,7 +215,7 @@ public sealed class MediaUpgradeLedger
 
             var dirtyPersisted = false;
 
-            foreach (var candidate in candidates)
+            foreach (var candidate in candidateList)
             {
                 if (candidate.ItemId == Guid.Empty)
                 {
@@ -219,7 +229,7 @@ public sealed class MediaUpgradeLedger
                 }
 
                 var dateUtc = NormalizeUtc(candidate.DateCreatedUtc);
-                var existing = FindRecord(candidate.ItemId, keys);
+                var existing = FindRecord(candidate.ItemId, keys, id => liveItemIds.Contains(id));
                 if (existing == null)
                 {
                     var record = new MediaUpgradeRecord
@@ -232,6 +242,22 @@ public sealed class MediaUpgradeLedger
                         Upgraded = false
                     };
                     AddRecord(record);
+                }
+                else if (existing.ItemId != candidate.ItemId || existing.RemovedAtUtc.HasValue)
+                {
+                    var wasPersisted = existing.Upgraded || existing.RemovedAtUtc.HasValue;
+                    var dirty = ReconcileReplacementOrUpgrade(existing, candidate.ItemId, keys, dateUtc);
+                    if (dateUtc < existing.FirstAddedUtc)
+                    {
+                        existing.FirstAddedUtc = dateUtc;
+                        dirty = true;
+                    }
+
+                    var isNowPersisted = existing.Upgraded || existing.RemovedAtUtc.HasValue;
+                    if (dirty && (wasPersisted || isNowPersisted))
+                    {
+                        dirtyPersisted = true;
+                    }
                 }
                 else
                 {
@@ -279,7 +305,13 @@ public sealed class MediaUpgradeLedger
             }
 
             var keys = KeysFor(candidate);
-            var existing = FindRecord(candidate.ItemId, keys);
+            // Match exact ItemId (or an ItemId-less record) so removing one copy never marks another live copy removed.
+            _byItemId!.TryGetValue(candidate.ItemId, out var existing);
+            if (existing == null)
+            {
+                existing = FindRecord(candidate.ItemId, keys, _ => true);
+            }
+
             var dateUtc = NormalizeUtc(candidate.DateCreatedUtc);
             var nowUtc = NormalizeUtc(removedAtUtc ?? DateTime.UtcNow);
 
@@ -376,40 +408,7 @@ public sealed class MediaUpgradeLedger
             }
 
             var wasPersisted = existing.Upgraded || existing.RemovedAtUtc.HasValue;
-            var dirty = MergeKeys(existing, keys);
-
-            var isReplacementItem = existing.ItemId != candidate.ItemId || existing.RemovedAtUtc.HasValue;
-            var isNewerThanBaseline = dateUtc > existing.FirstAddedUtc + UpgradeThreshold
-                || (existing.RemovedAtUtc.HasValue && dateUtc > existing.FirstAddedUtc + TimeSpan.FromSeconds(1));
-
-            if ((isReplacementItem && isNewerThanBaseline) || dateUtc > existing.FirstAddedUtc + UpgradeThreshold)
-            {
-                if (!existing.Upgraded)
-                {
-                    existing.Upgraded = true;
-                    dirty = true;
-                }
-
-                if (dateUtc > existing.LatestAddedUtc)
-                {
-                    existing.LatestAddedUtc = dateUtc;
-                    dirty = true;
-                }
-            }
-
-            if (existing.ItemId != candidate.ItemId)
-            {
-                _byItemId!.Remove(existing.ItemId);
-                existing.ItemId = candidate.ItemId;
-                _byItemId[candidate.ItemId] = existing;
-                dirty = true;
-            }
-
-            if (existing.RemovedAtUtc.HasValue)
-            {
-                existing.RemovedAtUtc = null;
-                dirty = true;
-            }
+            var dirty = ReconcileReplacementOrUpgrade(existing, candidate.ItemId, keys, dateUtc);
 
             var isNowPersisted = existing.Upgraded || existing.RemovedAtUtc.HasValue;
             if (dirty && (wasPersisted || isNowPersisted))
@@ -430,6 +429,50 @@ public sealed class MediaUpgradeLedger
 
             return true;
         }
+    }
+
+    private bool ReconcileReplacementOrUpgrade(
+        MediaUpgradeRecord existing,
+        Guid itemId,
+        List<string> keys,
+        DateTime dateUtc)
+    {
+        var dirty = MergeKeys(existing, keys);
+
+        var isReplacementItem = existing.ItemId != itemId || existing.RemovedAtUtc.HasValue;
+        var isNewerThanBaseline = dateUtc > existing.FirstAddedUtc + UpgradeThreshold
+            || (existing.RemovedAtUtc.HasValue && dateUtc > existing.FirstAddedUtc + TimeSpan.FromSeconds(1));
+
+        if ((isReplacementItem && isNewerThanBaseline) || dateUtc > existing.FirstAddedUtc + UpgradeThreshold)
+        {
+            if (!existing.Upgraded)
+            {
+                existing.Upgraded = true;
+                dirty = true;
+            }
+
+            if (dateUtc > existing.LatestAddedUtc)
+            {
+                existing.LatestAddedUtc = dateUtc;
+                dirty = true;
+            }
+        }
+
+        if (existing.ItemId != itemId)
+        {
+            _byItemId!.Remove(existing.ItemId);
+            existing.ItemId = itemId;
+            _byItemId[itemId] = existing;
+            dirty = true;
+        }
+
+        if (existing.RemovedAtUtc.HasValue)
+        {
+            existing.RemovedAtUtc = null;
+            dirty = true;
+        }
+
+        return dirty;
     }
 
     /// <summary>
@@ -492,25 +535,37 @@ public sealed class MediaUpgradeLedger
             return byIdRecord;
         }
 
+        MediaUpgradeRecord? nonLiveMatch = null;
+        MediaUpgradeRecord? fallbackMatch = null;
         foreach (var key in keys)
         {
-            if (_byKey!.TryGetValue(key, out var byKeyRecord))
+            if (!_byKey!.TryGetValue(key, out var recordsForKey))
+            {
+                continue;
+            }
+
+            foreach (var byKeyRecord in recordsForKey)
             {
                 if (byKeyRecord.ItemId == itemId || byKeyRecord.RemovedAtUtc.HasValue || byKeyRecord.ItemId == Guid.Empty)
                 {
                     return byKeyRecord;
                 }
 
-                if (isItemLive != null && isItemLive(byKeyRecord.ItemId))
+                if (isItemLive != null)
                 {
-                    continue;
+                    if (!isItemLive(byKeyRecord.ItemId))
+                    {
+                        nonLiveMatch ??= byKeyRecord;
+                    }
                 }
-
-                return byKeyRecord;
+                else
+                {
+                    fallbackMatch ??= byKeyRecord;
+                }
             }
         }
 
-        return null;
+        return nonLiveMatch ?? fallbackMatch;
     }
 
     private void AddRecord(MediaUpgradeRecord record)
@@ -523,7 +578,7 @@ public sealed class MediaUpgradeLedger
 
         foreach (var key in record.Keys)
         {
-            _byKey![key] = record;
+            IndexKey(key, record);
         }
     }
 
@@ -538,10 +593,24 @@ public sealed class MediaUpgradeLedger
                 added = true;
             }
 
-            _byKey![key] = record;
+            IndexKey(key, record);
         }
 
         return added;
+    }
+
+    private void IndexKey(string key, MediaUpgradeRecord record)
+    {
+        if (!_byKey!.TryGetValue(key, out var recordsForKey))
+        {
+            recordsForKey = new List<MediaUpgradeRecord>();
+            _byKey[key] = recordsForKey;
+        }
+
+        if (!recordsForKey.Contains(record))
+        {
+            recordsForKey.Add(record);
+        }
     }
 
     private void EnsureLoaded()
@@ -589,7 +658,7 @@ public sealed class MediaUpgradeLedger
         }
 
         _records = new List<MediaUpgradeRecord>();
-        _byKey = new Dictionary<string, MediaUpgradeRecord>(StringComparer.OrdinalIgnoreCase);
+        _byKey = new Dictionary<string, List<MediaUpgradeRecord>>(StringComparer.OrdinalIgnoreCase);
         _byItemId = new Dictionary<Guid, MediaUpgradeRecord>();
 
         if (loaded == null)

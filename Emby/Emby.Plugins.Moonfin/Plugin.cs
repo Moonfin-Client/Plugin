@@ -100,12 +100,26 @@ namespace Emby.Plugins.Moonfin
         {
             var oldUrl = Configuration?.PublicServerUrl;
             var oldGames = GamesSignature(Configuration);
+            var oldHideWatchedGlobal = Configuration?.DefaultUserSettings?.HideWatchedInRecentRows;
+            var oldHideWatchedTv = Configuration?.GetDefaultsFor("tv")?.HideWatchedInRecentRows;
+            var oldHideWatchedDesktop = Configuration?.GetDefaultsFor("desktop")?.HideWatchedInRecentRows;
+            var oldHideWatchedMobile = Configuration?.GetDefaultsFor("mobile")?.HideWatchedInRecentRows;
             base.UpdateConfiguration(configuration);
             var newUrl = Configuration?.PublicServerUrl;
 
             try
             {
-                SettingsService?.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
+                if (SettingsService != null)
+                {
+                    _ = SettingsService.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
+                    if (oldHideWatchedGlobal != Configuration?.DefaultUserSettings?.HideWatchedInRecentRows ||
+                        oldHideWatchedTv != Configuration?.GetDefaultsFor("tv")?.HideWatchedInRecentRows ||
+                        oldHideWatchedDesktop != Configuration?.GetDefaultsFor("desktop")?.HideWatchedInRecentRows ||
+                        oldHideWatchedMobile != Configuration?.GetDefaultsFor("mobile")?.HideWatchedInRecentRows)
+                    {
+                        _ = SettingsService.SyncHideWatchedForAffectedUsersAsync(CancellationToken.None);
+                    }
+                }
             }
             catch (Exception ex)
             {

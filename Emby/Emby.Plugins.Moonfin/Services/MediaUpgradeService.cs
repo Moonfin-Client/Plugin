@@ -24,9 +24,12 @@ namespace Emby.Plugins.Moonfin.Services
         private readonly MediaUpgradeLedger _ledger;
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<Guid, byte> _updating = new ConcurrentDictionary<Guid, byte>();
+        private readonly ConcurrentDictionary<Guid, DateTime> _queuedDesiredDates = new ConcurrentDictionary<Guid, DateTime>();
         private CancellationTokenSource _stopCts = new CancellationTokenSource();
         private Task _startupTask = Task.CompletedTask;
         private bool _started;
+        private readonly object _hideUpgradesCacheLock = new object();
+        private long _hideUpgradesCacheGeneration;
         private int _hideUpgradesCache = -1;
         private long _hideUpgradesCachedAtTicks;
 
@@ -129,7 +132,7 @@ namespace Emby.Plugins.Moonfin.Services
                 var item = _libraryManager.GetItemById(target.ItemId);
                 if (item == null) continue;
 
-                if (Math.Abs((item.DateCreated.UtcDateTime - target.DesiredDateUtc).TotalSeconds) <= 1)
+                if (!_updating.ContainsKey(target.ItemId) && Math.Abs((item.DateCreated.UtcDateTime - target.DesiredDateUtc).TotalSeconds) <= 1)
                 {
                     continue;
                 }
@@ -140,25 +143,43 @@ namespace Emby.Plugins.Moonfin.Services
 
         private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled, CancellationToken cancellationToken)
         {
-            Volatile.Write(ref _hideUpgradesCache, hideUpgradesEnabled ? 1 : 0);
-            Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            lock (_hideUpgradesCacheLock)
+            {
+                _hideUpgradesCacheGeneration++;
+                _hideUpgradesCache = hideUpgradesEnabled ? 1 : 0;
+                _hideUpgradesCachedAtTicks = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            }
+
             ApplyUpgradeDates(hideUpgradesEnabled, cancellationToken);
             return Task.CompletedTask;
         }
 
         private bool GetHideUpgradesCached()
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var cached = Volatile.Read(ref _hideUpgradesCache);
-            if (cached != -1 && now - Interlocked.Read(ref _hideUpgradesCachedAtTicks) < 30_000)
+            long generationBeforeScan;
+            lock (_hideUpgradesCacheLock)
             {
-                return cached == 1;
+                var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                if (_hideUpgradesCache != -1 && now - _hideUpgradesCachedAtTicks < 30_000)
+                {
+                    return _hideUpgradesCache == 1;
+                }
+
+                generationBeforeScan = _hideUpgradesCacheGeneration;
             }
 
             var enabled = _settings.IsAnyHideUpgradesEnabled();
-            Volatile.Write(ref _hideUpgradesCache, enabled ? 1 : 0);
-            Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, now);
-            return enabled;
+            lock (_hideUpgradesCacheLock)
+            {
+                if (_hideUpgradesCacheGeneration == generationBeforeScan)
+                {
+                    _hideUpgradesCache = enabled ? 1 : 0;
+                    _hideUpgradesCachedAtTicks = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    return enabled;
+                }
+
+                return _hideUpgradesCache != -1 ? _hideUpgradesCache == 1 : enabled;
+            }
         }
 
         internal void SeedFromLibrary()
@@ -280,6 +301,8 @@ namespace Emby.Plugins.Moonfin.Services
 
         private void UpdateItemDate(BaseItem item, DateTime desiredUtc)
         {
+            var normalizedDesiredUtc = DateTime.SpecifyKind(desiredUtc, DateTimeKind.Utc);
+            _queuedDesiredDates[item.Id] = normalizedDesiredUtc;
             if (!_updating.TryAdd(item.Id, 0))
             {
                 return;
@@ -287,9 +310,16 @@ namespace Emby.Plugins.Moonfin.Services
 
             try
             {
-                var utc = DateTime.SpecifyKind(desiredUtc, DateTimeKind.Utc);
-                item.DateCreated = new DateTimeOffset(utc);
-                item.UpdateToRepository(ItemUpdateType.MetadataEdit);
+                while (_queuedDesiredDates.TryRemove(item.Id, out var nextUtc))
+                {
+                    if (Math.Abs((item.DateCreated.UtcDateTime - nextUtc).TotalSeconds) <= 1)
+                    {
+                        continue;
+                    }
+
+                    item.DateCreated = new DateTimeOffset(nextUtc);
+                    item.UpdateToRepository(ItemUpdateType.MetadataEdit);
+                }
             }
             catch (Exception ex)
             {
@@ -298,6 +328,10 @@ namespace Emby.Plugins.Moonfin.Services
             finally
             {
                 _updating.TryRemove(item.Id, out _);
+                if (_queuedDesiredDates.TryRemove(item.Id, out var trailingUtc))
+                {
+                    UpdateItemDate(item, trailingUtc);
+                }
             }
         }
     }

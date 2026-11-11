@@ -1065,6 +1065,7 @@ public sealed partial class GameArtworkReconciliationService
         CancellationToken cancellationToken)
     {
         var foundAny = false;
+        var persistedFailed = false;
         try
         {
             var systems = _games.GetSystems(library.Id);
@@ -1110,10 +1111,11 @@ public sealed partial class GameArtworkReconciliationService
         }
         catch (Exception ex)
         {
+            persistedFailed = true;
             _logger.LogDebug(ex, "Failed to read persisted catalog metadata for incomplete library {LibraryId}", library.Id);
         }
 
-        if (!foundAny)
+        if (persistedFailed || !foundAny)
         {
             onUnknownPlatforms();
         }
@@ -1374,6 +1376,7 @@ public sealed partial class GameArtworkReconciliationService
             }
             catch (Exception ex)
             {
+                clearedAll = false;
                 _logger.LogWarning(ex, "Checking {Platform} game metadata for updates failed", platform);
             }
         }

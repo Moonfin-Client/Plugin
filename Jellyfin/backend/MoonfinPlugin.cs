@@ -106,11 +106,26 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
         var previousGamesEnabled = Configuration.GamesEnabled;
         var previousGameLibraryIds = Configuration.GameLibraryIds?.ToList() ?? new List<string>();
         var previousRomm = RommSignature(Configuration);
+        var previousHideWatchedGlobal = Configuration.DefaultUserSettings?.HideWatchedInRecentRows;
+        var previousHideWatchedTv = Configuration.GetDefaultsFor("tv")?.HideWatchedInRecentRows;
+        var previousHideWatchedDesktop = Configuration.GetDefaultsFor("desktop")?.HideWatchedInRecentRows;
+        var previousHideWatchedMobile = Configuration.GetDefaultsFor("mobile")?.HideWatchedInRecentRows;
         base.UpdateConfiguration(configuration);
 
         try
         {
-            ServiceProvider?.GetService<MoonfinSettingsService>()?.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
+            var settingsService = ServiceProvider?.GetService<MoonfinSettingsService>();
+            if (settingsService != null)
+            {
+                _ = settingsService.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
+                if (previousHideWatchedGlobal != Configuration.DefaultUserSettings?.HideWatchedInRecentRows ||
+                    previousHideWatchedTv != Configuration.GetDefaultsFor("tv")?.HideWatchedInRecentRows ||
+                    previousHideWatchedDesktop != Configuration.GetDefaultsFor("desktop")?.HideWatchedInRecentRows ||
+                    previousHideWatchedMobile != Configuration.GetDefaultsFor("mobile")?.HideWatchedInRecentRows)
+                {
+                    _ = settingsService.SyncHideWatchedForAffectedUsersAsync(CancellationToken.None);
+                }
+            }
         }
         catch (Exception)
         {

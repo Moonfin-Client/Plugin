@@ -23,9 +23,12 @@ public sealed class MediaUpgradeService : IHostedService
     private readonly MediaUpgradeLedger _ledger;
     private readonly ILogger<MediaUpgradeService> _logger;
     private readonly ConcurrentDictionary<Guid, byte> _updating = new();
+    private readonly ConcurrentDictionary<Guid, DateTime> _queuedDesiredDates = new();
     private readonly ConcurrentDictionary<Task, byte> _pendingArrivalUpdates = new();
     private CancellationTokenSource _stopCts = new();
     private Task _startupTask = Task.CompletedTask;
+    private readonly object _hideUpgradesCacheLock = new();
+    private long _hideUpgradesCacheGeneration;
     private int _hideUpgradesCache = -1;
     private long _hideUpgradesCachedAtTicks;
 
@@ -141,7 +144,7 @@ public sealed class MediaUpgradeService : IHostedService
                 continue;
             }
 
-            if (Math.Abs((item.DateCreated.ToUniversalTime() - desiredUtc).TotalSeconds) <= 1)
+            if (!_updating.ContainsKey(itemId) && Math.Abs((item.DateCreated.ToUniversalTime() - desiredUtc).TotalSeconds) <= 1)
             {
                 continue;
             }
@@ -152,24 +155,42 @@ public sealed class MediaUpgradeService : IHostedService
 
     private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled, CancellationToken cancellationToken)
     {
-        Volatile.Write(ref _hideUpgradesCache, hideUpgradesEnabled ? 1 : 0);
-        Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, Environment.TickCount64);
+        lock (_hideUpgradesCacheLock)
+        {
+            _hideUpgradesCacheGeneration++;
+            _hideUpgradesCache = hideUpgradesEnabled ? 1 : 0;
+            _hideUpgradesCachedAtTicks = Environment.TickCount64;
+        }
+
         return ApplyUpgradeDatesAsync(hideUpgradesEnabled, cancellationToken);
     }
 
     private bool GetHideUpgradesCached()
     {
-        var now = Environment.TickCount64;
-        var cached = Volatile.Read(ref _hideUpgradesCache);
-        if (cached != -1 && now - Interlocked.Read(ref _hideUpgradesCachedAtTicks) < 30_000)
+        long generationBeforeScan;
+        lock (_hideUpgradesCacheLock)
         {
-            return cached == 1;
+            var now = Environment.TickCount64;
+            if (_hideUpgradesCache != -1 && now - _hideUpgradesCachedAtTicks < 30_000)
+            {
+                return _hideUpgradesCache == 1;
+            }
+
+            generationBeforeScan = _hideUpgradesCacheGeneration;
         }
 
         var enabled = _settings.IsAnyHideUpgradesEnabled();
-        Volatile.Write(ref _hideUpgradesCache, enabled ? 1 : 0);
-        Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, now);
-        return enabled;
+        lock (_hideUpgradesCacheLock)
+        {
+            if (_hideUpgradesCacheGeneration == generationBeforeScan)
+            {
+                _hideUpgradesCache = enabled ? 1 : 0;
+                _hideUpgradesCachedAtTicks = Environment.TickCount64;
+                return enabled;
+            }
+
+            return _hideUpgradesCache != -1 ? _hideUpgradesCache == 1 : enabled;
+        }
     }
 
     internal void SeedFromLibrary()
@@ -285,6 +306,8 @@ public sealed class MediaUpgradeService : IHostedService
 
     private async Task UpdateItemDateAsync(BaseItem item, DateTime desiredUtc, CancellationToken cancellationToken)
     {
+        var normalizedDesiredUtc = DateTime.SpecifyKind(desiredUtc, DateTimeKind.Utc);
+        _queuedDesiredDates[item.Id] = normalizedDesiredUtc;
         if (!_updating.TryAdd(item.Id, 0))
         {
             return;
@@ -292,8 +315,21 @@ public sealed class MediaUpgradeService : IHostedService
 
         try
         {
-            item.DateCreated = DateTime.SpecifyKind(desiredUtc, DateTimeKind.Utc);
-            await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+            while (_queuedDesiredDates.TryRemove(item.Id, out var nextUtc))
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                if (Math.Abs((item.DateCreated.ToUniversalTime() - nextUtc).TotalSeconds) <= 1)
+                {
+                    continue;
+                }
+
+                item.DateCreated = nextUtc;
+                await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
@@ -302,6 +338,10 @@ public sealed class MediaUpgradeService : IHostedService
         finally
         {
             _updating.TryRemove(item.Id, out _);
+            if (!cancellationToken.IsCancellationRequested && _queuedDesiredDates.TryRemove(item.Id, out var trailingUtc))
+            {
+                await UpdateItemDateAsync(item, trailingUtc, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 }

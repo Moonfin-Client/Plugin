@@ -625,10 +625,11 @@ namespace Emby.Plugins.Moonfin.Api
                 ? null
                 : (settings.MediaBarLibraryIds ?? new List<string>()).Concat(settings.MediaBarCollectionIds ?? new List<string>()).ToList();
             var hideWatchedInRecent = !isFallback && settings.HideWatchedInRecentRows == true;
+            var hideUpgradesInRecent = !isFallback && settings.HideUpgradesInRecentRows == true;
             if (sourceType == "recentlyAdded")
-                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated, hideWatchedInRecent);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated, hideWatchedInRecent, hideUpgradesInRecent);
             else if (sourceType == "recentlyReleased")
-                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate, hideWatchedInRecent);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate, hideWatchedInRecent, hideUpgradesInRecent);
             else if (sourceType == "newReleases")
                 items = QueryNewReleaseSeries(parentIds, settings.MediaBarNewReleaseDays ?? 30, limit, user, excludedNames);
             else
@@ -687,7 +688,26 @@ namespace Emby.Plugins.Moonfin.Api
         /// genre-name exclusion. Shuffled, or newest first by <paramref name="orderBy"/>. A release date
         /// still to come isn't recently released.
         /// </summary>
-        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null, bool excludePlayed = false)
+        private static bool HasAnyAncestor(BaseItem item, HashSet<long> ancestorIds)
+        {
+            for (var parent = item.Parent; parent != null; parent = parent.Parent)
+            {
+                if (ancestorIds.Contains(parent.InternalId))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static DateTime EffectiveDateCreatedFor(BaseItem item, bool hideUpgrades)
+        {
+            var fallbackUtc = item.DateCreated.UtcDateTime;
+            return PluginServices.MediaUpgrades?.EffectiveDateCreated(item.Id, fallbackUtc, hideUpgrades) ?? fallbackUtc;
+        }
+
+        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null, bool excludePlayed = false, bool hideUpgrades = false)
         {
             var lm = LibraryManager;
             if (lm == null) return new List<BaseItem>();
@@ -728,6 +748,38 @@ namespace Emby.Plugins.Moonfin.Api
                 seq = seq.Where(i => i.Genres == null || !i.Genres.Any(excludedNames.Contains));
 
             var list = seq.ToList();
+            if (orderBy == ItemSortBy.DateCreated)
+            {
+                var upgrades = PluginServices.MediaUpgrades;
+                if (upgrades != null)
+                {
+                    var ancestorSet = query.AncestorIds != null && query.AncestorIds.Length > 0
+                        ? new HashSet<long>(query.AncestorIds)
+                        : null;
+                    var seen = new HashSet<Guid>(list.Select(i => i.Id));
+                    foreach (var (upgradedId, _) in upgrades.Ledger.GetDesiredDatesForUpgradedItems(hideUpgrades))
+                    {
+                        if (seen.Contains(upgradedId)) continue;
+                        var extra = lm.GetItemById(upgradedId);
+                        if (extra == null || extra.IsVirtualItem) continue;
+                        if (extra is not MediaBrowser.Controller.Entities.Movies.Movie &&
+                            extra is not MediaBrowser.Controller.Entities.TV.Series) continue;
+                        if (!extra.IsVisible(user) || !HasBackdropImage(extra)) continue;
+                        if (excludePlayed && extra.IsPlayed(user)) continue;
+                        if (excludedNames != null && extra.Genres != null && extra.Genres.Any(excludedNames.Contains)) continue;
+                        if (ancestorSet != null && !HasAnyAncestor(extra, ancestorSet)) continue;
+
+                        seen.Add(extra.Id);
+                        list.Add(extra);
+                    }
+                }
+
+                return list
+                    .OrderByDescending(i => EffectiveDateCreatedFor(i, hideUpgrades))
+                    .Take(limit)
+                    .ToList();
+            }
+
             if (orderBy != null) return list.Take(limit).ToList();
 
             var rng = new Random();

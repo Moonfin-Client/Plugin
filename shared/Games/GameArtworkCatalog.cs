@@ -209,6 +209,8 @@ public sealed class GameArtworkCatalog
     private readonly TimeSpan _persistDebounce;
     private readonly ConcurrentDictionary<string, Lazy<Task<LibraryCatalog>>> _libraries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _recoveredLibraries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _recoveryLock = new();
+    private long _recoveryEpoch;
     private long _documentWrites;
     private long _previewScanLookups;
     private readonly JsonSerializerOptions _jsonOptions = new()
@@ -223,8 +225,12 @@ public sealed class GameArtworkCatalog
     /// <summary>Resets startup recovery tracking (e.g. across service stop/restart cycles).</summary>
     public void ResetStartupRecovery()
     {
-        _recoveredLibraries.Clear();
-        HasPendingRecovery = false;
+        lock (_recoveryLock)
+        {
+            _recoveryEpoch++;
+            _recoveredLibraries.Clear();
+            HasPendingRecovery = false;
+        }
     }
 
     /// <summary>Creates a catalog below a plugin-owned directory (normally game-artwork-catalog).</summary>
@@ -1281,6 +1287,12 @@ public sealed class GameArtworkCatalog
     /// <summary>Returns work that must be rebuilt into worker queues during plugin startup.</summary>
     public async Task<IReadOnlyList<ArtworkCatalogWorkItem>> GetStartupRecoveryWorkAsync(CancellationToken cancellationToken = default)
     {
+        long epoch;
+        lock (_recoveryLock)
+        {
+            epoch = _recoveryEpoch;
+        }
+
         // This reads the files rather than the loaded documents, and the reconciliation service
         // calls it on every pass, not only at startup. Flushing first keeps the file the single
         // source of truth here, so a debounced transition cannot be re-queued as unfinished work.
@@ -1288,12 +1300,19 @@ public sealed class GameArtworkCatalog
 
         if (!Directory.Exists(_root))
         {
-            HasPendingRecovery = false;
+            lock (_recoveryLock)
+            {
+                if (_recoveryEpoch == epoch)
+                {
+                    HasPendingRecovery = false;
+                }
+            }
             return Array.Empty<ArtworkCatalogWorkItem>();
         }
 
         var files = Directory.EnumerateFiles(_root, "*.json", SearchOption.TopDirectoryOnly).ToArray();
         var work = new List<ArtworkCatalogWorkItem>();
+        var completedKeys = new List<string>();
         var hasFailures = false;
         foreach (var file in files)
         {
@@ -1313,29 +1332,44 @@ public sealed class GameArtworkCatalog
                 continue;
             }
 
-            _recoveredLibraries.TryAdd(libraryKey, 0);
-
-            if (document == null)
+            if (document != null)
             {
-                continue;
+                foreach (var entry in document.Entries.Values)
+                {
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+
+                    switch (entry.State)
+                    {
+                        case ArtworkCatalogState.Pending:
+                        case ArtworkCatalogState.Retryable:
+                            work.Add(new ArtworkCatalogWorkItem(entry, ArtworkCatalogWorkStage.AcquireOriginal, entry.RetryAfterUtc));
+                            break;
+                        case ArtworkCatalogState.OriginalReady when string.IsNullOrWhiteSpace(entry.ThumbnailPath):
+                            work.Add(new ArtworkCatalogWorkItem(entry, ArtworkCatalogWorkStage.DeriveThumbnail, entry.RetryAfterUtc));
+                            break;
+                    }
+                }
             }
 
-            foreach (var entry in document.Entries.Values)
+            completedKeys.Add(libraryKey);
+        }
+
+        lock (_recoveryLock)
+        {
+            if (_recoveryEpoch == epoch)
             {
-                switch (entry.State)
+                foreach (var key in completedKeys)
                 {
-                    case ArtworkCatalogState.Pending:
-                    case ArtworkCatalogState.Retryable:
-                        work.Add(new ArtworkCatalogWorkItem(entry, ArtworkCatalogWorkStage.AcquireOriginal, entry.RetryAfterUtc));
-                        break;
-                    case ArtworkCatalogState.OriginalReady when string.IsNullOrWhiteSpace(entry.ThumbnailPath):
-                        work.Add(new ArtworkCatalogWorkItem(entry, ArtworkCatalogWorkStage.DeriveThumbnail, entry.RetryAfterUtc));
-                        break;
+                    _recoveredLibraries.TryAdd(key, 0);
                 }
+
+                HasPendingRecovery = hasFailures;
             }
         }
 
-        HasPendingRecovery = hasFailures;
         return work;
     }
 
@@ -1454,6 +1488,12 @@ public sealed class GameArtworkCatalog
         foreach (var storageKey in parsed.Entries.Keys.ToArray())
         {
             var entry = parsed.Entries[storageKey];
+            if (entry == null)
+            {
+                parsed.Entries.Remove(storageKey);
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(entry.SystemId))
             {
                 continue;
