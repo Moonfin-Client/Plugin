@@ -1190,16 +1190,38 @@ public sealed partial class GameArtworkReconciliationService
             var platforms = candidates
                 .SelectMany(candidate => PlatformsOf(candidate, platformsBySource))
                 .ToHashSet(StringComparer.Ordinal);
-            var everyLibrary = _games.GetGameLibraries()
-                .Where(item => _games.IsLibraryInventoryReady(item.Id))
-                .Select(item => (item.Id, _games.GetSystems(item.Id).SelectMany(system => CreateSystemCandidates(item, system)).ToList()))
-                .ToList();
+            var incompletePlatforms = new HashSet<string>(StringComparer.Ordinal);
+            var deferAllPlatformClears = false;
+            var everyLibrary = new List<(string LibraryId, List<ArtworkCandidate> Candidates)>();
+            foreach (var item in _games.GetGameLibraries())
+            {
+                if (!_games.IsLibraryInventoryReady(item.Id))
+                {
+                    await CollectIncompleteLibraryPlatformsAsync(item, incompletePlatforms, () => deferAllPlatformClears = true, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                try
+                {
+                    everyLibrary.Add((item.Id, _games.GetSystems(item.Id).SelectMany(system => CreateSystemCandidates(item, system)).ToList()));
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    await CollectIncompleteLibraryPlatformsAsync(item, incompletePlatforms, () => deferAllPlatformClears = true, cancellationToken).ConfigureAwait(false);
+                    _logger.LogWarning(ex, "Failed to collect candidates for library {LibraryId} during refresh", item.Id);
+                }
+            }
+
             await CheckRdbUpdatesAsync(
                 everyLibrary,
                 platform => _thumbs.CheckRdbUpdateNowAsync(platform, cancellationToken),
                 platforms,
-                deferClearPlatforms: null,
-                deferAllClears: false,
+                deferAllPlatformClears ? null : incompletePlatforms,
+                deferAllPlatformClears,
                 cancellationToken).ConfigureAwait(false);
 
             _thumbs.ClearLookupCaches();

@@ -908,7 +908,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.True((bool)rdbDoneField.GetValue(service)!);
     }
 
-    private sealed class UnreadyGamesService : GamesService
+    internal sealed class UnreadyGamesService : GamesService
     {
         private readonly string _unreadyLibraryId;
         public bool IsReady { get; set; }
