@@ -886,12 +886,16 @@ public sealed partial class GameArtworkReconciliationService
 
             var runRdbUpdateCheck = !_rdbUpdateCheckDone;
             var rdbCandidatesIncomplete = false;
+            var incompletePlatforms = new HashSet<string>(StringComparer.Ordinal);
+            var deferAllPlatformClears = false;
             var libraryCandidates = new List<(string LibraryId, List<ArtworkCandidate> Candidates)>();
             foreach (var library in _games.GetGameLibraries())
             {
                 // Pruning against a RomM library that hasn't answered yet would delete its art.
                 if (!_games.IsLibraryInventoryReady(library.Id))
                 {
+                    rdbCandidatesIncomplete = true;
+                    await CollectIncompleteLibraryPlatformsAsync(library, incompletePlatforms, () => deferAllPlatformClears = true, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -1025,19 +1029,88 @@ public sealed partial class GameArtworkReconciliationService
                 catch (Exception ex)
                 {
                     rdbCandidatesIncomplete |= !candidatesCollected;
+                    if (!candidatesCollected)
+                    {
+                        await CollectIncompleteLibraryPlatformsAsync(library, incompletePlatforms, () => deferAllPlatformClears = true, cancellationToken).ConfigureAwait(false);
+                    }
                     _logger.LogWarning(ex, "Failed to reconcile game library {LibraryId}; skipping to next library", library.Id);
                 }
             }
 
-            if (runRdbUpdateCheck && !rdbCandidatesIncomplete)
+            if (runRdbUpdateCheck)
             {
-                _rdbUpdateCheckDone = true;
-                await CheckRdbUpdatesAsync(
-                    libraryCandidates,
-                    platform => _thumbs.EnsureRdbUpdateCheckedAsync(platform, cancellationToken),
-                    null,
-                    cancellationToken).ConfigureAwait(false);
+                var clearedAll = true;
+                if (libraryCandidates.Count > 0)
+                {
+                    clearedAll = await CheckRdbUpdatesAsync(
+                        libraryCandidates,
+                        platform => _thumbs.EnsureRdbUpdateCheckedAsync(platform, cancellationToken),
+                        null,
+                        deferAllPlatformClears ? null : incompletePlatforms,
+                        deferAllPlatformClears,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                if (!rdbCandidatesIncomplete && clearedAll)
+                {
+                    _rdbUpdateCheckDone = true;
+                }
             }
+    }
+
+    private async Task CollectIncompleteLibraryPlatformsAsync(
+        GameLibrary library,
+        ISet<string> platforms,
+        Action onUnknownPlatforms,
+        CancellationToken cancellationToken)
+    {
+        var foundAny = false;
+        try
+        {
+            var systems = _games.GetSystems(library.Id);
+            foreach (var system in systems)
+            {
+                foreach (var platform in GameArtworkStore.CandidatePlatformsFor(system.Core, false, system.Name))
+                {
+                    platforms.Add(platform);
+                    foundAny = true;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to inspect systems for incomplete library {LibraryId}", library.Id);
+        }
+
+        try
+        {
+            var persistedMetadata = await _catalog.GetSystemMetadataAsync(library.Id, cancellationToken).ConfigureAwait(false);
+            foreach (var meta in persistedMetadata)
+            {
+                foreach (var platform in GameArtworkStore.CandidatePlatformsFor(meta.Core, false, meta.Name))
+                {
+                    platforms.Add(platform);
+                    foundAny = true;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to read persisted catalog metadata for incomplete library {LibraryId}", library.Id);
+        }
+
+        if (!foundAny)
+        {
+            onUnknownPlatforms();
+        }
     }
 
     private List<ArtworkCandidate> CreateSystemCandidates(GameLibrary library, GameSystem system) =>
@@ -1125,6 +1198,8 @@ public sealed partial class GameArtworkReconciliationService
                 everyLibrary,
                 platform => _thumbs.CheckRdbUpdateNowAsync(platform, cancellationToken),
                 platforms,
+                deferClearPlatforms: null,
+                deferAllClears: false,
                 cancellationToken).ConfigureAwait(false);
 
             _thumbs.ClearLookupCaches();
@@ -1167,10 +1242,12 @@ public sealed partial class GameArtworkReconciliationService
     // Checks each platform the libraries' lookups can consult, independent of artwork acquisition,
     // and reopens that platform's Missing entries when its RDB changed how games match. A failure
     // here only defers the reopen: the marker stays until the catalog change is saved.
-    private async Task CheckRdbUpdatesAsync(
+    private async Task<bool> CheckRdbUpdatesAsync(
         IReadOnlyList<(string LibraryId, List<ArtworkCandidate> Candidates)> libraryCandidates,
         Func<string, Task<RdbCheckResult>> checkPlatform,
         ISet<string>? onlyPlatforms,
+        ISet<string>? deferClearPlatforms,
+        bool deferAllClears,
         CancellationToken cancellationToken)
     {
         var platformsBySource = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
@@ -1197,6 +1274,7 @@ public sealed partial class GameArtworkReconciliationService
             }
         }
 
+        var clearedAll = true;
         foreach (var (platform, members) in byPlatform.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1231,8 +1309,19 @@ public sealed partial class GameArtworkReconciliationService
                     }
                 }
 
-                _thumbs.ClearRdbPendingReopen(platform, check.Digest);
-                _logger.LogInformation("Reopened {Count} missing game artwork entries after the {Platform} metadata update", reopenedCount, platform);
+                if (deferAllClears || deferClearPlatforms?.Contains(platform) == true)
+                {
+                    clearedAll = false;
+                    _logger.LogInformation(
+                        "Reopened {Count} missing game artwork entries after {Platform} metadata update; keeping reopen pending for incomplete libraries",
+                        reopenedCount,
+                        platform);
+                }
+                else
+                {
+                    _thumbs.ClearRdbPendingReopen(platform, check.Digest);
+                    _logger.LogInformation("Reopened {Count} missing game artwork entries after the {Platform} metadata update", reopenedCount, platform);
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -1243,6 +1332,8 @@ public sealed partial class GameArtworkReconciliationService
                 _logger.LogWarning(ex, "Checking {Platform} game metadata for updates failed", platform);
             }
         }
+
+        return clearedAll;
     }
 
     private async Task<bool> QueueCandidateAsync(

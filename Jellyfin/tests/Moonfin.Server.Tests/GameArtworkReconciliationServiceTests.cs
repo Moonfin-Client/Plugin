@@ -794,6 +794,134 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Empty((System.Collections.IList)pendingField.GetValue(service)!);
     }
 
+    [Fact]
+    public async Task Reconciliation_DoesNotClearPendingReopenWhenPlatformHasUnreadyLibrary()
+    {
+        var rootA = Path.Combine(_root, "Games-unready-" + Guid.NewGuid().ToString("N"));
+        var systemA = Path.Combine(rootA, "SNES");
+        Directory.CreateDirectory(systemA);
+        var romPathA = Path.Combine(systemA, "GameA.sfc");
+        await File.WriteAllBytesAsync(romPathA, [1, 2, 3]);
+
+        var rootB = Path.Combine(_root, "Games-ready-" + Guid.NewGuid().ToString("N"));
+        var systemB = Path.Combine(rootB, "SNES");
+        Directory.CreateDirectory(systemB);
+        var romPathB = Path.Combine(systemB, "GameB.sfc");
+        await File.WriteAllBytesAsync(romPathB, [4, 5, 6]);
+
+        var libraryIdA = "lib-unready-" + Guid.NewGuid().ToString("N");
+        var libraryIdB = "lib-ready-" + Guid.NewGuid().ToString("N");
+
+        var catalogDir = Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N"));
+        var catalog = new GameArtworkCatalog(catalogDir);
+
+        // Pre-seed catalog for Library A so its SNES system metadata is known even while unready
+        var keyA = ArtworkCatalogKey.Create(libraryIdA, "SNES/GameA.sfc", $"{new FileInfo(romPathA).Length:x}-{new FileInfo(romPathA).LastWriteTimeUtc.Ticks:x}", "boxart");
+        await catalog.SynchronizeProjectionAsync(
+            libraryIdA,
+            [new ArtworkCatalogProjectionEntry(keyA, "SNES", GamePathResolver.EncodeToken(romPathA))],
+            "1.0",
+            new ArtworkCatalogSystemMetadata("SNES", "SNES", "snes9x", 1));
+        await catalog.MarkMissingAsync(keyA, "SNES", "1.0");
+
+        // Seed Library B with Missing artwork that should be reopened by RDB update check
+        var keyB = ArtworkCatalogKey.Create(libraryIdB, "SNES/GameB.sfc", $"{new FileInfo(romPathB).Length:x}-{new FileInfo(romPathB).LastWriteTimeUtc.Ticks:x}", "boxart");
+        await catalog.SynchronizeProjectionAsync(
+            libraryIdB,
+            [new ArtworkCatalogProjectionEntry(keyB, "SNES", GamePathResolver.EncodeToken(romPathB))],
+            "1.0",
+            new ArtworkCatalogSystemMetadata("SNES", "SNES", "snes9x", 1));
+        await catalog.MarkMissingAsync(keyB, "SNES", "1.0");
+
+        // Setup RDB store with an update pending reopen for SNES
+        var rdbDir = Path.Combine(_root, "rdb-data-" + Guid.NewGuid().ToString("N"));
+        var metaDir = Path.Combine(rdbDir, "gamemeta");
+        Directory.CreateDirectory(metaDir);
+
+        const string platform = "Nintendo - Super Nintendo Entertainment System";
+        var rdbPath = Path.Combine(metaDir, platform + ".rdb");
+        var sidecarPath = Path.Combine(metaDir, platform + ".rdb.json");
+        await File.WriteAllBytesAsync(rdbPath, [10, 20, 30]);
+
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var digest = GamesCompat.LowerHex(sha.ComputeHash(new byte[] { 10, 20, 30 }));
+        await File.WriteAllTextAsync(sidecarPath, $"{{\"pendingReopenDigest\":\"{digest}\"}}");
+
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), rdbDir)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration(),
+        };
+        var handler = new CountingArtHandler();
+        var thumbs = new GameThumbService(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameThumbService>(),
+            rdb,
+            Path.Combine(_root, "thumb-data-" + Guid.NewGuid().ToString("N")));
+
+        var libraryManager = new FakeLibraryManager(
+        [
+            new VirtualFolderInfo { Name = "Games A", ItemId = libraryIdA, Locations = [rootA] },
+            new VirtualFolderInfo { Name = "Games B", ItemId = libraryIdB, Locations = [rootB] },
+        ]);
+        var gamesService = new UnreadyGamesService(libraryManager, libraryIdA) { IsReady = false };
+
+        var service = new GameArtworkReconciliationService(
+            gamesService,
+            thumbs,
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null,
+            watchLibraryFileSystem: false);
+
+        // First pass: Library A is unready, Library B is ready
+        await ReconcileAsync(service);
+
+        // Ready Library B had its missing artwork reopened and queued
+        Assert.Contains("remote:" + keyB.StorageKey, QueuedRemoteIdentities(service));
+
+        // But because Library A also uses SNES and was unready, ClearRdbPendingReopen was deferred
+        var sidecarJson = await File.ReadAllTextAsync(sidecarPath);
+        Assert.Contains(digest, sidecarJson);
+
+        // And _rdbUpdateCheckDone remains false
+        var rdbDoneField = typeof(GameArtworkReconciliationService).GetField("_rdbUpdateCheckDone", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Assert.False((bool)rdbDoneField.GetValue(service)!);
+
+        // Library A's missing art is still missing
+        var entryA = await catalog.GetAsync(keyA);
+        Assert.Equal(ArtworkCatalogState.Missing, entryA!.State);
+
+        // Now Library A becomes ready
+        gamesService.IsReady = true;
+
+        // Second pass: both libraries are ready
+        await ReconcileAsync(service);
+
+        // Library A now has its missing art reopened and queued
+        Assert.Contains("remote:" + keyA.StorageKey, QueuedRemoteIdentities(service));
+
+        // ClearRdbPendingReopen has now executed and cleared the sidecar marker
+        sidecarJson = await File.ReadAllTextAsync(sidecarPath);
+        Assert.DoesNotContain(digest, sidecarJson);
+
+        // And _rdbUpdateCheckDone is now latched true
+        Assert.True((bool)rdbDoneField.GetValue(service)!);
+    }
+
+    private sealed class UnreadyGamesService : GamesService
+    {
+        private readonly string _unreadyLibraryId;
+        public bool IsReady { get; set; }
+
+        public UnreadyGamesService(FakeLibraryManager libraryManager, string unreadyLibraryId) : base(libraryManager)
+        {
+            _unreadyLibraryId = unreadyLibraryId;
+        }
+
+        public override bool IsLibraryInventoryReady(string libraryId) =>
+            libraryId == _unreadyLibraryId ? IsReady : base.IsLibraryInventoryReady(libraryId);
+    }
+
     private sealed class ThrowingGamesService : GamesService
     {
         private readonly string _failingLibraryId;
