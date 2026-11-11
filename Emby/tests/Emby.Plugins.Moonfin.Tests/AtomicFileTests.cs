@@ -190,6 +190,16 @@ public class AtomicFileTests : IDisposable
     }
 
     [Fact]
+    public void DeleteWithSidecars_ThrowsWhenDirectoryIsInaccessible()
+    {
+        var blockedParent = NewPath();
+        File.WriteAllText(blockedParent, "not-a-directory");
+        var blockedPath = Path.Combine(blockedParent, "session.json");
+
+        Assert.ThrowsAny<IOException>(() => AtomicFile.DeleteWithSidecars(blockedPath));
+    }
+
+    [Fact]
     public void ReadWithRecovery_DistinguishesInaccessibleParentFromMissingFile()
     {
         var missingPath = NewPath();

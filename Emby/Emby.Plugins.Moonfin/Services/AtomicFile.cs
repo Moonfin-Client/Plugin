@@ -226,14 +226,19 @@ namespace Emby.Plugins.Moonfin.Services
         {
             try
             {
-                if (File.Exists(path))
+                File.Delete(path);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                Exception? dirError;
+                if (IsInaccessibleParentDirectory(path, ex, out dirError))
                 {
-                    File.Delete(path);
+                    throw dirError ?? ex;
                 }
             }
-            catch
+            catch (FileNotFoundException)
             {
-                // Cleanup only.
+                // File is genuinely missing.
             }
         }
     }

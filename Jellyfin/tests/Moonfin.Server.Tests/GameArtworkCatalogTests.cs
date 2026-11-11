@@ -716,17 +716,42 @@ public sealed class GameArtworkCatalogTests : IDisposable
     {
         var catalog = new GameArtworkCatalog(_root);
         var key = Key("cached");
-        await catalog.GetOrCreateAsync(key, "snes", "provider-v1");
+        var created = await catalog.GetOrCreateAsync(key, "snes", "provider-v1");
+
+        // Mutate in-memory state before it has flushed to disk
+        var inMemoryOnly = await catalog.MarkOriginalReadyAsync(key, "snes", Path.Combine(_root, "mem-only.png"));
 
         // Cancelled caller token should throw OperationCanceledException
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => catalog.GetAsync(key, cts.Token));
 
-        // Cache was not evicted; entry is still immediately accessible
+        // Cache was not evicted; returns the exact same in-memory entry instance with unsaved state
         var healthy = await catalog.GetAsync(key);
         Assert.NotNull(healthy);
-        Assert.Equal(key, healthy!.Key);
+        Assert.Same(inMemoryOnly, healthy);
+        Assert.Equal(inMemoryOnly.OriginalPath, healthy!.OriginalPath);
+    }
+
+    [Fact]
+    public async Task GetLibraryAsync_EvictsFaultedLoadAndSucceedsAfterLockRelease()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var key = Key("retry-after-lock");
+        var catalogPath = catalog.GetLibraryPath(key.LibraryId);
+        Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+        await File.WriteAllTextAsync(catalogPath, "{}");
+
+        // Exclusive lock ensures LoadLibraryAsync fails on accessing the file
+        using (new FileStream(catalogPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            await Assert.ThrowsAnyAsync<IOException>(() => catalog.GetAsync(key));
+        }
+
+        // After releasing the lock, the faulted Lazy must have been evicted so retrying succeeds
+        var entry = await catalog.GetOrCreateAsync(key, "snes", "provider-v1");
+        Assert.NotNull(entry);
+        Assert.Equal(key, entry.Key);
     }
 
     [Fact]

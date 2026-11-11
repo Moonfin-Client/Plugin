@@ -30,11 +30,24 @@ namespace Emby.Plugins.Moonfin.Services
         private static readonly string[] NonSessionCookieNames = { "XSRF-TOKEN", "_csrf" };
 
         public SeerrSessionService(ILogger logger)
+            : this(logger, null)
+        {
+        }
+
+        internal SeerrSessionService(ILogger logger, string? sessionsPath)
         {
             _logger = logger;
-            var dataPath = Plugin.Instance?.DataFolderPath
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Emby-Server", "programdata", "plugins", "Moonfin");
-            _sessionsPath = Path.Combine(dataPath, "seerr-sessions");
+            if (!string.IsNullOrEmpty(sessionsPath))
+            {
+                _sessionsPath = sessionsPath;
+            }
+            else
+            {
+                var dataPath = Plugin.Instance?.DataFolderPath
+                    ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Emby-Server", "programdata", "plugins", "Moonfin");
+                _sessionsPath = Path.Combine(dataPath, "seerr-sessions");
+            }
+
             _jsonOptions = new JsonSerializerOptions
             {
                 WriteIndented = true,
@@ -46,7 +59,14 @@ namespace Emby.Plugins.Moonfin.Services
 
         private void EnsureDirectory()
         {
-            if (!Directory.Exists(_sessionsPath)) Directory.CreateDirectory(_sessionsPath);
+            try
+            {
+                if (!Directory.Exists(_sessionsPath)) Directory.CreateDirectory(_sessionsPath);
+            }
+            catch
+            {
+                // Access errors will be caught and reported during read/write/clear operations.
+            }
         }
 
         private string GetSessionPath(Guid userId) => Path.Combine(_sessionsPath, $"{userId}.json");

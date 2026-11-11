@@ -565,6 +565,84 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Empty(handler.Urls);
     }
 
+    [Fact]
+    public async Task Reconciliation_IsolatesInaccessibleLibraryAndPreservesRecoveryWork()
+    {
+        var rootA = Path.Combine(_root, "Games-inaccessible-" + Guid.NewGuid().ToString("N"));
+        var systemA = Path.Combine(rootA, "SNES");
+        Directory.CreateDirectory(systemA);
+        await File.WriteAllBytesAsync(Path.Combine(systemA, "GameA.sfc"), [1, 2, 3]);
+
+        var rootB = Path.Combine(_root, "Games-accessible-" + Guid.NewGuid().ToString("N"));
+        var systemB = Path.Combine(rootB, "SNES");
+        Directory.CreateDirectory(systemB);
+        await File.WriteAllBytesAsync(Path.Combine(systemB, "GameB1.sfc"), [4, 5, 6]);
+        await File.WriteAllBytesAsync(Path.Combine(systemB, "GameB2.sfc"), [7, 8, 9]);
+
+        var libraryIdA = "lib-inaccessible-" + Guid.NewGuid().ToString("N");
+        var libraryIdB = "lib-accessible-" + Guid.NewGuid().ToString("N");
+
+        var catalogDir = Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N"));
+        var catalog = new GameArtworkCatalog(catalogDir);
+
+        var handler = new CountingArtHandler();
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration(),
+        };
+        var thumbs = new GameThumbService(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameThumbService>(),
+            rdb,
+            Path.Combine(_root, "thumb-data-" + Guid.NewGuid().ToString("N")));
+
+        var libraryManager = new FakeLibraryManager(
+        [
+            new VirtualFolderInfo { Name = "Games A", ItemId = libraryIdA, Locations = [rootA] },
+            new VirtualFolderInfo { Name = "Games B", ItemId = libraryIdB, Locations = [rootB] },
+        ]);
+        var gamesService = new GamesService(libraryManager);
+
+        var service = new GameArtworkReconciliationService(
+            gamesService,
+            thumbs,
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null,
+            watchLibraryFileSystem: false);
+
+        var gamesB = gamesService.GetGames(libraryIdB, null);
+        var candidateB1 = ResolveCandidate(service, libraryIdB, gamesB[0].Id);
+        var candidateB2 = ResolveCandidate(service, libraryIdB, gamesB[1].Id);
+
+        var managedRoot = Path.Combine(_root, "game_thumbs");
+        Directory.CreateDirectory(managedRoot);
+        var artB = Path.Combine(managedRoot, "art-b.png");
+        await File.WriteAllBytesAsync(artB, [1, 2, 3]);
+
+        // Pre-seed a recoverable work item for library B (OriginalReady but missing thumbnail) and persist it
+        await catalog.GetOrCreateAsync(candidateB1.Key, candidateB1.SystemId, PreviousProviderVersion, candidateB1.GameId);
+        await catalog.MarkOriginalReadyAsync(candidateB1.Key, candidateB1.SystemId, artB);
+        await catalog.FlushAsync();
+
+        // Lock library A's catalog file exclusively so PruneAsync throws during reconciliation
+        var catalogPathA = catalog.GetLibraryPath(libraryIdA);
+        Directory.CreateDirectory(Path.GetDirectoryName(catalogPathA)!);
+        await File.WriteAllTextAsync(catalogPathA, "{}");
+
+        using (new FileStream(catalogPathA, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            // Reconciliation must not throw despite library A being locked
+            await ReconcileAsync(service);
+        }
+
+        // Recovery work from library B was preserved and queued
+        Assert.Contains("thumbnail:" + candidateB1.Key.StorageKey, QueuedThumbnailIdentities(service));
+
+        // Library B's preview candidates were reconciled and queued
+        Assert.Contains("remote:" + candidateB2.Key.StorageKey, QueuedRemoteIdentities(service));
+    }
+
     private static Task ReconcileAsync(GameArtworkReconciliationService service)
     {
         var method = typeof(GameArtworkReconciliationService)

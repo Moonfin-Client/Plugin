@@ -268,6 +268,25 @@ public class SeerrArrCalendarTests
         Assert.Equal(["http://radarr.lan:7878/api/v3/calendar?start=2026-11-05&end=2026-11-06&unmonitored=true"], handler.Requested);
     }
 
+    [Fact]
+    public async Task ClearSessionAsync_ThrowsWhenSessionDirectoryIsInaccessible()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var blockedSessionsDir = Path.Combine(tempFile, "seerr-sessions");
+            var service = new SeerrSessionService(
+                new NoOpLogger<SeerrSessionService>(),
+                new ThrowingHttpClientFactory(),
+                blockedSessionsDir);
+            await Assert.ThrowsAnyAsync<IOException>(() => service.ClearSessionAsync(Guid.NewGuid()));
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
     // Unless a test passes one, a lookup fails the test, since https and the internal address never need one.
     private static Task<SeerrProxyResponse> Fetch(ArrHandler handler, string[] bases, Func<string, Task<IPAddress[]>>? resolveHost = null, string query = Query) =>
         SeerrSessionService.FetchArrCalendarAsync(

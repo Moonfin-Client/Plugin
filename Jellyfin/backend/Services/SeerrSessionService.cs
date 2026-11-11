@@ -26,14 +26,28 @@ public class SeerrSessionService
     public SeerrSessionService(
         ILogger<SeerrSessionService> logger,
         IHttpClientFactory httpClientFactory)
+        : this(logger, httpClientFactory, null)
+    {
+    }
+
+    internal SeerrSessionService(
+        ILogger<SeerrSessionService> logger,
+        IHttpClientFactory httpClientFactory,
+        string? sessionsPath)
     {
         _logger = logger;
         _httpClientFactory = httpClientFactory;
 
-        var dataPath = MoonfinPlugin.Instance?.DataFolderPath
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
-
-        _sessionsPath = Path.Combine(dataPath, "seerr-sessions");
+        if (!string.IsNullOrEmpty(sessionsPath))
+        {
+            _sessionsPath = sessionsPath;
+        }
+        else
+        {
+            var dataPath = MoonfinPlugin.Instance?.DataFolderPath
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
+            _sessionsPath = Path.Combine(dataPath, "seerr-sessions");
+        }
 
         _jsonOptions = new JsonSerializerOptions
         {
@@ -47,9 +61,16 @@ public class SeerrSessionService
 
     private void EnsureDirectory()
     {
-        if (!Directory.Exists(_sessionsPath))
+        try
         {
-            Directory.CreateDirectory(_sessionsPath);
+            if (!Directory.Exists(_sessionsPath))
+            {
+                Directory.CreateDirectory(_sessionsPath);
+            }
+        }
+        catch
+        {
+            // Access errors will be caught and reported during read/write/clear operations.
         }
     }
 
@@ -798,17 +819,15 @@ public class SeerrSessionService
         try
         {
             var path = GetSessionPath(userId);
+            // Takes the backup with it, otherwise recovery could bring back a session the
+            // user just signed out of.
+            AtomicFile.DeleteWithSidecars(path);
             if (File.Exists(path) || File.Exists(AtomicFile.BackupPath(path)))
             {
-                // Takes the backup with it, otherwise recovery could bring back a session the
-                // user just signed out of.
-                AtomicFile.DeleteWithSidecars(path);
-                if (File.Exists(path) || File.Exists(AtomicFile.BackupPath(path)))
-                {
-                    throw new IOException($"Failed to delete Seerr session file for user {userId}");
-                }
-                _logger.LogInformation("Seerr session cleared for user {UserId}", userId);
+                throw new IOException($"Failed to delete Seerr session file for user {userId}");
             }
+
+            _logger.LogInformation("Seerr session cleared for user {UserId}", userId);
         }
         finally
         {

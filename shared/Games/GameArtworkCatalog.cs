@@ -1377,11 +1377,22 @@ public sealed class GameArtworkCatalog
         var lazy = _libraries.GetOrAdd(
             normalizedLibraryId,
             id => new Lazy<Task<LibraryCatalog>>(() => LoadLibraryAsync(id), LazyThreadSafetyMode.ExecutionAndPublication));
+        Task<LibraryCatalog> task;
         try
         {
-            return await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+            task = lazy.Value;
         }
-        catch when (lazy.Value.IsFaulted)
+        catch
+        {
+            _libraries.TryRemove(new KeyValuePair<string, Lazy<Task<LibraryCatalog>>>(normalizedLibraryId, lazy));
+            throw;
+        }
+
+        try
+        {
+            return await task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch when (task.IsFaulted)
         {
             _libraries.TryRemove(new KeyValuePair<string, Lazy<Task<LibraryCatalog>>>(normalizedLibraryId, lazy));
             throw;
@@ -1587,11 +1598,22 @@ public sealed class GameArtworkCatalog
             }
 
             LibraryCatalog library;
+            Task<LibraryCatalog> task;
             try
             {
-                library = await pair.Value.Value.ConfigureAwait(false);
+                task = pair.Value.Value;
             }
-            catch when (pair.Value.Value.IsFaulted)
+            catch
+            {
+                _libraries.TryRemove(pair);
+                continue;
+            }
+
+            try
+            {
+                library = await task.ConfigureAwait(false);
+            }
+            catch when (task.IsFaulted)
             {
                 _libraries.TryRemove(pair);
                 continue;

@@ -242,14 +242,18 @@ public static class AtomicFile
     {
         try
         {
-            if (File.Exists(path))
+            File.Delete(path);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            if (IsInaccessibleParentDirectory(path, ex, out var dirError))
             {
-                File.Delete(path);
+                throw dirError ?? ex;
             }
         }
-        catch
+        catch (FileNotFoundException)
         {
-            // Cleanup only.
+            // File is genuinely missing.
         }
     }
 }
