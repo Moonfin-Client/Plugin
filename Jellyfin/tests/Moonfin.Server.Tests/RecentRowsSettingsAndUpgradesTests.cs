@@ -369,6 +369,7 @@ public sealed class RecentRowsSettingsAndUpgradesTests
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-scan-race-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
+        var releaseScan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
             using var settings = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempRoot);
@@ -393,7 +394,6 @@ public sealed class RecentRowsSettingsAndUpgradesTests
             settings.InvalidateHideUpgradesCache();
 
             var scanPaused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var releaseScan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var pauseOnce = 0;
             settings.BeforePublishHideUpgradesScanForTesting = () =>
             {
@@ -413,10 +413,10 @@ public sealed class RecentRowsSettingsAndUpgradesTests
                 userId,
                 "global",
                 new MoonfinSettingsProfile { HideUpgradesInRecentRows = true });
+            await saveTask.WaitAsync(TimeSpan.FromSeconds(5));
             releaseScan.TrySetResult();
 
             var scanResult = await scanTask.WaitAsync(TimeSpan.FromSeconds(5));
-            await saveTask.WaitAsync(TimeSpan.FromSeconds(5));
             await settings.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
 
             Assert.True(scanResult);
@@ -428,6 +428,7 @@ public sealed class RecentRowsSettingsAndUpgradesTests
         }
         finally
         {
+            releaseScan.TrySetResult();
             if (Directory.Exists(tempRoot))
             {
                 Directory.Delete(tempRoot, recursive: true);
