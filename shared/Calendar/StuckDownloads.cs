@@ -29,6 +29,10 @@ public sealed class StuckDownloadRecord
 
     [JsonPropertyName("notifiedAt")]
     public DateTime? NotifiedAt { get; set; }
+
+    /// <summary>Who was already told while someone else couldn't be, so a later check only retries the rest.</summary>
+    [JsonPropertyName("told")]
+    public List<Guid>? Told { get; set; }
 }
 
 /// <summary>A download that has been stuck long enough to tell people about.</summary>
@@ -104,7 +108,10 @@ public sealed class StuckDownloadStore
 /// <summary>What one check needs from the server it runs on.</summary>
 public sealed class StuckDownloadRun
 {
-    /// <summary>The whole queue of the default Radarr (false) or Sonarr (true). Null when it couldn't be read.</summary>
+    /// <summary>
+    /// The whole queue of the default Radarr (false) or Sonarr (true). Null when it couldn't be read.
+    /// It should stop early once <see cref="Cancellation"/> is set.
+    /// </summary>
     public Func<bool, Task<JsonArray?>> ReadQueue { get; set; } = _ => Task.FromResult<JsonArray?>(null);
 
     /// <summary>Sends a GET to the Seerr API with the admin session, such as "request?take=100".</summary>
@@ -170,54 +177,90 @@ public static class StuckDownloads
 
     /// <summary>
     /// One check: read both queues, update the store, and notify what has been stuck long enough. A
-    /// download is only marked notified once someone was told, so a run that can't read Seerr's
-    /// requests, or finds nobody to tell, tries again on the next one.
+    /// download is only marked notified once everyone was told, so a run that can't read Seerr's
+    /// requests, finds nobody to tell, or can't reach someone, tries again on the next one. Whoever
+    /// was already told isn't told twice.
     /// </summary>
     public static async Task<int> RunAsync(StuckDownloadRun run, StuckDownloadStore store)
     {
         var radarr = await run.ReadQueue(false).ConfigureAwait(false);
+        if (run.Cancellation.IsCancellationRequested) return 0;
         var sonarr = await run.ReadQueue(true).ConfigureAwait(false);
         if (radarr == null && sonarr == null) return 0;
 
         var (next, due) = Scan(store.Load(), radarr, sonarr, run.NowUtc, run.StalledThreshold);
         var notified = 0;
-        if (due.Count > 0)
+        if (due.Count > 0 && !run.Cancellation.IsCancellationRequested)
         {
             var requests = await ReadProcessingRequestsAsync(run.SeerrGet).ConfigureAwait(false);
-            if (run.Cancellation.IsCancellationRequested) return 0;
-
             if (requests == null)
             {
-                run.Log("Seerr's requests couldn't be read, so " + due.Count.ToString(CultureInfo.InvariantCulture) + " stuck downloads wait for the next check");
+                run.Log("Seerr's requests couldn't be read in full, so " + due.Count.ToString(CultureInfo.InvariantCulture) + " stuck downloads wait for the next check");
                 due.Clear();
             }
 
             var admins = new HashSet<Guid>(run.Admins());
             foreach (var download in due)
             {
-                var (requesters, requestTmdbId) = Requesters(requests, download);
-                var route = Route(download, download.TmdbId ?? requestTmdbId);
-                var redacted = Body(download, redact: true);
-                var toAdmins = admins.Count(admin => TryDeliver(run, admin, Body(download, redact: false), redacted, route));
-                var toRequesters = requesters
-                    .Where(r => !admins.Contains(r) && run.RequesterWantsIt(r))
-                    .Count(requester => TryDeliver(run, requester, redacted, redacted, route));
-
-                if (toAdmins + toRequesters == 0)
-                {
-                    run.Log($"{download.Key} is stuck ({download.Reason}), but there was nobody to tell");
-                    continue;
-                }
-
-                next[download.Key].NotifiedAt = run.NowUtc;
-                notified++;
-                run.Log($"{download.Key} is stuck ({download.Reason}), told {toAdmins} admins and {toRequesters} requesters");
+                // Whatever was delivered before shutdown is still saved below, so it isn't sent again.
+                if (run.Cancellation.IsCancellationRequested) break;
+                if (Notify(run, download, requests, admins, next[download.Key])) notified++;
             }
         }
 
-        if (run.Cancellation.IsCancellationRequested) return notified;
         store.Save(next);
         return notified;
+    }
+
+    // Tells everyone who hasn't been told yet. True once nobody is left.
+    private static bool Notify(StuckDownloadRun run, StuckDownload download, JsonArray? requests, HashSet<Guid> admins, StuckDownloadRecord record)
+    {
+        var (requesters, requestTmdbId) = Requesters(requests, download);
+        var route = Route(download, download.TmdbId ?? requestTmdbId);
+        var redacted = Body(download, redact: true);
+        var told = new HashSet<Guid>(record.Told ?? new List<Guid>());
+        var recipients = admins.Select(admin => (User: admin, Body: Body(download, redact: false)))
+            .Concat(requesters.Where(r => !admins.Contains(r) && run.RequesterWantsIt(r)).Select(r => (User: r, Body: redacted)))
+            .Where(r => !told.Contains(r.User))
+            .ToList();
+
+        int toAdmins = 0, toRequesters = 0, failed = 0;
+        foreach (var (user, body) in recipients)
+        {
+            if (run.Cancellation.IsCancellationRequested)
+            {
+                failed++;
+                continue;
+            }
+
+            if (!TryDeliver(run, user, body, redacted, route))
+            {
+                failed++;
+                continue;
+            }
+
+            told.Add(user);
+            if (admins.Contains(user)) toAdmins++;
+            else toRequesters++;
+        }
+
+        if (told.Count == 0)
+        {
+            run.Log($"{download.Key} is stuck ({download.Reason}), but there was nobody to tell");
+            return false;
+        }
+
+        run.Log($"{download.Key} is stuck ({download.Reason}), told {toAdmins} admins and {toRequesters} requesters");
+        if (failed > 0)
+        {
+            record.Told = told.ToList();
+            run.Log($"{download.Key}: {failed.ToString(CultureInfo.InvariantCulture)} more to tell on the next check");
+            return false;
+        }
+
+        record.NotifiedAt = run.NowUtc;
+        record.Told = null;
+        return true;
     }
 
     // One recipient that can't be reached doesn't stop the others.
@@ -239,11 +282,13 @@ public static class StuckDownloads
     /// The whole queue, page by page, with the movie or series on each entry. Null when any page
     /// couldn't be read, so a download missing from a partial read isn't taken for one that left.
     /// </summary>
-    public static async Task<JsonArray?> ReadQueueAsync(ArrSend send, bool isSonarr)
+    public static async Task<JsonArray?> ReadQueueAsync(ArrSend send, bool isSonarr, CancellationToken cancellationToken = default)
     {
         var all = new JsonArray();
         for (var page = 1; page <= MaxQueuePages; page++)
         {
+            if (cancellationToken.IsCancellationRequested) return null;
+
             var path = "api/v3/queue?page=" + page.ToString(CultureInfo.InvariantCulture)
                 + "&pageSize=" + QueuePageSize.ToString(CultureInfo.InvariantCulture)
                 + (isSonarr ? "&includeSeries=true&includeEpisode=true" : "&includeMovie=true");
@@ -321,7 +366,7 @@ public static class StuckDownloads
         DateTime now,
         TimeSpan stalledThreshold)
     {
-        var record = new StuckDownloadRecord { NotifiedAt = before?.NotifiedAt };
+        var record = new StuckDownloadRecord { NotifiedAt = before?.NotifiedAt, Told = before?.Told };
         string? reason = null;
         string? detail = null;
         var sizeLeft = entries.Select(e => Long(e["sizeleft"])).Max();
@@ -356,6 +401,10 @@ public static class StuckDownloads
             // sending anything, so the clock only starts over once bytes actually arrive.
             record.SizeLeft = sizeLeft;
             record.StalledSince = before.StalledSince;
+            if (entries.Any(IsDownloading) && now - before.StalledSince.Value >= stalledThreshold)
+            {
+                reason = "no progress for " + Hours(now - before.StalledSince.Value);
+            }
         }
 
         if (record.StuckSince == null && record.StalledSince == null && record.NotifiedAt == null) return (null, null);
@@ -382,13 +431,19 @@ public static class StuckDownloads
     // downloads still downloading count, and not ones the client is holding back.
     private static bool IsStalled(JsonObject entry)
     {
-        var state = Text(entry["trackedDownloadState"]);
-        if (state != null && !string.Equals(state, "downloading", StringComparison.OrdinalIgnoreCase)) return false;
-        if (Text(entry["status"]) is string status && HeldStatuses.Contains(status)) return false;
+        if (!IsDownloading(entry)) return false;
 
         return (Text(entry["errorMessage"])?.IndexOf("stalled", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0
             || string.Equals(Text(entry["status"]), "warning", StringComparison.OrdinalIgnoreCase)
             || string.Equals(Text(entry["trackedDownloadStatus"]), "warning", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Still downloading, and not held back by the client.
+    private static bool IsDownloading(JsonObject entry)
+    {
+        var state = Text(entry["trackedDownloadState"]);
+        if (state != null && !string.Equals(state, "downloading", StringComparison.OrdinalIgnoreCase)) return false;
+        return !(Text(entry["status"]) is string status && HeldStatuses.Contains(status));
     }
 
     private static StuckDownload Describe(string key, List<JsonObject> entries, bool isSonarr, string reason, string? detail)
@@ -411,7 +466,10 @@ public static class StuckDownloads
             detail);
     }
 
-    /// <summary>"Title is stuck: why, message", with server paths cut down for non-admins.</summary>
+    /// <summary>
+    /// "Title is stuck: why, message". For non-admins and push the paths are cut down and the
+    /// message shortened. Admins see it whole in the app, since the path is what they need.
+    /// </summary>
     internal static string Body(StuckDownload download, bool redact)
     {
         var name = download.Seasons.Count == 1
@@ -419,7 +477,7 @@ public static class StuckDownloads
             : download.Title;
         var detail = download.Detail?.Trim();
         if (!string.IsNullOrEmpty(detail) && redact) detail = ArrQueue.RedactPaths(detail!);
-        if (detail != null && detail.Length > MaxDetailLength) detail = detail.Substring(0, MaxDetailLength).TrimEnd() + "...";
+        if (redact && detail != null && detail.Length > MaxDetailLength) detail = detail.Substring(0, MaxDetailLength).TrimEnd() + "...";
 
         return string.IsNullOrEmpty(detail)
             ? name + " is stuck: " + download.Reason
@@ -432,7 +490,10 @@ public static class StuckDownloads
             ? "/seerr/media/" + id.ToString(CultureInfo.InvariantCulture) + "?mediaType=" + (download.IsSonarr ? "tv" : "movie")
             : "/seerr/requests";
 
-    /// <summary>Every request Seerr is still working on, or null when Seerr couldn't be read.</summary>
+    /// <summary>
+    /// Every request Seerr is still working on. Null when any page couldn't be read, or there were
+    /// more than it reads, so a requester on a missing page isn't left out of a notification.
+    /// </summary>
     internal static async Task<JsonArray?> ReadProcessingRequestsAsync(Func<string, Task<ArrAnswer>> seerrGet)
     {
         var all = new JsonArray();
@@ -442,7 +503,7 @@ public static class StuckDownloads
                 "request?take=" + RequestPageSize.ToString(CultureInfo.InvariantCulture)
                 + "&skip=" + (page * RequestPageSize).ToString(CultureInfo.InvariantCulture)
                 + "&filter=processing&sort=added").ConfigureAwait(false);
-            if (!answer.Ok || answer.Body == null) return page == 0 ? null : all;
+            if (!answer.Ok || answer.Body == null) return null;
 
             JsonArray? results;
             try
@@ -451,20 +512,20 @@ public static class StuckDownloads
             }
             catch (JsonException)
             {
-                return page == 0 ? null : all;
+                return null;
             }
 
-            if (results == null) return page == 0 ? null : all;
+            if (results == null) return null;
             foreach (var result in results.ToList())
             {
                 results.Remove(result);
                 all.Add(result);
             }
 
-            if (all.Count < (page + 1) * RequestPageSize) break;
+            if (all.Count < (page + 1) * RequestPageSize) return all;
         }
 
-        return all;
+        return null;
     }
 
     /// <summary>

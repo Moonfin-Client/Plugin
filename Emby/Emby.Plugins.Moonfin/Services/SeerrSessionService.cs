@@ -658,11 +658,11 @@ namespace Emby.Plugins.Moonfin.Services
             return ToProxyResponse(await ArrQueue.RemoveAsync(ArrSender(service, server), isSonarr, queueId).ConfigureAwait(false));
         }
 
-        private ArrSend ArrSender(string service, ArrServerConnection server) =>
+        private ArrSend ArrSender(string service, ArrServerConnection server, CancellationToken cancellationToken = default) =>
             async (method, pathAndQuery, body) =>
             {
                 var response = await TrySendArrAsync(
-                    () => new HttpClient(), _logger, service, server.Bases, server.ApiKey, method, pathAndQuery, body).ConfigureAwait(false);
+                    () => new HttpClient(), _logger, service, server.Bases, server.ApiKey, method, pathAndQuery, body, cancellationToken: cancellationToken).ConfigureAwait(false);
                 return response == null ? ArrAnswer.Unreachable : new ArrAnswer(response.StatusCode, response.Body);
             };
 
@@ -687,7 +687,7 @@ namespace Emby.Plugins.Moonfin.Services
         /// The whole queue of the default Radarr or Sonarr, for the stuck download check. Null when
         /// there's no admin session or arr, or the arr couldn't be read.
         /// </summary>
-        public async Task<JsonArray?> ReadWholeArrQueueAsync(string service)
+        public async Task<JsonArray?> ReadWholeArrQueueAsync(string service, CancellationToken cancellationToken = default)
         {
             var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
             var (server, error) = await ResolveArrServerAsync(service, isSonarr).ConfigureAwait(false);
@@ -697,7 +697,9 @@ namespace Emby.Plugins.Moonfin.Services
                 return null;
             }
 
-            return await StuckDownloads.ReadQueueAsync(ArrSender(service, server), isSonarr).ConfigureAwait(false);
+            // Reading the arr settings is one Seerr call with its own timeout, so the token is checked after it.
+            if (cancellationToken.IsCancellationRequested) return null;
+            return await StuckDownloads.ReadQueueAsync(ArrSender(service, server, cancellationToken), isSonarr, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>The default Sonarr or Radarr as Seerr has it, read through an admin Seerr session.</summary>
@@ -827,7 +829,8 @@ namespace Emby.Plugins.Moonfin.Services
             HttpMethod method,
             string pathAndQuery,
             byte[]? jsonBody,
-            Func<string, Task<IPAddress[]>>? resolveHost = null)
+            Func<string, Task<IPAddress[]>>? resolveHost = null,
+            CancellationToken cancellationToken = default)
         {
             Exception? lastError = null;
             for (var i = 0; i < bases.Count; i++)
@@ -835,7 +838,7 @@ namespace Emby.Plugins.Moonfin.Services
                 var baseUrl = bases[i];
                 // The External URL can point anywhere, so the API key only goes to it encrypted or on the
                 // local network.
-                if (i > 0 && !await CanSendApiKeyAsync(baseUrl, resolveHost ?? Dns.GetHostAddressesAsync).ConfigureAwait(false))
+                if (i > 0 && !await CanSendApiKeyAsync(baseUrl, resolveHost ?? (host => ResolveHostAsync(host, cancellationToken))).ConfigureAwait(false))
                 {
                     logger.Error("Skipped the " + service + " External URL " + baseUrl +
                         " because it uses plain http and isn't on the local network, so the API key would travel unencrypted");
@@ -854,7 +857,7 @@ namespace Emby.Plugins.Moonfin.Services
                         request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
                     }
 
-                    using var arrResponse = await client.SendAsync(request).ConfigureAwait(false);
+                    using var arrResponse = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
                     var arrBody = await arrResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                     return new SeerrProxyResponse
                     {
@@ -863,7 +866,7 @@ namespace Emby.Plugins.Moonfin.Services
                         ContentType = arrResponse.Content.Headers.ContentType?.ToString() ?? "application/json"
                     };
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
                     logger.Debug("Could not reach " + service + " at " + baseUrl + ": " + ex.Message);
                     lastError = ex;
@@ -872,6 +875,24 @@ namespace Emby.Plugins.Moonfin.Services
 
             logger.Error("Failed to reach " + service + ": " + lastError?.Message);
             return null;
+        }
+
+        // .NET Standard's DNS lookup takes no cancellation, so a cancelled one is left behind and
+        // counts as not resolving, which keeps the API key from going out.
+        private static async Task<IPAddress[]> ResolveHostAsync(string host, CancellationToken cancellationToken)
+        {
+            var lookup = Dns.GetHostAddressesAsync(host);
+            if (!cancellationToken.CanBeCanceled) return await lookup.ConfigureAwait(false);
+
+            using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (await Task.WhenAny(lookup, Task.Delay(Timeout.Infinite, wait.Token)).ConfigureAwait(false) != lookup)
+            {
+                _ = lookup.ContinueWith(t => t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                throw new OperationCanceledException(cancellationToken);
+            }
+
+            wait.Cancel();
+            return await lookup.ConfigureAwait(false);
         }
 
         /// <summary>

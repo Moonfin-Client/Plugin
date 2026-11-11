@@ -226,6 +226,33 @@ public class StuckDownloadsTests
     }
 
     [Fact]
+    public void AStalledTorrentThatStaysDownloadingWithoutAByteIsStillToldAbout()
+    {
+        JsonObject Stalled() => Movie(state: "downloading", status: "ok", message: null, error: "The download is stalled with no connections", sizeLeft: 500);
+        JsonObject Peer() => Movie(state: "downloading", status: "ok", message: null, sizeLeft: 500);
+
+        var first = Scan(new Dictionary<string, StuckDownloadRecord>(), Queue(Stalled()), Queue(), Start);
+        var flipped = Scan(first.Next, Queue(Peer()), Queue(), Start.AddHours(3));
+        var late = Scan(flipped.Next, Queue(Peer()), Queue(), Start.AddHours(6));
+
+        Assert.Empty(flipped.Due);
+        Assert.Equal("Big Buck Bunny is stuck: no progress for 6 hours", StuckDownloads.Body(Assert.Single(late.Due), redact: false));
+    }
+
+    [Fact]
+    public void AStalledTorrentTheClientThenPausesIsNotToldAbout()
+    {
+        JsonObject Stalled() => Movie(state: "downloading", status: "ok", message: null, error: "The download is stalled with no connections", sizeLeft: 500);
+        var paused = Movie(state: "downloading", status: "ok", message: null, sizeLeft: 500);
+        paused["status"] = "paused";
+
+        var first = Scan(new Dictionary<string, StuckDownloadRecord>(), Queue(Stalled()), Queue(), Start);
+        var late = Scan(first.Next, Queue(paused), Queue(), Start.AddHours(7));
+
+        Assert.Empty(late.Due);
+    }
+
+    [Fact]
     public void ADownloadThatGetsGoingAgainIsDropped()
     {
         JsonObject Stalled() => Movie(state: "downloading", status: "ok", message: null, error: "The download is stalled with no connections", sizeLeft: 500);
@@ -334,15 +361,16 @@ public class StuckDownloadsTests
     }
 
     [Fact]
-    public void ServerPathsAreCutForNonAdminsAndALongMessageIsShortened()
+    public void ServerPathsAreCutForNonAdminsAndALongMessageIsShortenedForThemOnly()
     {
         var download = new StuckDownload("radarr:x", false, "Movie", 1, null, Array.Empty<int>(), "import blocked", "No files found are eligible for import in /downloads/complete/Movie.2008");
         var longOne = new StuckDownload("radarr:y", false, "Movie", 1, null, Array.Empty<int>(), "import blocked", new string('x', 400));
 
         Assert.EndsWith("eligible for import in /downloads/complete/Movie.2008", StuckDownloads.Body(download, redact: false));
         Assert.EndsWith("eligible for import in Movie.2008", StuckDownloads.Body(download, redact: true));
-        Assert.EndsWith("...", StuckDownloads.Body(longOne, redact: false));
-        Assert.True(StuckDownloads.Body(longOne, redact: false).Length < 220);
+        Assert.EndsWith("...", StuckDownloads.Body(longOne, redact: true));
+        Assert.True(StuckDownloads.Body(longOne, redact: true).Length < 220);
+        Assert.EndsWith(new string('x', 400), StuckDownloads.Body(longOne, redact: false));
     }
 
     [Fact]
@@ -458,11 +486,12 @@ public class StuckDownloadsTests
     }
 
     [Fact]
-    public async Task OneRecipientThatFailsDoesNotStopTheOthersOrTheSave()
+    public async Task OneRecipientThatFailsIsTriedAgainWithoutTellingTheOthersTwice()
     {
         var store = new StuckDownloadStore("s.json", new MemoryStateFile());
         var other = Guid.NewGuid();
         var sent = new List<Guid>();
+        var adminFails = true;
 
         StuckDownloadRun Run(DateTime now) => new StuckDownloadRun
         {
@@ -471,18 +500,55 @@ public class StuckDownloadsTests
             Admins = () => new[] { Admin, other },
             Deliver = (user, _, _, _, _) =>
             {
-                if (user == Admin) throw new InvalidOperationException("socket closed");
+                if (user == Admin && adminFails) throw new InvalidOperationException("socket closed");
                 sent.Add(user);
             },
             NowUtc = now,
         };
 
         await StuckDownloads.RunAsync(Run(Start), store);
-        await StuckDownloads.RunAsync(Run(Start.AddMinutes(15)), store);
-        await StuckDownloads.RunAsync(Run(Start.AddMinutes(30)), store);
-
+        Assert.Equal(0, await StuckDownloads.RunAsync(Run(Start.AddMinutes(15)), store));
+        Assert.Equal(0, await StuckDownloads.RunAsync(Run(Start.AddMinutes(30)), store));
         Assert.Equal(new[] { other }, sent);
-        Assert.Equal(Start.AddMinutes(15), store.Load()["radarr:abc"].NotifiedAt);
+        Assert.Null(store.Load()["radarr:abc"].NotifiedAt);
+
+        adminFails = false;
+        Assert.Equal(1, await StuckDownloads.RunAsync(Run(Start.AddMinutes(45)), store));
+        Assert.Equal(0, await StuckDownloads.RunAsync(Run(Start.AddMinutes(60)), store));
+
+        Assert.Equal(new[] { other, Admin }, sent);
+        var record = store.Load()["radarr:abc"];
+        Assert.Equal(Start.AddMinutes(45), record.NotifiedAt);
+        Assert.Null(record.Told);
+    }
+
+    [Fact]
+    public async Task ARunCancelledMidwayKeepsWhatItAlreadySent()
+    {
+        var store = new StuckDownloadStore("s.json", new MemoryStateFile());
+        var other = Guid.NewGuid();
+        var sent = new List<Guid>();
+        using var cancel = new System.Threading.CancellationTokenSource();
+
+        StuckDownloadRun Run(DateTime now) => new StuckDownloadRun
+        {
+            ReadQueue = isSonarr => Task.FromResult<JsonArray?>(isSonarr ? Queue() : Queue(Movie())),
+            SeerrGet = _ => Task.FromResult(new ArrAnswer(200, Encoding.UTF8.GetBytes("""{"results":[]}"""))),
+            Admins = () => new[] { Admin, other },
+            Deliver = (user, _, _, _, _) =>
+            {
+                sent.Add(user);
+                cancel.Cancel();
+            },
+            NowUtc = now,
+            Cancellation = cancel.Token,
+        };
+
+        await StuckDownloads.RunAsync(Run(Start), store);
+        await StuckDownloads.RunAsync(Run(Start.AddMinutes(15)), store);
+
+        Assert.Equal(new[] { Admin }, sent);
+        Assert.Equal(new[] { Admin }, store.Load()["radarr:abc"].Told);
     }
 
     [Fact]
@@ -543,14 +609,14 @@ public class StuckDownloadsTests
     }
 
     [Fact]
-    public async Task SeerrRequestsStopAtAPageThatFails()
+    public async Task SeerrRequestsCountAsUnreadWhenAnyPageFailsOrThereAreTooMany()
     {
-        Task<ArrAnswer> Get(string path) => Task.FromResult(path.Contains("skip=0")
-            ? new ArrAnswer(200, Encoding.UTF8.GetBytes("{\"results\":[" + string.Join(",", Enumerable.Repeat("{}", 100)) + "]}"))
-            : ArrAnswer.Unreachable);
+        var fullPage = new ArrAnswer(200, Encoding.UTF8.GetBytes("{\"results\":[" + string.Join(",", Enumerable.Repeat("{}", 100)) + "]}"));
+        Task<ArrAnswer> Get(string path) => Task.FromResult(path.Contains("skip=0") ? fullPage : ArrAnswer.Unreachable);
 
-        Assert.Equal(100, (await StuckDownloads.ReadProcessingRequestsAsync(Get))!.Count);
+        Assert.Null(await StuckDownloads.ReadProcessingRequestsAsync(Get));
         Assert.Null(await StuckDownloads.ReadProcessingRequestsAsync(_ => Task.FromResult(ArrAnswer.Unreachable)));
+        Assert.Null(await StuckDownloads.ReadProcessingRequestsAsync(_ => Task.FromResult(fullPage)));
     }
 
     [Fact]
@@ -572,6 +638,12 @@ public class StuckDownloadsTests
 
         failPageTwo = true;
         Assert.Null(await StuckDownloads.ReadQueueAsync(Send, isSonarr: true));
+
+        using var cancel = new System.Threading.CancellationTokenSource();
+        cancel.Cancel();
+        asked.Clear();
+        Assert.Null(await StuckDownloads.ReadQueueAsync(Send, isSonarr: true, cancel.Token));
+        Assert.Empty(asked);
     }
 
     [Fact]

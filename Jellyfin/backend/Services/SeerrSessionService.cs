@@ -1071,7 +1071,13 @@ public class SeerrSessionService
             return null;
         }
 
-        return await StuckDownloads.ReadQueueAsync(ArrSender(service, server, cancellationToken), isSonarr);
+        // Reading the arr settings is one Seerr call with its own timeout, so the token is checked after it.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        return await StuckDownloads.ReadQueueAsync(ArrSender(service, server, cancellationToken), isSonarr, cancellationToken);
     }
 
     /// <summary>The default Sonarr or Radarr as Seerr has it, read through an admin Seerr session.</summary>
@@ -1207,7 +1213,7 @@ public class SeerrSessionService
             var baseUrl = bases[i];
             // The External URL can point anywhere, so the API key only goes to it encrypted or on the
             // local network.
-            if (i > 0 && !await CanSendApiKeyAsync(baseUrl, resolveHost ?? Dns.GetHostAddressesAsync))
+            if (i > 0 && !await CanSendApiKeyAsync(baseUrl, resolveHost ?? (host => Dns.GetHostAddressesAsync(host, cancellationToken))))
             {
                 logger.LogWarning(
                     "Skipped the {Service} External URL {BaseUrl} because it uses plain http and isn't on the local network, so the API key would travel unencrypted",

@@ -63,7 +63,7 @@ namespace Emby.Plugins.Moonfin.Services
 
             var run = new StuckDownloadRun
             {
-                ReadQueue = isSonarr => seerr.ReadWholeArrQueueAsync(isSonarr ? "sonarr" : "radarr"),
+                ReadQueue = isSonarr => seerr.ReadWholeArrQueueAsync(isSonarr ? "sonarr" : "radarr", cancellationToken),
                 SeerrGet = async path =>
                 {
                     var response = await seerr.RequestWithSessionAsync(session, HttpMethod.Get, path, cancellationToken: cancellationToken).ConfigureAwait(false);
