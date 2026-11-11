@@ -92,16 +92,18 @@ public sealed class MediaUpgradeLedger
 
     private readonly string _filePath;
     private readonly IStateFile _stateFile;
+    private readonly IRecordingLog? _logger;
     private readonly object _gate = new object();
 
     private List<MediaUpgradeRecord>? _records;
     private Dictionary<string, MediaUpgradeRecord>? _byKey;
     private Dictionary<Guid, MediaUpgradeRecord>? _byItemId;
 
-    public MediaUpgradeLedger(string filePath, IStateFile stateFile)
+    public MediaUpgradeLedger(string filePath, IStateFile stateFile, IRecordingLog? logger = null)
     {
         _filePath = filePath;
         _stateFile = stateFile;
+        _logger = logger;
     }
 
     public int Count
@@ -513,13 +515,27 @@ public sealed class MediaUpgradeLedger
         }
 
         List<MediaUpgradeRecord>? loaded = null;
+        var parseInvoked = false;
+        Exception? loadError = null;
         try
         {
-            loaded = _stateFile.Read(_filePath, json => JsonSerializer.Deserialize<List<MediaUpgradeRecord>>(json, JsonOptions));
+            loaded = _stateFile.Read(
+                _filePath,
+                json =>
+                {
+                    parseInvoked = true;
+                    return JsonSerializer.Deserialize<List<MediaUpgradeRecord>>(json, JsonOptions);
+                });
         }
-        catch
+        catch (Exception ex)
         {
+            loadError = ex;
             loaded = null;
+        }
+
+        if (loaded == null && (parseInvoked || loadError != null || File.Exists(_filePath) || File.Exists(_filePath + ".bak")))
+        {
+            _logger?.Warn(loadError, "Could not load media upgrade ledger from {Path}; starting with an empty ledger", _filePath);
         }
 
         _records = new List<MediaUpgradeRecord>();

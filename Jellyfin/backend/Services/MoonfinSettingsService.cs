@@ -39,6 +39,8 @@ public class MoonfinSettingsService
     internal Func<bool, Task>? UpgradePreferenceChanged { get; set; }
     private int _userHideUpgradesCache = -1;
     private int _lastAppliedUpgradeState = -1;
+    private readonly object _upgradeSyncGate = new();
+    private Task _upgradeSyncWorker = Task.CompletedTask;
 
     public void InvalidateHideUpgradesCache() => Volatile.Write(ref _userHideUpgradesCache, -1);
 
@@ -1206,7 +1208,7 @@ public class MoonfinSettingsService
             }
         }
 
-        await SyncUpgradePreferenceStateIfNeededAsync(Guid.Empty).ConfigureAwait(false);
+        ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
         return (usersReset, orphansDeleted);
     }
 
@@ -1575,7 +1577,7 @@ public class MoonfinSettingsService
             _lock.Release();
         }
 
-        await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
+        ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
     public async Task DeleteProfileAsync(Guid userId, string profileName)
@@ -1605,7 +1607,7 @@ public class MoonfinSettingsService
             _lock.Release();
         }
 
-        await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
+        ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
     public bool UserSettingsExist(Guid userId)
@@ -1813,10 +1815,10 @@ public class MoonfinSettingsService
             }
         }
 
-        await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
+        ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
-    private async Task SyncUpgradePreferenceStateIfNeededAsync(Guid userId)
+    private void ScheduleUpgradePreferenceSyncIfNeeded(Guid userId)
     {
         var callback = UpgradePreferenceChanged;
         if (callback == null)
@@ -1832,14 +1834,26 @@ public class MoonfinSettingsService
             return;
         }
 
-        try
+        lock (_upgradeSyncGate)
         {
-            await Task.Run(() => callback(effectiveServerWide)).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            Interlocked.CompareExchange(ref _lastAppliedUpgradeState, -1, targetState);
-            _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
+            _upgradeSyncWorker = _upgradeSyncWorker.ContinueWith(
+                async _ =>
+                {
+                    try
+                    {
+                        var currentEffective = IsAnyHideUpgradesEnabled();
+                        Volatile.Write(ref _lastAppliedUpgradeState, currentEffective ? 1 : 0);
+                        await callback(currentEffective).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Volatile.Write(ref _lastAppliedUpgradeState, -1);
+                        _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default).Unwrap();
         }
     }
 }

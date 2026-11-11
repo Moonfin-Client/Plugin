@@ -28,6 +28,8 @@ namespace Emby.Plugins.Moonfin.Services
         internal Func<bool, Task>? UpgradePreferenceChanged { get; set; }
         private int _userHideUpgradesCache = -1;
         private int _lastAppliedUpgradeState = -1;
+        private readonly object _upgradeSyncGate = new object();
+        private Task _upgradeSyncWorker = Task.CompletedTask;
 
         public void InvalidateHideUpgradesCache() => Volatile.Write(ref _userHideUpgradesCache, -1);
 
@@ -882,7 +884,7 @@ namespace Emby.Plugins.Moonfin.Services
                 }
             }
 
-            await SyncUpgradePreferenceStateIfNeededAsync(Guid.Empty).ConfigureAwait(false);
+            ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
             return (usersAffected, orphansDeleted);
         }
 
@@ -942,7 +944,7 @@ namespace Emby.Plugins.Moonfin.Services
                 _lock.Release();
             }
 
-            await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
+            ScheduleUpgradePreferenceSyncIfNeeded(userId);
         }
 
         public async Task DeleteProfileAsync(Guid userId, string profileName)
@@ -966,7 +968,7 @@ namespace Emby.Plugins.Moonfin.Services
                 _lock.Release();
             }
 
-            await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
+            ScheduleUpgradePreferenceSyncIfNeeded(userId);
         }
 
         // Settings that only survive as a backup still count as existing.
@@ -1343,7 +1345,7 @@ namespace Emby.Plugins.Moonfin.Services
             return anyUserEnabled;
         }
 
-        private async Task SyncRecentRowPreferencesAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName)
+        private Task SyncRecentRowPreferencesAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName)
         {
             var resolved = ResolveProfile(settings, string.IsNullOrEmpty(activeProfileName) ? "global" : activeProfileName);
             var hideWatched = resolved.HideWatchedInRecentRows
@@ -1374,10 +1376,11 @@ namespace Emby.Plugins.Moonfin.Services
                 }
             }
 
-            await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
+            ScheduleUpgradePreferenceSyncIfNeeded(userId);
+            return Task.CompletedTask;
         }
 
-        private async Task SyncUpgradePreferenceStateIfNeededAsync(Guid userId)
+        private void ScheduleUpgradePreferenceSyncIfNeeded(Guid userId)
         {
             var callback = UpgradePreferenceChanged;
             if (callback == null)
@@ -1393,14 +1396,26 @@ namespace Emby.Plugins.Moonfin.Services
                 return;
             }
 
-            try
+            lock (_upgradeSyncGate)
             {
-                await Task.Run(() => callback(effectiveServerWide)).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Interlocked.CompareExchange(ref _lastAppliedUpgradeState, -1, targetState);
-                _logger.Debug("Could not apply upgrade date preference for user " + userId + ": " + ex.Message);
+                _upgradeSyncWorker = _upgradeSyncWorker.ContinueWith(
+                    async _ =>
+                    {
+                        try
+                        {
+                            var currentEffective = IsAnyHideUpgradesEnabled();
+                            Volatile.Write(ref _lastAppliedUpgradeState, currentEffective ? 1 : 0);
+                            await callback(currentEffective).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Volatile.Write(ref _lastAppliedUpgradeState, -1);
+                            _logger.Debug("Could not apply upgrade date preference for user " + userId + ": " + ex.Message);
+                        }
+                    },
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default).Unwrap();
             }
         }
     }

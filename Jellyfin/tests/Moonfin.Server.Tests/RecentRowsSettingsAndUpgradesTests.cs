@@ -20,6 +20,22 @@ public sealed class RecentRowsSettingsAndUpgradesTests
         public void Write(string path, string content) => _files[path] = content;
     }
 
+    private sealed class CapturingRecordingLog : IRecordingLog
+    {
+        public List<string> Warnings { get; } = new();
+
+        public void Info(string template, params object?[] args)
+        {
+        }
+
+        public void Warn(Exception? exception, string template, params object?[] args) =>
+            Warnings.Add(template);
+
+        public void Error(Exception? exception, string template, params object?[] args)
+        {
+        }
+    }
+
     [Fact]
     public void ProfileSerializesHideWatchedAndHideUpgradesUnderClientWireKeys()
     {
@@ -195,6 +211,26 @@ public sealed class RecentRowsSettingsAndUpgradesTests
         var target = Assert.Single(reloaded.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: true));
         Assert.Equal(replacementId, target.ItemId);
         Assert.Equal(originalDate, target.DesiredDateUtc);
+    }
+
+    [Fact]
+    public void EnsureLoadedStaysSilentOnMissingFirstRunAndLogsOnceOnFailedRecovery()
+    {
+        var missingState = new MemoryStateFile();
+        var missingLog = new CapturingRecordingLog();
+        var firstRunLedger = new MediaUpgradeLedger("nonexistent-upgrade-dates.json", missingState, missingLog);
+
+        Assert.Equal(0, firstRunLedger.Count);
+        Assert.Empty(missingLog.Warnings);
+
+        var corruptState = new MemoryStateFile();
+        corruptState.Write("corrupt-upgrade-dates.json", "{not-valid-json");
+        var corruptLog = new CapturingRecordingLog();
+        var corruptLedger = new MediaUpgradeLedger("corrupt-upgrade-dates.json", corruptState, corruptLog);
+
+        Assert.Equal(0, corruptLedger.Count);
+        Assert.Equal(0, corruptLedger.Count);
+        Assert.Single(corruptLog.Warnings);
     }
 }
 

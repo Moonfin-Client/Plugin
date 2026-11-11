@@ -89,14 +89,16 @@ namespace Emby.Plugins.Moonfin
 
             if (newMediaSettings != null)
             {
+                var upgradeLogger = _logManager.GetLogger("MoonfinUpgrades");
                 var upgradeLedger = new MediaUpgradeLedger(
                     System.IO.Path.Combine(plugin.DataFolderPath, MediaUpgradeLedger.StoreFileName),
-                    new Services.EmbyStateFile());
+                    new Services.EmbyStateFile(),
+                    new Services.EmbyRecordingLog(upgradeLogger));
                 _mediaUpgrades = new Services.MediaUpgradeService(
                     _libraryManager,
                     newMediaSettings,
                     upgradeLedger,
-                    _logManager.GetLogger("MoonfinUpgrades"));
+                    upgradeLogger);
                 _mediaUpgrades.Start();
                 PluginServices.MediaUpgrades = _mediaUpgrades;
             }
