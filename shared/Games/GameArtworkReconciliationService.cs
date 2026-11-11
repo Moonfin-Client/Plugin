@@ -879,6 +879,7 @@ public sealed partial class GameArtworkReconciliationService
             }
 
             var runRdbUpdateCheck = !_rdbUpdateCheckDone;
+            var rdbCandidatesIncomplete = false;
             var libraryCandidates = new List<(string LibraryId, List<ArtworkCandidate> Candidates)>();
             foreach (var library in _games.GetGameLibraries())
             {
@@ -888,6 +889,7 @@ public sealed partial class GameArtworkReconciliationService
                     continue;
                 }
 
+                var candidatesCollected = false;
                 try
                 {
                     var reconciledSystems = new List<(GameSystem System, List<ArtworkCandidate> All, List<ArtworkCandidate> Boxart)>();
@@ -903,6 +905,8 @@ public sealed partial class GameArtworkReconciliationService
                     {
                         libraryCandidates.Add((library.Id, reconciledSystems.SelectMany(item => item.All).ToList()));
                     }
+
+                    candidatesCollected = true;
 
                     var orphaned = await _catalog.PruneAsync(
                         library.Id,
@@ -1008,17 +1012,18 @@ public sealed partial class GameArtworkReconciliationService
                         }
                     }
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     throw;
                 }
                 catch (Exception ex)
                 {
+                    rdbCandidatesIncomplete |= !candidatesCollected;
                     _logger.LogWarning(ex, "Failed to reconcile game library {LibraryId}; skipping to next library", library.Id);
                 }
             }
 
-            if (runRdbUpdateCheck)
+            if (runRdbUpdateCheck && !rdbCandidatesIncomplete)
             {
                 _rdbUpdateCheckDone = true;
                 await CheckRdbUpdatesAsync(

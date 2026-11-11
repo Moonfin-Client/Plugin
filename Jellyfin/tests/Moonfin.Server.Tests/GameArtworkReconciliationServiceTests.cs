@@ -643,6 +643,82 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Contains("remote:" + candidateB2.Key.StorageKey, QueuedRemoteIdentities(service));
     }
 
+    [Fact]
+    public async Task Reconciliation_LibraryFailingBeforeCandidateCollectionLeavesRdbCheckUnset()
+    {
+        var rootA = Path.Combine(_root, "Games-failing-" + Guid.NewGuid().ToString("N"));
+        var systemA = Path.Combine(rootA, "SNES");
+        Directory.CreateDirectory(systemA);
+        await File.WriteAllBytesAsync(Path.Combine(systemA, "GameA.sfc"), [1, 2, 3]);
+
+        var rootB = Path.Combine(_root, "Games-healthy-" + Guid.NewGuid().ToString("N"));
+        var systemB = Path.Combine(rootB, "SNES");
+        Directory.CreateDirectory(systemB);
+        await File.WriteAllBytesAsync(Path.Combine(systemB, "GameB.sfc"), [4, 5, 6]);
+
+        var libraryIdA = "lib-failing-" + Guid.NewGuid().ToString("N");
+        var libraryIdB = "lib-healthy-" + Guid.NewGuid().ToString("N");
+
+        var catalogDir = Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N"));
+        var catalog = new GameArtworkCatalog(catalogDir);
+
+        var handler = new CountingArtHandler();
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration(),
+        };
+        var thumbs = new GameThumbService(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameThumbService>(),
+            rdb,
+            Path.Combine(_root, "thumb-data-" + Guid.NewGuid().ToString("N")));
+
+        var libraryManager = new FakeLibraryManager(
+        [
+            new VirtualFolderInfo { Name = "Games A", ItemId = libraryIdA, Locations = [rootA] },
+            new VirtualFolderInfo { Name = "Games B", ItemId = libraryIdB, Locations = [rootB] },
+        ]);
+        var throwingGames = new ThrowingGamesService(libraryManager, libraryIdA);
+
+        var service = new GameArtworkReconciliationService(
+            throwingGames,
+            thumbs,
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null,
+            watchLibraryFileSystem: false);
+
+        await ReconcileAsync(service);
+
+        // Library A failed before candidate collection, so RDB check must not be marked done
+        var rdbDoneField = typeof(GameArtworkReconciliationService).GetField("_rdbUpdateCheckDone", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Assert.False((bool)rdbDoneField.GetValue(service)!);
+
+        // Library B still reconciled successfully
+        var gamesB = throwingGames.GetGames(libraryIdB, null);
+        var candidateB = ResolveCandidate(service, libraryIdB, gamesB[0].Id);
+        Assert.Contains("remote:" + candidateB.Key.StorageKey, QueuedRemoteIdentities(service));
+    }
+
+    private sealed class ThrowingGamesService : GamesService
+    {
+        private readonly string _failingLibraryId;
+        public ThrowingGamesService(FakeLibraryManager libraryManager, string failingLibraryId) : base(libraryManager)
+        {
+            _failingLibraryId = failingLibraryId;
+        }
+
+        public override IReadOnlyList<GameSummary> GetGames(string libraryId, string? systemId)
+        {
+            if (libraryId == _failingLibraryId)
+            {
+                throw new IOException("Storage offline");
+            }
+
+            return base.GetGames(libraryId, systemId);
+        }
+    }
+
     private static Task ReconcileAsync(GameArtworkReconciliationService service)
     {
         var method = typeof(GameArtworkReconciliationService)
