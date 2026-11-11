@@ -556,12 +556,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // hides anything. A hidden parent counts as off and hides its own fields too, so a rule
     // has to come after the rule that hides its parent.
     var FIELD_DEPENDENCIES = [
-        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'SeerrWebhookBlock', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultEnableRadarrCalendar', 'DefaultEnableSonarrCalendar', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
+        { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'SeerrWebhookBlock', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
         { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
         { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
         { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
-        { parent: 'DefaultEnableRadarrCalendar', fields: ['DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
-        { parent: 'DefaultEnableSonarrCalendar', fields: ['DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars'] },
         { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
         { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
         { parent: 'WatchPartiesEnabled', fields: ['WatchPartyEveryoneControl', 'WatchPartyChat', 'WatchPartyReactions', 'WatchPartyAlerts', 'WatchPartyMaxMembers'] },
@@ -596,7 +594,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultHomeRowsImageTypeOverride', fields: ['DefaultHomeRowsImageType'] },
         { parent: 'DefaultHomeRowsImageTypeOverride', off: ['true'], fields: ['DefaultHomeRowImageTypesSection'] },
         { parent: 'DefaultMediaPreviewMode', off: ['off'], fields: ['DefaultPreviewAudioEnabled'] },
-        { parent: 'DefaultSeasonalRowEnabled', fields: ['DefaultSeasonalRowCountry', 'DefaultSeasonalRowHolidays', 'DefaultSeasonalRowAllYear'] },
         { parent: 'DefaultDetailScreenStyle', off: ['modern', 'spotlight', 'nouveau', 'minimalist', 'stage', 'premiere', 'quickLook', 'frost'], fields: ['DefaultDetailUseSeriesThumbnails'] },
         { parent: 'DefaultDetailScreenStyle', off: ['classic', 'spotlight', 'nouveau', 'minimalist', 'stage', 'premiere', 'quickLook', 'frost'], fields: ['DefaultDetailExpandedTabs'] },
         { parent: 'DefaultThemeMusicEnabled', fields: ['DefaultThemeMusicVolume', 'DefaultThemeMusicOnHomeRows', 'DefaultThemeMusicLoop'] },
@@ -3008,7 +3005,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultSeasonalSurprise', defaults.seasonalSurprise, 'Configured surprise');
         setSelectValue(view, '#DefaultSeasonalDensity', defaults.seasonalDensity, 'Configured density');
         setNullableBoolSelect(view, '#DefaultSeasonalFollower', defaults.seasonalFollower);
-        setNullableBoolSelect(view, '#DefaultSeasonalRowEnabled', defaults.seasonalRowEnabled);
         setSelectValue(view, '#DefaultSeasonalRowCountry', defaults.seasonalRowCountry, 'Configured country');
         renderSeasonalHolidayChecks(view, defaults.seasonalRowHiddenHolidays);
         setNullableBoolSelect(view, '#DefaultSeasonalRowAllYear', defaults.seasonalRowAllYear);
@@ -3174,31 +3170,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         fillExternalRowSortSelect(view, '#DefaultImdbRowsSortBy');
         setSelectValue(view, '#DefaultImdbRowsSortBy', defaults.imdbRowsSortBy, 'Configured sort');
         setSelectValue(view, '#DefaultImdbRowsSortOrder', defaults.imdbRowsSortOrder, 'Configured direction');
-        setNullableBoolSelect(view, '#DefaultImdbTop250MoviesEnabled', defaults.imdbTop250MoviesEnabled);
-        setNullableBoolSelect(view, '#DefaultImdbTop250TvShowsEnabled', defaults.imdbTop250TvShowsEnabled);
-        setNullableBoolSelect(view, '#DefaultImdbMostPopularMoviesEnabled', defaults.imdbMostPopularMoviesEnabled);
-        setNullableBoolSelect(view, '#DefaultImdbMostPopularTvShowsEnabled', defaults.imdbMostPopularTvShowsEnabled);
-        setNullableBoolSelect(view, '#DefaultImdbTopEnglishMoviesEnabled', defaults.imdbTopEnglishMoviesEnabled);
-        setNullableBoolSelect(view, '#DefaultImdbLowestRatedMoviesEnabled', defaults.imdbLowestRatedMoviesEnabled);
-        setNullableBoolSelect(view, '#DefaultMdblistWatchingNowEnabled', defaults.mdblistWatchingNowEnabled);
         fillExternalRowSortSelect(view, '#DefaultTmdbRowsSortBy');
         setSelectValue(view, '#DefaultTmdbRowsSortBy', defaults.tmdbRowsSortBy, 'Configured sort');
         setSelectValue(view, '#DefaultTmdbRowsSortOrder', defaults.tmdbRowsSortOrder, 'Configured direction');
-        setNullableBoolSelect(view, '#DefaultTmdbTrendingAllWeeklyEnabled', defaults.tmdbTrendingAllWeeklyEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbTrendingMovieDailyEnabled', defaults.tmdbTrendingMovieDailyEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbTrendingMovieWeeklyEnabled', defaults.tmdbTrendingMovieWeeklyEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbTrendingTvDailyEnabled', defaults.tmdbTrendingTvDailyEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbTrendingTvWeeklyEnabled', defaults.tmdbTrendingTvWeeklyEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbPopularMoviesEnabled', defaults.tmdbPopularMoviesEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbPopularTvEnabled', defaults.tmdbPopularTvEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbTopRatedMoviesEnabled', defaults.tmdbTopRatedMoviesEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbTopRatedTvEnabled', defaults.tmdbTopRatedTvEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbNowPlayingMoviesEnabled', defaults.tmdbNowPlayingMoviesEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbUpcomingMoviesEnabled', defaults.tmdbUpcomingMoviesEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbAiringTodayTvEnabled', defaults.tmdbAiringTodayTvEnabled);
-        setNullableBoolSelect(view, '#DefaultTmdbOnTheAirTvEnabled', defaults.tmdbOnTheAirTvEnabled);
-        setNullableBoolSelect(view, '#DefaultEnableRadarrCalendar', defaults.enableRadarrCalendar);
-        setNullableBoolSelect(view, '#DefaultEnableSonarrCalendar', defaults.enableSonarrCalendar);
         setNullableBoolSelect(view, '#DefaultMergeRadarrSonarrCalendars', defaults.mergeRadarrSonarrCalendars);
         setNullableBoolSelect(view, '#DefaultRadarrCalendarShowCinema', defaults.radarrCalendarShowCinema);
         setNullableBoolSelect(view, '#DefaultRadarrCalendarShowDigital', defaults.radarrCalendarShowDigital);
@@ -3476,7 +3450,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.seasonalSurprise = view.querySelector('#DefaultSeasonalSurprise').value || null;
         d.seasonalDensity = view.querySelector('#DefaultSeasonalDensity').value || null;
         d.seasonalFollower = getNullableBoolSelect(view, '#DefaultSeasonalFollower');
-        d.seasonalRowEnabled = getNullableBoolSelect(view, '#DefaultSeasonalRowEnabled');
         d.seasonalRowCountry = view.querySelector('#DefaultSeasonalRowCountry').value || null;
         d.seasonalRowHiddenHolidays = readSeasonalHiddenHolidays(view);
         d.seasonalRowAllYear = getNullableBoolSelect(view, '#DefaultSeasonalRowAllYear');
@@ -3647,30 +3620,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.displayAudioAlbums = getNullableBoolSelect(view, '#DefaultDisplayAudioAlbums');
         d.imdbRowsSortBy = view.querySelector('#DefaultImdbRowsSortBy').value || null;
         d.imdbRowsSortOrder = view.querySelector('#DefaultImdbRowsSortOrder').value || null;
-        d.imdbTop250MoviesEnabled = getNullableBoolSelect(view, '#DefaultImdbTop250MoviesEnabled');
-        d.imdbTop250TvShowsEnabled = getNullableBoolSelect(view, '#DefaultImdbTop250TvShowsEnabled');
-        d.imdbMostPopularMoviesEnabled = getNullableBoolSelect(view, '#DefaultImdbMostPopularMoviesEnabled');
-        d.imdbMostPopularTvShowsEnabled = getNullableBoolSelect(view, '#DefaultImdbMostPopularTvShowsEnabled');
-        d.imdbTopEnglishMoviesEnabled = getNullableBoolSelect(view, '#DefaultImdbTopEnglishMoviesEnabled');
-        d.imdbLowestRatedMoviesEnabled = getNullableBoolSelect(view, '#DefaultImdbLowestRatedMoviesEnabled');
-        d.mdblistWatchingNowEnabled = getNullableBoolSelect(view, '#DefaultMdblistWatchingNowEnabled');
         d.tmdbRowsSortBy = view.querySelector('#DefaultTmdbRowsSortBy').value || null;
         d.tmdbRowsSortOrder = view.querySelector('#DefaultTmdbRowsSortOrder').value || null;
-        d.tmdbTrendingAllWeeklyEnabled = getNullableBoolSelect(view, '#DefaultTmdbTrendingAllWeeklyEnabled');
-        d.tmdbTrendingMovieDailyEnabled = getNullableBoolSelect(view, '#DefaultTmdbTrendingMovieDailyEnabled');
-        d.tmdbTrendingMovieWeeklyEnabled = getNullableBoolSelect(view, '#DefaultTmdbTrendingMovieWeeklyEnabled');
-        d.tmdbTrendingTvDailyEnabled = getNullableBoolSelect(view, '#DefaultTmdbTrendingTvDailyEnabled');
-        d.tmdbTrendingTvWeeklyEnabled = getNullableBoolSelect(view, '#DefaultTmdbTrendingTvWeeklyEnabled');
-        d.tmdbPopularMoviesEnabled = getNullableBoolSelect(view, '#DefaultTmdbPopularMoviesEnabled');
-        d.tmdbPopularTvEnabled = getNullableBoolSelect(view, '#DefaultTmdbPopularTvEnabled');
-        d.tmdbTopRatedMoviesEnabled = getNullableBoolSelect(view, '#DefaultTmdbTopRatedMoviesEnabled');
-        d.tmdbTopRatedTvEnabled = getNullableBoolSelect(view, '#DefaultTmdbTopRatedTvEnabled');
-        d.tmdbNowPlayingMoviesEnabled = getNullableBoolSelect(view, '#DefaultTmdbNowPlayingMoviesEnabled');
-        d.tmdbUpcomingMoviesEnabled = getNullableBoolSelect(view, '#DefaultTmdbUpcomingMoviesEnabled');
-        d.tmdbAiringTodayTvEnabled = getNullableBoolSelect(view, '#DefaultTmdbAiringTodayTvEnabled');
-        d.tmdbOnTheAirTvEnabled = getNullableBoolSelect(view, '#DefaultTmdbOnTheAirTvEnabled');
-        d.enableRadarrCalendar = getNullableBoolSelect(view, '#DefaultEnableRadarrCalendar');
-        d.enableSonarrCalendar = getNullableBoolSelect(view, '#DefaultEnableSonarrCalendar');
         d.mergeRadarrSonarrCalendars = getNullableBoolSelect(view, '#DefaultMergeRadarrSonarrCalendars');
         d.radarrCalendarShowCinema = getNullableBoolSelect(view, '#DefaultRadarrCalendarShowCinema');
         d.radarrCalendarShowDigital = getNullableBoolSelect(view, '#DefaultRadarrCalendarShowDigital');
