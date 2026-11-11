@@ -74,6 +74,16 @@ public class PluginConfiguration : BasePluginConfiguration, IGamesConfig
     public int CalendarCacheMinutes { get; set; } = 5;
 
     /// <summary>
+    /// Tells the requester and every admin when a Radarr or Sonarr download for a request gets stuck.
+    /// </summary>
+    public bool StuckDownloadNotify { get; set; }
+
+    /// <summary>
+    /// How many hours a download can sit stalled before it counts as stuck.
+    /// </summary>
+    public int StuckDownloadStalledHours { get; set; } = 6;
+
+    /// <summary>
     /// Server-wide MDBList API key shared with all users.
     /// Users who set their own key will use that instead.
     /// </summary>

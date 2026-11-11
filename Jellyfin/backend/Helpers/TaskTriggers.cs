@@ -13,6 +13,7 @@ internal static class TaskTriggers
     // The 10.10 string constants and the 10.11 enum members share these names.
     private const string StartupTrigger = "StartupTrigger";
     private const string DailyTrigger = "DailyTrigger";
+    private const string IntervalTrigger = "IntervalTrigger";
 
     private static readonly PropertyInfo? _typeProperty =
         typeof(TaskTriggerInfo).GetProperty("Type", BindingFlags.Public | BindingFlags.Instance);
@@ -20,6 +21,13 @@ internal static class TaskTriggers
     public static TaskTriggerInfo Startup() => Build(StartupTrigger, null);
 
     public static TaskTriggerInfo Daily(TimeSpan timeOfDay) => Build(DailyTrigger, timeOfDay.Ticks);
+
+    public static TaskTriggerInfo Interval(TimeSpan interval)
+    {
+        var trigger = Build(IntervalTrigger, null);
+        trigger.IntervalTicks = interval.Ticks;
+        return trigger;
+    }
 
     private static TaskTriggerInfo Build(string triggerName, long? timeOfDayTicks)
     {

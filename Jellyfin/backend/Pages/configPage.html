@@ -2189,6 +2189,26 @@
                     </div>
 
                     <div class="verticalSection">
+                        <h3 class="sectionTitle">Stuck downloads</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="StuckDownloadNotify" is="emby-checkbox" />
+                                <span>Notify when a request gets stuck</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Every 15 minutes, Moonfin checks the Radarr and Sonarr set up in Seerr. When a download is import
+                                blocked, has failed, or has stalled, the person who requested it and every Jellyfin admin get one
+                                notification. Needs Seerr turned on above and an admin signed in to Seerr.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="StuckDownloadStalledHours">Stalled hours</label>
+                            <input type="number" id="StuckDownloadStalledHours" is="emby-input" min="1" max="168" step="1" />
+                            <div class="fieldDescription">How many hours a download can sit stalled before it counts as stuck.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
                         <h3 class="sectionTitle">MDBList Integration</h3>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="MdblistApiKey">Server-wide MDBList API Key</label>
@@ -6259,7 +6279,8 @@
             var FIELD_DEPENDENCIES = [
                 { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'SeerrWebhookBlock', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
-                { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
+                { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'StuckDownloadNotify', 'StuckDownloadStalledHours', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
+                { parent: 'StuckDownloadNotify', fields: ['StuckDownloadStalledHours'] },
                 { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
                 { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
                 { parent: 'WatchPartiesEnabled', fields: ['WatchPartyEveryoneControl', 'WatchPartyChat', 'WatchPartyReactions', 'WatchPartyAlerts', 'WatchPartyMaxMembers'] },
@@ -11274,6 +11295,8 @@
                     document.querySelector('#CalendarDaysBack').value = config.CalendarDaysBack != null ? config.CalendarDaysBack : 14;
                     document.querySelector('#CalendarDaysAhead').value = config.CalendarDaysAhead != null ? config.CalendarDaysAhead : 90;
                     document.querySelector('#CalendarCacheMinutes').value = config.CalendarCacheMinutes != null ? config.CalendarCacheMinutes : 5;
+                    document.querySelector('#StuckDownloadNotify').checked = config.StuckDownloadNotify === true;
+                    document.querySelector('#StuckDownloadStalledHours').value = config.StuckDownloadStalledHours != null ? config.StuckDownloadStalledHours : 6;
                     loadWebhookProvisioningStatus();
                     document.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
                     document.querySelector('#PushRelayAppKey').value = config.PushRelayAppKey || '';
@@ -12205,6 +12228,8 @@
                         config.CalendarDaysBack = wholeNumberIn(document.querySelector('#CalendarDaysBack').value, 0, 365, 14);
                         config.CalendarDaysAhead = wholeNumberIn(document.querySelector('#CalendarDaysAhead').value, 0, 730, 90);
                         config.CalendarCacheMinutes = wholeNumberIn(document.querySelector('#CalendarCacheMinutes').value, 0, 1440, 5);
+                        config.StuckDownloadNotify = document.querySelector('#StuckDownloadNotify').checked;
+                        config.StuckDownloadStalledHours = wholeNumberIn(document.querySelector('#StuckDownloadStalledHours').value, 1, 168, 6);
                         config.PushRelayUrl = document.querySelector('#PushRelayUrl').value || 'https://push.moonfin.io/send';
                         config.PushRelayAppKey = document.querySelector('#PushRelayAppKey').value || null;
                         config.FcmServiceAccountJson = document.querySelector('#FcmServiceAccountJson').value || null;

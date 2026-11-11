@@ -135,6 +135,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), "calendar-reminders"),
             new JellyfinStateFile()));
         serviceCollection.AddHostedService<CalendarReminderNotifier>();
+        serviceCollection.AddSingleton(_ => new StuckDownloadStore(
+            Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), "seerr-stuck-downloads.json"),
+            new JellyfinStateFile()));
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<GameArtworkReconciliationService>());
 
         // Incomplete Live TV recordings
