@@ -28,7 +28,8 @@
                 'Calendar',
                 'Watch Parties',
                 'Live rooms',
-                'PINs'
+                'PINs',
+                'Studio Logos'
             ],
             hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
                 'DefaultShowCalendarButton', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll'],
@@ -38,7 +39,8 @@
                 'Retro Games (EmulatorJS)': 'Not supported on Silo yet. These settings do nothing on Silo for now.',
                 'MDBList Integration': 'Ratings work on Silo. The official MDBList lists aren’t supported on Silo yet.',
                 'Uploaded Themes': 'Moonbase on Silo keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.',
-                'Smart Search': 'Not supported on Silo yet. These settings do nothing on Silo for now.'
+                'Smart Search': 'Not supported on Silo yet. These settings do nothing on Silo for now.',
+                'Default look': 'Poster labels aren’t supported on Silo yet. The settings on this tab do nothing on Silo for now.'
             },
             liveTv: false,
             customRows: false,
@@ -52,8 +54,8 @@
             restored: 'Restored the changes you hadn’t saved before your Moonbase sign-in ended. Press Save to keep them.',
             sessionEnded: 'You’re signed out of Moonbase. Sign in again with your Plex account. Changes you tried to save are kept and come back when you do.',
             signInUrl: 'admin/signin',
-            hidden: ['Active Downloads', 'Live TV Recordings'],
-            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay', 'SeerrWebhookBlock', 'FcmServiceAccountJson', 'FcmServiceAccountPath'],
+            hidden: ['Active Downloads', 'Live TV Recordings', 'Studio Logos'],
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay', 'SeerrWebhookBlock', 'FcmServiceAccountJson', 'FcmServiceAccountPath', 'PublicServerUrl'],
             unsupported: {
                 'Connecting to this server': 'Moonbase for Plex serves Moonfin Web at /Moonfin/Web/ on its own port, 32500 by default. With Default Server URL empty, the app offers the Plex address Moonbase uses.',
                 'Seerr Integration': 'Moonfin apps sign each person in to Seerr with their own Plex account, so Seerr has to use Plex sign-in and know them as a user of this server.',

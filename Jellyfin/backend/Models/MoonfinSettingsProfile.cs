@@ -1248,6 +1248,24 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("showLoadingAnimationText")]
     public bool? ShowLoadingAnimationText { get; set; }
+
+    [JsonPropertyName("autoDownloadEnabled")]
+    public bool? AutoDownloadEnabled { get; set; }
+
+    [JsonPropertyName("autoDownloadBackgroundRefresh")]
+    public bool? AutoDownloadBackgroundRefresh { get; set; }
+
+    [JsonPropertyName("autoDownloadKeepUnwatched")]
+    public int? AutoDownloadKeepUnwatched { get; set; }
+
+    [JsonPropertyName("autoDownloadDeleteAfterHours")]
+    public int? AutoDownloadDeleteAfterHours { get; set; }
+
+    [JsonPropertyName("detailButtonsMaxVisible")]
+    public int? DetailButtonsMaxVisible { get; set; }
+
+    [JsonPropertyName("playlistsGroupByType")]
+    public bool? PlaylistsGroupByType { get; set; }
 }
 
 

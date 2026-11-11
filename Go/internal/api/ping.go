@@ -22,6 +22,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"tmdbThumbsSupported":      true,
 		"tmdbPersonLinksSupported": true,
 		"tmdbReviewsSupported":     true,
+		"tmdbDetailsSupported":     true,
 		"messagesSupported":        true,
 		"recommendationsSupported": s.similarOn(cfg),
 		"pinSupported":             s.pins,

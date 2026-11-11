@@ -42,8 +42,8 @@ func TestTmdbTitleRoutes(t *testing.T) {
 	s.ext.tmdbBase = srv.URL
 	withKeys(t, s, "", "v3key")
 
-	if _, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", nil); ping["tmdbReviewsSupported"] != true {
-		t.Fatal("apps only ask for reviews when Ping says they're supported")
+	if _, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", nil); ping["tmdbReviewsSupported"] != true || ping["tmdbDetailsSupported"] != true {
+		t.Fatal("apps only ask for reviews and details when Ping says they're supported")
 	}
 	_, got := call(t, s, userMain, "GET", "/Moonfin/Tmdb/Reviews", "", map[string]any{"tmdbId": "603", "language": "de-DE"})
 	reviews, _ := got["reviews"].([]any)
