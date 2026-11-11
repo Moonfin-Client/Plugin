@@ -55,7 +55,16 @@ internal sealed class JellyfinRecordingLog : IRecordingLog
 internal sealed class JellyfinStateFile : IStateFile
 {
     public T? Read<T>(string path, Func<string, T?> parse)
-        where T : class => AtomicFile.ReadWithRecovery(path, parse);
+        where T : class
+    {
+        var result = AtomicFile.ReadWithRecovery(path, parse, out var accessError);
+        if (result == null && accessError != null)
+        {
+            throw accessError;
+        }
+
+        return result;
+    }
 
     public void Write(string path, string contents) => AtomicFile.WriteAllText(path, contents);
 }

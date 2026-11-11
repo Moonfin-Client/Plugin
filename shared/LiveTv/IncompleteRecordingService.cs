@@ -1787,8 +1787,17 @@ public sealed class IncompleteRecordingService : IDisposable
             return _data;
         }
 
-        _data = _stateFile.Read(_storePath, json => JsonSerializer.Deserialize<IncompleteRecordingStoreData>(json, JsonOptions))
-            ?? new IncompleteRecordingStoreData();
+        try
+        {
+            _data = _stateFile.Read(_storePath, json => JsonSerializer.Deserialize<IncompleteRecordingStoreData>(json, JsonOptions))
+                ?? new IncompleteRecordingStoreData();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.Warn(ex, "Could not load incomplete recordings from {Path}; starting with an empty store", _storePath);
+            _data = new IncompleteRecordingStoreData();
+        }
+
         RefreshTracked(_data);
         return _data;
     }

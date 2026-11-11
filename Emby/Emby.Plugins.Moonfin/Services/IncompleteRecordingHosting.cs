@@ -49,7 +49,17 @@ namespace Emby.Plugins.Moonfin.Services
     internal sealed class EmbyStateFile : IStateFile
     {
         public T? Read<T>(string path, Func<string, T?> parse)
-            where T : class => AtomicFile.ReadWithRecovery(path, parse);
+            where T : class
+        {
+            Exception? accessError;
+            var result = AtomicFile.ReadWithRecovery(path, parse, out accessError);
+            if (result == null && accessError != null)
+            {
+                throw accessError;
+            }
+
+            return result;
+        }
 
         public void Write(string path, string contents) => AtomicFile.WriteAllText(path, contents);
     }

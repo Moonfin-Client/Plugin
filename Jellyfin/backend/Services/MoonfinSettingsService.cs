@@ -16,7 +16,7 @@ namespace Moonfin.Server.Services;
 /// <summary>
 /// Service for managing Moonfin user settings storage with device profile support.
 /// </summary>
-public class MoonfinSettingsService
+public class MoonfinSettingsService : IDisposable
 {
     private readonly string _dataPath;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -36,11 +36,38 @@ public class MoonfinSettingsService
     private static readonly MethodInfo? UpdateConfigurationMethod = UserManagerType?
         .GetMethod("UpdateConfigurationAsync", [typeof(Guid), typeof(UserConfiguration)]);
 
-    internal Func<bool, Task>? UpgradePreferenceChanged { get; set; }
+    private Func<bool, CancellationToken, Task>? _upgradePreferenceChanged;
     private int _userHideUpgradesCache = -1;
     private int _lastAppliedUpgradeState = -1;
+    private bool _upgradeWorkerRunning;
+    private bool _upgradeSyncStopping;
+    private CancellationTokenSource _upgradeSyncCts = new();
     private readonly object _upgradeSyncGate = new();
     private Task _upgradeSyncWorker = Task.CompletedTask;
+
+    internal Func<bool, CancellationToken, Task>? UpgradePreferenceChanged
+    {
+        get
+        {
+            lock (_upgradeSyncGate)
+            {
+                return _upgradePreferenceChanged;
+            }
+        }
+        set
+        {
+            lock (_upgradeSyncGate)
+            {
+                _upgradePreferenceChanged = value;
+                if (value != null && _upgradeSyncStopping)
+                {
+                    _upgradeSyncStopping = false;
+                    _upgradeSyncCts.Dispose();
+                    _upgradeSyncCts = new CancellationTokenSource();
+                }
+            }
+        }
+    }
 
     public void InvalidateHideUpgradesCache() => Volatile.Write(ref _userHideUpgradesCache, -1);
 
@@ -1815,45 +1842,134 @@ public class MoonfinSettingsService
             }
         }
 
-        ScheduleUpgradePreferenceSyncIfNeeded(userId);
+        _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
-    private void ScheduleUpgradePreferenceSyncIfNeeded(Guid userId)
+    internal Task ScheduleUpgradePreferenceSyncIfNeeded(Guid userId)
     {
-        var callback = UpgradePreferenceChanged;
-        if (callback == null)
-        {
-            return;
-        }
-
-        var effectiveServerWide = IsAnyHideUpgradesEnabled();
-        var targetState = effectiveServerWide ? 1 : 0;
-        var previousState = Interlocked.Exchange(ref _lastAppliedUpgradeState, targetState);
-        if (previousState == targetState)
-        {
-            return;
-        }
-
         lock (_upgradeSyncGate)
         {
-            _upgradeSyncWorker = _upgradeSyncWorker.ContinueWith(
-                async _ =>
+            if (_upgradeSyncStopping || _upgradePreferenceChanged == null)
+            {
+                return _upgradeSyncWorker;
+            }
+
+            var desiredState = IsAnyHideUpgradesEnabled() ? 1 : 0;
+            if (!_upgradeWorkerRunning && _lastAppliedUpgradeState == desiredState)
+            {
+                return _upgradeSyncWorker;
+            }
+
+            if (!_upgradeWorkerRunning)
+            {
+                _upgradeWorkerRunning = true;
+                var token = _upgradeSyncCts.Token;
+                _upgradeSyncWorker = Task.Run(() => DrainUpgradePreferenceSyncAsync(userId, token), CancellationToken.None);
+            }
+
+            return _upgradeSyncWorker;
+        }
+    }
+
+    private async Task DrainUpgradePreferenceSyncAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            Func<bool, CancellationToken, Task>? callback;
+            int targetState;
+
+            lock (_upgradeSyncGate)
+            {
+                if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
                 {
-                    try
+                    _upgradeWorkerRunning = false;
+                    return;
+                }
+
+                callback = _upgradePreferenceChanged;
+                targetState = IsAnyHideUpgradesEnabled() ? 1 : 0;
+                if (callback == null || _lastAppliedUpgradeState == targetState)
+                {
+                    _upgradeWorkerRunning = false;
+                    return;
+                }
+            }
+
+            try
+            {
+                await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
+
+                lock (_upgradeSyncGate)
+                {
+                    if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
                     {
-                        var currentEffective = IsAnyHideUpgradesEnabled();
-                        Volatile.Write(ref _lastAppliedUpgradeState, currentEffective ? 1 : 0);
-                        await callback(currentEffective).ConfigureAwait(false);
+                        _lastAppliedUpgradeState = -1;
+                        _upgradeWorkerRunning = false;
+                        return;
                     }
-                    catch (Exception ex)
-                    {
-                        Volatile.Write(ref _lastAppliedUpgradeState, -1);
-                        _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
-                    }
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.None,
-                TaskScheduler.Default).Unwrap();
+
+                    _lastAppliedUpgradeState = targetState;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                lock (_upgradeSyncGate)
+                {
+                    _lastAppliedUpgradeState = -1;
+                    _upgradeWorkerRunning = false;
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                lock (_upgradeSyncGate)
+                {
+                    _lastAppliedUpgradeState = -1;
+                    _upgradeWorkerRunning = false;
+                }
+
+                _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
+                return;
+            }
+        }
+    }
+
+    internal async Task StopUpgradePreferenceSyncAsync(CancellationToken cancellationToken = default)
+    {
+        Task workerToDrain;
+        CancellationTokenSource ctsToCancel;
+        lock (_upgradeSyncGate)
+        {
+            _upgradeSyncStopping = true;
+            _upgradePreferenceChanged = null;
+            ctsToCancel = _upgradeSyncCts;
+            workerToDrain = _upgradeSyncWorker;
+        }
+
+        try
+        {
+            ctsToCancel.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        if (!workerToDrain.IsCompleted)
+        {
+            var completed = await Task.WhenAny(workerToDrain, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+            if (completed == workerToDrain)
+            {
+                await workerToDrain.ConfigureAwait(false);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        StopUpgradePreferenceSyncAsync(CancellationToken.None).GetAwaiter().GetResult();
+        lock (_upgradeSyncGate)
+        {
+            _upgradeSyncCts.Dispose();
         }
     }
 }

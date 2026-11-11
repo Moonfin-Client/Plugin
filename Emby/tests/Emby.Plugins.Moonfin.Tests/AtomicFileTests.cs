@@ -186,6 +186,21 @@ public class AtomicFileTests : IDisposable
         Assert.Null(Record.Exception(() => AtomicFile.DeleteWithSidecars(NewPath())));
     }
 
+    [Fact]
+    public void ReadWithRecovery_DistinguishesInaccessibleParentFromMissingFile()
+    {
+        var missingPath = NewPath();
+        Assert.Null(AtomicFile.ReadWithRecovery(missingPath, Parse, out var missingError));
+        Assert.Null(missingError);
+
+        var blockedParent = NewPath();
+        File.WriteAllText(blockedParent, "not-a-directory");
+        var blockedPath = Path.Combine(blockedParent, "upgrade-dates.json");
+        Assert.Null(AtomicFile.ReadWithRecovery(blockedPath, Parse, out var accessError));
+        Assert.NotNull(accessError);
+        Assert.ThrowsAny<IOException>(() => new EmbyStateFile().Read(blockedPath, Parse));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

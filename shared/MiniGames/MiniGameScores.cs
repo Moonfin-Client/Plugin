@@ -68,9 +68,18 @@ public sealed class FileMiniGameScoreStore : IMiniGameScoreStore
 
     private string FilePath => Path.Combine(_folder, "scores.json");
 
-    public Dictionary<string, List<MiniGameScore>> Load() =>
-        _files.Read(FilePath, json => JsonSerializer.Deserialize<Dictionary<string, List<MiniGameScore>>>(json))
-        ?? new Dictionary<string, List<MiniGameScore>>();
+    public Dictionary<string, List<MiniGameScore>> Load()
+    {
+        try
+        {
+            return _files.Read(FilePath, json => JsonSerializer.Deserialize<Dictionary<string, List<MiniGameScore>>>(json))
+                ?? new Dictionary<string, List<MiniGameScore>>();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new Dictionary<string, List<MiniGameScore>>();
+        }
+    }
 
     public void Save(Dictionary<string, List<MiniGameScore>> boards)
     {

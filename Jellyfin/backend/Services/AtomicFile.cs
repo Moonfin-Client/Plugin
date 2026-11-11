@@ -102,20 +102,31 @@ public static class AtomicFile
     /// rejects, which is how a half-written file gets caught.
     /// </summary>
     public static T? ReadWithRecovery<T>(string path, Func<string, T?> parse)
+        where T : class =>
+        ReadWithRecovery(path, parse, out _);
+
+    /// <summary>
+    /// Reads and parses path with backup recovery, reporting any underlying file or directory
+    /// access exception when neither copy can be read.
+    /// </summary>
+    public static T? ReadWithRecovery<T>(string path, Func<string, T?> parse, out Exception? accessError)
         where T : class
     {
-        if (TryReadAndParse(path, parse, out var fromMain))
+        if (TryReadAndParse(path, parse, out var fromMain, out var mainError))
         {
+            accessError = null;
             return fromMain;
         }
 
         var backup = BackupPath(path);
-        if (TryReadAndParse(backup, parse, out var fromBackup))
+        if (TryReadAndParse(backup, parse, out var fromBackup, out var backupError))
         {
+            accessError = null;
             TryPromoteBackup(path, backup);
             return fromBackup;
         }
 
+        accessError = mainError ?? backupError;
         return null;
     }
 
@@ -127,24 +138,85 @@ public static class AtomicFile
         TryDelete(TempPath(path));
     }
 
-    private static bool TryReadAndParse<T>(string path, Func<string, T?> parse, out T? result)
+    private static bool TryReadAndParse<T>(
+        string path,
+        Func<string, T?> parse,
+        out T? result,
+        out Exception? accessError)
         where T : class
     {
         result = null;
-        if (!File.Exists(path))
+        accessError = null;
+
+        string text;
+        try
         {
+            text = File.ReadAllText(path);
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            if (IsInaccessibleParentDirectory(path, ex, out var dirError))
+            {
+                accessError = dirError;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            accessError = ex;
             return false;
         }
 
         try
         {
-            result = parse(File.ReadAllText(path));
+            result = parse(text);
             return result != null;
         }
         catch
         {
             return false;
         }
+    }
+
+    private static bool IsInaccessibleParentDirectory(
+        string path,
+        DirectoryNotFoundException ex,
+        out Exception? dirError)
+    {
+        dirError = null;
+        try
+        {
+            var current = Path.GetDirectoryName(path);
+            while (!string.IsNullOrEmpty(current))
+            {
+                if (File.Exists(current))
+                {
+                    dirError = ex;
+                    return true;
+                }
+
+                if (Directory.Exists(current))
+                {
+                    using var enumerator = Directory.EnumerateFileSystemEntries(current).GetEnumerator();
+                    _ = enumerator.MoveNext();
+                    return false;
+                }
+
+                current = Path.GetDirectoryName(current);
+            }
+        }
+        catch (Exception probeEx)
+        {
+            dirError = probeEx;
+            return true;
+        }
+
+        return false;
     }
 
     // Restores the good copy so later reads hit the main file. Copying rather than renaming is

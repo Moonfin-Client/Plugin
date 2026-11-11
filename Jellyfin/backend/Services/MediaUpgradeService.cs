@@ -23,6 +23,8 @@ public sealed class MediaUpgradeService : IHostedService
     private readonly MediaUpgradeLedger _ledger;
     private readonly ILogger<MediaUpgradeService> _logger;
     private readonly ConcurrentDictionary<Guid, byte> _updating = new();
+    private CancellationTokenSource _stopCts = new();
+    private Task _startupTask = Task.CompletedTask;
     private int _hideUpgradesCache = -1;
     private long _hideUpgradesCachedAtTicks;
 
@@ -43,19 +45,35 @@ public sealed class MediaUpgradeService : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        if (_stopCts.IsCancellationRequested)
+        {
+            _stopCts.Dispose();
+            _stopCts = new CancellationTokenSource();
+        }
+
+        _settings.UpgradePreferenceChanged = OnUpgradePreferenceChangedAsync;
         _libraryManager.ItemAdded += OnItemChanged;
         _libraryManager.ItemUpdated += OnItemChanged;
         _libraryManager.ItemRemoved += OnItemRemoved;
 
-        _ = Task.Run(async () =>
+        var stopToken = _stopCts.Token;
+        _startupTask = Task.Run(async () =>
         {
             try
             {
-                SeedFromLibrary();
-                if (_settings.IsAnyHideUpgradesEnabled())
+                if (stopToken.IsCancellationRequested)
                 {
-                    await ApplyUpgradeDatesAsync(true, CancellationToken.None).ConfigureAwait(false);
+                    return;
                 }
+
+                SeedFromLibrary();
+                if (!stopToken.IsCancellationRequested && _settings.IsAnyHideUpgradesEnabled())
+                {
+                    await ApplyUpgradeDatesAsync(true, stopToken).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
+            {
             }
             catch (Exception ex)
             {
@@ -66,12 +84,30 @@ public sealed class MediaUpgradeService : IHostedService
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
         _libraryManager.ItemAdded -= OnItemChanged;
         _libraryManager.ItemUpdated -= OnItemChanged;
         _libraryManager.ItemRemoved -= OnItemRemoved;
-        return Task.CompletedTask;
+
+        try
+        {
+            _stopCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        await _settings.StopUpgradePreferenceSyncAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!_startupTask.IsCompleted)
+        {
+            var completed = await Task.WhenAny(_startupTask, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+            if (completed == _startupTask)
+            {
+                await _startupTask.ConfigureAwait(false);
+            }
+        }
     }
 
     public DateTime EffectiveDateCreated(Guid itemId, DateTime fallbackUtc, bool hideUpgradesEnabled) =>
@@ -102,11 +138,11 @@ public sealed class MediaUpgradeService : IHostedService
         }
     }
 
-    private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled)
+    private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled, CancellationToken cancellationToken)
     {
         Volatile.Write(ref _hideUpgradesCache, hideUpgradesEnabled ? 1 : 0);
         Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, Environment.TickCount64);
-        return ApplyUpgradeDatesAsync(hideUpgradesEnabled, CancellationToken.None);
+        return ApplyUpgradeDatesAsync(hideUpgradesEnabled, cancellationToken);
     }
 
     private bool GetHideUpgradesCached()

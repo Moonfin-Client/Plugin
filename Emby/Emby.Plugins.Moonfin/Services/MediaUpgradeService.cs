@@ -24,6 +24,8 @@ namespace Emby.Plugins.Moonfin.Services
         private readonly MediaUpgradeLedger _ledger;
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<Guid, byte> _updating = new ConcurrentDictionary<Guid, byte>();
+        private CancellationTokenSource _stopCts = new CancellationTokenSource();
+        private Task _startupTask = Task.CompletedTask;
         private bool _started;
         private int _hideUpgradesCache = -1;
         private long _hideUpgradesCachedAtTicks;
@@ -47,19 +49,31 @@ namespace Emby.Plugins.Moonfin.Services
         {
             if (_started) return;
             _started = true;
+            if (_stopCts.IsCancellationRequested)
+            {
+                _stopCts.Dispose();
+                _stopCts = new CancellationTokenSource();
+            }
+
+            _settings.UpgradePreferenceChanged = OnUpgradePreferenceChangedAsync;
             _libraryManager.ItemAdded += OnItemChanged;
             _libraryManager.ItemUpdated += OnItemChanged;
             _libraryManager.ItemRemoved += OnItemRemoved;
 
-            _ = Task.Run(() =>
+            var stopToken = _stopCts.Token;
+            _startupTask = Task.Run(() =>
             {
                 try
                 {
+                    if (stopToken.IsCancellationRequested) return;
                     SeedFromLibrary();
-                    if (_settings.IsAnyHideUpgradesEnabled())
+                    if (!stopToken.IsCancellationRequested && _settings.IsAnyHideUpgradesEnabled())
                     {
-                        ApplyUpgradeDates(true);
+                        ApplyUpgradeDates(true, stopToken);
                     }
+                }
+                catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
+                {
                 }
                 catch (Exception ex)
                 {
@@ -70,21 +84,40 @@ namespace Emby.Plugins.Moonfin.Services
 
         public void Dispose()
         {
-            if (!_started) return;
-            _started = false;
-            _libraryManager.ItemAdded -= OnItemChanged;
-            _libraryManager.ItemUpdated -= OnItemChanged;
-            _libraryManager.ItemRemoved -= OnItemRemoved;
+            if (_started)
+            {
+                _started = false;
+                _libraryManager.ItemAdded -= OnItemChanged;
+                _libraryManager.ItemUpdated -= OnItemChanged;
+                _libraryManager.ItemRemoved -= OnItemRemoved;
+            }
+
+            try
+            {
+                _stopCts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            _settings.StopUpgradePreferenceSync();
+            _startupTask.GetAwaiter().GetResult();
+            _stopCts.Dispose();
         }
 
         public DateTime EffectiveDateCreated(Guid itemId, DateTime fallbackUtc, bool hideUpgradesEnabled) =>
             _ledger.EffectiveDateCreated(itemId, fallbackUtc, hideUpgradesEnabled);
 
-        public void ApplyUpgradeDates(bool hideUpgradesEnabled)
+        public void ApplyUpgradeDates(bool hideUpgradesEnabled, CancellationToken cancellationToken = default)
         {
             var targets = _ledger.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled);
             foreach (var target in targets)
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
                 var item = _libraryManager.GetItemById(target.ItemId);
                 if (item == null) continue;
 
@@ -97,11 +130,11 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
-        private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled)
+        private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled, CancellationToken cancellationToken)
         {
             Volatile.Write(ref _hideUpgradesCache, hideUpgradesEnabled ? 1 : 0);
             Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-            ApplyUpgradeDates(hideUpgradesEnabled);
+            ApplyUpgradeDates(hideUpgradesEnabled, cancellationToken);
             return Task.CompletedTask;
         }
 

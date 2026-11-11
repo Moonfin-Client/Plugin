@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moonfin.LiveTv;
 using Moonfin.Server.Models;
+using Moonfin.Server.Services;
 using Moonfin.Upgrades;
 using Xunit;
 
@@ -231,6 +233,135 @@ public sealed class RecentRowsSettingsAndUpgradesTests
         Assert.Equal(0, corruptLedger.Count);
         Assert.Equal(0, corruptLedger.Count);
         Assert.Single(corruptLog.Warnings);
+    }
+
+    [Fact]
+    public void EnsureLoadedLogsOnceWhenStateFileAdapterEncountersAccessError()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-ledger-access-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var stateFile = new JellyfinStateFile();
+
+            // 1. Missing first-run path with real JellyfinStateFile stays silent.
+            var missingPath = Path.Combine(tempRoot, "missing", "upgrade-dates.json");
+            var missingLog = new CapturingRecordingLog();
+            var missingLedger = new MediaUpgradeLedger(missingPath, stateFile, missingLog);
+            Assert.Equal(0, missingLedger.Count);
+            Assert.Empty(missingLog.Warnings);
+
+            // 2. Inaccessible parent path where File.Exists returns false for both main and .bak logs once.
+            var blockedParent = Path.Combine(tempRoot, "blocked-parent");
+            File.WriteAllText(blockedParent, "not-a-directory");
+            var blockedPath = Path.Combine(blockedParent, "upgrade-dates.json");
+            Assert.False(File.Exists(blockedPath));
+            Assert.False(File.Exists(blockedPath + ".bak"));
+
+            var blockedLog = new CapturingRecordingLog();
+            var blockedLedger = new MediaUpgradeLedger(blockedPath, stateFile, blockedLog);
+            Assert.Equal(0, blockedLedger.Count);
+            Assert.Equal(0, blockedLedger.Count);
+            Assert.Single(blockedLog.Warnings);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task OverlappingSavesReapplyFinalPreferenceAndStopCancelsWorker()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-upgrade-sync-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            using var settings = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempRoot);
+            var userId = Guid.NewGuid();
+            var appliedStates = new List<bool>();
+            var falseStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseFalse = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            settings.UpgradePreferenceChanged = async (enabled, cancellationToken) =>
+            {
+                if (!enabled && !falseStarted.Task.IsCompleted)
+                {
+                    falseStarted.TrySetResult();
+                    await releaseFalse.Task.WaitAsync(cancellationToken);
+                }
+
+                lock (appliedStates)
+                {
+                    appliedStates.Add(enabled);
+                }
+            };
+
+            // 1. Initial true save applies true.
+            await settings.SaveProfileAsync(
+                userId,
+                "global",
+                new MoonfinSettingsProfile { HideUpgradesInRecentRows = true });
+            await settings.ScheduleUpgradePreferenceSyncIfNeeded(userId);
+
+            // 2. Save false; wait until worker has read false and entered the callback (before updating _lastAppliedUpgradeState).
+            await settings.SaveProfileAsync(
+                userId,
+                "global",
+                new MoonfinSettingsProfile { HideUpgradesInRecentRows = false });
+            await falseStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // 3. While the false worker is still in flight, save true again.
+            await settings.SaveProfileAsync(
+                userId,
+                "global",
+                new MoonfinSettingsProfile { HideUpgradesInRecentRows = true });
+
+            // 4. Release the false worker and wait for the drain loop to finish.
+            releaseFalse.TrySetResult();
+            await settings.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+
+            lock (appliedStates)
+            {
+                Assert.Equal([true, false, true], appliedStates);
+            }
+
+            // 5. Verify StopUpgradePreferenceSyncAsync cancels and drains an in-flight worker.
+            var stopStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var observedCancellation = false;
+            settings.UpgradePreferenceChanged = async (_, cancellationToken) =>
+            {
+                stopStarted.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    observedCancellation = true;
+                    throw;
+                }
+            };
+
+            await settings.SaveProfileAsync(
+                userId,
+                "global",
+                new MoonfinSettingsProfile { HideUpgradesInRecentRows = false });
+            await stopStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            await settings.StopUpgradePreferenceSyncAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(observedCancellation);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
     }
 }
 
