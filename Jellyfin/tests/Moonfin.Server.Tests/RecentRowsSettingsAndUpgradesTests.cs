@@ -255,10 +255,7 @@ public sealed class RecentRowsSettingsAndUpgradesTests
 
             Assert.True(File.Exists(filePath));
             var backupPath = filePath + ".bak";
-            if (!File.Exists(backupPath))
-            {
-                File.Copy(filePath, backupPath, overwrite: true);
-            }
+            File.Copy(filePath, backupPath, overwrite: true);
             Assert.True(File.Exists(backupPath));
 
             File.Delete(filePath);
