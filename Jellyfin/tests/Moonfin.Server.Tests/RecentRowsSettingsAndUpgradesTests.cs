@@ -1,4 +1,8 @@
 using System.Text.Json;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moonfin.LiveTv;
 using Moonfin.Server.Models;
@@ -681,6 +685,256 @@ public sealed class RecentRowsSettingsAndUpgradesTests
         var restore = Assert.Single(reloaded.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: false));
         Assert.Equal(newId, restore.ItemId);
         Assert.Equal(upgradeDate, restore.DesiredDateUtc);
+    }
+
+    [Fact]
+    public void ResolveHideWatchedWithDefaultsHandlesDeviceOnlyAndConflictingDefaults()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-device-defaults-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            using var settings = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempRoot);
+            var tvDefaults = new MoonfinSettingsProfile();
+            var desktopDefaults = new MoonfinSettingsProfile();
+            var mobileDefaults = new MoonfinSettingsProfile();
+            var globalDefaults = new MoonfinSettingsProfile();
+            settings.AdminDefaultsOverrideForTesting = profile => profile.ToLowerInvariant() switch
+            {
+                "tv" => tvDefaults,
+                "desktop" => desktopDefaults,
+                "mobile" => mobileDefaults,
+                _ => globalDefaults,
+            };
+
+            var unsetUser = new MoonfinUserSettings();
+
+            // TV-only true when global/user unset -> resolves true.
+            tvDefaults.HideWatchedInRecentRows = true;
+            Assert.True(settings.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+
+            // Conflicting device defaults (TV = true, Desktop = false) -> true wins.
+            desktopDefaults.HideWatchedInRecentRows = false;
+            Assert.True(settings.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+
+            // Desktop-only false when others unset -> resolves false.
+            tvDefaults.HideWatchedInRecentRows = null;
+            Assert.False(settings.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+
+            // Explicit user override takes precedence over conflicting admin defaults.
+            tvDefaults.HideWatchedInRecentRows = true;
+            var userFalse = new MoonfinUserSettings
+            {
+                Global = new MoonfinSettingsProfile { HideWatchedInRecentRows = false }
+            };
+            Assert.False(settings.ResolveHideWatchedWithDefaults(userFalse, "global"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task StaleBackupWithPrimaryAccessErrorDoesNotCacheFalseAndRetriesToRecover()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-stale-backup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            using var settings = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempRoot);
+            settings.UpgradeScanRetryDelayForTesting = TimeSpan.FromMilliseconds(30);
+
+            var userId = Guid.NewGuid();
+            var primaryPath = Path.Combine(tempRoot, $"{userId}.json");
+            var backupPath = primaryPath + ".bak";
+
+            // Backup has stale false, primary has true.
+            File.WriteAllText(backupPath, JsonSerializer.Serialize(new MoonfinUserSettings
+            {
+                SchemaVersion = 2,
+                Global = new MoonfinSettingsProfile { HideUpgradesInRecentRows = false }
+            }));
+            File.WriteAllText(primaryPath, JsonSerializer.Serialize(new MoonfinUserSettings
+            {
+                SchemaVersion = 2,
+                Global = new MoonfinSettingsProfile { HideUpgradesInRecentRows = true }
+            }));
+
+            var appliedStates = new List<bool>();
+            var recoveredTrue = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            settings.UpgradePreferenceChanged = (enabled, _) =>
+            {
+                lock (appliedStates)
+                {
+                    appliedStates.Add(enabled);
+                }
+
+                if (enabled)
+                {
+                    recoveredTrue.TrySetResult();
+                }
+
+                return Task.CompletedTask;
+            };
+
+            FileStream? lockStream = new FileStream(primaryPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            try
+            {
+                // Even though backup is readable and returns false, primary access error must keep scanIncomplete = true.
+                var initial = settings.IsAnyHideUpgradesEnabled(out var incomplete);
+                Assert.False(initial);
+                Assert.True(incomplete);
+
+                // Kick off worker while primary file is locked; worker must preserve uncached state and arrange a retry.
+                await settings.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            finally
+            {
+                lockStream.Dispose();
+                lockStream = null;
+            }
+
+            // Without any new settings write, the scheduled retry recovers and applies true.
+            await recoveredTrue.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(settings.IsAnyHideUpgradesEnabled(out var incompleteAfterRecovery));
+            Assert.False(incompleteAfterRecovery);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task MediaUpgradeServiceConvergesToLatestPreferenceAcrossBothInterleavings()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-upgrade-order-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            using var settings = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempRoot);
+            var ledger = new MediaUpgradeLedger(Path.Combine(tempRoot, MediaUpgradeLedger.StoreFileName), new JellyfinStateFile());
+
+            var movieId = Guid.NewGuid();
+            var originalDate = new DateTime(2023, 3, 1, 10, 0, 0, DateTimeKind.Utc);
+            var upgradeDate = new DateTime(2026, 8, 15, 14, 0, 0, DateTimeKind.Utc);
+
+            var movie = new Movie
+            {
+                Id = movieId,
+                Name = "Upgrade Race Movie",
+                ProductionYear = 2023,
+                DateCreated = upgradeDate,
+            };
+            movie.SetProviderId(MetadataProvider.Tmdb, "998877");
+
+            ledger.RecordRemoved(new MediaUpgradeCandidate
+            {
+                ItemId = Guid.NewGuid(),
+                IsEpisode = false,
+                TmdbId = "998877",
+                DateCreatedUtc = originalDate,
+            });
+
+            var fakeLibrary = RecordingHostProxy.Create<ILibraryManager>((method, args) =>
+            {
+                if (method.Name == nameof(ILibraryManager.GetItemById))
+                {
+                    return (Guid)args![0]! == movieId ? movie : null;
+                }
+
+                return null;
+            });
+
+            var upgradeService = new MediaUpgradeService(
+                fakeLibrary,
+                settings,
+                ledger,
+                NullLogger<MediaUpgradeService>.Instance);
+
+            var userId = Guid.NewGuid();
+            await settings.SaveProfileAsync(userId, "global", new MoonfinSettingsProfile { HideUpgradesInRecentRows = false });
+            await settings.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Observe initial upgrade arrival with HideUpgrades = false (so EffectiveDateCreated should be upgradeDate).
+            ledger.ObserveArrival(
+                new MediaUpgradeCandidate
+                {
+                    ItemId = movieId,
+                    IsEpisode = false,
+                    TmdbId = "998877",
+                    DateCreatedUtc = upgradeDate,
+                },
+                hideUpgradesEnabled: false,
+                out _);
+
+            // Opposite per-user preferences resolve distinct effective dates for Media Bar callers.
+            Assert.Equal(originalDate, upgradeService.EffectiveDateCreated(movieId, movie.DateCreated, hideUpgradesEnabled: true));
+            Assert.Equal(upgradeDate, upgradeService.EffectiveDateCreated(movieId, movie.DateCreated, hideUpgradesEnabled: false));
+
+            // Interleaving 1: queued arrival task pauses BEFORE entering per-item gate while preference toggles to true and completes.
+            movie.DateCreated = originalDate; // Simulate stale DateCreated before arrival task runs while pref is false.
+            var arrivalPaused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseArrival = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            upgradeService.BeforeQueuedArrivalStartForTesting = async () =>
+            {
+                arrivalPaused.TrySetResult();
+                await releaseArrival.Task.ConfigureAwait(false);
+            };
+            upgradeService.PersistItemDateForTesting = (_, _, _) => Task.CompletedTask;
+
+            // Reset ledger item to re-trigger ObserveArrival desire cleanly.
+            movie.DateCreated = originalDate;
+            upgradeService.HandleItemChangedForTesting(movie);
+            await arrivalPaused.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Preference changes to true and completes BEFORE queued arrival task starts executing inside gate.
+            await upgradeService.ApplyUpgradeDatesAsync(hideUpgradesEnabled: true);
+            Assert.Equal(originalDate, movie.DateCreated);
+
+            releaseArrival.TrySetResult();
+            await upgradeService.WaitForPendingArrivalUpdatesForTestingAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(originalDate, movie.DateCreated);
+
+            // Interleaving 2: an active write (for false -> upgradeDate) is paused inside gate when true arrives.
+            upgradeService.BeforeQueuedArrivalStartForTesting = null;
+            var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseFirstWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var writeCount = 0;
+            upgradeService.PersistItemDateForTesting = async (_, _, _) =>
+            {
+                if (Interlocked.Increment(ref writeCount) == 1)
+                {
+                    writeStarted.TrySetResult();
+                    await releaseFirstWrite.Task.ConfigureAwait(false);
+                }
+            };
+
+            // Start write expecting upgradeDate (false).
+            var firstWriteTask = upgradeService.ApplyUpgradeDatesAsync(hideUpgradesEnabled: false);
+            await writeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Concurrent toggle back to true waits on per-item gate while first write is still in progress.
+            var secondWriteTask = upgradeService.ApplyUpgradeDatesAsync(hideUpgradesEnabled: true);
+            releaseFirstWrite.TrySetResult();
+
+            await Task.WhenAll(firstWriteTask, secondWriteTask).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(originalDate, movie.DateCreated);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
     }
 }
 

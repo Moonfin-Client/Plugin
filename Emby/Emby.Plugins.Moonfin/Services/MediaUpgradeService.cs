@@ -23,8 +23,8 @@ namespace Emby.Plugins.Moonfin.Services
         private readonly MoonfinSettingsService _settings;
         private readonly MediaUpgradeLedger _ledger;
         private readonly ILogger _logger;
-        private readonly ConcurrentDictionary<Guid, byte> _updating = new ConcurrentDictionary<Guid, byte>();
-        private readonly ConcurrentDictionary<Guid, DateTime> _queuedDesiredDates = new ConcurrentDictionary<Guid, DateTime>();
+        private readonly ConcurrentDictionary<Guid, object> _itemWriteGates = new ConcurrentDictionary<Guid, object>();
+        private readonly ConcurrentDictionary<Guid, int> _selfWriteDepth = new ConcurrentDictionary<Guid, int>();
         private CancellationTokenSource _stopCts = new CancellationTokenSource();
         private Task _startupTask = Task.CompletedTask;
         private bool _started;
@@ -121,6 +121,13 @@ namespace Emby.Plugins.Moonfin.Services
 
         public void ApplyUpgradeDates(bool hideUpgradesEnabled, CancellationToken cancellationToken = default)
         {
+            lock (_hideUpgradesCacheLock)
+            {
+                _hideUpgradesCacheGeneration++;
+                _hideUpgradesCache = hideUpgradesEnabled ? 1 : 0;
+                _hideUpgradesCachedAtTicks = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            }
+
             var targets = _ledger.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled);
             foreach (var target in targets)
             {
@@ -132,12 +139,7 @@ namespace Emby.Plugins.Moonfin.Services
                 var item = _libraryManager.GetItemById(target.ItemId);
                 if (item == null) continue;
 
-                if (!_updating.ContainsKey(target.ItemId) && Math.Abs((item.DateCreated.UtcDateTime - target.DesiredDateUtc).TotalSeconds) <= 1)
-                {
-                    continue;
-                }
-
-                UpdateItemDate(item, target.DesiredDateUtc);
+                UpdateItemDate(item, cancellationToken);
             }
         }
 
@@ -271,12 +273,19 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
+        internal Action? BeforeQueuedArrivalStartForTesting { get; set; }
+        internal Action<BaseItem, DateTime>? PersistItemDateForTesting { get; set; }
+
         private void OnItemChanged(object? sender, ItemChangeEventArgs e)
+        {
+            HandleItemChangedForTesting(e.Item);
+        }
+
+        internal void HandleItemChangedForTesting(BaseItem? item)
         {
             try
             {
-                var item = e.Item;
-                if (item == null || item.IsVirtualItem || _updating.ContainsKey(item.Id))
+                if (item == null || item.IsVirtualItem || (_selfWriteDepth.TryGetValue(item.Id, out var depth) && depth > 0))
                 {
                     return;
                 }
@@ -290,7 +299,8 @@ namespace Emby.Plugins.Moonfin.Services
                 var hideUpgrades = GetHideUpgradesCached();
                 if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc, id => _libraryManager.GetItemById(id) != null) && desiredUtc.HasValue)
                 {
-                    UpdateItemDate(item, desiredUtc.Value);
+                    BeforeQueuedArrivalStartForTesting?.Invoke();
+                    UpdateItemDate(item, _stopCts.Token);
                 }
             }
             catch (Exception ex)
@@ -299,38 +309,52 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
-        private void UpdateItemDate(BaseItem item, DateTime desiredUtc)
+        internal void UpdateItemDate(BaseItem item, CancellationToken cancellationToken = default)
         {
-            var normalizedDesiredUtc = DateTime.SpecifyKind(desiredUtc, DateTimeKind.Utc);
-            _queuedDesiredDates[item.Id] = normalizedDesiredUtc;
-            if (!_updating.TryAdd(item.Id, 0))
+            var gate = _itemWriteGates.GetOrAdd(item.Id, static _ => new object());
+            lock (gate)
             {
-                return;
-            }
-
-            try
-            {
-                while (_queuedDesiredDates.TryRemove(item.Id, out var nextUtc))
+                if (cancellationToken.IsCancellationRequested)
                 {
-                    if (Math.Abs((item.DateCreated.UtcDateTime - nextUtc).TotalSeconds) <= 1)
+                    return;
+                }
+
+                try
+                {
+                    var hideUpgrades = GetHideUpgradesCached();
+                    var desiredUtc = _ledger.GetDesiredDateForItem(item.Id, hideUpgrades);
+                    if (!desiredUtc.HasValue)
                     {
-                        continue;
+                        return;
                     }
 
-                    item.DateCreated = new DateTimeOffset(nextUtc);
-                    item.UpdateToRepository(ItemUpdateType.MetadataEdit);
+                    var normalizedDesiredUtc = DateTime.SpecifyKind(desiredUtc.Value, DateTimeKind.Utc);
+                    if (Math.Abs((item.DateCreated.UtcDateTime - normalizedDesiredUtc).TotalSeconds) <= 1)
+                    {
+                        return;
+                    }
+
+                    _selfWriteDepth.AddOrUpdate(item.Id, 1, static (_, c) => c + 1);
+                    try
+                    {
+                        item.DateCreated = new DateTimeOffset(normalizedDesiredUtc);
+                        if (PersistItemDateForTesting != null)
+                        {
+                            PersistItemDateForTesting(item, normalizedDesiredUtc);
+                        }
+                        else
+                        {
+                            item.UpdateToRepository(ItemUpdateType.MetadataEdit);
+                        }
+                    }
+                    finally
+                    {
+                        _selfWriteDepth.AddOrUpdate(item.Id, 0, static (_, c) => Math.Max(0, c - 1));
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn("Could not update DateCreated for upgraded item " + item.Id + ": " + ex.Message);
-            }
-            finally
-            {
-                _updating.TryRemove(item.Id, out _);
-                if (_queuedDesiredDates.TryRemove(item.Id, out var trailingUtc))
+                catch (Exception ex)
                 {
-                    UpdateItemDate(item, trailingUtc);
+                    _logger.Warn("Could not update DateCreated for upgraded item " + item.Id + ": " + ex.Message);
                 }
             }
         }

@@ -505,23 +505,26 @@ public sealed class MediaUpgradeLedger
         }
     }
 
-    /// <summary>
-    /// Returns the effective <c>DateCreated</c> for an item given a user's preference, used by
-    /// per-user surfaces such as the Media Bar.
-    /// </summary>
-    public DateTime EffectiveDateCreated(Guid itemId, DateTime fallbackUtc, bool hideUpgradesEnabled)
+    public DateTime? GetDesiredDateForItem(Guid itemId, bool hideUpgradesEnabled)
     {
         lock (_gate)
         {
             EnsureLoaded();
-            if (_records != null && _byItemId!.TryGetValue(itemId, out var record) && record.Upgraded)
+            if (_records != null && itemId != Guid.Empty && _byItemId!.TryGetValue(itemId, out var record) && record.Upgraded)
             {
                 return hideUpgradesEnabled ? record.FirstAddedUtc : record.LatestAddedUtc;
             }
 
-            return fallbackUtc;
+            return null;
         }
     }
+
+    /// <summary>
+    /// Returns the effective <c>DateCreated</c> for an item given a user's preference, used by
+    /// per-user surfaces such as the Media Bar.
+    /// </summary>
+    public DateTime EffectiveDateCreated(Guid itemId, DateTime fallbackUtc, bool hideUpgradesEnabled) =>
+        GetDesiredDateForItem(itemId, hideUpgradesEnabled) ?? fallbackUtc;
 
     private MediaUpgradeRecord? FindRecord(Guid itemId, List<string> keys, Func<Guid, bool>? isItemLive = null)
     {

@@ -256,4 +256,75 @@ public sealed class ProfileDefaultsTests : IDisposable
         Assert.Equal(0, await _service.CopySettingsAsync(Guid.NewGuid(), [bob], ["global"], null, replace: true));
         Assert.Equal("never", Read(bob).Global!.ClockBehavior);
     }
+
+    [Fact]
+    public void ResolveHideWatchedWithDefaultsHandlesDeviceOnlyAndConflictingDefaults()
+    {
+        var tvDefaults = new MoonfinSettingsProfile();
+        var desktopDefaults = new MoonfinSettingsProfile();
+        var mobileDefaults = new MoonfinSettingsProfile();
+        var globalDefaults = new MoonfinSettingsProfile();
+        _service.AdminDefaultsOverrideForTesting = profile => profile.ToLowerInvariant() switch
+        {
+            "tv" => tvDefaults,
+            "desktop" => desktopDefaults,
+            "mobile" => mobileDefaults,
+            _ => globalDefaults,
+        };
+
+        var unsetUser = new MoonfinUserSettings();
+
+        tvDefaults.HideWatchedInRecentRows = true;
+        Assert.True(_service.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+
+        desktopDefaults.HideWatchedInRecentRows = false;
+        Assert.True(_service.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+
+        tvDefaults.HideWatchedInRecentRows = null;
+        Assert.False(_service.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+    }
+
+    [Fact]
+    public async Task StaleBackupWithPrimaryAccessErrorDoesNotCacheFalseAndRetriesToRecover()
+    {
+        _service.UpgradeScanRetryDelayForTesting = TimeSpan.FromMilliseconds(30);
+        var userId = Guid.NewGuid();
+        var primaryPath = Path.Combine(_dataPath, $"{userId}.json");
+        var backupPath = primaryPath + ".bak";
+
+        File.WriteAllText(backupPath, System.Text.Json.JsonSerializer.Serialize(new MoonfinUserSettings
+        {
+            SchemaVersion = 2,
+            Global = new MoonfinSettingsProfile { HideUpgradesInRecentRows = false }
+        }));
+        File.WriteAllText(primaryPath, System.Text.Json.JsonSerializer.Serialize(new MoonfinUserSettings
+        {
+            SchemaVersion = 2,
+            Global = new MoonfinSettingsProfile { HideUpgradesInRecentRows = true }
+        }));
+
+        var recoveredTrue = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _service.UpgradePreferenceChanged = (enabled, _) =>
+        {
+            if (enabled)
+            {
+                recoveredTrue.TrySetResult();
+            }
+
+            return Task.CompletedTask;
+        };
+
+        using (var lockStream = new FileStream(primaryPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var initial = _service.IsAnyHideUpgradesEnabled(out var incomplete);
+            Assert.False(initial);
+            Assert.True(incomplete);
+
+            await _service.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        await recoveredTrue.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(_service.IsAnyHideUpgradesEnabled(out var incompleteAfterRecovery));
+        Assert.False(incompleteAfterRecovery);
+    }
 }

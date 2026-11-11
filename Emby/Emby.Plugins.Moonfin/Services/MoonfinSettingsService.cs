@@ -1392,8 +1392,14 @@ namespace Emby.Plugins.Moonfin.Services
             return false;
         }
 
-        public bool IsAnyHideUpgradesEnabled()
+        internal TimeSpan UpgradeScanRetryDelayForTesting { get; set; } = TimeSpan.FromSeconds(2);
+        internal Func<string, MoonfinSettingsProfile?>? AdminDefaultsOverrideForTesting { get; set; }
+
+        public bool IsAnyHideUpgradesEnabled() => IsAnyHideUpgradesEnabled(out _);
+
+        internal bool IsAnyHideUpgradesEnabled(out bool scanIncomplete)
         {
+            scanIncomplete = false;
             var config = Plugin.Instance?.Configuration;
             if (config?.DefaultUserSettings?.HideUpgradesInRecentRows == true ||
                 config?.GetDefaultsFor("tv")?.HideUpgradesInRecentRows == true ||
@@ -1443,14 +1449,14 @@ namespace Emby.Plugins.Moonfin.Services
                     }
 
                     var settings = ReadSettingsWithRecovery(file, out var accessError);
+                    if (accessError != null)
+                    {
+                        hadAccessError = true;
+                        _logger.Debug("Could not scan HideUpgrades preference from " + file + ": " + accessError.Message);
+                    }
+
                     if (settings == null)
                     {
-                        if (accessError != null)
-                        {
-                            hadAccessError = true;
-                            _logger.Debug("Could not scan HideUpgrades preference from " + file + ": " + accessError.Message);
-                        }
-
                         continue;
                     }
 
@@ -1468,6 +1474,7 @@ namespace Emby.Plugins.Moonfin.Services
 
                 if (!anyUserEnabled && hadAccessError)
                 {
+                    scanIncomplete = true;
                     var known = Volatile.Read(ref _lastKnownUserHideUpgrades);
                     return known != -1 ? known == 1 : Volatile.Read(ref _lastAppliedUpgradeState) == 1;
                 }
@@ -1536,17 +1543,76 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
-        private bool? ResolveHideWatchedWithDefaults(MoonfinUserSettings settings, string? activeProfileName)
+        private MoonfinSettingsProfile? GetAdminDefaultsForProfile(string profileName) =>
+            AdminDefaultsOverrideForTesting != null
+                ? AdminDefaultsOverrideForTesting(profileName)
+                : AdminDefaultsFor(profileName);
+
+        /// <summary>
+        /// Resolves effective <c>HideWatchedInRecentRows</c> for a user's single native
+        /// <c>HidePlayedInLatest</c> toggle. When neither the active/global user profile nor the
+        /// admin global default sets a value, device profiles/defaults resolve with <c>true</c> taking
+        /// precedence over <c>false</c> across devices so hiding watched items on any device is honored.
+        /// </summary>
+        internal bool? ResolveHideWatchedWithDefaults(MoonfinUserSettings settings, string? activeProfileName)
         {
             var profileName = string.IsNullOrEmpty(activeProfileName) ? "global" : activeProfileName;
             var resolved = ResolveProfile(settings, profileName);
-            return resolved.HideWatchedInRecentRows
-                ?? settings.Global?.HideWatchedInRecentRows
-                ?? settings.Tv?.HideWatchedInRecentRows
-                ?? settings.Desktop?.HideWatchedInRecentRows
-                ?? settings.Mobile?.HideWatchedInRecentRows
-                ?? AdminDefaultsFor(profileName)?.HideWatchedInRecentRows
-                ?? AdminDefaultsFor("global")?.HideWatchedInRecentRows;
+            if (resolved.HideWatchedInRecentRows.HasValue)
+            {
+                return resolved.HideWatchedInRecentRows;
+            }
+
+            if (settings.Global?.HideWatchedInRecentRows.HasValue == true)
+            {
+                return settings.Global.HideWatchedInRecentRows;
+            }
+
+            var userDeviceValues = new[]
+            {
+                settings.Tv?.HideWatchedInRecentRows,
+                settings.Desktop?.HideWatchedInRecentRows,
+                settings.Mobile?.HideWatchedInRecentRows,
+            };
+            if (userDeviceValues.Any(v => v == true))
+            {
+                return true;
+            }
+
+            if (userDeviceValues.Any(v => v == false))
+            {
+                return false;
+            }
+
+            var activeAdminDefault = GetAdminDefaultsForProfile(profileName)?.HideWatchedInRecentRows;
+            if (activeAdminDefault.HasValue)
+            {
+                return activeAdminDefault;
+            }
+
+            var globalAdminDefault = GetAdminDefaultsForProfile("global")?.HideWatchedInRecentRows;
+            if (globalAdminDefault.HasValue)
+            {
+                return globalAdminDefault;
+            }
+
+            var adminDeviceDefaults = new[]
+            {
+                GetAdminDefaultsForProfile("tv")?.HideWatchedInRecentRows,
+                GetAdminDefaultsForProfile("desktop")?.HideWatchedInRecentRows,
+                GetAdminDefaultsForProfile("mobile")?.HideWatchedInRecentRows,
+            };
+            if (adminDeviceDefaults.Any(v => v == true))
+            {
+                return true;
+            }
+
+            if (adminDeviceDefaults.Any(v => v == false))
+            {
+                return false;
+            }
+
+            return null;
         }
 
         private async Task SyncNativeHideWatchedAsync(Guid userId, bool hideWatched, long? expectedSaveGeneration)
@@ -1626,6 +1692,34 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
+        private void ScheduleUpgradeScanRetry(Guid userId, CancellationToken cancellationToken)
+        {
+            bool shouldRetry;
+            lock (_upgradeSyncGate)
+            {
+                shouldRetry = !_upgradeSyncStopping && !cancellationToken.IsCancellationRequested && _upgradeScanRetryCount < 5;
+                if (shouldRetry)
+                {
+                    _upgradeScanRetryCount++;
+                }
+            }
+
+            if (shouldRetry)
+            {
+                _ = Task.Delay(UpgradeScanRetryDelayForTesting, cancellationToken).ContinueWith(
+                    t =>
+                    {
+                        if (!t.IsCanceled)
+                        {
+                            _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
+                        }
+                    },
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+        }
+
         private async Task DrainUpgradePreferenceSyncAsync(Guid userId, CancellationToken cancellationToken)
         {
             while (true)
@@ -1643,9 +1737,10 @@ namespace Emby.Plugins.Moonfin.Services
                 }
 
                 bool anyEnabled;
+                bool scanIncomplete;
                 try
                 {
-                    anyEnabled = IsAnyHideUpgradesEnabled();
+                    anyEnabled = IsAnyHideUpgradesEnabled(out scanIncomplete);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -1658,34 +1753,14 @@ namespace Emby.Plugins.Moonfin.Services
                 }
                 catch (Exception ex)
                 {
-                    bool shouldRetry;
                     lock (_upgradeSyncGate)
                     {
                         _lastAppliedUpgradeState = -1;
                         _upgradeWorkerRunning = false;
-                        shouldRetry = !_upgradeSyncStopping && !cancellationToken.IsCancellationRequested && _upgradeScanRetryCount < 3;
-                        if (shouldRetry)
-                        {
-                            _upgradeScanRetryCount++;
-                        }
                     }
 
                     _logger.Debug("Could not scan HideUpgrades preference for user " + userId + ": " + ex.Message);
-                    if (shouldRetry)
-                    {
-                        _ = Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ContinueWith(
-                            t =>
-                            {
-                                if (!t.IsCanceled)
-                                {
-                                    _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
-                                }
-                            },
-                            CancellationToken.None,
-                            TaskContinuationOptions.ExecuteSynchronously,
-                            TaskScheduler.Default);
-                    }
-
+                    ScheduleUpgradeScanRetry(userId, cancellationToken);
                     return;
                 }
 
@@ -1709,10 +1784,23 @@ namespace Emby.Plugins.Moonfin.Services
 
                     if (_lastAppliedUpgradeState == targetState && !_upgradeSyncPending)
                     {
-                        _upgradeScanRetryCount = 0;
+                        if (!scanIncomplete)
+                        {
+                            _upgradeScanRetryCount = 0;
+                        }
+
                         _upgradeWorkerRunning = false;
-                        return;
+                        if (!scanIncomplete)
+                        {
+                            return;
+                        }
                     }
+                }
+
+                if (_lastAppliedUpgradeState == targetState && scanIncomplete)
+                {
+                    ScheduleUpgradeScanRetry(userId, cancellationToken);
+                    return;
                 }
 
                 if (_lastAppliedUpgradeState != targetState)
@@ -1721,6 +1809,7 @@ namespace Emby.Plugins.Moonfin.Services
                     {
                         await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
 
+                        var scheduleRetryForIncomplete = false;
                         lock (_upgradeSyncGate)
                         {
                             if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
@@ -1731,7 +1820,21 @@ namespace Emby.Plugins.Moonfin.Services
                             }
 
                             _lastAppliedUpgradeState = targetState;
-                            _upgradeScanRetryCount = 0;
+                            if (!scanIncomplete)
+                            {
+                                _upgradeScanRetryCount = 0;
+                            }
+                            else if (!_upgradeSyncPending)
+                            {
+                                _upgradeWorkerRunning = false;
+                                scheduleRetryForIncomplete = true;
+                            }
+                        }
+
+                        if (scheduleRetryForIncomplete)
+                        {
+                            ScheduleUpgradeScanRetry(userId, cancellationToken);
+                            return;
                         }
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
