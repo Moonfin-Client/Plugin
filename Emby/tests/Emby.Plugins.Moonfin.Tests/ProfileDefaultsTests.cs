@@ -1,6 +1,19 @@
+using System.Reflection;
+using System.Text.Json;
 using System.Xml.Serialization;
+using Emby.Plugins.Moonfin.Api;
 using Emby.Plugins.Moonfin.Models;
 using Emby.Plugins.Moonfin.Services;
+using MediaBrowser.Common;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Net;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Querying;
+using MediaBrowser.Model.Services;
+using Moonfin.LiveTv;
+using Moonfin.Upgrades;
 using Xunit;
 
 namespace Emby.Plugins.Moonfin.Tests;
@@ -22,6 +35,7 @@ public sealed class ProfileDefaultsTests : IDisposable
 
     public void Dispose()
     {
+        _service.Dispose();
         if (Directory.Exists(_dataPath))
         {
             Directory.Delete(_dataPath, recursive: true);
@@ -326,5 +340,484 @@ public sealed class ProfileDefaultsTests : IDisposable
         await recoveredTrue.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(_service.IsAnyHideUpgradesEnabled(out var incompleteAfterRecovery));
         Assert.False(incompleteAfterRecovery);
+    }
+
+    private sealed class MemoryUpgradeStateFile : IStateFile
+    {
+        private readonly Dictionary<string, string> _files = new(StringComparer.OrdinalIgnoreCase);
+
+        public T? Read<T>(string path, Func<string, T?> parse) where T : class =>
+            _files.TryGetValue(path, out var text) ? parse(text) : null;
+
+        public void Write(string path, string content) => _files[path] = content;
+    }
+
+    private class EmbyDelegateProxy : DispatchProxy
+    {
+        private Func<MethodInfo, object?[]?, object?>? _handler;
+
+        public static T Create<T>(Func<MethodInfo, object?[]?, object?>? handler = null) where T : class
+        {
+            var proxy = Create<T, EmbyDelegateProxy>();
+            ((EmbyDelegateProxy)(object)proxy)._handler = handler;
+            return proxy;
+        }
+
+        protected override object? Invoke(MethodInfo? method, object?[]? args) =>
+            _handler != null ? _handler(method!, args) : null;
+    }
+
+    private sealed class VisibleEmbyMovie : MediaBrowser.Controller.Entities.Movies.Movie
+    {
+        public override bool IsVisible(User user) => true;
+    }
+
+    [Fact]
+    public async Task StaleTrueBackupWithPrimaryAccessErrorDoesNotCacheTrueAndRetriesPastFiveAttempts()
+    {
+        _service.UpgradeScanRetryDelayForTesting = TimeSpan.FromMilliseconds(15);
+        var userId = Guid.NewGuid();
+        var primaryPath = Path.Combine(_dataPath, $"{userId}.json");
+        var backupPath = primaryPath + ".bak";
+
+        File.WriteAllText(backupPath, JsonSerializer.Serialize(new MoonfinUserSettings
+        {
+            SchemaVersion = 2,
+            Global = new MoonfinSettingsProfile { HideUpgradesInRecentRows = true }
+        }));
+        File.WriteAllText(primaryPath, JsonSerializer.Serialize(new MoonfinUserSettings
+        {
+            SchemaVersion = 2,
+            Global = new MoonfinSettingsProfile { HideUpgradesInRecentRows = false }
+        }));
+
+        var scanAttempts = 0;
+        var reachedSevenAttempts = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recoveredFalse = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _service.BeforePublishHideUpgradesScanForTesting = () =>
+        {
+            if (Interlocked.Increment(ref scanAttempts) >= 7)
+            {
+                reachedSevenAttempts.TrySetResult();
+            }
+        };
+
+        _service.UpgradePreferenceChanged = (enabled, _) =>
+        {
+            if (!enabled && Volatile.Read(ref scanAttempts) >= 7)
+            {
+                recoveredFalse.TrySetResult();
+            }
+
+            return Task.CompletedTask;
+        };
+
+        FileStream? lockStream = new FileStream(primaryPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        try
+        {
+            var initial = _service.IsAnyHideUpgradesEnabled(out var incomplete);
+            Assert.True(initial);
+            Assert.True(incomplete);
+
+            await _service.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+            await reachedSevenAttempts.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            lockStream.Dispose();
+        }
+
+        await recoveredFalse.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(_service.IsAnyHideUpgradesEnabled(out var incompleteAfterRecovery));
+        Assert.False(incompleteAfterRecovery);
+    }
+
+    [Fact]
+    public async Task PendingSyncDuringIncompleteScanWithAppliedStateStillDrainsAndClearsWorkerFlag()
+    {
+        _service.UpgradeScanRetryDelayForTesting = TimeSpan.FromMilliseconds(30);
+        var userId = Guid.NewGuid();
+        var primaryPath = Path.Combine(_dataPath, $"{userId}.json");
+        File.WriteAllText(primaryPath, JsonSerializer.Serialize(new MoonfinUserSettings
+        {
+            SchemaVersion = 2,
+            Global = new MoonfinSettingsProfile { HideUpgradesInRecentRows = false }
+        }));
+
+        var appliedTrue = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _service.UpgradePreferenceChanged = (enabled, _) =>
+        {
+            if (enabled)
+            {
+                appliedTrue.TrySetResult();
+            }
+
+            return Task.CompletedTask;
+        };
+
+        await _service.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+        _service.InvalidateHideUpgradesCache();
+
+        var injectedPending = 0;
+        FileStream? lockStream = new FileStream(primaryPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        try
+        {
+            _service.BeforePublishHideUpgradesScanForTesting = () =>
+            {
+                if (Interlocked.CompareExchange(ref injectedPending, 1, 0) == 0)
+                {
+                    lockStream?.Dispose();
+                    lockStream = null;
+                    File.WriteAllText(primaryPath, JsonSerializer.Serialize(new MoonfinUserSettings
+                    {
+                        SchemaVersion = 2,
+                        Global = new MoonfinSettingsProfile { HideUpgradesInRecentRows = true }
+                    }));
+                    _service.InvalidateHideUpgradesCache();
+                    _ = _service.ScheduleUpgradePreferenceSyncIfNeeded(userId);
+                }
+            };
+
+            await _service.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            lockStream?.Dispose();
+        }
+
+        await appliedTrue.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(_service.IsUpgradeWorkerRunningForTesting);
+
+        _service.UpgradePreferenceChanged = (_, _) => Task.CompletedTask;
+        await _service.ScheduleUpgradePreferenceSyncIfNeeded(userId, force: true).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(_service.IsUpgradeWorkerRunningForTesting);
+    }
+
+    [Fact]
+    public async Task ArrivalPausedBeforeObserveConvergesWhenHideUpgradesTurnsOnBeforeObserve()
+    {
+        var ledger = new MediaUpgradeLedger("emby-ledger.json", new MemoryUpgradeStateFile());
+        var movieId = Guid.NewGuid();
+        var originalDate = new DateTime(2023, 2, 1, 9, 0, 0, DateTimeKind.Utc);
+        var upgradeDate = new DateTime(2026, 9, 10, 18, 0, 0, DateTimeKind.Utc);
+
+        var movie = new MediaBrowser.Controller.Entities.Movies.Movie
+        {
+            Id = movieId,
+            Name = "Emby Pre-Observe Race Movie",
+            ProductionYear = 2023,
+            DateCreated = new DateTimeOffset(upgradeDate),
+        };
+        movie.ProviderIds["Tmdb"] = "445566";
+
+        ledger.RecordRemoved(new MediaUpgradeCandidate
+        {
+            ItemId = Guid.NewGuid(),
+            IsEpisode = false,
+            TmdbId = "445566",
+            DateCreatedUtc = originalDate,
+        });
+
+        var fakeLibrary = EmbyDelegateProxy.Create<ILibraryManager>((method, args) =>
+            method.Name == nameof(ILibraryManager.GetItemById) && args is { Length: 1 } && args[0] is Guid id && id == movieId
+                ? movie
+                : null);
+
+        using var upgradeService = new MediaUpgradeService(
+            fakeLibrary,
+            _service,
+            ledger,
+            AdminDefaultsMergeTests.NoOpLogger.Create());
+
+        var userId = Guid.NewGuid();
+        await _service.SaveProfileAsync(userId, "global", new MoonfinSettingsProfile { HideUpgradesInRecentRows = false });
+        await _service.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+
+        using var enteredBeforeObserve = new ManualResetEventSlim(false);
+        using var allowObserveContinue = new ManualResetEventSlim(false);
+        upgradeService.PersistItemDateForTesting = (_, _) => { };
+        upgradeService.BeforeObserveArrivalForTesting = () =>
+        {
+            enteredBeforeObserve.Set();
+            allowObserveContinue.Wait(TimeSpan.FromSeconds(5));
+        };
+
+        var arrivalTask = Task.Run(() => upgradeService.HandleItemChangedForTesting(movie));
+        Assert.True(enteredBeforeObserve.Wait(TimeSpan.FromSeconds(5)));
+
+        upgradeService.ApplyUpgradeDates(hideUpgradesEnabled: true);
+
+        allowObserveContinue.Set();
+        await arrivalTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(originalDate, movie.DateCreated.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task TwoUserMediaBarEndpointOrdersUpgradesIndependently()
+    {
+        var prevLibrary = PluginServices.LibraryManager;
+        var prevUpgrades = PluginServices.MediaUpgrades;
+        try
+        {
+            var ledger = new MediaUpgradeLedger("emby-twouser.json", new MemoryUpgradeStateFile());
+            var userHide = new User { Id = Guid.NewGuid(), Name = "emby-hide-user" };
+            var userShow = new User { Id = Guid.NewGuid(), Name = "emby-show-user" };
+
+            var upgradedMovieId = Guid.NewGuid();
+            var newerMovieId = Guid.NewGuid();
+            var originalDate = new DateTime(2023, 1, 15, 10, 0, 0, DateTimeKind.Utc);
+            var middleDate = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+            var upgradeDate = new DateTime(2026, 10, 15, 10, 0, 0, DateTimeKind.Utc);
+
+            var upgradedMovie = new VisibleEmbyMovie
+            {
+                Id = upgradedMovieId,
+                Name = "Emby Upgraded Movie",
+                ProductionYear = 2023,
+                DateCreated = new DateTimeOffset(originalDate),
+                ImageInfos = new[] { new ItemImageInfo { Type = ImageType.Backdrop, Path = "/tmp/upgraded-backdrop.jpg" } },
+            };
+            upgradedMovie.ProviderIds["Tmdb"] = "778899";
+
+            var newerMovie = new VisibleEmbyMovie
+            {
+                Id = newerMovieId,
+                Name = "Emby Newer Standard Movie",
+                ProductionYear = 2025,
+                DateCreated = new DateTimeOffset(middleDate),
+                ImageInfos = new[] { new ItemImageInfo { Type = ImageType.Backdrop, Path = "/tmp/newer-backdrop.jpg" } },
+            };
+
+            ledger.RecordRemoved(new MediaUpgradeCandidate
+            {
+                ItemId = Guid.NewGuid(),
+                TmdbId = "778899",
+                DateCreatedUtc = originalDate,
+            });
+            ledger.ObserveArrival(
+                new MediaUpgradeCandidate
+                {
+                    ItemId = upgradedMovieId,
+                    TmdbId = "778899",
+                    DateCreatedUtc = upgradeDate,
+                },
+                hideUpgradesEnabled: true,
+                out _);
+
+            var items = new BaseItem[] { upgradedMovie, newerMovie };
+            var fakeLibrary = EmbyDelegateProxy.Create<ILibraryManager>((method, args) =>
+            {
+                if (method.Name == nameof(ILibraryManager.GetItemById) && args is { Length: 1 } && args[0] is Guid id)
+                {
+                    return items.FirstOrDefault(i => i.Id == id);
+                }
+
+                if (method.Name == nameof(ILibraryManager.GetItemsResult) && args is { Length: 1 } && args[0] is InternalItemsQuery q)
+                {
+                    IEnumerable<BaseItem> seq = items;
+                    if (q.OrderBy is { Length: > 0 })
+                    {
+                        seq = seq.OrderByDescending(i => i.DateCreated);
+                    }
+
+                    if (q.Limit.HasValue)
+                    {
+                        seq = seq.Take(q.Limit.Value);
+                    }
+
+                    return new QueryResult<BaseItem> { Items = seq.ToArray() };
+                }
+
+                return null;
+            });
+
+            using var upgradeService = new MediaUpgradeService(
+                fakeLibrary,
+                _service,
+                ledger,
+                AdminDefaultsMergeTests.NoOpLogger.Create());
+
+            PluginServices.LibraryManager = fakeLibrary;
+            PluginServices.MediaUpgrades = upgradeService;
+
+            await SeedAsync("global", new MoonfinSettingsProfile
+            {
+                MediaBarSourceType = "recentlyAdded",
+                MediaBarItemCount = 10,
+                HideUpgradesInRecentRows = true,
+            }, userHide.Id);
+
+            await SeedAsync("global", new MoonfinSettingsProfile
+            {
+                MediaBarSourceType = "recentlyAdded",
+                MediaBarItemCount = 10,
+                HideUpgradesInRecentRows = false,
+            }, userShow.Id);
+
+            var currentUser = userHide;
+            var authContext = EmbyDelegateProxy.Create<IAuthorizationContext>((method, _) =>
+                method.Name == nameof(IAuthorizationContext.GetAuthorizationInfo)
+                    ? new AuthorizationInfo { User = currentUser }
+                    : null);
+            var logManager = EmbyDelegateProxy.Create<ILogManager>((_, _) => AdminDefaultsMergeTests.NoOpLogger.Create());
+            var resultFactory = EmbyDelegateProxy.Create<IHttpResultFactory>((method, args) =>
+            {
+                if (method.Name == nameof(IHttpResultFactory.GetResult) && args is { Length: >= 2 } && args[1] is Stream s)
+                {
+                    using var doc = JsonDocument.Parse(s);
+                    return doc.RootElement.GetProperty("Items")
+                        .EnumerateArray()
+                        .Select(e => e.GetProperty("Id").GetGuid())
+                        .ToArray();
+                }
+
+                return null;
+            });
+            var appHost = EmbyDelegateProxy.Create<IApplicationHost>((method, _) =>
+            {
+                if (method.Name == nameof(IApplicationHost.Resolve))
+                {
+                    var target = method.GetGenericArguments()[0];
+                    if (target == typeof(IAuthorizationContext)) return authContext;
+                    if (target == typeof(IHttpResultFactory)) return resultFactory;
+                    if (target == typeof(ILogManager)) return logManager;
+                }
+
+                return null;
+            });
+
+            var settingsApi = new SettingsService(appHost)
+            {
+                Request = EmbyDelegateProxy.Create<IRequest>(),
+                SettingsOverrideForTesting = _service,
+            };
+
+            currentUser = userHide;
+            var hideResultIds = Assert.IsType<Guid[]>(await settingsApi.Get(new GetMediaBarRequest { Profile = "global" }));
+
+            currentUser = userShow;
+            var showResultIds = Assert.IsType<Guid[]>(await settingsApi.Get(new GetMediaBarRequest { Profile = "global" }));
+
+            Assert.Equal(new[] { newerMovieId, upgradedMovieId }, hideResultIds);
+            Assert.Equal(new[] { upgradedMovieId, newerMovieId }, showResultIds);
+        }
+        finally
+        {
+            PluginServices.LibraryManager = prevLibrary;
+            PluginServices.MediaUpgrades = prevUpgrades;
+        }
+    }
+
+    [Fact]
+    public async Task FailedPersistenceRestoresDateCreatedAndRetriesUpgradeBatch()
+    {
+        var ledger = new MediaUpgradeLedger("emby-persist-retry.json", new MemoryUpgradeStateFile());
+        var movieId = Guid.NewGuid();
+        var originalDate = new DateTime(2023, 5, 1, 10, 0, 0, DateTimeKind.Utc);
+        var upgradeDate = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
+
+        var movie = new MediaBrowser.Controller.Entities.Movies.Movie
+        {
+            Id = movieId,
+            Name = "Emby Retry Persist Movie",
+            ProductionYear = 2023,
+            DateCreated = new DateTimeOffset(originalDate),
+        };
+        movie.ProviderIds["Tmdb"] = "112299";
+        ledger.RecordRemoved(new MediaUpgradeCandidate { ItemId = Guid.NewGuid(), TmdbId = "112299", DateCreatedUtc = originalDate });
+        ledger.ObserveArrival(new MediaUpgradeCandidate { ItemId = movieId, TmdbId = "112299", DateCreatedUtc = upgradeDate }, true, out _);
+
+        var fakeLibrary = EmbyDelegateProxy.Create<ILibraryManager>((method, args) =>
+            method.Name == nameof(ILibraryManager.GetItemById) && args is { Length: 1 } && args[0] is Guid id && id == movieId ? movie : null);
+
+        _service.UpgradeScanRetryDelayForTesting = TimeSpan.FromMilliseconds(20);
+        using var upgradeService = new MediaUpgradeService(
+            fakeLibrary,
+            _service,
+            ledger,
+            AdminDefaultsMergeTests.NoOpLogger.Create());
+
+        var failWrites = 1;
+        var recovered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        upgradeService.PersistItemDateForTesting = (_, _) =>
+        {
+            if (Interlocked.Exchange(ref failWrites, 0) == 1)
+            {
+                throw new IOException("Transient Emby DB write failure");
+            }
+
+            recovered.TrySetResult();
+        };
+
+        Assert.Throws<InvalidOperationException>(() => upgradeService.ApplyUpgradeDates(hideUpgradesEnabled: false));
+        Assert.Equal(originalDate, movie.DateCreated.UtcDateTime);
+
+        Volatile.Write(ref failWrites, 1);
+        var userId = Guid.NewGuid();
+        await SeedAsync("global", new MoonfinSettingsProfile { HideUpgradesInRecentRows = false }, userId);
+        await _service.ScheduleUpgradePreferenceSyncIfNeeded(userId, force: true).WaitAsync(TimeSpan.FromSeconds(5));
+        await recovered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(upgradeDate, movie.DateCreated.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task SyncHideWatchedForAffectedUsersValidatesBaselineGenerationZero()
+    {
+        var prevUserManager = PluginServices.UserManager;
+        try
+        {
+            var user = new User { Id = Guid.NewGuid(), Name = "emby-unsaved-user" };
+            var config = new MediaBrowser.Model.Configuration.UserConfiguration { HidePlayedInLatest = true };
+            var userManager = EmbyDelegateProxy.Create<IUserManager>((method, args) =>
+            {
+                if (method.Name == nameof(IUserManager.GetUserList))
+                {
+                    return new[] { user };
+                }
+
+                if (method.Name == nameof(IUserManager.GetUserById))
+                {
+                    return user;
+                }
+
+                if (method.Name == nameof(IUserManager.GetUserConfiguration))
+                {
+                    return config;
+                }
+
+                if (method.Name == nameof(IUserManager.UpdateConfiguration) && args is { Length: 2 } && args[1] is MediaBrowser.Model.Configuration.UserConfiguration updated)
+                {
+                    config.HidePlayedInLatest = updated.HidePlayedInLatest;
+                    return null;
+                }
+
+                return null;
+            });
+
+            PluginServices.UserManager = userManager;
+            _service.AdminDefaultsOverrideForTesting = profile =>
+                profile == "global" ? new MoonfinSettingsProfile { HideWatchedInRecentRows = true } : null;
+
+            var concurrentSaveTriggered = 0;
+            _service.BeforeNativeSyncWaitForTesting = id =>
+            {
+                if (id == user.Id && Interlocked.CompareExchange(ref concurrentSaveTriggered, 1, 0) == 0)
+                {
+                    SeedAsync("global", new MoonfinSettingsProfile { HideWatchedInRecentRows = false }, user.Id)
+                        .GetAwaiter().GetResult();
+                }
+            };
+
+            await _service.SyncHideWatchedForAffectedUsersAsync();
+
+            Assert.False(config.HidePlayedInLatest);
+        }
+        finally
+        {
+            PluginServices.UserManager = prevUserManager;
+        }
     }
 }

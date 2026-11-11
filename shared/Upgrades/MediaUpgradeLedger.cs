@@ -243,7 +243,7 @@ public sealed class MediaUpgradeLedger
                     };
                     AddRecord(record);
                 }
-                else if (existing.ItemId != candidate.ItemId || existing.RemovedAtUtc.HasValue)
+                else
                 {
                     var wasPersisted = existing.Upgraded || existing.RemovedAtUtc.HasValue;
                     var dirty = ReconcileReplacementOrUpgrade(existing, candidate.ItemId, keys, dateUtc);
@@ -257,23 +257,6 @@ public sealed class MediaUpgradeLedger
                     if (dirty && (wasPersisted || isNowPersisted))
                     {
                         dirtyPersisted = true;
-                    }
-                }
-                else
-                {
-                    var isPersisted = existing.Upgraded || existing.RemovedAtUtc.HasValue;
-                    if (MergeKeys(existing, keys) && isPersisted)
-                    {
-                        dirtyPersisted = true;
-                    }
-
-                    if (dateUtc < existing.FirstAddedUtc)
-                    {
-                        existing.FirstAddedUtc = dateUtc;
-                        if (isPersisted)
-                        {
-                            dirtyPersisted = true;
-                        }
                     }
                 }
             }
@@ -443,7 +426,9 @@ public sealed class MediaUpgradeLedger
         var isNewerThanBaseline = dateUtc > existing.FirstAddedUtc + UpgradeThreshold
             || (existing.RemovedAtUtc.HasValue && dateUtc > existing.FirstAddedUtc + TimeSpan.FromSeconds(1));
 
-        if ((isReplacementItem && isNewerThanBaseline) || dateUtc > existing.FirstAddedUtc + UpgradeThreshold)
+        if ((isReplacementItem && isNewerThanBaseline)
+            || dateUtc > existing.FirstAddedUtc + UpgradeThreshold
+            || (existing.Upgraded && dateUtc > existing.LatestAddedUtc))
         {
             if (!existing.Upgraded)
             {
@@ -479,7 +464,14 @@ public sealed class MediaUpgradeLedger
     /// Returns the desired <c>DateCreated</c> timestamp for every upgraded item in the ledger
     /// according to <paramref name="hideUpgradesEnabled"/>.
     /// </summary>
-    public List<(Guid ItemId, DateTime DesiredDateUtc)> GetDesiredDatesForUpgradedItems(bool hideUpgradesEnabled)
+    public List<(Guid ItemId, DateTime DesiredDateUtc)> GetDesiredDatesForUpgradedItems(bool hideUpgradesEnabled) =>
+        GetDesiredDatesForUpgradedItems(hideUpgradesEnabled, includeEpisodes: true);
+
+    /// <summary>
+    /// Returns the desired <c>DateCreated</c> timestamp for upgraded items in the ledger,
+    /// optionally excluding episode records.
+    /// </summary>
+    public List<(Guid ItemId, DateTime DesiredDateUtc)> GetDesiredDatesForUpgradedItems(bool hideUpgradesEnabled, bool includeEpisodes)
     {
         lock (_gate)
         {
@@ -492,7 +484,7 @@ public sealed class MediaUpgradeLedger
 
             foreach (var record in _records)
             {
-                if (!record.Upgraded || record.ItemId == Guid.Empty)
+                if (!record.Upgraded || record.ItemId == Guid.Empty || (!includeEpisodes && record.IsEpisode))
                 {
                     continue;
                 }
@@ -549,14 +541,25 @@ public sealed class MediaUpgradeLedger
 
             foreach (var byKeyRecord in recordsForKey)
             {
-                if (byKeyRecord.ItemId == itemId || byKeyRecord.RemovedAtUtc.HasValue || byKeyRecord.ItemId == Guid.Empty)
+                if (byKeyRecord.ItemId == itemId || byKeyRecord.ItemId == Guid.Empty)
                 {
                     return byKeyRecord;
                 }
 
+                var isLive = isItemLive != null && isItemLive(byKeyRecord.ItemId);
+                if (byKeyRecord.RemovedAtUtc.HasValue)
+                {
+                    if (!isLive)
+                    {
+                        return byKeyRecord;
+                    }
+
+                    continue;
+                }
+
                 if (isItemLive != null)
                 {
-                    if (!isItemLive(byKeyRecord.ItemId))
+                    if (!isLive)
                     {
                         nonLiveMatch ??= byKeyRecord;
                     }

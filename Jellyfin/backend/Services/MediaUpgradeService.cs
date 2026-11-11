@@ -138,12 +138,10 @@ public sealed class MediaUpgradeService : IHostedService
         }
 
         var targets = _ledger.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled);
+        var failedCount = 0;
         foreach (var (itemId, _) in targets)
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
+            cancellationToken.ThrowIfCancellationRequested();
 
             var item = _libraryManager.GetItemById(itemId);
             if (item == null)
@@ -151,7 +149,15 @@ public sealed class MediaUpgradeService : IHostedService
                 continue;
             }
 
-            await UpdateItemDateAsync(item, cancellationToken).ConfigureAwait(false);
+            if (!await UpdateItemDateAsync(item, cancellationToken).ConfigureAwait(false))
+            {
+                failedCount++;
+            }
+        }
+
+        if (failedCount > 0)
+        {
+            throw new InvalidOperationException($"Failed to update DateCreated for {failedCount} upgraded item(s).");
         }
     }
 
@@ -276,6 +282,7 @@ public sealed class MediaUpgradeService : IHostedService
         }
     }
 
+    internal Action? BeforeObserveArrivalForTesting { get; set; }
     internal Func<Task>? BeforeQueuedArrivalStartForTesting { get; set; }
     internal Func<BaseItem, DateTime, CancellationToken, Task>? PersistItemDateForTesting { get; set; }
 
@@ -295,8 +302,9 @@ public sealed class MediaUpgradeService : IHostedService
             }
 
             var hideUpgrades = GetHideUpgradesCached();
+            BeforeObserveArrivalForTesting?.Invoke();
             var stopToken = _stopCts.Token;
-            if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc, id => _libraryManager.GetItemById(id) != null) && desiredUtc.HasValue && !stopToken.IsCancellationRequested)
+            if (_ledger.ObserveArrival(candidate, hideUpgrades, out _, id => _libraryManager.GetItemById(id) != null) && !stopToken.IsCancellationRequested)
             {
                 var updateTask = Task.Run(async () =>
                 {
@@ -325,58 +333,77 @@ public sealed class MediaUpgradeService : IHostedService
         return pending.Length == 0 ? Task.CompletedTask : Task.WhenAll(pending);
     }
 
-    internal async Task UpdateItemDateAsync(BaseItem item, CancellationToken cancellationToken)
+    internal async Task<bool> UpdateItemDateAsync(BaseItem item, CancellationToken cancellationToken)
     {
         var gate = _itemWriteGates.GetOrAdd(item.Id, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var acquired = false;
         try
         {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            acquired = true;
+
             if (cancellationToken.IsCancellationRequested)
             {
-                return;
+                return false;
             }
 
             var hideUpgrades = GetHideUpgradesCached();
             var desiredUtc = _ledger.GetDesiredDateForItem(item.Id, hideUpgrades);
             if (!desiredUtc.HasValue)
             {
-                return;
+                return true;
             }
 
             var normalizedDesiredUtc = DateTime.SpecifyKind(desiredUtc.Value, DateTimeKind.Utc);
             if (Math.Abs((item.DateCreated.ToUniversalTime() - normalizedDesiredUtc).TotalSeconds) <= 1)
             {
-                return;
+                return true;
             }
 
             _selfWriteDepth.AddOrUpdate(item.Id, 1, static (_, c) => c + 1);
+            var previousDate = item.DateCreated;
             try
             {
                 item.DateCreated = normalizedDesiredUtc;
-                if (PersistItemDateForTesting != null)
+                try
                 {
-                    await PersistItemDateForTesting(item, normalizedDesiredUtc, cancellationToken).ConfigureAwait(false);
+                    if (PersistItemDateForTesting != null)
+                    {
+                        await PersistItemDateForTesting(item, normalizedDesiredUtc, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                    }
                 }
-                else
+                catch
                 {
-                    await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                    item.DateCreated = previousDate;
+                    throw;
                 }
             }
             finally
             {
                 _selfWriteDepth.AddOrUpdate(item.Id, 0, static (_, c) => Math.Max(0, c - 1));
             }
+
+            return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            return false;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not update DateCreated for upgraded item {ItemId}", item.Id);
+            return false;
         }
         finally
         {
-            gate.Release();
+            if (acquired)
+            {
+                gate.Release();
+            }
         }
     }
 }

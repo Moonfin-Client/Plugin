@@ -77,7 +77,18 @@ namespace Emby.Plugins.Moonfin.Api
             if (user.Policy?.EnableLiveTvManagement != true) return NotAllowed();
 
             var itemId = ResolveItem(request.ItemId);
-            if (itemId == null || !await service.DismissAsync(itemId.Value, user.Id, CancellationToken.None).ConfigureAwait(false))
+            if (itemId == null)
+            {
+                return Json(404, new { error = "No incomplete recording with that id" });
+            }
+
+            var outcome = await service.DismissWithOutcomeAsync(itemId.Value, user.Id, CancellationToken.None).ConfigureAwait(false);
+            if (outcome == StoreMutationOutcome.Unavailable)
+            {
+                return NotReady();
+            }
+
+            if (outcome != StoreMutationOutcome.Succeeded)
             {
                 return Json(404, new { error = "No incomplete recording with that id" });
             }
@@ -107,6 +118,11 @@ namespace Emby.Plugins.Moonfin.Api
             var (showing, refusal) = await service.RequestCompleteShowingAsync(body!.ProgramId!, user.Id, CancellationToken.None).ConfigureAwait(false);
             if (showing == null)
             {
+                if (refusal == CompleteShowingRefusal.Unavailable)
+                {
+                    return NotReady();
+                }
+
                 return refusal == CompleteShowingRefusal.NoEpisodeNumbers
                     ? Json(400, new { error = "The program needs season and episode numbers, or movie classification with a title and description." })
                     : Json(404, new { error = "No guide program with that id" });
@@ -147,7 +163,13 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(400, new { error = "programId and showing are required." });
             }
 
-            if (!await service.ScheduleSuggestedShowingAsync(body.ProgramId!, body.Showing, user.Id, CancellationToken.None).ConfigureAwait(false))
+            var outcome = await service.ScheduleSuggestedShowingWithOutcomeAsync(body.ProgramId!, body.Showing, user.Id, CancellationToken.None).ConfigureAwait(false);
+            if (outcome == StoreMutationOutcome.Unavailable)
+            {
+                return NotReady();
+            }
+
+            if (outcome != StoreMutationOutcome.Succeeded)
             {
                 return Json(409, new { error = "The selected airing is no longer available or no longer matches." });
             }

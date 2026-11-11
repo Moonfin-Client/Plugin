@@ -27,8 +27,9 @@ namespace Emby.Plugins.Moonfin.Api
 
         public IRequest Request { get; set; } = null!;
         public IHttpResultFactory ResultFactory { get; set; } = null!;
+        internal MoonfinSettingsService? SettingsOverrideForTesting { get; set; }
 
-        private MoonfinSettingsService Settings => Plugin.Instance?.SettingsService
+        private MoonfinSettingsService Settings => SettingsOverrideForTesting ?? Plugin.Instance?.SettingsService
             ?? throw new InvalidOperationException("MoonfinSettingsService not initialized");
 
         private ILibraryManager? LibraryManager => PluginServices.LibraryManager;

@@ -1442,11 +1442,45 @@ public class MoonfinController : ControllerBase
     {
         var upgrades = _mediaUpgrades ?? MoonfinPlugin.Instance?.ServiceProvider?.GetService(typeof(MediaUpgradeService)) as MediaUpgradeService;
         if (upgrades == null) return Array.Empty<Guid>();
-        return upgrades.Ledger.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: false)
+        return upgrades.Ledger.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: false, includeEpisodes: false)
             .Select(entry => entry.ItemId)
             .Where(id => id != Guid.Empty)
             .Distinct()
             .ToArray();
+    }
+
+    private void AddMissingUpgradedItems(
+        Guid[] candidateIds,
+        BaseItemKind[] itemTypes,
+        Guid[]? includedGenreIds,
+        bool excludePlayed,
+        object queryUser,
+        Guid? ancestorId,
+        HashSet<Guid> seenIds,
+        List<BaseItem> results)
+    {
+        const int batchSize = 200;
+        foreach (var batch in candidateIds.Chunk(batchSize))
+        {
+            var upgradeQuery = new InternalItemsQuery
+            {
+                ItemIds = batch,
+                IncludeItemTypes = itemTypes,
+                Limit = batch.Length
+            };
+
+            if (ancestorId.HasValue) upgradeQuery.AncestorIds = [ancestorId.Value];
+            if (includedGenreIds != null) upgradeQuery.GenreIds = includedGenreIds;
+            if (excludePlayed) upgradeQuery.IsPlayed = false;
+            if (!UserReflection.ApplyUser(upgradeQuery, queryUser)) continue;
+
+            foreach (var item in _libraryManager.GetItemsResult(upgradeQuery).Items)
+            {
+                if (!seenIds.Add(item.Id)) continue;
+                if (ancestorId.HasValue && !UserReflection.IsVisibleTo(item, queryUser)) continue;
+                results.Add(item);
+            }
+        }
     }
 
     /// <summary>
@@ -1503,25 +1537,15 @@ public class MoonfinController : ControllerBase
                 {
                     foreach (var types in queryItemTypes)
                     {
-                        var upgradeQuery = new InternalItemsQuery
-                        {
-                            ItemIds = missingUpgradedIds,
-                            IncludeItemTypes = types,
-                            Limit = missingUpgradedIds.Length
-                        };
-
-                        if (includedGenreIds != null) upgradeQuery.GenreIds = includedGenreIds;
-                        if (excludePlayed) upgradeQuery.IsPlayed = false;
-                        if (UserReflection.ApplyUser(upgradeQuery, queryUser))
-                        {
-                            foreach (var item in _libraryManager.GetItemsResult(upgradeQuery).Items)
-                            {
-                                if (candidateIds.Add(item.Id))
-                                {
-                                    candidateItems.Add(item);
-                                }
-                            }
-                        }
+                        AddMissingUpgradedItems(
+                            missingUpgradedIds,
+                            types,
+                            includedGenreIds,
+                            excludePlayed,
+                            queryUser,
+                            ancestorId: null,
+                            candidateIds,
+                            candidateItems);
                     }
                 }
             }
@@ -1592,25 +1616,15 @@ public class MoonfinController : ControllerBase
                     var missingInLib = upgradedIds.Where(id => !seenIds.Contains(id)).ToArray();
                     if (missingInLib.Length > 0)
                     {
-                        var upgradeQuery = new InternalItemsQuery
-                        {
-                            ItemIds = missingInLib,
-                            IncludeItemTypes = types,
-                            AncestorIds = [parentGuid],
-                            Limit = missingInLib.Length
-                        };
-
-                        if (includedGenreIds != null) upgradeQuery.GenreIds = includedGenreIds;
-                        if (excludePlayed) upgradeQuery.IsPlayed = false;
-                        if (UserReflection.ApplyUser(upgradeQuery, queryUser))
-                        {
-                            foreach (var item in _libraryManager.GetItemsResult(upgradeQuery).Items)
-                            {
-                                if (!seenIds.Add(item.Id)) continue;
-                                if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
-                                allItems.Add(item);
-                            }
-                        }
+                        AddMissingUpgradedItems(
+                            missingInLib,
+                            types,
+                            includedGenreIds,
+                            excludePlayed,
+                            queryUser,
+                            ancestorId: parentGuid,
+                            seenIds,
+                            allItems);
                     }
                 }
             }

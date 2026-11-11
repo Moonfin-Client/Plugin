@@ -43,6 +43,7 @@ public class MoonfinSettingsService : IDisposable
     private readonly object _hideUpgradesCacheGate = new();
     private int _lastAppliedUpgradeState = -1;
     private int _upgradeScanRetryCount;
+    private bool _upgradeScanRetryScheduled;
     private bool _upgradeWorkerRunning;
     private bool _upgradeSyncStopping;
     private bool _upgradeSyncPending;
@@ -53,6 +54,18 @@ public class MoonfinSettingsService : IDisposable
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _nativeSyncLocks = new();
 
     internal Action? BeforePublishHideUpgradesScanForTesting { get; set; }
+    internal Action<Guid>? BeforeNativeSyncWaitForTesting { get; set; }
+
+    internal bool IsUpgradeWorkerRunningForTesting
+    {
+        get
+        {
+            lock (_upgradeSyncGate)
+            {
+                return _upgradeWorkerRunning;
+            }
+        }
+    }
 
     internal Func<bool, CancellationToken, Task>? UpgradePreferenceChanged
     {
@@ -1853,7 +1866,8 @@ public class MoonfinSettingsService : IDisposable
                 continue;
             }
 
-            var anyUserEnabled = false;
+            var anyConfirmedEnabled = false;
+            var anyBackupEnabled = false;
             var hadAccessError = false;
             foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
             {
@@ -1875,32 +1889,46 @@ public class MoonfinSettingsService : IDisposable
                     continue;
                 }
 
-                if (settings.Global?.HideUpgradesInRecentRows == true ||
+                var hasEnabled =
+                    settings.Global?.HideUpgradesInRecentRows == true ||
                     settings.Tv?.HideUpgradesInRecentRows == true ||
                     settings.Desktop?.HideUpgradesInRecentRows == true ||
-                    settings.Mobile?.HideUpgradesInRecentRows == true)
+                    settings.Mobile?.HideUpgradesInRecentRows == true;
+
+                if (hasEnabled)
                 {
-                    anyUserEnabled = true;
-                    break;
+                    if (accessError == null)
+                    {
+                        anyConfirmedEnabled = true;
+                        break;
+                    }
+
+                    anyBackupEnabled = true;
                 }
             }
 
             BeforePublishHideUpgradesScanForTesting?.Invoke();
 
-            if (!anyUserEnabled && hadAccessError)
+            if (!anyConfirmedEnabled && hadAccessError)
             {
                 scanIncomplete = true;
                 var known = Volatile.Read(ref _lastKnownUserHideUpgrades);
-                return known != -1 ? known == 1 : Volatile.Read(ref _lastAppliedUpgradeState) == 1;
+                if (known != -1)
+                {
+                    return known == 1;
+                }
+
+                var applied = Volatile.Read(ref _lastAppliedUpgradeState);
+                return applied != -1 ? applied == 1 : anyBackupEnabled;
             }
 
             lock (_hideUpgradesCacheGate)
             {
                 if (_hideUpgradesCacheGeneration == scanGeneration)
                 {
-                    Volatile.Write(ref _lastKnownUserHideUpgrades, anyUserEnabled ? 1 : 0);
-                    Volatile.Write(ref _userHideUpgradesCache, anyUserEnabled ? 1 : 0);
-                    return anyUserEnabled;
+                    Volatile.Write(ref _lastKnownUserHideUpgrades, anyConfirmedEnabled ? 1 : 0);
+                    Volatile.Write(ref _userHideUpgradesCache, anyConfirmedEnabled ? 1 : 0);
+                    return anyConfirmedEnabled;
                 }
             }
         }
@@ -1931,7 +1959,7 @@ public class MoonfinSettingsService : IDisposable
                 continue;
             }
 
-            var expectedGen = _userSaveGenerations.TryGetValue(userId, out var gen) ? gen : (long?)null;
+            var expectedGen = _userSaveGenerations.GetOrAdd(userId, 0L);
             MoonfinUserSettings? settings;
             try
             {
@@ -2037,6 +2065,7 @@ public class MoonfinSettingsService : IDisposable
         }
 
         var syncGate = _nativeSyncLocks.GetOrAdd(userId, static _ => new SemaphoreSlim(1, 1));
+        BeforeNativeSyncWaitForTesting?.Invoke(userId);
         await syncGate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -2116,32 +2145,49 @@ public class MoonfinSettingsService : IDisposable
         }
     }
 
+    private TimeSpan ComputeUpgradeRetryDelay(int retryAttempt)
+    {
+        var baseTicks = Math.Max(1L, UpgradeScanRetryDelayForTesting.Ticks);
+        var shift = Math.Clamp(retryAttempt, 0, 3);
+        var scaledTicks = baseTicks <= (long.MaxValue >> shift) ? baseTicks << shift : long.MaxValue;
+        var capTicks = Math.Max(baseTicks, TimeSpan.FromMinutes(1).Ticks);
+        return TimeSpan.FromTicks(Math.Min(scaledTicks, capTicks));
+    }
+
     private void ScheduleUpgradeScanRetry(Guid userId, CancellationToken cancellationToken)
     {
-        bool shouldRetry;
+        TimeSpan delay;
         lock (_upgradeSyncGate)
         {
-            shouldRetry = !_upgradeSyncStopping && !cancellationToken.IsCancellationRequested && _upgradeScanRetryCount < 5;
-            if (shouldRetry)
+            if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested || _upgradeScanRetryScheduled)
+            {
+                return;
+            }
+
+            _upgradeScanRetryScheduled = true;
+            delay = ComputeUpgradeRetryDelay(_upgradeScanRetryCount);
+            if (_upgradeScanRetryCount < 16)
             {
                 _upgradeScanRetryCount++;
             }
         }
 
-        if (shouldRetry)
-        {
-            _ = Task.Delay(UpgradeScanRetryDelayForTesting, cancellationToken).ContinueWith(
-                t =>
+        _ = Task.Delay(delay, cancellationToken).ContinueWith(
+            t =>
+            {
+                lock (_upgradeSyncGate)
                 {
-                    if (!t.IsCanceled)
-                    {
-                        _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
-                    }
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-        }
+                    _upgradeScanRetryScheduled = false;
+                }
+
+                if (!t.IsCanceled)
+                {
+                    _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private async Task DrainUpgradePreferenceSyncAsync(Guid userId, CancellationToken cancellationToken)
@@ -2172,6 +2218,7 @@ public class MoonfinSettingsService : IDisposable
                 {
                     _lastAppliedUpgradeState = -1;
                     _upgradeWorkerRunning = false;
+                    _upgradeSyncPending = false;
                     return;
                 }
             }
@@ -2180,6 +2227,11 @@ public class MoonfinSettingsService : IDisposable
                 lock (_upgradeSyncGate)
                 {
                     _lastAppliedUpgradeState = -1;
+                    if (_upgradeSyncPending && !_upgradeSyncStopping && !cancellationToken.IsCancellationRequested)
+                    {
+                        continue;
+                    }
+
                     _upgradeWorkerRunning = false;
                 }
 
@@ -2191,11 +2243,14 @@ public class MoonfinSettingsService : IDisposable
             var targetState = anyEnabled ? 1 : 0;
 
             Func<bool, CancellationToken, Task>? callback;
+            var shouldReturn = false;
+            var shouldScheduleRetry = false;
             lock (_upgradeSyncGate)
             {
                 if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
                 {
                     _upgradeWorkerRunning = false;
+                    _upgradeSyncPending = false;
                     return;
                 }
 
@@ -2203,84 +2258,97 @@ public class MoonfinSettingsService : IDisposable
                 if (callback == null)
                 {
                     _upgradeWorkerRunning = false;
+                    _upgradeSyncPending = false;
                     return;
                 }
 
-                if (_lastAppliedUpgradeState == targetState && !_upgradeSyncPending)
+                if (_lastAppliedUpgradeState == targetState)
                 {
                     if (!scanIncomplete)
                     {
                         _upgradeScanRetryCount = 0;
                     }
 
-                    _upgradeWorkerRunning = false;
-                    if (!scanIncomplete)
+                    if (_upgradeSyncPending)
                     {
-                        return;
+                        continue;
                     }
+
+                    _upgradeWorkerRunning = false;
+                    shouldScheduleRetry = scanIncomplete;
+                    shouldReturn = true;
                 }
             }
 
-            if (_lastAppliedUpgradeState == targetState && scanIncomplete)
+            if (shouldReturn)
             {
-                ScheduleUpgradeScanRetry(userId, cancellationToken);
+                if (shouldScheduleRetry)
+                {
+                    ScheduleUpgradeScanRetry(userId, cancellationToken);
+                }
+
                 return;
             }
 
-            if (_lastAppliedUpgradeState != targetState)
+            try
             {
-                try
+                await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
+
+                var scheduleRetryForIncomplete = false;
+                lock (_upgradeSyncGate)
                 {
-                    await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
-
-                    var scheduleRetryForIncomplete = false;
-                    lock (_upgradeSyncGate)
-                    {
-                        if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
-                        {
-                            _lastAppliedUpgradeState = -1;
-                            _upgradeWorkerRunning = false;
-                            return;
-                        }
-
-                        _lastAppliedUpgradeState = targetState;
-                        if (!scanIncomplete)
-                        {
-                            _upgradeScanRetryCount = 0;
-                        }
-                        else if (!_upgradeSyncPending)
-                        {
-                            _upgradeWorkerRunning = false;
-                            scheduleRetryForIncomplete = true;
-                        }
-                    }
-
-                    if (scheduleRetryForIncomplete)
-                    {
-                        ScheduleUpgradeScanRetry(userId, cancellationToken);
-                        return;
-                    }
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    lock (_upgradeSyncGate)
+                    if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
                     {
                         _lastAppliedUpgradeState = -1;
                         _upgradeWorkerRunning = false;
+                        _upgradeSyncPending = false;
                         return;
                     }
-                }
-                catch (Exception ex)
-                {
-                    lock (_upgradeSyncGate)
-                    {
-                        _lastAppliedUpgradeState = -1;
-                        _upgradeWorkerRunning = false;
-                    }
 
-                    _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
+                    _lastAppliedUpgradeState = targetState;
+                    if (!scanIncomplete)
+                    {
+                        _upgradeScanRetryCount = 0;
+                    }
+                    else if (!_upgradeSyncPending)
+                    {
+                        _upgradeWorkerRunning = false;
+                        scheduleRetryForIncomplete = true;
+                    }
+                }
+
+                if (scheduleRetryForIncomplete)
+                {
+                    ScheduleUpgradeScanRetry(userId, cancellationToken);
                     return;
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                lock (_upgradeSyncGate)
+                {
+                    _lastAppliedUpgradeState = -1;
+                    _upgradeWorkerRunning = false;
+                    _upgradeSyncPending = false;
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                lock (_upgradeSyncGate)
+                {
+                    _lastAppliedUpgradeState = -1;
+                    if (_upgradeSyncPending && !_upgradeSyncStopping && !cancellationToken.IsCancellationRequested)
+                    {
+                        continue;
+                    }
+
+                    _upgradeWorkerRunning = false;
+                }
+
+                _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
+                ScheduleUpgradeScanRetry(userId, cancellationToken);
+                return;
             }
         }
     }

@@ -1994,4 +1994,195 @@ public sealed class IncompleteRecordingTests : IDisposable
         await service.RunAsync(CancellationToken.None);
         Assert.Equal(_clock.UtcNow + IncompleteRecordingRules.SampleInterval, service.NextRunAt());
     }
+
+    private sealed class ToggleableFailingStateFile : IStateFile
+    {
+        private readonly IStateFile _inner;
+
+        public ToggleableFailingStateFile(IStateFile inner) => _inner = inner;
+
+        public bool FailReads { get; set; }
+        public int ReadCalls { get; private set; }
+
+        public T? Read<T>(string path, Func<string, T?> parse) where T : class
+        {
+            ReadCalls++;
+            if (FailReads)
+            {
+                throw new IOException("Simulated store read outage");
+            }
+
+            return _inner.Read(path, parse);
+        }
+
+        public void Write(string path, string contents) => _inner.Write(path, contents);
+    }
+
+    [Fact]
+    public async Task StoreOutageNextRunAtHonorsSafetyNetWhilePreservingStaleTimers()
+    {
+        var stateFile = new ToggleableFailingStateFile(PlainStateFile.Instance) { FailReads = true };
+        var service = new IncompleteRecordingService(
+            _host,
+            _log,
+            stateFile,
+            () => _clock.UtcNow,
+            StorePath,
+            () => _settings);
+
+        await service.RunAsync(CancellationToken.None);
+        Assert.Equal(1, stateFile.ReadCalls);
+        Assert.Equal(_clock.UtcNow + IncompleteRecordingRules.SafetyNetInterval, service.NextRunAt());
+
+        // A stale-timer mark during the outage must not collapse NextRunAt() back to Now and hammer Read().
+        service.MarkScheduleChanged();
+        Assert.Equal(_clock.UtcNow + IncompleteRecordingRules.SafetyNetInterval, service.NextRunAt());
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        await service.RunAsync(CancellationToken.None);
+        Assert.Equal(1, stateFile.ReadCalls);
+        Assert.True(service.NextRunAt() > _clock.UtcNow);
+
+        // Once the retry deadline passes and storage recovers, timers reload and NextRunAt works normally.
+        _clock.Advance(IncompleteRecordingRules.SafetyNetInterval);
+        stateFile.FailReads = false;
+        AddAiring("p1", _clock.UtcNow.AddHours(2));
+        var futureTimer = new ScheduledTimer
+        {
+            TimerId = "t-future",
+            ProgramId = "p1",
+            StartDate = _clock.UtcNow.AddHours(2),
+            EndDate = _clock.UtcNow.AddHours(2).AddMinutes(20),
+            Status = "New",
+        };
+        _host.Timers.Add(futureTimer);
+        await service.RunAsync(CancellationToken.None);
+        Assert.Equal(2, stateFile.ReadCalls);
+        Assert.Equal(_clock.UtcNow + IncompleteRecordingRules.SafetyNetInterval, service.NextRunAt());
+    }
+
+    [Fact]
+    public async Task StoreOutageRetainsCompletedAndActiveRecordingsUntilRecovery()
+    {
+        var stateFile = new ToggleableFailingStateFile(PlainStateFile.Instance) { FailReads = true };
+        var service = new IncompleteRecordingService(
+            _host,
+            _log,
+            stateFile,
+            () => _clock.UtcNow,
+            StorePath,
+            () => _settings);
+
+        var timer = new ScheduledTimer
+        {
+            TimerId = "t-outage",
+            ProgramId = "p1",
+            StartDate = Start,
+            EndDate = Start.AddMinutes(20),
+            Status = "New",
+        };
+        _host.Timers.Add(timer);
+        var recordedItem = _host.AddItem("/rec/outage.ts");
+
+        // Recording starts, writes 10 incomplete minutes, stops, and leaves Timers all while Load() fails.
+        _clock.UtcNow = Start;
+        while (_clock.UtcNow <= timer.EndDate)
+        {
+            var minute = (_clock.UtcNow - Start).TotalMinutes;
+            if (minute < 10 && !_host.ActivePaths.ContainsKey(timer.TimerId))
+            {
+                _host.StartRecording(timer, recordedItem.Path!, 3, 7);
+            }
+            else if (minute >= 10 && _host.ActivePaths.ContainsKey(timer.TimerId))
+            {
+                _host.StopRecording(timer);
+            }
+
+            _host.Write();
+            await service.RunAsync(CancellationToken.None);
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _host.Timers.Clear();
+
+        // Storage recovers past SafetyNetInterval: outage snapshot is reconciled and judged incomplete.
+        _clock.Advance(IncompleteRecordingRules.SafetyNetInterval);
+        stateFile.FailReads = false;
+        await service.RunAsync(CancellationToken.None);
+
+        var store = ReadStore();
+        Assert.Single(store.Records);
+        Assert.Contains(IncompleteRecordingRules.Tag, recordedItem.Tags);
+    }
+
+    [Fact]
+    public async Task StoreOutageQueuesLibraryEventsAndDismissesAutomaticRequestOnTagRemoval()
+    {
+        _settings.AutoRecordComplete = true;
+        var item = _host.AddItem("/rec/a.ts");
+        await RecordShow(writtenMinutes: 10);
+
+        var stateFile = new ToggleableFailingStateFile(PlainStateFile.Instance) { FailReads = true };
+        var outageService = new IncompleteRecordingService(
+            _host,
+            _log,
+            stateFile,
+            () => _clock.UtcNow,
+            StorePath,
+            () => _settings);
+
+        // Remove the incomplete tag while initial Load() is unavailable.
+        item.Tags = Array.Empty<string>();
+        await outageService.OnItemUpdatedAsync(item, CancellationToken.None);
+
+        // Storage recovers on RunAsync: queued tag-removal replays, dismisses record AND automatic request,
+        // so adding a later airing no longer schedules a recovery timer.
+        stateFile.FailReads = false;
+        AddAiring("p2", _clock.UtcNow.AddDays(1));
+        await outageService.RunAsync(CancellationToken.None);
+
+        var store = ReadStore();
+        Assert.True(Assert.Single(store.Records).Dismissed);
+        Assert.Equal(CompleteShowingState.Dismissed, Assert.Single(store.Requests).State);
+        Assert.Empty(_host.Scheduled);
+    }
+
+    [Fact]
+    public async Task StoreOutagePropagatesUnavailableFromMutationMethods()
+    {
+        var futureProgram = AddAiring("p-future", _clock.UtcNow.AddHours(3));
+        var stateFile = new ToggleableFailingStateFile(PlainStateFile.Instance) { FailReads = true };
+        var service = new IncompleteRecordingService(
+            _host,
+            _log,
+            stateFile,
+            () => _clock.UtcNow,
+            StorePath,
+            () => _settings);
+
+        var (req, refusal) = await service.RequestCompleteShowingAsync(futureProgram.Id, User, CancellationToken.None);
+        Assert.Null(req);
+        Assert.Equal(CompleteShowingRefusal.Unavailable, refusal);
+
+        Assert.Equal(
+            StoreMutationOutcome.Unavailable,
+            await service.DismissWithOutcomeAsync(Guid.NewGuid(), User, CancellationToken.None));
+
+        Assert.Equal(
+            StoreMutationOutcome.Unavailable,
+            await service.ScheduleSuggestedShowingWithOutcomeAsync(
+                futureProgram.Id,
+                SuggestedShowing.FromProgram(futureProgram),
+                User,
+                CancellationToken.None));
+
+        // Genuine domain misses still report NotFound / Rejected when store is healthy.
+        stateFile.FailReads = false;
+        var (missingReq, missingRefusal) = await service.RequestCompleteShowingAsync(Guid.NewGuid().ToString("N"), User, CancellationToken.None);
+        Assert.Null(missingReq);
+        Assert.Equal(CompleteShowingRefusal.NotFound, missingRefusal);
+        Assert.Equal(
+            StoreMutationOutcome.Rejected,
+            await service.DismissWithOutcomeAsync(Guid.NewGuid(), User, CancellationToken.None));
+    }
 }
