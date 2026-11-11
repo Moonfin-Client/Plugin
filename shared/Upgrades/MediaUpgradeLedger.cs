@@ -98,6 +98,7 @@ public sealed class MediaUpgradeLedger
     private List<MediaUpgradeRecord>? _records;
     private Dictionary<string, MediaUpgradeRecord>? _byKey;
     private Dictionary<Guid, MediaUpgradeRecord>? _byItemId;
+    private bool _loadAccessErrorLogged;
 
     public MediaUpgradeLedger(string filePath, IStateFile stateFile, IRecordingLog? logger = null)
     {
@@ -113,7 +114,7 @@ public sealed class MediaUpgradeLedger
             lock (_gate)
             {
                 EnsureLoaded();
-                return _records!.Count;
+                return _records?.Count ?? 0;
             }
         }
     }
@@ -197,6 +198,11 @@ public sealed class MediaUpgradeLedger
         lock (_gate)
         {
             EnsureLoaded();
+            if (_records == null)
+            {
+                return;
+            }
+
             var dirtyPersisted = false;
 
             foreach (var candidate in candidates)
@@ -267,6 +273,11 @@ public sealed class MediaUpgradeLedger
         lock (_gate)
         {
             EnsureLoaded();
+            if (_records == null)
+            {
+                return;
+            }
+
             var keys = KeysFor(candidate);
             var existing = FindRecord(candidate.ItemId, keys);
             var dateUtc = NormalizeUtc(candidate.DateCreatedUtc);
@@ -334,6 +345,11 @@ public sealed class MediaUpgradeLedger
         lock (_gate)
         {
             EnsureLoaded();
+            if (_records == null)
+            {
+                return false;
+            }
+
             var keys = KeysFor(candidate);
             if (keys.Count == 0)
             {
@@ -425,7 +441,12 @@ public sealed class MediaUpgradeLedger
         {
             EnsureLoaded();
             var result = new List<(Guid ItemId, DateTime DesiredDateUtc)>();
-            foreach (var record in _records!)
+            if (_records == null)
+            {
+                return result;
+            }
+
+            foreach (var record in _records)
             {
                 if (!record.Upgraded || record.ItemId == Guid.Empty)
                 {
@@ -449,7 +470,7 @@ public sealed class MediaUpgradeLedger
         lock (_gate)
         {
             EnsureLoaded();
-            if (_byItemId!.TryGetValue(itemId, out var record) && record.Upgraded)
+            if (_records != null && _byItemId!.TryGetValue(itemId, out var record) && record.Upgraded)
             {
                 return hideUpgradesEnabled ? record.FirstAddedUtc : record.LatestAddedUtc;
             }
@@ -460,17 +481,25 @@ public sealed class MediaUpgradeLedger
 
     private MediaUpgradeRecord? FindRecord(Guid itemId, List<string> keys)
     {
-        foreach (var key in keys)
+        if (_records == null)
         {
-            if (_byKey!.TryGetValue(key, out var byKeyRecord))
-            {
-                return byKeyRecord;
-            }
+            return null;
         }
 
         if (itemId != Guid.Empty && _byItemId!.TryGetValue(itemId, out var byIdRecord))
         {
             return byIdRecord;
+        }
+
+        foreach (var key in keys)
+        {
+            if (_byKey!.TryGetValue(key, out var byKeyRecord))
+            {
+                if (byKeyRecord.ItemId == itemId || byKeyRecord.RemovedAtUtc.HasValue || byKeyRecord.ItemId == Guid.Empty)
+                {
+                    return byKeyRecord;
+                }
+            }
         }
 
         return null;
@@ -533,9 +562,22 @@ public sealed class MediaUpgradeLedger
             loaded = null;
         }
 
-        if (loaded == null && (parseInvoked || loadError != null || File.Exists(_filePath) || File.Exists(_filePath + ".bak")))
+        if (loadError != null)
         {
-            _logger?.Warn(loadError, "Could not load media upgrade ledger from {Path}; starting with an empty ledger", _filePath);
+            if (!_loadAccessErrorLogged)
+            {
+                _loadAccessErrorLogged = true;
+                _logger?.Warn(loadError, "Could not load media upgrade ledger from {Path} due to an access error; keeping ledger unavailable", _filePath);
+            }
+
+            return;
+        }
+
+        _loadAccessErrorLogged = false;
+
+        if (loaded == null && (parseInvoked || File.Exists(_filePath) || File.Exists(_filePath + ".bak")))
+        {
+            _logger?.Warn(null, "Could not load media upgrade ledger from {Path}; starting with an empty ledger", _filePath);
         }
 
         _records = new List<MediaUpgradeRecord>();
@@ -562,10 +604,15 @@ public sealed class MediaUpgradeLedger
 
     private void Save()
     {
+        if (_records == null)
+        {
+            return;
+        }
+
         try
         {
             var cutoffUtc = DateTime.UtcNow.AddDays(-7);
-            var persisted = _records!
+            var persisted = _records
                 .Where(r => r.Upgraded || (r.RemovedAtUtc.HasValue && r.RemovedAtUtc.Value >= cutoffUtc))
                 .ToList();
 

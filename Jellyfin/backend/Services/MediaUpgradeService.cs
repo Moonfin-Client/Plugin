@@ -67,9 +67,9 @@ public sealed class MediaUpgradeService : IHostedService
                 }
 
                 SeedFromLibrary();
-                if (!stopToken.IsCancellationRequested && _settings.IsAnyHideUpgradesEnabled())
+                if (!stopToken.IsCancellationRequested)
                 {
-                    await ApplyUpgradeDatesAsync(true, stopToken).ConfigureAwait(false);
+                    await _settings.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty, force: true).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (stopToken.IsCancellationRequested)

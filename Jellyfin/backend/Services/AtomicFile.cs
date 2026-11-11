@@ -118,6 +118,12 @@ public static class AtomicFile
             return fromMain;
         }
 
+        if (mainError != null)
+        {
+            accessError = mainError;
+            return null;
+        }
+
         var backup = BackupPath(path);
         if (TryReadAndParse(backup, parse, out var fromBackup, out var backupError))
         {
@@ -126,7 +132,7 @@ public static class AtomicFile
             return fromBackup;
         }
 
-        accessError = mainError ?? backupError;
+        accessError = backupError;
         return null;
     }
 

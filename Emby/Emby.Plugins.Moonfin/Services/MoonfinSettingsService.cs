@@ -1443,10 +1443,15 @@ namespace Emby.Plugins.Moonfin.Services
             return Task.CompletedTask;
         }
 
-        internal Task ScheduleUpgradePreferenceSyncIfNeeded(Guid userId)
+        internal Task ScheduleUpgradePreferenceSyncIfNeeded(Guid userId, bool force = false)
         {
             lock (_upgradeSyncGate)
             {
+                if (force)
+                {
+                    _lastAppliedUpgradeState = -1;
+                }
+
                 if (_upgradeSyncStopping || _upgradePreferenceChanged == null)
                 {
                     return _upgradeSyncWorker;

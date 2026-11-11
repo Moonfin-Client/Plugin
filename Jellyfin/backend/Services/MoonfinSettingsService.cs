@@ -1881,10 +1881,15 @@ public class MoonfinSettingsService : IDisposable
         _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
-    internal Task ScheduleUpgradePreferenceSyncIfNeeded(Guid userId)
+    internal Task ScheduleUpgradePreferenceSyncIfNeeded(Guid userId, bool force = false)
     {
         lock (_upgradeSyncGate)
         {
+            if (force)
+            {
+                _lastAppliedUpgradeState = -1;
+            }
+
             if (_upgradeSyncStopping || _upgradePreferenceChanged == null)
             {
                 return _upgradeSyncWorker;

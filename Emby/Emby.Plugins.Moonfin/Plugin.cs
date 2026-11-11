@@ -103,6 +103,15 @@ namespace Emby.Plugins.Moonfin
             base.UpdateConfiguration(configuration);
             var newUrl = Configuration?.PublicServerUrl;
 
+            try
+            {
+                SettingsService?.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug("Moonfin upgrade preference sync after config save failed: " + ex.Message);
+            }
+
             // Re-watch and re-scan the ROM roots when the game settings change, so a newly picked
             // library's games get artwork without waiting for a library scan or a restart.
             if (!string.Equals(oldGames, GamesSignature(Configuration), StringComparison.Ordinal))

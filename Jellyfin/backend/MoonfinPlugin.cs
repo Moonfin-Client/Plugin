@@ -108,6 +108,14 @@ public class MoonfinPlugin : BasePlugin<PluginConfiguration>, IHasWebPages
         var previousRomm = RommSignature(Configuration);
         base.UpdateConfiguration(configuration);
 
+        try
+        {
+            ServiceProvider?.GetService<MoonfinSettingsService>()?.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
+        }
+        catch (Exception)
+        {
+        }
+
         // Re-provision the Seerr webhook when the public URL changes, so the new URL is
         // pushed to Seerr without waiting for a restart. The provisioning guardrail only
         // overwrites our own webhook.

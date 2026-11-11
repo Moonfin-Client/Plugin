@@ -96,6 +96,12 @@ namespace Emby.Plugins.Moonfin.Services
                 return fromMain;
             }
 
+            if (mainError != null)
+            {
+                accessError = mainError;
+                return null;
+            }
+
             var backup = BackupPath(path);
             T? fromBackup;
             Exception? backupError;
@@ -106,7 +112,7 @@ namespace Emby.Plugins.Moonfin.Services
                 return fromBackup;
             }
 
-            accessError = mainError ?? backupError;
+            accessError = backupError;
             return null;
         }
 

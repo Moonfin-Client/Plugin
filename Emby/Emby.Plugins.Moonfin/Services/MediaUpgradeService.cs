@@ -61,15 +61,15 @@ namespace Emby.Plugins.Moonfin.Services
             _libraryManager.ItemRemoved += OnItemRemoved;
 
             var stopToken = _stopCts.Token;
-            _startupTask = Task.Run(() =>
+            _startupTask = Task.Run(async () =>
             {
                 try
                 {
                     if (stopToken.IsCancellationRequested) return;
                     SeedFromLibrary();
-                    if (!stopToken.IsCancellationRequested && _settings.IsAnyHideUpgradesEnabled())
+                    if (!stopToken.IsCancellationRequested)
                     {
-                        ApplyUpgradeDates(true, stopToken);
+                        await _settings.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty, force: true).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException) when (stopToken.IsCancellationRequested)

@@ -216,6 +216,114 @@ public sealed class RecentRowsSettingsAndUpgradesTests
     }
 
     [Fact]
+    public void ReloadedLedgerRecoversFromBackupWhenPrimaryFileIsMissing()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-ledger-backup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var stateFile = new JellyfinStateFile();
+            var filePath = Path.Combine(tempRoot, "upgrade-dates.json");
+            var ledger = new MediaUpgradeLedger(filePath, stateFile);
+            var originalId = Guid.NewGuid();
+            var replacementId = Guid.NewGuid();
+            var originalDate = new DateTime(2024, 2, 10, 8, 0, 0, DateTimeKind.Utc);
+            var upgradeDate = new DateTime(2026, 7, 1, 14, 0, 0, DateTimeKind.Utc);
+
+            ledger.RecordRemoved(new MediaUpgradeCandidate
+            {
+                ItemId = originalId,
+                IsEpisode = false,
+                TmdbId = "157336",
+                Name = "Interstellar",
+                ProductionYear = 2014,
+                DateCreatedUtc = originalDate
+            });
+
+            ledger.ObserveArrival(
+                new MediaUpgradeCandidate
+                {
+                    ItemId = replacementId,
+                    IsEpisode = false,
+                    TmdbId = "157336",
+                    Name = "Interstellar",
+                    ProductionYear = 2014,
+                    DateCreatedUtc = upgradeDate
+                },
+                hideUpgradesEnabled: true,
+                out _);
+
+            Assert.True(File.Exists(filePath));
+            var backupPath = filePath + ".bak";
+            if (!File.Exists(backupPath))
+            {
+                File.Copy(filePath, backupPath, overwrite: true);
+            }
+            Assert.True(File.Exists(backupPath));
+
+            File.Delete(filePath);
+            Assert.False(File.Exists(filePath));
+
+            var reloaded = new MediaUpgradeLedger(filePath, stateFile);
+            var target = Assert.Single(reloaded.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: true));
+            Assert.Equal(replacementId, target.ItemId);
+            Assert.Equal(originalDate, target.DesiredDateUtc);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void SeparateLiveCopiesSharingProviderIdsRemainDistinctAndNotMarkedAsUpgrades()
+    {
+        var ledger = new MediaUpgradeLedger("upgrade-dates.json", new MemoryStateFile());
+        var movie1Id = Guid.NewGuid();
+        var movie2Id = Guid.NewGuid();
+        var date1 = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var date2 = new DateTime(2024, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        var candidate1 = new MediaUpgradeCandidate
+        {
+            ItemId = movie1Id,
+            IsEpisode = false,
+            TmdbId = "550",
+            Name = "Fight Club",
+            ProductionYear = 1999,
+            DateCreatedUtc = date1
+        };
+
+        var candidate2 = new MediaUpgradeCandidate
+        {
+            ItemId = movie2Id,
+            IsEpisode = false,
+            TmdbId = "550",
+            Name = "Fight Club",
+            ProductionYear = 1999,
+            DateCreatedUtc = date2
+        };
+
+        // 1. First live copy arrives.
+        var upgraded1 = ledger.ObserveArrival(candidate1, hideUpgradesEnabled: true, out var desiredUtc1);
+        Assert.False(upgraded1);
+        Assert.Null(desiredUtc1);
+
+        // 2. Second live copy arrives (different ItemId, both active in library).
+        var upgraded2 = ledger.ObserveArrival(candidate2, hideUpgradesEnabled: true, out var desiredUtc2);
+        Assert.False(upgraded2);
+        Assert.Null(desiredUtc2);
+
+        // Neither copy should be marked upgraded.
+        Assert.Empty(ledger.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: true));
+        Assert.Equal(date1, ledger.EffectiveDateCreated(movie1Id, date1, hideUpgradesEnabled: true));
+        Assert.Equal(date2, ledger.EffectiveDateCreated(movie2Id, date2, hideUpgradesEnabled: true));
+    }
+
+    [Fact]
     public void EnsureLoadedStaysSilentOnMissingFirstRunAndLogsOnceOnFailedRecovery()
     {
         var missingState = new MemoryStateFile();
