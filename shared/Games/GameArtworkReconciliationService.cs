@@ -73,6 +73,7 @@ public sealed partial class GameArtworkReconciliationService
     private Timer? _libraryWatcherDebounce;
     private long _lastWatcherOverflowWarningTicks = long.MinValue / 2;
     private bool _startupRecoveryDone;
+    private List<ArtworkCatalogWorkItem> _pendingRecoveryWork = new();
     private bool _rdbUpdateCheckDone;
     private int _reopenMetadataDeferred;
     private int _nextRemoteQueueVersion;
@@ -516,6 +517,7 @@ public sealed partial class GameArtworkReconciliationService
             }
 
             _startupRecoveryDone = false;
+            _pendingRecoveryWork.Clear();
             _catalog.ResetStartupRecovery();
             _rdbUpdateCheckDone = false;
             stop.Dispose();
@@ -861,21 +863,25 @@ public sealed partial class GameArtworkReconciliationService
             // 20k ROMs), so it only makes sense to pay for once, on the first (startup) pass. Later
             // passes -- now triggered by RefreshLibrary completions instead of a timer -- rely on
             // the ordinary per-candidate state already tracked in the catalog.
-            IReadOnlyList<ArtworkCatalogWorkItem> recovery = Array.Empty<ArtworkCatalogWorkItem>();
             if (!_startupRecoveryDone)
             {
-                recovery = await _catalog.GetStartupRecoveryWorkAsync(cancellationToken).ConfigureAwait(false);
+                var startupWork = await _catalog.GetStartupRecoveryWorkAsync(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
+                if (startupWork.Count > 0)
+                {
+                    _pendingRecoveryWork.AddRange(startupWork);
+                }
 
                 // Latched only after the read succeeds for all libraries. Latching first would let one failed or
                 // cancelled startup pass strand the recoverable jobs until the next process start,
                 // which the timer this replaced used to paper over by simply trying again.
                 _startupRecoveryDone = !_catalog.HasPendingRecovery;
-                if (recovery.Count > 0)
-                {
-                    _logger.LogDebug("Rebuilding {Count} recoverable game-artwork jobs from the catalog during reconciliation", recovery.Count);
-                    await EnqueueRecoveryAsync(recovery, cancellationToken).ConfigureAwait(false);
-                }
+            }
+
+            if (_pendingRecoveryWork.Count > 0)
+            {
+                _logger.LogDebug("Rebuilding {Count} recoverable game-artwork jobs from the catalog during reconciliation", _pendingRecoveryWork.Count);
+                _pendingRecoveryWork = await EnqueueRecoveryAsync(_pendingRecoveryWork, cancellationToken).ConfigureAwait(false);
             }
 
             var runRdbUpdateCheck = !_rdbUpdateCheckDone;
@@ -1276,36 +1282,55 @@ public sealed partial class GameArtworkReconciliationService
         }
     }
 
-    private Task EnqueueRecoveryAsync(IReadOnlyList<ArtworkCatalogWorkItem> recovery, CancellationToken cancellationToken)
+    private Task<List<ArtworkCatalogWorkItem>> EnqueueRecoveryAsync(IReadOnlyList<ArtworkCatalogWorkItem> recovery, CancellationToken cancellationToken)
     {
+        var remaining = new List<ArtworkCatalogWorkItem>();
         foreach (var item in recovery)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (cancellationToken.IsCancellationRequested)
+            {
+                remaining.Add(item);
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(item.Entry.GameId) || !TryParseKind(item.Entry.Key.Role, out var kind))
             {
                 continue;
             }
 
-            var candidate = TryCreateCandidate(item.Entry.Key.LibraryId, item.Entry.GameId, kind);
-            if (candidate == null || !string.Equals(candidate.Key.StorageKey, item.Entry.Key.StorageKey, StringComparison.Ordinal))
+            try
             {
-                continue;
-            }
+                var candidate = TryCreateCandidate(item.Entry.Key.LibraryId, item.Entry.GameId, kind);
+                if (candidate == null || !string.Equals(candidate.Key.StorageKey, item.Entry.Key.StorageKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
 
-            if (item.Stage == ArtworkCatalogWorkStage.DeriveThumbnail &&
-                !string.IsNullOrWhiteSpace(item.Entry.OriginalPath) &&
-                IsManagedArtworkPath(item.Entry.OriginalPath) &&
-                File.Exists(item.Entry.OriginalPath))
-            {
-                QueueThumbnail(candidate with { OriginalPath = item.Entry.OriginalPath }, item.NotBeforeUtc);
+                if (item.Stage == ArtworkCatalogWorkStage.DeriveThumbnail &&
+                    !string.IsNullOrWhiteSpace(item.Entry.OriginalPath) &&
+                    IsManagedArtworkPath(item.Entry.OriginalPath) &&
+                    File.Exists(item.Entry.OriginalPath))
+                {
+                    QueueThumbnail(candidate with { OriginalPath = item.Entry.OriginalPath }, item.NotBeforeUtc);
+                }
+                else if (item.Stage == ArtworkCatalogWorkStage.AcquireOriginal)
+                {
+                    QueueRemote(candidate, ArtworkLane.Bulk, item.NotBeforeUtc);
+                }
             }
-            else if (item.Stage == ArtworkCatalogWorkStage.AcquireOriginal)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                QueueRemote(candidate, ArtworkLane.Bulk, item.NotBeforeUtc);
+                remaining.Add(item);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to enqueue recovery item {StorageKey} for library {LibraryId}; retaining for retry", item.Entry.Key.StorageKey, item.Entry.Key.LibraryId);
+                remaining.Add(item);
             }
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(remaining);
     }
 
     private async Task RemoteWorkerAsync(CancellationToken cancellationToken)

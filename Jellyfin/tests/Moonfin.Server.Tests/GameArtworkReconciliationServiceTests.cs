@@ -700,9 +700,105 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.Contains("remote:" + candidateB.Key.StorageKey, QueuedRemoteIdentities(service));
     }
 
+    [Fact]
+    public async Task Reconciliation_IsolatesRecoveryItemFailureAndRetriesOnLaterPass()
+    {
+        var rootA = Path.Combine(_root, "Games-failing-rec-" + Guid.NewGuid().ToString("N"));
+        var systemA = Path.Combine(rootA, "SNES");
+        Directory.CreateDirectory(systemA);
+        await File.WriteAllBytesAsync(Path.Combine(systemA, "GameA.sfc"), [1, 2, 3]);
+
+        var rootB = Path.Combine(_root, "Games-healthy-rec-" + Guid.NewGuid().ToString("N"));
+        var systemB = Path.Combine(rootB, "SNES");
+        Directory.CreateDirectory(systemB);
+        await File.WriteAllBytesAsync(Path.Combine(systemB, "GameB.sfc"), [4, 5, 6]);
+
+        var libraryIdA = "lib-rec-a-" + Guid.NewGuid().ToString("N");
+        var libraryIdB = "lib-rec-b-" + Guid.NewGuid().ToString("N");
+
+        var catalogDir = Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N"));
+        var catalog = new GameArtworkCatalog(catalogDir);
+
+        var handler = new CountingArtHandler();
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), _root)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration(),
+        };
+        var thumbs = new GameThumbService(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameThumbService>(),
+            rdb,
+            Path.Combine(_root, "thumb-data-" + Guid.NewGuid().ToString("N")));
+
+        var libraryManager = new FakeLibraryManager(
+        [
+            new VirtualFolderInfo { Name = "Games A", ItemId = libraryIdA, Locations = [rootA] },
+            new VirtualFolderInfo { Name = "Games B", ItemId = libraryIdB, Locations = [rootB] },
+        ]);
+        var throwingGames = new ThrowingGamesService(libraryManager, libraryIdA);
+
+        var service = new GameArtworkReconciliationService(
+            throwingGames,
+            thumbs,
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null,
+            watchLibraryFileSystem: false);
+
+        // Turn off failing temporarily to resolve candidates for seeding catalog
+        throwingGames.Fail = false;
+        var gamesA = throwingGames.GetGames(libraryIdA, null);
+        var candidateA = ResolveCandidate(service, libraryIdA, gamesA[0].Id);
+        var gamesB = throwingGames.GetGames(libraryIdB, null);
+        var candidateB = ResolveCandidate(service, libraryIdB, gamesB[0].Id);
+
+        var managedRoot = Path.Combine(_root, "game_thumbs");
+        Directory.CreateDirectory(managedRoot);
+        var artB = Path.Combine(managedRoot, "art-b.png");
+        await File.WriteAllBytesAsync(artB, [1, 2, 3]);
+
+        // Pre-seed recovery item for library A (Pending -> AcquireOriginal)
+        await catalog.GetOrCreateAsync(candidateA.Key, candidateA.SystemId, PreviousProviderVersion, candidateA.GameId);
+
+        // Pre-seed recovery item for library B (OriginalReady -> DeriveThumbnail)
+        await catalog.GetOrCreateAsync(candidateB.Key, candidateB.SystemId, PreviousProviderVersion, candidateB.GameId);
+        await catalog.MarkOriginalReadyAsync(candidateB.Key, candidateB.SystemId, artB);
+
+        await catalog.FlushAsync();
+
+        // Enable storage failure for library A
+        throwingGames.Fail = true;
+
+        // First pass: library A throws during EnqueueRecoveryAsync when TryCreateCandidate calls GetGames
+        await ReconcileAsync(service);
+
+        // Library B's recovery work succeeded and was queued
+        Assert.Contains("thumbnail:" + candidateB.Key.StorageKey, QueuedThumbnailIdentities(service));
+
+        // Library A's recovery item was not queued yet because storage failed
+        Assert.DoesNotContain("remote:" + candidateA.Key.StorageKey, QueuedRemoteIdentities(service));
+
+        // Library A's recovery item was retained in _pendingRecoveryWork
+        var pendingField = typeof(GameArtworkReconciliationService).GetField("_pendingRecoveryWork", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var pendingList = (System.Collections.IList)pendingField.GetValue(service)!;
+        Assert.Single(pendingList);
+
+        // Now restore storage for library A
+        throwingGames.Fail = false;
+
+        // Second pass: retries retained recovery work and succeeds
+        await ReconcileAsync(service);
+
+        // Retained recovery item for library A has now been queued
+        Assert.Contains("remote:" + candidateA.Key.StorageKey, QueuedRemoteIdentities(service));
+        Assert.Empty((System.Collections.IList)pendingField.GetValue(service)!);
+    }
+
     private sealed class ThrowingGamesService : GamesService
     {
         private readonly string _failingLibraryId;
+        public bool Fail { get; set; } = true;
+
         public ThrowingGamesService(FakeLibraryManager libraryManager, string failingLibraryId) : base(libraryManager)
         {
             _failingLibraryId = failingLibraryId;
@@ -710,7 +806,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
 
         public override IReadOnlyList<GameSummary> GetGames(string libraryId, string? systemId)
         {
-            if (libraryId == _failingLibraryId)
+            if (Fail && libraryId == _failingLibraryId)
             {
                 throw new IOException("Storage offline");
             }
