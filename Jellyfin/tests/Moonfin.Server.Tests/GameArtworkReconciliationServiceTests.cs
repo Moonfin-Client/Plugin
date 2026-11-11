@@ -908,14 +908,20 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.True((bool)rdbDoneField.GetValue(service)!);
     }
 
-    [Fact]
-    public async Task Reconciliation_DoesNotClearPendingReopenWhenArcadePlatformHasUnreadyLibrary()
+    [Theory]
+    [InlineData(false)] // Live metadata only (empty persisted catalog metadata)
+    [InlineData(true)]  // Persisted metadata only (live systems unavailable/empty on pass 1)
+    public async Task Reconciliation_DoesNotClearPendingReopenWhenArcadePlatformHasUnreadyLibrary(bool fromPersistedMetadataOnly)
     {
         var rootA = Path.Combine(_root, "Games-unready-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(rootA);
         var systemA = Path.Combine(rootA, "Arcade");
-        Directory.CreateDirectory(systemA);
         var romPathA = Path.Combine(systemA, "gamea.zip");
-        await File.WriteAllBytesAsync(romPathA, [1, 2, 3]);
+        if (!fromPersistedMetadataOnly)
+        {
+            Directory.CreateDirectory(systemA);
+            await File.WriteAllBytesAsync(romPathA, [1, 2, 3]);
+        }
 
         var rootB = Path.Combine(_root, "Games-ready-" + Guid.NewGuid().ToString("N"));
         var systemB = Path.Combine(rootB, "MAME");
@@ -923,43 +929,73 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         var romPathB = Path.Combine(systemB, "gameb.zip");
         await File.WriteAllBytesAsync(romPathB, [4, 5, 6]);
 
+        var systemB2 = Path.Combine(rootB, "SNES");
+        Directory.CreateDirectory(systemB2);
+        var romPathB2 = Path.Combine(systemB2, "gamesnes.sfc");
+        await File.WriteAllBytesAsync(romPathB2, [7, 8, 9]);
+
         var libraryIdA = "lib-unready-" + Guid.NewGuid().ToString("N");
         var libraryIdB = "lib-ready-" + Guid.NewGuid().ToString("N");
 
         var catalogDir = Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N"));
         var catalog = new GameArtworkCatalog(catalogDir);
 
-        // Pre-seed catalog for Library A with Arcade system metadata (core "arcade")
-        var keyA = ArtworkCatalogKey.Create(libraryIdA, "Arcade/gamea.zip", $"{new FileInfo(romPathA).Length:x}-{new FileInfo(romPathA).LastWriteTimeUtc.Ticks:x}", "boxart");
-        await catalog.SynchronizeProjectionAsync(
-            libraryIdA,
-            [new ArtworkCatalogProjectionEntry(keyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
-            "1.0",
-            new ArtworkCatalogSystemMetadata("Arcade", "Arcade", "arcade", 1));
+        var keyA = ArtworkCatalogKey.Create(libraryIdA, "Arcade/gamea.zip", "3-12345", "boxart");
+        if (fromPersistedMetadataOnly)
+        {
+            // Seed catalog with persisted metadata for Library A, but no live files yet
+            await catalog.SynchronizeProjectionAsync(
+                libraryIdA,
+                [new ArtworkCatalogProjectionEntry(keyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
+                "1.0",
+                new ArtworkCatalogSystemMetadata("Arcade", "Arcade", "arcade", 1));
+        }
+        else
+        {
+            // Seed catalog projection without system metadata, isolating live systems
+            var infoA = new FileInfo(romPathA);
+            keyA = ArtworkCatalogKey.Create(libraryIdA, "Arcade/gamea.zip", $"{infoA.Length:x}-{infoA.LastWriteTimeUtc.Ticks:x}", "boxart");
+            await catalog.SynchronizeProjectionAsync(
+                libraryIdA,
+                [new ArtworkCatalogProjectionEntry(keyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
+                "1.0");
+        }
         await catalog.MarkMissingAsync(keyA, "Arcade", "1.0");
 
-        // Seed Library B with Missing MAME artwork that should be reopened by RDB update check
+        // Seed Library B with Missing MAME artwork and Missing SNES artwork
         var keyB = ArtworkCatalogKey.Create(libraryIdB, "MAME/gameb.zip", $"{new FileInfo(romPathB).Length:x}-{new FileInfo(romPathB).LastWriteTimeUtc.Ticks:x}", "boxart");
+        var keyB2 = ArtworkCatalogKey.Create(libraryIdB, "SNES/gamesnes.sfc", $"{new FileInfo(romPathB2).Length:x}-{new FileInfo(romPathB2).LastWriteTimeUtc.Ticks:x}", "boxart");
         await catalog.SynchronizeProjectionAsync(
             libraryIdB,
-            [new ArtworkCatalogProjectionEntry(keyB, "MAME", GamePathResolver.EncodeToken(romPathB))],
+            [
+                new ArtworkCatalogProjectionEntry(keyB, "MAME", GamePathResolver.EncodeToken(romPathB)),
+                new ArtworkCatalogProjectionEntry(keyB2, "SNES", GamePathResolver.EncodeToken(romPathB2)),
+            ],
             "1.0",
             new ArtworkCatalogSystemMetadata("MAME", "MAME", "mame", 1));
         await catalog.MarkMissingAsync(keyB, "MAME", "1.0");
+        await catalog.MarkMissingAsync(keyB2, "SNES", "1.0");
 
-        // Setup RDB store with an update pending reopen for MAME
+        // Setup RDB store with an update pending reopen for MAME and unrelated SNES
         var rdbDir = Path.Combine(_root, "rdb-data-" + Guid.NewGuid().ToString("N"));
         var metaDir = Path.Combine(rdbDir, "gamemeta");
         Directory.CreateDirectory(metaDir);
 
-        const string platform = "MAME";
-        var rdbPath = Path.Combine(metaDir, platform + ".rdb");
-        var sidecarPath = Path.Combine(metaDir, platform + ".rdb.json");
-        await File.WriteAllBytesAsync(rdbPath, [10, 20, 30]);
-
         using var sha = System.Security.Cryptography.SHA256.Create();
-        var digest = GamesCompat.LowerHex(sha.ComputeHash(new byte[] { 10, 20, 30 }));
-        await File.WriteAllTextAsync(sidecarPath, $"{{\"pendingReopenDigest\":\"{digest}\"}}");
+
+        const string platformMame = "MAME";
+        var rdbPathMame = Path.Combine(metaDir, platformMame + ".rdb");
+        var sidecarPathMame = Path.Combine(metaDir, platformMame + ".rdb.json");
+        await File.WriteAllBytesAsync(rdbPathMame, [10, 20, 30]);
+        var digestMame = GamesCompat.LowerHex(sha.ComputeHash(new byte[] { 10, 20, 30 }));
+        await File.WriteAllTextAsync(sidecarPathMame, $"{{\"pendingReopenDigest\":\"{digestMame}\"}}");
+
+        const string platformSnes = "Nintendo - Super Nintendo Entertainment System";
+        var rdbPathSnes = Path.Combine(metaDir, platformSnes + ".rdb");
+        var sidecarPathSnes = Path.Combine(metaDir, platformSnes + ".rdb.json");
+        await File.WriteAllBytesAsync(rdbPathSnes, [40, 50, 60]);
+        var digestSnes = GamesCompat.LowerHex(sha.ComputeHash(new byte[] { 40, 50, 60 }));
+        await File.WriteAllTextAsync(sidecarPathSnes, $"{{\"pendingReopenDigest\":\"{digestSnes}\"}}");
 
         var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), rdbDir)
         {
@@ -987,16 +1023,35 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
             taskManager: null,
             watchLibraryFileSystem: false);
 
-        // First pass: Library A is unready (Arcade), Library B is ready (MAME)
+        // First pass: Library A is unready (Arcade), Library B is ready (MAME and SNES)
         await ReconcileAsync(service);
 
-        // Ready Library B had its missing artwork reopened and queued
+        // Ready Library B had both its missing artworks reopened and queued
         Assert.Contains("remote:" + keyB.StorageKey, QueuedRemoteIdentities(service));
+        Assert.Contains("remote:" + keyB2.StorageKey, QueuedRemoteIdentities(service));
 
-        // Even though Library A's persisted metadata has core "arcade", incomplete platform collection
-        // includes both Arcade and MAME, so ClearRdbPendingReopen for MAME was deferred!
-        var sidecarJson = await File.ReadAllTextAsync(sidecarPath);
-        Assert.Contains(digest, sidecarJson);
+        // The shared MAME marker stays pending
+        var sidecarMameJson = await File.ReadAllTextAsync(sidecarPathMame);
+        Assert.Contains(digestMame, sidecarMameJson);
+
+        // The unrelated SNES marker clears (distinguishes platform collection from unknown-platform fallback)
+        var sidecarSnesJson = await File.ReadAllTextAsync(sidecarPathSnes);
+        Assert.DoesNotContain(digestSnes, sidecarSnesJson);
+
+        // Prepare Library A for becoming ready
+        if (fromPersistedMetadataOnly)
+        {
+            Directory.CreateDirectory(systemA);
+            await File.WriteAllBytesAsync(romPathA, [1, 2, 3]);
+            var infoA = new FileInfo(romPathA);
+            var actualKeyA = ArtworkCatalogKey.Create(libraryIdA, "Arcade/gamea.zip", $"{infoA.Length:x}-{infoA.LastWriteTimeUtc.Ticks:x}", "boxart");
+            await catalog.SynchronizeProjectionAsync(
+                libraryIdA,
+                [new ArtworkCatalogProjectionEntry(actualKeyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
+                "1.0");
+            await catalog.MarkMissingAsync(actualKeyA, "Arcade", "1.0");
+            keyA = actualKeyA;
+        }
 
         // Now Library A becomes ready
         gamesService.IsReady = true;
@@ -1004,9 +1059,139 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         // Second pass: both libraries are ready
         await ReconcileAsync(service);
 
-        // ClearRdbPendingReopen has now executed and cleared the sidecar marker
-        sidecarJson = await File.ReadAllTextAsync(sidecarPath);
-        Assert.DoesNotContain(digest, sidecarJson);
+        // Library A's missing artwork is now reopened and queued
+        Assert.Contains("remote:" + keyA.StorageKey, QueuedRemoteIdentities(service));
+
+        // ClearRdbPendingReopen has now executed and cleared the MAME marker
+        sidecarMameJson = await File.ReadAllTextAsync(sidecarPathMame);
+        Assert.DoesNotContain(digestMame, sidecarMameJson);
+    }
+
+    [Fact]
+    public async Task Reconciliation_DoesNotClearPendingReopenWhenArcadePlatformFailsCandidateCollection()
+    {
+        var rootA = Path.Combine(_root, "Games-failing-" + Guid.NewGuid().ToString("N"));
+        var systemA = Path.Combine(rootA, "Arcade");
+        Directory.CreateDirectory(systemA);
+        var romPathA = Path.Combine(systemA, "gamea.zip");
+        await File.WriteAllBytesAsync(romPathA, [1, 2, 3]);
+
+        var rootB = Path.Combine(_root, "Games-ready-" + Guid.NewGuid().ToString("N"));
+        var systemB = Path.Combine(rootB, "MAME");
+        Directory.CreateDirectory(systemB);
+        var romPathB = Path.Combine(systemB, "gameb.zip");
+        await File.WriteAllBytesAsync(romPathB, [4, 5, 6]);
+
+        var systemB2 = Path.Combine(rootB, "SNES");
+        Directory.CreateDirectory(systemB2);
+        var romPathB2 = Path.Combine(systemB2, "gamesnes.sfc");
+        await File.WriteAllBytesAsync(romPathB2, [7, 8, 9]);
+
+        var libraryIdA = "lib-failing-" + Guid.NewGuid().ToString("N");
+        var libraryIdB = "lib-ready-" + Guid.NewGuid().ToString("N");
+
+        var catalogDir = Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N"));
+        var catalog = new GameArtworkCatalog(catalogDir);
+
+        var keyA = ArtworkCatalogKey.Create(libraryIdA, "Arcade/gamea.zip", $"{new FileInfo(romPathA).Length:x}-{new FileInfo(romPathA).LastWriteTimeUtc.Ticks:x}", "boxart");
+        await catalog.SynchronizeProjectionAsync(
+            libraryIdA,
+            [new ArtworkCatalogProjectionEntry(keyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
+            "1.0",
+            new ArtworkCatalogSystemMetadata("Arcade", "Arcade", "arcade", 1));
+        await catalog.MarkMissingAsync(keyA, "Arcade", "1.0");
+
+        var keyB = ArtworkCatalogKey.Create(libraryIdB, "MAME/gameb.zip", $"{new FileInfo(romPathB).Length:x}-{new FileInfo(romPathB).LastWriteTimeUtc.Ticks:x}", "boxart");
+        var keyB2 = ArtworkCatalogKey.Create(libraryIdB, "SNES/gamesnes.sfc", $"{new FileInfo(romPathB2).Length:x}-{new FileInfo(romPathB2).LastWriteTimeUtc.Ticks:x}", "boxart");
+        await catalog.SynchronizeProjectionAsync(
+            libraryIdB,
+            [
+                new ArtworkCatalogProjectionEntry(keyB, "MAME", GamePathResolver.EncodeToken(romPathB)),
+                new ArtworkCatalogProjectionEntry(keyB2, "SNES", GamePathResolver.EncodeToken(romPathB2)),
+            ],
+            "1.0",
+            new ArtworkCatalogSystemMetadata("MAME", "MAME", "mame", 1));
+        await catalog.MarkMissingAsync(keyB, "MAME", "1.0");
+        await catalog.MarkMissingAsync(keyB2, "SNES", "1.0");
+
+        var rdbDir = Path.Combine(_root, "rdb-data-" + Guid.NewGuid().ToString("N"));
+        var metaDir = Path.Combine(rdbDir, "gamemeta");
+        Directory.CreateDirectory(metaDir);
+
+        using var sha = System.Security.Cryptography.SHA256.Create();
+
+        const string platformMame = "MAME";
+        var rdbPathMame = Path.Combine(metaDir, platformMame + ".rdb");
+        var sidecarPathMame = Path.Combine(metaDir, platformMame + ".rdb.json");
+        await File.WriteAllBytesAsync(rdbPathMame, [10, 20, 30]);
+        var digestMame = GamesCompat.LowerHex(sha.ComputeHash(new byte[] { 10, 20, 30 }));
+        await File.WriteAllTextAsync(sidecarPathMame, $"{{\"pendingReopenDigest\":\"{digestMame}\"}}");
+
+        const string platformSnes = "Nintendo - Super Nintendo Entertainment System";
+        var rdbPathSnes = Path.Combine(metaDir, platformSnes + ".rdb");
+        var sidecarPathSnes = Path.Combine(metaDir, platformSnes + ".rdb.json");
+        await File.WriteAllBytesAsync(rdbPathSnes, [40, 50, 60]);
+        var digestSnes = GamesCompat.LowerHex(sha.ComputeHash(new byte[] { 40, 50, 60 }));
+        await File.WriteAllTextAsync(sidecarPathSnes, $"{{\"pendingReopenDigest\":\"{digestSnes}\"}}");
+
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), rdbDir)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration(),
+        };
+        var handler = new CountingArtHandler();
+        var thumbs = new GameThumbService(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameThumbService>(),
+            rdb,
+            Path.Combine(_root, "thumb-data-" + Guid.NewGuid().ToString("N")));
+
+        var libraryManager = new FakeLibraryManager(
+        [
+            new VirtualFolderInfo { Name = "Games A", ItemId = libraryIdA, Locations = [rootA] },
+            new VirtualFolderInfo { Name = "Games B", ItemId = libraryIdB, Locations = [rootB] },
+        ]);
+        var throwingGames = new ThrowingGamesService(libraryManager, libraryIdA) { Fail = true };
+
+        var service = new GameArtworkReconciliationService(
+            throwingGames,
+            thumbs,
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null,
+            watchLibraryFileSystem: false);
+
+        // First pass: Library A fails candidate collection
+        await ReconcileAsync(service);
+
+        // Ready Library B had both its missing artworks reopened and queued
+        Assert.Contains("remote:" + keyB.StorageKey, QueuedRemoteIdentities(service));
+        Assert.Contains("remote:" + keyB2.StorageKey, QueuedRemoteIdentities(service));
+
+        // Shared MAME marker stays pending because Library A failed candidate collection and its Arcade system includes MAME
+        var sidecarMameJson = await File.ReadAllTextAsync(sidecarPathMame);
+        Assert.Contains(digestMame, sidecarMameJson);
+
+        // Unrelated SNES marker clears (distinguishing incomplete collection from unknown-platform fallback)
+        var sidecarSnesJson = await File.ReadAllTextAsync(sidecarPathSnes);
+        Assert.DoesNotContain(digestSnes, sidecarSnesJson);
+
+        // Library A's missing art was not reopened during the failed pass
+        Assert.DoesNotContain("remote:" + keyA.StorageKey, QueuedRemoteIdentities(service));
+        var entryA = await catalog.GetAsync(keyA);
+        Assert.Equal(ArtworkCatalogState.Missing, entryA!.State);
+
+        // Library A recovers
+        throwingGames.Fail = false;
+
+        // Second pass: reconciliation recovers
+        await ReconcileAsync(service);
+
+        // Library A's missing art now reopens and is queued
+        Assert.Contains("remote:" + keyA.StorageKey, QueuedRemoteIdentities(service));
+
+        // MAME pending reopen marker has now executed and cleared
+        sidecarMameJson = await File.ReadAllTextAsync(sidecarPathMame);
+        Assert.DoesNotContain(digestMame, sidecarMameJson);
     }
 
     internal sealed class UnreadyGamesService : GamesService
