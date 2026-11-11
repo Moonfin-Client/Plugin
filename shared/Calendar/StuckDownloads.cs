@@ -395,13 +395,14 @@ public static class StuckDownloads
                 detail = Text(stalled["errorMessage"]) ?? FirstMessage(stalled);
             }
         }
-        else if (before?.StalledSince != null && !progressed && sizeLeft != null && before.SizeLeft != null)
+        else if (before?.StalledSince != null && !progressed && sizeLeft != null && before.SizeLeft != null && entries.Any(IsDownloading))
         {
             // qBittorrent flips a stalled torrent to downloading whenever a peer connects without
-            // sending anything, so the clock only starts over once bytes actually arrive.
+            // sending anything, so the clock only starts over once bytes actually arrive. A download
+            // the client holds back drops the clock, so the time it spent held doesn't count.
             record.SizeLeft = sizeLeft;
             record.StalledSince = before.StalledSince;
-            if (entries.Any(IsDownloading) && now - before.StalledSince.Value >= stalledThreshold)
+            if (now - before.StalledSince.Value >= stalledThreshold)
             {
                 reason = "no progress for " + Hours(now - before.StalledSince.Value);
             }

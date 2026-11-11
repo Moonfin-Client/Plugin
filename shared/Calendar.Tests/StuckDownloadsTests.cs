@@ -253,6 +253,24 @@ public class StuckDownloadsTests
     }
 
     [Fact]
+    public void TimeTheClientSpendsHoldingADownloadDoesNotCountTowardsTheStall()
+    {
+        JsonObject Stalled() => Movie(state: "downloading", status: "ok", message: null, error: "The download is stalled with no connections", sizeLeft: 500);
+        var paused = Movie(state: "downloading", status: "ok", message: null, sizeLeft: 500);
+        paused["status"] = "paused";
+        var resumed = Movie(state: "downloading", status: "ok", message: null, sizeLeft: 500);
+
+        var first = Scan(new Dictionary<string, StuckDownloadRecord>(), Queue(Stalled()), Queue(), Start);
+        var held = Scan(first.Next, Queue(paused), Queue(), Start.AddHours(1));
+        var back = Scan(held.Next, Queue(resumed), Queue(), Start.AddHours(7));
+        var stalledAgain = Scan(back.Next, Queue(Stalled()), Queue(), Start.AddHours(8));
+
+        Assert.Empty(back.Due);
+        Assert.Empty(stalledAgain.Due);
+        Assert.Equal(Start.AddHours(8), stalledAgain.Next["radarr:abc"].StalledSince);
+    }
+
+    [Fact]
     public void ADownloadThatGetsGoingAgainIsDropped()
     {
         JsonObject Stalled() => Movie(state: "downloading", status: "ok", message: null, error: "The download is stalled with no connections", sizeLeft: 500);
