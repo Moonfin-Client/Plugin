@@ -534,9 +534,10 @@ func stars(rating float64) string {
 }
 
 type rowTitleInfo struct {
-	overview, backdrop, poster, rating string
-	genres                             []string
-	ticks                              int64
+	overview, backdrop, poster, rating, imdb string
+	genres                                   []string
+	ticks                                    int64
+	vote                                     float64
 }
 
 // fillFromTmdb gives titles what TMDB holds for them: the TMDB id of an
@@ -614,8 +615,9 @@ func (s *Server) tmdbTitle(ctx context.Context, key, typ, id, lang string) *rowT
 		return nil
 	}
 	details := titleDetails(d)
-	info := &rowTitleInfo{poster: text(d, "poster_path"), rating: usCertification(d)}
+	info := &rowTitleInfo{poster: text(d, "poster_path"), rating: usCertification(d), imdb: text(d, "imdb_id")}
 	info.overview, _ = details["overview"].(string)
+	info.vote, _ = details["rating"].(float64)
 	info.backdrop, _ = details["backdropPath"].(string)
 	info.genres, _ = details["genres"].([]string)
 	info.ticks, _ = details["runTimeTicks"].(int64)

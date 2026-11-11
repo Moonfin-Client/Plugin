@@ -49,6 +49,11 @@ type Host struct {
 	// AnimeDir keeps the anime markers' caches and log. Empty, or a catalog
 	// that isn't an AnimeCatalog, leaves the markers off.
 	AnimeDir string
+	// SeasonalDir keeps the seasonal row's keywords and suggestions, and
+	// SeasonalRules is shared/Seasonal/seasonal-holidays.json. Either one
+	// empty, or a catalog that isn't a SeasonalCatalog, leaves the row off.
+	SeasonalDir   string
+	SeasonalRules string
 }
 
 var ErrSignedOut = errors.New("caller isn't signed in")
@@ -94,6 +99,7 @@ type Server struct {
 	notify      notifier
 	remindersMu sync.Mutex
 	anime       *animeMarkers
+	seasonal    *seasonalRow
 }
 
 func NewServer(version string, h Host) *Server {
@@ -110,6 +116,7 @@ func NewServer(version string, h Host) *Server {
 	s.notify.on = h.Notify
 	s.smart.helper = h.SmartSearch
 	s.anime = newAnimeMarkers(h.AnimeDir, h.Catalog)
+	s.seasonal = newSeasonalRow(h.SeasonalDir, h.SeasonalRules, h.Catalog)
 	s.routes()
 	if h.SmartSearch != nil {
 		s.scheduleSmartSearch()
@@ -119,6 +126,9 @@ func NewServer(version string, h Host) *Server {
 	}
 	if s.anime != nil {
 		s.scheduleAnimeMarkers()
+	}
+	if s.seasonal != nil {
+		s.scheduleSeasonalKeywords()
 	}
 	return s
 }
@@ -149,6 +159,7 @@ func (s *Server) routes() {
 	s.similarRoutes()
 	s.animeMarkerRoutes()
 	s.gameRoutes()
+	s.seasonalRoutes()
 	if s.pins {
 		s.pinRoutes()
 	}

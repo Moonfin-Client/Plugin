@@ -35,6 +35,7 @@ COPY --from=smartsearch /out/smartsearch /smartsearch
 COPY shared/PosterBadges/flags /flags
 COPY shared/WatchParty/invite.html shared/WatchParty/preview.png /watchparty/
 COPY shared/EmulatorJS/player.html shared/EmulatorJS/moonfin-bridge.js /emulatorjs/
+COPY shared/Seasonal/seasonal-holidays.json /seasonal-holidays.json
 # A named volume takes this folder's owner, so the nonroot user can write it.
 COPY --from=build --chown=65532:65532 /out/config /config
 USER 65532:65532

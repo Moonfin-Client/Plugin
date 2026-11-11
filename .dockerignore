@@ -7,6 +7,7 @@
 !shared/WatchParty/invite.html
 !shared/WatchParty/preview.png
 !shared/EmulatorJS/
+!shared/Seasonal/seasonal-holidays.json
 Go/dist/
 Go/web/moonfin/
 Go/smartsearch/bin/

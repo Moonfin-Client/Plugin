@@ -45,6 +45,9 @@ type Config struct {
 	WatchPartyDir string
 	// EmulatorJSDir holds the retro games player from shared/EmulatorJS.
 	EmulatorJSDir string
+	// SeasonalRules is shared/Seasonal/seasonal-holidays.json. Empty leaves
+	// the seasonal row off.
+	SeasonalRules string
 }
 
 // How long a checked token is trusted before Plex is asked again.
@@ -101,6 +104,8 @@ func New(cfg Config) (*Companion, error) {
 		SeerrPlexLogin: true,
 		Notify:         true,
 		AnimeDir:       filepath.Join(cfg.DataDir, "anime"),
+		SeasonalDir:    filepath.Join(cfg.DataDir, "seasonal"),
+		SeasonalRules:  cfg.SeasonalRules,
 	})
 	c.startWatchParties()
 	return c, nil

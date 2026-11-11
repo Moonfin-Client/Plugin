@@ -7,10 +7,10 @@ name: Moonbase Go
 on:
   push:
     branches: [master]
-    paths: ['Go/**', 'shared/SmartSearch/**', '.github/workflows/moonbase-go.yml']
+    paths: ['Go/**', 'shared/SmartSearch/**', 'shared/Seasonal/seasonal-holidays.json', '.github/workflows/moonbase-go.yml']
   pull_request:
     branches: [master]
-    paths: ['Go/**', 'shared/SmartSearch/**', '.github/workflows/moonbase-go.yml']
+    paths: ['Go/**', 'shared/SmartSearch/**', 'shared/Seasonal/seasonal-holidays.json', '.github/workflows/moonbase-go.yml']
 
 permissions:
   contents: read
