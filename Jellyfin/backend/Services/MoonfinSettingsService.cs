@@ -37,6 +37,10 @@ public class MoonfinSettingsService
         .GetMethod("UpdateConfigurationAsync", [typeof(Guid), typeof(UserConfiguration)]);
 
     internal Func<bool, Task>? UpgradePreferenceChanged { get; set; }
+    private int _userHideUpgradesCache = -1;
+    private int _lastAppliedUpgradeState = -1;
+
+    public void InvalidateHideUpgradesCache() => Volatile.Write(ref _userHideUpgradesCache, -1);
 
     // Resolve and merge reflect over every property on each call, and the profile carries a
     // couple of hundred of them, so the lookup is cached rather than repeated per request.
@@ -423,6 +427,7 @@ public class MoonfinSettingsService
 
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
+            InvalidateHideUpgradesCache();
         }
         finally
         {
@@ -525,6 +530,7 @@ public class MoonfinSettingsService
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
+            InvalidateHideUpgradesCache();
         }
         finally
         {
@@ -1185,6 +1191,7 @@ public class MoonfinSettingsService
                     if (File.Exists(filePath))
                     {
                         AtomicFile.DeleteWithSidecars(filePath);
+                        InvalidateHideUpgradesCache();
                         orphansDeleted++;
                     }
                 }
@@ -1199,6 +1206,7 @@ public class MoonfinSettingsService
             }
         }
 
+        await SyncUpgradePreferenceStateIfNeededAsync(Guid.Empty).ConfigureAwait(false);
         return (usersReset, orphansDeleted);
     }
 
@@ -1231,6 +1239,7 @@ public class MoonfinSettingsService
         {
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
+            InvalidateHideUpgradesCache();
         }
         finally
         {
@@ -1559,11 +1568,14 @@ public class MoonfinSettingsService
             // Takes the backup with it, otherwise a deleted user's settings could come back
             // through recovery.
             AtomicFile.DeleteWithSidecars(filePath);
+            InvalidateHideUpgradesCache();
         }
         finally
         {
             _lock.Release();
         }
+
+        await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
     }
 
     public async Task DeleteProfileAsync(Guid userId, string profileName)
@@ -1586,11 +1598,14 @@ public class MoonfinSettingsService
             settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
+            InvalidateHideUpgradesCache();
         }
         finally
         {
             _lock.Release();
         }
+
+        await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
     }
 
     public bool UserSettingsExist(Guid userId)
@@ -1721,11 +1736,19 @@ public class MoonfinSettingsService
             return true;
         }
 
+        var cached = Volatile.Read(ref _userHideUpgradesCache);
+        if (cached != -1)
+        {
+            return cached == 1;
+        }
+
         if (!Directory.Exists(_dataPath))
         {
+            Volatile.Write(ref _userHideUpgradesCache, 0);
             return false;
         }
 
+        var anyUserEnabled = false;
         foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
         {
             var fileName = Path.GetFileNameWithoutExtension(file);
@@ -1745,11 +1768,13 @@ public class MoonfinSettingsService
                 settings.Desktop?.HideUpgradesInRecentRows == true ||
                 settings.Mobile?.HideUpgradesInRecentRows == true)
             {
-                return true;
+                anyUserEnabled = true;
+                break;
             }
         }
 
-        return false;
+        Volatile.Write(ref _userHideUpgradesCache, anyUserEnabled ? 1 : 0);
+        return anyUserEnabled;
     }
 
     private async Task SyncRecentRowPreferencesAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName)
@@ -1788,22 +1813,33 @@ public class MoonfinSettingsService
             }
         }
 
-        var hideUpgrades = resolved.HideUpgradesInRecentRows
-            ?? settings.Global?.HideUpgradesInRecentRows
-            ?? settings.Tv?.HideUpgradesInRecentRows
-            ?? settings.Desktop?.HideUpgradesInRecentRows
-            ?? settings.Mobile?.HideUpgradesInRecentRows;
+        await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
+    }
 
-        if (hideUpgrades.HasValue && UpgradePreferenceChanged != null)
+    private async Task SyncUpgradePreferenceStateIfNeededAsync(Guid userId)
+    {
+        var callback = UpgradePreferenceChanged;
+        if (callback == null)
         {
-            try
-            {
-                await UpgradePreferenceChanged(hideUpgrades.Value).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
-            }
+            return;
+        }
+
+        var effectiveServerWide = IsAnyHideUpgradesEnabled();
+        var targetState = effectiveServerWide ? 1 : 0;
+        var previousState = Interlocked.Exchange(ref _lastAppliedUpgradeState, targetState);
+        if (previousState == targetState)
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.Run(() => callback(effectiveServerWide)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Interlocked.CompareExchange(ref _lastAppliedUpgradeState, -1, targetState);
+            _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
         }
     }
 }

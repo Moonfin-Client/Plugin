@@ -155,5 +155,46 @@ public sealed class RecentRowsSettingsAndUpgradesTests
         Assert.Equal(newEpisodeId, desiredWhenTurnedOn.ItemId);
         Assert.Equal(firstAdded, desiredWhenTurnedOn.DesiredDateUtc);
     }
+
+    [Fact]
+    public void ReloadedLedgerRestoresPersistedUpgradeRecordsFromStateFile()
+    {
+        var stateFile = new MemoryStateFile();
+        var ledger = new MediaUpgradeLedger("upgrade-dates.json", stateFile);
+        var originalId = Guid.NewGuid();
+        var replacementId = Guid.NewGuid();
+        var originalDate = new DateTime(2024, 2, 10, 8, 0, 0, DateTimeKind.Utc);
+        var upgradeDate = new DateTime(2026, 7, 1, 14, 0, 0, DateTimeKind.Utc);
+
+        ledger.Seed([
+            new MediaUpgradeCandidate
+            {
+                ItemId = originalId,
+                IsEpisode = false,
+                TmdbId = "157336",
+                Name = "Interstellar",
+                ProductionYear = 2014,
+                DateCreatedUtc = originalDate
+            }
+        ]);
+
+        ledger.ObserveArrival(
+            new MediaUpgradeCandidate
+            {
+                ItemId = replacementId,
+                IsEpisode = false,
+                TmdbId = "157336",
+                Name = "Interstellar",
+                ProductionYear = 2014,
+                DateCreatedUtc = upgradeDate
+            },
+            hideUpgradesEnabled: true,
+            out _);
+
+        var reloaded = new MediaUpgradeLedger("upgrade-dates.json", stateFile);
+        var target = Assert.Single(reloaded.GetDesiredDatesForUpgradedItems(hideUpgradesEnabled: true));
+        Assert.Equal(replacementId, target.ItemId);
+        Assert.Equal(originalDate, target.DesiredDateUtc);
+    }
 }
 

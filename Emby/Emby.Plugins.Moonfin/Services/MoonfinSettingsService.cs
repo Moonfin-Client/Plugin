@@ -26,6 +26,10 @@ namespace Emby.Plugins.Moonfin.Services
         private static readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
 
         internal Func<bool, Task>? UpgradePreferenceChanged { get; set; }
+        private int _userHideUpgradesCache = -1;
+        private int _lastAppliedUpgradeState = -1;
+
+        public void InvalidateHideUpgradesCache() => Volatile.Write(ref _userHideUpgradesCache, -1);
 
         // Cached once. GetProperties() is called on the warm settings-resolve path.
         private static readonly System.Reflection.PropertyInfo[] ProfileProps = typeof(MoonfinSettingsProfile).GetProperties();
@@ -380,6 +384,7 @@ namespace Emby.Plugins.Moonfin.Services
 
                 var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
+                InvalidateHideUpgradesCache();
             }
             finally
             {
@@ -443,6 +448,7 @@ namespace Emby.Plugins.Moonfin.Services
 
                 var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, serialized)).ConfigureAwait(false);
+                InvalidateHideUpgradesCache();
             }
             finally
             {
@@ -871,11 +877,12 @@ namespace Emby.Plugins.Moonfin.Services
                 {
                     var fileName = Path.GetFileNameWithoutExtension(filePath);
                     if (!Guid.TryParse(fileName, out var userId) || userSet.Contains(userId)) continue;
-                    try { AtomicFile.DeleteWithSidecars(filePath); orphansDeleted++; }
+                    try { AtomicFile.DeleteWithSidecars(filePath); InvalidateHideUpgradesCache(); orphansDeleted++; }
                     catch (Exception ex) { _logger.ErrorException("Failed to delete orphan settings " + userId, ex); }
                 }
             }
 
+            await SyncUpgradePreferenceStateIfNeededAsync(Guid.Empty).ConfigureAwait(false);
             return (usersAffected, orphansDeleted);
         }
 
@@ -900,6 +907,7 @@ namespace Emby.Plugins.Moonfin.Services
                 var filePath = GetUserSettingsPath(userId);
                 var json = JsonSerializer.Serialize(clean, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
+                InvalidateHideUpgradesCache();
             }
             finally
             {
@@ -927,11 +935,14 @@ namespace Emby.Plugins.Moonfin.Services
                 // Takes the backup with it, otherwise a deleted user's settings could come back
                 // through recovery.
                 AtomicFile.DeleteWithSidecars(filePath);
+                InvalidateHideUpgradesCache();
             }
             finally
             {
                 _lock.Release();
             }
+
+            await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
         }
 
         public async Task DeleteProfileAsync(Guid userId, string profileName)
@@ -948,11 +959,14 @@ namespace Emby.Plugins.Moonfin.Services
                 settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 var json = JsonSerializer.Serialize(settings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
+                InvalidateHideUpgradesCache();
             }
             finally
             {
                 _lock.Release();
             }
+
+            await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
         }
 
         // Settings that only survive as a backup still count as existing.
@@ -1288,11 +1302,19 @@ namespace Emby.Plugins.Moonfin.Services
                 return true;
             }
 
+            var cached = Volatile.Read(ref _userHideUpgradesCache);
+            if (cached != -1)
+            {
+                return cached == 1;
+            }
+
             if (!Directory.Exists(_dataPath))
             {
+                Volatile.Write(ref _userHideUpgradesCache, 0);
                 return false;
             }
 
+            var anyUserEnabled = false;
             foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
             {
                 var fileName = Path.GetFileNameWithoutExtension(file);
@@ -1312,11 +1334,13 @@ namespace Emby.Plugins.Moonfin.Services
                     settings.Desktop?.HideUpgradesInRecentRows == true ||
                     settings.Mobile?.HideUpgradesInRecentRows == true)
                 {
-                    return true;
+                    anyUserEnabled = true;
+                    break;
                 }
             }
 
-            return false;
+            Volatile.Write(ref _userHideUpgradesCache, anyUserEnabled ? 1 : 0);
+            return anyUserEnabled;
         }
 
         private async Task SyncRecentRowPreferencesAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName)
@@ -1350,22 +1374,33 @@ namespace Emby.Plugins.Moonfin.Services
                 }
             }
 
-            var hideUpgrades = resolved.HideUpgradesInRecentRows
-                ?? settings.Global?.HideUpgradesInRecentRows
-                ?? settings.Tv?.HideUpgradesInRecentRows
-                ?? settings.Desktop?.HideUpgradesInRecentRows
-                ?? settings.Mobile?.HideUpgradesInRecentRows;
+            await SyncUpgradePreferenceStateIfNeededAsync(userId).ConfigureAwait(false);
+        }
 
-            if (hideUpgrades.HasValue && UpgradePreferenceChanged != null)
+        private async Task SyncUpgradePreferenceStateIfNeededAsync(Guid userId)
+        {
+            var callback = UpgradePreferenceChanged;
+            if (callback == null)
             {
-                try
-                {
-                    await UpgradePreferenceChanged(hideUpgrades.Value).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Debug("Could not apply upgrade date preference for user " + userId + ": " + ex.Message);
-                }
+                return;
+            }
+
+            var effectiveServerWide = IsAnyHideUpgradesEnabled();
+            var targetState = effectiveServerWide ? 1 : 0;
+            var previousState = Interlocked.Exchange(ref _lastAppliedUpgradeState, targetState);
+            if (previousState == targetState)
+            {
+                return;
+            }
+
+            try
+            {
+                await Task.Run(() => callback(effectiveServerWide)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Interlocked.CompareExchange(ref _lastAppliedUpgradeState, -1, targetState);
+                _logger.Debug("Could not apply upgrade date preference for user " + userId + ": " + ex.Message);
             }
         }
     }

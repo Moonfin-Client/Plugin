@@ -1453,7 +1453,7 @@ public class MoonfinController : ControllerBase
         }
 
         List<Guid> allowedLibraryIds = libraryIds is { Count: > 0 } ? VisibleLibraryIds(libraryIds, queryUser) : [];
-        List<BaseItem> collectionItems = collectionCount > 0 ? GetCollectionItems(collectionIds!, int.MaxValue, queryUser, excludedGenreIds) : [];
+        List<BaseItem> collectionItems = collectionCount > 0 ? GetCollectionItems(collectionIds!, int.MaxValue, queryUser, excludedGenreIds, excludePlayed) : [];
         if (allowedLibraryIds.Count == 0 && collectionItems.Count == 0) return [];
 
         var allItems = new List<BaseItem>();
@@ -1649,7 +1649,7 @@ public class MoonfinController : ControllerBase
     /// Queries items from specified collections/playlists, filtered to Movie/Series.
     /// Collection items are iterated individually, so genre exclusion is applied in-memory.
     /// </summary>
-    private List<BaseItem> GetCollectionItems(List<string> collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null)
+    private List<BaseItem> GetCollectionItems(List<string> collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, bool excludePlayed = false)
     {
         var allItems = new List<BaseItem>();
         var seenIds = new HashSet<Guid>();
@@ -1676,6 +1676,8 @@ public class MoonfinController : ControllerBase
                 IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
                 Limit = linkedIds.Length
             };
+
+            if (excludePlayed) query.IsPlayed = false;
 
             if (!UserReflection.ApplyUser(query, queryUser)) return [];
 

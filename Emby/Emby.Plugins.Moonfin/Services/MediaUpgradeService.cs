@@ -25,6 +25,8 @@ namespace Emby.Plugins.Moonfin.Services
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<Guid, byte> _updating = new ConcurrentDictionary<Guid, byte>();
         private bool _started;
+        private int _hideUpgradesCache = -1;
+        private long _hideUpgradesCachedAtTicks;
 
         public MediaUpgradeService(
             ILibraryManager libraryManager,
@@ -97,8 +99,25 @@ namespace Emby.Plugins.Moonfin.Services
 
         private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled)
         {
+            Volatile.Write(ref _hideUpgradesCache, hideUpgradesEnabled ? 1 : 0);
+            Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             ApplyUpgradeDates(hideUpgradesEnabled);
             return Task.CompletedTask;
+        }
+
+        private bool GetHideUpgradesCached()
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var cached = Volatile.Read(ref _hideUpgradesCache);
+            if (cached != -1 && now - Interlocked.Read(ref _hideUpgradesCachedAtTicks) < 30_000)
+            {
+                return cached == 1;
+            }
+
+            var enabled = _settings.IsAnyHideUpgradesEnabled();
+            Volatile.Write(ref _hideUpgradesCache, enabled ? 1 : 0);
+            Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, now);
+            return enabled;
         }
 
         internal void SeedFromLibrary()
@@ -206,7 +225,7 @@ namespace Emby.Plugins.Moonfin.Services
                     return;
                 }
 
-                var hideUpgrades = _settings.IsAnyHideUpgradesEnabled();
+                var hideUpgrades = GetHideUpgradesCached();
                 if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc) && desiredUtc.HasValue)
                 {
                     UpdateItemDate(item, desiredUtc.Value);

@@ -23,6 +23,8 @@ public sealed class MediaUpgradeService : IHostedService
     private readonly MediaUpgradeLedger _ledger;
     private readonly ILogger<MediaUpgradeService> _logger;
     private readonly ConcurrentDictionary<Guid, byte> _updating = new();
+    private int _hideUpgradesCache = -1;
+    private long _hideUpgradesCachedAtTicks;
 
     public MediaUpgradeService(
         ILibraryManager libraryManager,
@@ -100,8 +102,27 @@ public sealed class MediaUpgradeService : IHostedService
         }
     }
 
-    private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled) =>
-        ApplyUpgradeDatesAsync(hideUpgradesEnabled, CancellationToken.None);
+    private Task OnUpgradePreferenceChangedAsync(bool hideUpgradesEnabled)
+    {
+        Volatile.Write(ref _hideUpgradesCache, hideUpgradesEnabled ? 1 : 0);
+        Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, Environment.TickCount64);
+        return ApplyUpgradeDatesAsync(hideUpgradesEnabled, CancellationToken.None);
+    }
+
+    private bool GetHideUpgradesCached()
+    {
+        var now = Environment.TickCount64;
+        var cached = Volatile.Read(ref _hideUpgradesCache);
+        if (cached != -1 && now - Interlocked.Read(ref _hideUpgradesCachedAtTicks) < 30_000)
+        {
+            return cached == 1;
+        }
+
+        var enabled = _settings.IsAnyHideUpgradesEnabled();
+        Volatile.Write(ref _hideUpgradesCache, enabled ? 1 : 0);
+        Interlocked.Exchange(ref _hideUpgradesCachedAtTicks, now);
+        return enabled;
+    }
 
     internal void SeedFromLibrary()
     {
@@ -199,7 +220,7 @@ public sealed class MediaUpgradeService : IHostedService
                 return;
             }
 
-            var hideUpgrades = _settings.IsAnyHideUpgradesEnabled();
+            var hideUpgrades = GetHideUpgradesCached();
             if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc) && desiredUtc.HasValue)
             {
                 _ = Task.Run(() => UpdateItemDateAsync(item, desiredUtc.Value, CancellationToken.None));

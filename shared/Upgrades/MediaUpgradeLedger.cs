@@ -515,10 +515,7 @@ public sealed class MediaUpgradeLedger
         List<MediaUpgradeRecord>? loaded = null;
         try
         {
-            if (File.Exists(_filePath))
-            {
-                loaded = _stateFile.Read(_filePath, json => JsonSerializer.Deserialize<List<MediaUpgradeRecord>>(json, JsonOptions));
-            }
+            loaded = _stateFile.Read(_filePath, json => JsonSerializer.Deserialize<List<MediaUpgradeRecord>>(json, JsonOptions));
         }
         catch
         {
