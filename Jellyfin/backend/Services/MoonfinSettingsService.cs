@@ -195,7 +195,7 @@ public class MoonfinSettingsService : IDisposable
 
             return settings;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
         {
             _logger.LogError(ex, "Error reading settings for user {UserId}", userId);
             return null;
@@ -1776,10 +1776,17 @@ public class MoonfinSettingsService : IDisposable
             var fileName = Path.GetFileNameWithoutExtension(file);
             if (Guid.TryParse(fileName, out var userId))
             {
-                var settings = await GetUserSettingsAsync(userId);
-                if (settings != null)
+                try
                 {
-                    result.Add((userId, settings));
+                    var settings = await GetUserSettingsAsync(userId);
+                    if (settings != null)
+                    {
+                        result.Add((userId, settings));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to read settings for user {UserId} during bulk read", userId);
                 }
             }
         }

@@ -947,7 +947,7 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
             await catalog.SynchronizeProjectionAsync(
                 libraryIdA,
                 [new ArtworkCatalogProjectionEntry(keyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
-                "1.0",
+                CurrentProviderVersion,
                 new ArtworkCatalogSystemMetadata("Arcade", "Arcade", "arcade", 1));
         }
         else
@@ -958,9 +958,9 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
             await catalog.SynchronizeProjectionAsync(
                 libraryIdA,
                 [new ArtworkCatalogProjectionEntry(keyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
-                "1.0");
+                CurrentProviderVersion);
         }
-        await catalog.MarkMissingAsync(keyA, "Arcade", "1.0");
+        await catalog.MarkMissingAsync(keyA, "Arcade", CurrentProviderVersion);
 
         // Seed Library B with Missing MAME artwork and Missing SNES artwork
         var keyB = ArtworkCatalogKey.Create(libraryIdB, "MAME/gameb.zip", $"{new FileInfo(romPathB).Length:x}-{new FileInfo(romPathB).LastWriteTimeUtc.Ticks:x}", "boxart");
@@ -971,10 +971,10 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
                 new ArtworkCatalogProjectionEntry(keyB, "MAME", GamePathResolver.EncodeToken(romPathB)),
                 new ArtworkCatalogProjectionEntry(keyB2, "SNES", GamePathResolver.EncodeToken(romPathB2)),
             ],
-            "1.0",
+            CurrentProviderVersion,
             new ArtworkCatalogSystemMetadata("MAME", "MAME", "mame", 1));
-        await catalog.MarkMissingAsync(keyB, "MAME", "1.0");
-        await catalog.MarkMissingAsync(keyB2, "SNES", "1.0");
+        await catalog.MarkMissingAsync(keyB, "MAME", CurrentProviderVersion);
+        await catalog.MarkMissingAsync(keyB2, "SNES", CurrentProviderVersion);
 
         // Setup RDB store with an update pending reopen for MAME and unrelated SNES
         var rdbDir = Path.Combine(_root, "rdb-data-" + Guid.NewGuid().ToString("N"));
@@ -1048,8 +1048,8 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
             await catalog.SynchronizeProjectionAsync(
                 libraryIdA,
                 [new ArtworkCatalogProjectionEntry(actualKeyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
-                "1.0");
-            await catalog.MarkMissingAsync(actualKeyA, "Arcade", "1.0");
+                CurrentProviderVersion);
+            await catalog.MarkMissingAsync(actualKeyA, "Arcade", CurrentProviderVersion);
             keyA = actualKeyA;
         }
 
@@ -1097,9 +1097,9 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         await catalog.SynchronizeProjectionAsync(
             libraryIdA,
             [new ArtworkCatalogProjectionEntry(keyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
-            "1.0",
+            CurrentProviderVersion,
             new ArtworkCatalogSystemMetadata("Arcade", "Arcade", "arcade", 1));
-        await catalog.MarkMissingAsync(keyA, "Arcade", "1.0");
+        await catalog.MarkMissingAsync(keyA, "Arcade", CurrentProviderVersion);
 
         var keyB = ArtworkCatalogKey.Create(libraryIdB, "MAME/gameb.zip", $"{new FileInfo(romPathB).Length:x}-{new FileInfo(romPathB).LastWriteTimeUtc.Ticks:x}", "boxart");
         var keyB2 = ArtworkCatalogKey.Create(libraryIdB, "SNES/gamesnes.sfc", $"{new FileInfo(romPathB2).Length:x}-{new FileInfo(romPathB2).LastWriteTimeUtc.Ticks:x}", "boxart");
@@ -1109,10 +1109,10 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
                 new ArtworkCatalogProjectionEntry(keyB, "MAME", GamePathResolver.EncodeToken(romPathB)),
                 new ArtworkCatalogProjectionEntry(keyB2, "SNES", GamePathResolver.EncodeToken(romPathB2)),
             ],
-            "1.0",
+            CurrentProviderVersion,
             new ArtworkCatalogSystemMetadata("MAME", "MAME", "mame", 1));
-        await catalog.MarkMissingAsync(keyB, "MAME", "1.0");
-        await catalog.MarkMissingAsync(keyB2, "SNES", "1.0");
+        await catalog.MarkMissingAsync(keyB, "MAME", CurrentProviderVersion);
+        await catalog.MarkMissingAsync(keyB2, "SNES", CurrentProviderVersion);
 
         var rdbDir = Path.Combine(_root, "rdb-data-" + Guid.NewGuid().ToString("N"));
         var metaDir = Path.Combine(rdbDir, "gamemeta");
