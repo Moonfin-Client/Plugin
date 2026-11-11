@@ -396,7 +396,7 @@ public class SeerrProxyController : ControllerBase
                 new { error = "Seerr integration is not enabled" });
         }
 
-        var result = await _sessionService.GetArrQueueAsync(service, titleId, this.IsAdminFromClaims());
+        var result = await _sessionService.GetArrQueueAsync(service, titleId, this.IsAdminFromClaims(), HttpContext.RequestAborted);
         return ArrResult(result);
     }
 
@@ -408,7 +408,7 @@ public class SeerrProxyController : ControllerBase
                 new { error = "Seerr integration is not enabled" });
         }
 
-        var result = await _sessionService.RemoveArrQueueItemAsync(service, id);
+        var result = await _sessionService.RemoveArrQueueItemAsync(service, id, HttpContext.RequestAborted);
         return ArrResult(result);
     }
 

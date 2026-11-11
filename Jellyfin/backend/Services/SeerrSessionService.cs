@@ -1006,7 +1006,7 @@ public class SeerrSessionService
     /// The queue entries for one title on the default Radarr or Sonarr, read through the same Seerr
     /// connection as the calendar. Never cached, since a download's state is what's being asked.
     /// </summary>
-    public async Task<SeerrProxyResponse> GetArrQueueAsync(string service, string? titleId, bool isAdmin)
+    public async Task<SeerrProxyResponse> GetArrQueueAsync(string service, string? titleId, bool isAdmin, CancellationToken cancellationToken = default)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
         var (server, error) = await ResolveArrServerAsync(service, isSonarr);
@@ -1015,11 +1015,11 @@ public class SeerrSessionService
             return QueueError(error!);
         }
 
-        return ToProxyResponse(await ArrQueue.ReadAsync(ArrSender(service, server), isSonarr, titleId, isAdmin));
+        return ToProxyResponse(await ArrQueue.ReadAsync(ArrSender(service, server, cancellationToken), isSonarr, titleId, isAdmin));
     }
 
     /// <summary>Drops a stuck download, blocklists its release and lets the arr grab another.</summary>
-    public async Task<SeerrProxyResponse> RemoveArrQueueItemAsync(string service, int queueId)
+    public async Task<SeerrProxyResponse> RemoveArrQueueItemAsync(string service, int queueId, CancellationToken cancellationToken = default)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
         var (server, error) = await ResolveArrServerAsync(service, isSonarr);
@@ -1029,13 +1029,13 @@ public class SeerrSessionService
         }
 
         _logger.LogInformation("Removing {Service} queue entry {QueueId} and blocklisting its release", service, queueId);
-        return ToProxyResponse(await ArrQueue.RemoveAsync(ArrSender(service, server), isSonarr, queueId));
+        return ToProxyResponse(await ArrQueue.RemoveAsync(ArrSender(service, server, cancellationToken), isSonarr, queueId));
     }
 
-    private ArrSend ArrSender(string service, ArrServerConnection server) =>
+    private ArrSend ArrSender(string service, ArrServerConnection server, CancellationToken cancellationToken) =>
         async (method, pathAndQuery, body) =>
         {
-            var response = await TrySendArrAsync(_httpClientFactory, _logger, service, server.Bases, server.ApiKey, method, pathAndQuery, body);
+            var response = await TrySendArrAsync(_httpClientFactory, _logger, service, server.Bases, server.ApiKey, method, pathAndQuery, body, cancellationToken: cancellationToken);
             return response == null ? ArrAnswer.Unreachable : new ArrAnswer(response.StatusCode, response.Body);
         };
 
@@ -1177,7 +1177,8 @@ public class SeerrSessionService
         HttpMethod method,
         string pathAndQuery,
         byte[]? jsonBody,
-        Func<string, Task<IPAddress[]>>? resolveHost = null)
+        Func<string, Task<IPAddress[]>>? resolveHost = null,
+        CancellationToken cancellationToken = default)
     {
         Exception? lastError = null;
         for (var i = 0; i < bases.Count; i++)
@@ -1206,8 +1207,8 @@ public class SeerrSessionService
                     request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
                 }
 
-                using var arrResponse = await client.SendAsync(request);
-                var arrBody = await arrResponse.Content.ReadAsByteArrayAsync();
+                using var arrResponse = await client.SendAsync(request, cancellationToken);
+                var arrBody = await arrResponse.Content.ReadAsByteArrayAsync(cancellationToken);
                 return new SeerrProxyResponse
                 {
                     StatusCode = (int)arrResponse.StatusCode,
@@ -1215,7 +1216,7 @@ public class SeerrSessionService
                     ContentType = arrResponse.Content.Headers.ContentType?.ToString() ?? "application/json"
                 };
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 logger.LogDebug(ex, "Could not reach {Service} at {BaseUrl}", service, baseUrl);
                 lastError = ex;

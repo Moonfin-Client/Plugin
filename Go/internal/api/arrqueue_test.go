@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 
@@ -233,6 +234,10 @@ func TestArrQueueRemovalBlocklistsAndSearchesAgain(t *testing.T) {
 	if code != 200 || len(body["removed"].([]any)) != 1 || body["removed"].([]any)[0] != 7.0 {
 		t.Fatalf("removal = %d %v", code, body)
 	}
+	// The fake answers 404 to any other path, which removal accepts, so the exact delete is checked.
+	if want := "DELETE /api/v3/queue/7?removeFromClient=true&blocklist=true&skipRedownload=false"; !slices.Contains(arr.seen(), want) {
+		t.Fatalf("missing %q in %v", want, arr.seen())
+	}
 }
 
 func TestArrQueueSeasonPackGoesAsOneBulkRemoval(t *testing.T) {
@@ -249,6 +254,9 @@ func TestArrQueueSeasonPackGoesAsOneBulkRemoval(t *testing.T) {
 	arr.mu.Unlock()
 	if got != `{"ids":[10,11,13]}` {
 		t.Fatalf("bulk body = %s", got)
+	}
+	if want := "DELETE /api/v3/queue/bulk?removeFromClient=true&blocklist=true&skipRedownload=false"; !slices.Contains(arr.seen(), want) {
+		t.Fatalf("missing %q in %v", want, arr.seen())
 	}
 }
 
