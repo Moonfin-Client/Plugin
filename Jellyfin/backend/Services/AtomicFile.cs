@@ -121,7 +121,7 @@ public static class AtomicFile
         var backup = BackupPath(path);
         if (TryReadAndParse(backup, parse, out var fromBackup, out var backupError))
         {
-            accessError = null;
+            accessError = mainError;
             if (mainError == null)
             {
                 TryPromoteBackup(path, backup);

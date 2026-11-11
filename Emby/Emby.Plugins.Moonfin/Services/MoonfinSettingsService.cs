@@ -195,8 +195,12 @@ namespace Emby.Plugins.Moonfin.Services
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
-                if (settings == null) return;
+                var (settings, accessError) = await Task.Run(() =>
+                {
+                    var s = ReadSettingsWithRecovery(filePath, out var err);
+                    return (s, err);
+                }).ConfigureAwait(false);
+                if (accessError != null || settings == null) return;
 
                 if (settings.HiddenContentBaselines != null &&
                     settings.HiddenContentBaselines.TryGetValue(name, out var known) &&

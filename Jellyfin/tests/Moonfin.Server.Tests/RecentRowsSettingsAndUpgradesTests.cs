@@ -379,6 +379,52 @@ public sealed class RecentRowsSettingsAndUpgradesTests
     }
 
     [Fact]
+    public void ReadWithRecoveryAndStateFilePreserveAccessErrorWhenPrimaryFailsEvenIfBackupSucceeds()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-atomic-access-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var path = Path.Combine(tempRoot, "upgrade-dates.json");
+            var backupPath = AtomicFile.BackupPath(path);
+            File.WriteAllText(path, "[{\"ItemType\":\"Movie\",\"Name\":\"New Movie\"}]");
+            File.WriteAllText(backupPath, "[{\"ItemType\":\"Movie\",\"Name\":\"Old Movie\"}]");
+
+            using (var lockStream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                // Primary has access error, but backup is readable
+                var recovered = AtomicFile.ReadWithRecovery<string>(path, s => s, out var accessError);
+                Assert.Equal("[{\"ItemType\":\"Movie\",\"Name\":\"Old Movie\"}]", recovered);
+                Assert.NotNull(accessError);
+                Assert.IsAssignableFrom<IOException>(accessError);
+
+                // Two-argument overload returns the backup
+                Assert.Equal("[{\"ItemType\":\"Movie\",\"Name\":\"Old Movie\"}]", AtomicFile.ReadWithRecovery<string>(path, s => s));
+
+                // State file adapter must reject that access error and throw
+                var stateFile = new JellyfinStateFile();
+                Assert.ThrowsAny<IOException>(() => stateFile.Read<List<MediaUpgradeRecord>>(path, json => new List<MediaUpgradeRecord>()));
+
+                // MediaUpgradeLedger keeps ledger unavailable (Count is 0, warning logged)
+                var log = new CapturingRecordingLog();
+                var ledger = new MediaUpgradeLedger(path, stateFile, log);
+                Assert.Equal(0, ledger.Count);
+                Assert.Single(log.Warnings);
+            }
+
+            // Primary file was not overwritten by backup
+            Assert.Contains("New Movie", File.ReadAllText(path));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task OverlappingSavesReapplyFinalPreferenceAndStopCancelsWorker()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-upgrade-sync-" + Guid.NewGuid().ToString("N"));

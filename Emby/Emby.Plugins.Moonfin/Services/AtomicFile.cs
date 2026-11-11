@@ -101,7 +101,7 @@ namespace Emby.Plugins.Moonfin.Services
             Exception? backupError;
             if (TryReadAndParse(backup, parse, out fromBackup, out backupError))
             {
-                accessError = null;
+                accessError = mainError;
                 if (mainError == null)
                 {
                     TryPromoteBackup(path, backup);

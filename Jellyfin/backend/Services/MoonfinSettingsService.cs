@@ -223,8 +223,8 @@ public class MoonfinSettingsService : IDisposable
         await _lock.WaitAsync();
         try
         {
-            var settings = ReadSettingsWithRecovery(filePath);
-            if (settings == null)
+            var settings = ReadSettingsWithRecovery(filePath, out var accessError);
+            if (accessError != null || settings == null)
             {
                 return;
             }

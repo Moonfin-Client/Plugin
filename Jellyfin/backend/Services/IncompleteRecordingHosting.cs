@@ -58,7 +58,7 @@ internal sealed class JellyfinStateFile : IStateFile
         where T : class
     {
         var result = AtomicFile.ReadWithRecovery(path, parse, out var accessError);
-        if (result == null && accessError != null)
+        if (accessError != null)
         {
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(accessError).Throw();
         }
