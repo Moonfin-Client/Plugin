@@ -262,12 +262,34 @@ public class StuckDownloadsTests
 
         var first = Scan(new Dictionary<string, StuckDownloadRecord>(), Queue(Stalled()), Queue(), Start);
         var held = Scan(first.Next, Queue(paused), Queue(), Start.AddHours(1));
-        var back = Scan(held.Next, Queue(resumed), Queue(), Start.AddHours(7));
+        var stillHeld = Scan(held.Next, Queue(paused), Queue(), Start.AddHours(4));
+        var back = Scan(stillHeld.Next, Queue(resumed), Queue(), Start.AddHours(7));
         var stalledAgain = Scan(back.Next, Queue(Stalled()), Queue(), Start.AddHours(8));
+        var late = Scan(stalledAgain.Next, Queue(resumed), Queue(), Start.AddHours(12));
 
+        Assert.Empty(held.Due);
+        Assert.Empty(stillHeld.Due);
+        Assert.Equal(Start, stillHeld.Next["radarr:abc"].StalledSince);
         Assert.Empty(back.Due);
         Assert.Empty(stalledAgain.Due);
-        Assert.Equal(Start.AddHours(8), stalledAgain.Next["radarr:abc"].StalledSince);
+        Assert.Equal(Start.AddHours(6), stalledAgain.Next["radarr:abc"].StalledSince);
+        Assert.Equal("Big Buck Bunny is stuck: no progress for 6 hours", StuckDownloads.Body(Assert.Single(late.Due), redact: false));
+    }
+
+    [Fact]
+    public void WhoWasAlreadyToldIsKeptWhileTheDownloadIsHeldOrMovingAgain()
+    {
+        var paused = Movie(state: "downloading", status: "ok", message: null, sizeLeft: 500);
+        paused["status"] = "paused";
+        var moving = Movie(state: "downloading", status: "ok", message: null, sizeLeft: 100);
+        StuckDownloadRecord PartlyTold() => new StuckDownloadRecord { StalledSince = Start, SizeLeft = 500, Told = new List<Guid> { Admin } };
+
+        var held = Scan(new Dictionary<string, StuckDownloadRecord> { ["radarr:abc"] = PartlyTold() }, Queue(paused), Queue(), Start.AddHours(7));
+        var going = Scan(new Dictionary<string, StuckDownloadRecord> { ["radarr:abc"] = PartlyTold() }, Queue(moving), Queue(), Start.AddHours(7));
+
+        Assert.Equal(new[] { Admin }, held.Next["radarr:abc"].Told);
+        Assert.Equal(new[] { Admin }, going.Next["radarr:abc"].Told);
+        Assert.Empty(going.Due);
     }
 
     [Fact]

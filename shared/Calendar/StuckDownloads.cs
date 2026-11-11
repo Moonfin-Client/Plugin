@@ -27,6 +27,10 @@ public sealed class StuckDownloadRecord
     [JsonPropertyName("sizeLeft")]
     public long? SizeLeft { get; set; }
 
+    /// <summary>When the client was first seen holding a stalled download back, so that time isn't counted.</summary>
+    [JsonPropertyName("heldSince")]
+    public DateTime? HeldSince { get; set; }
+
     [JsonPropertyName("notifiedAt")]
     public DateTime? NotifiedAt { get; set; }
 
@@ -388,7 +392,7 @@ public static class StuckDownloads
         else if (entries.FirstOrDefault(IsStalled) is JsonObject stalled)
         {
             record.SizeLeft = sizeLeft;
-            record.StalledSince = !progressed && before?.StalledSince != null ? before.StalledSince : now;
+            record.StalledSince = !progressed && before?.StalledSince != null ? Resumed(before, now) : now;
             if (before?.StalledSince != null && now - record.StalledSince.Value >= stalledThreshold)
             {
                 reason = "no progress for " + Hours(now - record.StalledSince.Value);
@@ -398,17 +402,23 @@ public static class StuckDownloads
         else if (before?.StalledSince != null && !progressed && sizeLeft != null && before.SizeLeft != null && entries.Any(IsDownloading))
         {
             // qBittorrent flips a stalled torrent to downloading whenever a peer connects without
-            // sending anything, so the clock only starts over once bytes actually arrive. A download
-            // the client holds back drops the clock, so the time it spent held doesn't count.
+            // sending anything, so the clock only starts over once bytes actually arrive.
             record.SizeLeft = sizeLeft;
-            record.StalledSince = before.StalledSince;
-            if (now - before.StalledSince.Value >= stalledThreshold)
+            record.StalledSince = Resumed(before, now);
+            if (now - record.StalledSince.Value >= stalledThreshold)
             {
-                reason = "no progress for " + Hours(now - before.StalledSince.Value);
+                reason = "no progress for " + Hours(now - record.StalledSince.Value);
             }
         }
+        else if (before?.StalledSince != null && entries.Any(IsHeld))
+        {
+            // The client is holding a stalled download back, so its clock waits until it resumes.
+            record.SizeLeft = before.SizeLeft;
+            record.StalledSince = before.StalledSince;
+            record.HeldSince = before.HeldSince ?? now;
+        }
 
-        if (record.StuckSince == null && record.StalledSince == null && record.NotifiedAt == null) return (null, null);
+        if (record.StuckSince == null && record.StalledSince == null && record.NotifiedAt == null && record.Told == null) return (null, null);
         if (reason == null || record.NotifiedAt != null) return (record, null);
 
         return (record, Describe(key, entries, isSonarr, reason, detail));
@@ -440,12 +450,22 @@ public static class StuckDownloads
     }
 
     // Still downloading, and not held back by the client.
-    private static bool IsDownloading(JsonObject entry)
+    private static bool IsDownloading(JsonObject entry) => InDownloadState(entry) && !HasHeldStatus(entry);
+
+    // Still downloading as far as the arr knows, but the client is holding it back.
+    private static bool IsHeld(JsonObject entry) => InDownloadState(entry) && HasHeldStatus(entry);
+
+    private static bool InDownloadState(JsonObject entry)
     {
         var state = Text(entry["trackedDownloadState"]);
-        if (state != null && !string.Equals(state, "downloading", StringComparison.OrdinalIgnoreCase)) return false;
-        return !(Text(entry["status"]) is string status && HeldStatuses.Contains(status));
+        return state == null || string.Equals(state, "downloading", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool HasHeldStatus(JsonObject entry) => Text(entry["status"]) is string status && HeldStatuses.Contains(status);
+
+    // The stalled clock, moved on past any time the client spent holding the download back.
+    private static DateTime Resumed(StuckDownloadRecord before, DateTime now) =>
+        before.HeldSince is DateTime held ? before.StalledSince!.Value + (now - held) : before.StalledSince!.Value;
 
     private static StuckDownload Describe(string key, List<JsonObject> entries, bool isSonarr, string reason, string? detail)
     {
