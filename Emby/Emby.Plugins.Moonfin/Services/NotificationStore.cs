@@ -149,7 +149,15 @@ namespace Emby.Plugins.Moonfin.Services
                 var fileName = Path.GetFileNameWithoutExtension(path);
                 if (!Guid.TryParse(fileName, out var userId)) continue;
 
-                var prefs = GetPrefs(userId);
+                NotificationPrefs prefs;
+                try
+                {
+                    prefs = GetPrefs(userId);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    continue;
+                }
                 if (predicate(prefs)) yield return userId;
             }
         }

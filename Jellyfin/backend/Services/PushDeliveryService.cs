@@ -37,7 +37,16 @@ public class PushDeliveryService
     {
         var config = MoonfinPlugin.Instance?.Configuration;
         var pushEnabled = config?.PushEnabled == true;
-        var devices = config == null ? new List<DeviceRegistration>() : _store.GetUserDevices(userId);
+        List<DeviceRegistration> devices;
+        try
+        {
+            devices = config == null ? new List<DeviceRegistration>() : _store.GetUserDevices(userId);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogDebug(ex, "Push device lookup failed for user {UserId}", userId);
+            return;
+        }
 
         _logger.LogInformation("push: user {UserId} enabled={Enabled} devices={Count}",
             userId, pushEnabled, devices.Count);

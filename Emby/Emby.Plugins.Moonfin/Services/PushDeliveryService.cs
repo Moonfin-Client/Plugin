@@ -40,7 +40,16 @@ namespace Emby.Plugins.Moonfin.Services
             if (config == null || !config.PushEnabled)
                 return;
 
-            var devices = _store.GetUserDevices(userId);
+            List<DeviceRegistration> devices;
+            try
+            {
+                devices = _store.GetUserDevices(userId);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.Debug("Push device lookup failed for user " + userId + ": " + ex.Message);
+                return;
+            }
             if (devices.Count == 0)
                 return;
 

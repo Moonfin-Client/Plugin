@@ -28,26 +28,28 @@ namespace Emby.Plugins.Moonfin.Services
 
         public PinRecord? Load(Guid userId)
         {
+            PinRecord? record;
+            Exception? accessError;
             try
             {
-                Exception? accessError;
-                var record = AtomicFile.ReadWithRecovery(
+                record = AtomicFile.ReadWithRecovery(
                     PathFor(userId),
                     json => JsonSerializer.Deserialize<PinRecord>(json, JsonOptions),
                     out accessError);
-                if (accessError != null)
-                {
-                    _logger.ErrorException("Failed to read the PIN record for user " + userId.ToString("N") + " due to access error", accessError);
-                    throw accessError;
-                }
-
-                return record;
             }
-            catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
+            catch (Exception ex)
             {
                 _logger.ErrorException("Failed to read the PIN record for user " + userId.ToString("N"), ex);
                 return null;
             }
+
+            if (accessError != null)
+            {
+                _logger.ErrorException("Failed to read the PIN record for user " + userId.ToString("N") + " due to access error", accessError);
+                throw accessError;
+            }
+
+            return record;
         }
 
         public void Save(Guid userId, PinRecord record)

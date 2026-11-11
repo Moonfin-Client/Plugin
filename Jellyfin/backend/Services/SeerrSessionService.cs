@@ -1512,11 +1512,20 @@ public class SeerrSessionService
         await _lock.WaitAsync();
         try
         {
-            return AtomicFile.ReadWithRecovery(
+            var session = AtomicFile.ReadWithRecovery(
                 path,
-                json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions));
+                json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions),
+                out var accessError);
+
+            if (accessError != null)
+            {
+                _logger.LogWarning(accessError, "Failed to load Seerr session for user {UserId} due to access error", userId);
+                throw accessError;
+            }
+
+            return session;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
         {
             _logger.LogError(ex, "Failed to load Seerr session for user {UserId}", userId);
             return null;

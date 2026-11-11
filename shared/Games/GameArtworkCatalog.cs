@@ -1342,12 +1342,20 @@ public sealed class GameArtworkCatalog
         }
     }
 
-    private Task<LibraryCatalog> GetLibraryAsync(string normalizedLibraryId, CancellationToken cancellationToken)
+    private async Task<LibraryCatalog> GetLibraryAsync(string normalizedLibraryId, CancellationToken cancellationToken)
     {
         var lazy = _libraries.GetOrAdd(
             normalizedLibraryId,
             id => new Lazy<Task<LibraryCatalog>>(() => LoadLibraryAsync(id), LazyThreadSafetyMode.ExecutionAndPublication));
-        return lazy.Value.WaitAsync(cancellationToken);
+        try
+        {
+            return await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            _libraries.TryRemove(normalizedLibraryId, out _);
+            throw;
+        }
     }
 
     private Task<LibraryCatalog> LoadLibraryAsync(string libraryId)
@@ -1382,7 +1390,13 @@ public sealed class GameArtworkCatalog
             {
                 return null;
             }
-        });
+        }, out var accessError);
+
+        if (accessError != null)
+        {
+            throw accessError;
+        }
+
         return document;
     }
 

@@ -26,25 +26,28 @@ public class FilePinStore : IPinStore
 
     public PinRecord? Load(Guid userId)
     {
+        PinRecord? record;
+        Exception? accessError;
         try
         {
-            var record = AtomicFile.ReadWithRecovery(
+            record = AtomicFile.ReadWithRecovery(
                 PathFor(userId),
                 json => JsonSerializer.Deserialize<PinRecord>(json, JsonOptions),
-                out var accessError);
-            if (accessError != null)
-            {
-                _logger.LogError(accessError, "Failed to read the PIN record for user {UserId} due to access error", userId);
-                throw accessError;
-            }
-
-            return record;
+                out accessError);
         }
-        catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to read the PIN record for user {UserId}", userId);
             return null;
         }
+
+        if (accessError != null)
+        {
+            _logger.LogError(accessError, "Failed to read the PIN record for user {UserId} due to access error", userId);
+            throw accessError;
+        }
+
+        return record;
     }
 
     public void Save(Guid userId, PinRecord record)

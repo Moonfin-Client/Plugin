@@ -179,7 +179,16 @@ public class NotificationStore
                 continue;
             }
 
-            var prefs = GetPrefs(userId);
+            NotificationPrefs prefs;
+            try
+            {
+                prefs = GetPrefs(userId);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
             if (predicate(prefs))
             {
                 yield return userId;

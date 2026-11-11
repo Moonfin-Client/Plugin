@@ -1035,11 +1035,25 @@ namespace Emby.Plugins.Moonfin.Services
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                return await Task.Run(() => AtomicFile.ReadWithRecovery(
-                    path,
-                    json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions))).ConfigureAwait(false);
+                var (session, accessError) = await Task.Run(() =>
+                {
+                    Exception? err;
+                    var s = AtomicFile.ReadWithRecovery(
+                        path,
+                        json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions),
+                        out err);
+                    return (s, err);
+                }).ConfigureAwait(false);
+
+                if (accessError != null)
+                {
+                    _logger.ErrorException("Failed to load Seerr session for user " + userId + " due to access error", accessError);
+                    throw accessError;
+                }
+
+                return session;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
             {
                 _logger.ErrorException("Failed to load Seerr session for user " + userId, ex);
                 return null;

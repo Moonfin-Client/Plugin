@@ -95,7 +95,18 @@ public class WatchPartyHost : IWatchPartyHost
             foreach (var user in _directory.Users())
             {
                 var id = user.Id.ToString("N");
-                if (skip.Contains(id) || !await WantsAlerts(user.Id).ConfigureAwait(false) || FindItem(id, announcement.ContentId) == null)
+                bool wantsAlerts;
+                try
+                {
+                    wantsAlerts = await WantsAlerts(user.Id).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogDebug(ex, "Could not load settings for user {UserId} during watch party announce", user.Id);
+                    continue;
+                }
+
+                if (skip.Contains(id) || !wantsAlerts || FindItem(id, announcement.ContentId) == null)
                 {
                     continue;
                 }
