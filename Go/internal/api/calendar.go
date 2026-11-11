@@ -3,9 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -194,23 +192,7 @@ func dayOr(v string, def time.Time) time.Time {
 
 // fetchArr reads an arr's calendar. Its errors never hold the URL or the key.
 func (s *Server) fetchArr(ctx context.Context, arr arrServer, q url.Values) ([]byte, int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, arr.URL+"/api/v3/calendar?"+q.Encode(), nil)
-	if err != nil {
-		return nil, 0, errors.New("bad server URL")
-	}
-	req.Header.Set("X-Api-Key", arr.APIKey)
-	req.Header.Set("Accept", "application/json")
-	resp, err := s.ext.http.Do(req)
-	if err != nil {
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			err = ue.Err
-		}
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	return body, resp.StatusCode, err
+	return s.arrRequest(ctx, arr, http.MethodGet, "api/v3/calendar?"+q.Encode(), nil)
 }
 
 // arrIDs are a calendar title's ids: an episode's series on Sonarr, the

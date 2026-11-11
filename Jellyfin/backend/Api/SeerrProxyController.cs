@@ -353,6 +353,82 @@ public class SeerrProxyController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public Task<IActionResult> GetSonarrCalendar() => GetArrCalendar("sonarr");
 
+    /// <summary>
+    /// A movie's Radarr download queue with why each download is stuck, looked up by its TMDB id.
+    /// An empty list with inArr true means Radarr has the movie and nothing is downloading.
+    /// </summary>
+    [HttpGet("Radarr/Queue")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public Task<IActionResult> GetRadarrQueue([FromQuery] string? tmdbId) => GetArrQueue("radarr", tmdbId);
+
+    /// <summary>
+    /// A series' Sonarr download queue with why each download is stuck, looked up by its TVDB id.
+    /// An empty list with inArr true means Sonarr has the series and nothing is downloading.
+    /// </summary>
+    [HttpGet("Sonarr/Queue")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public Task<IActionResult> GetSonarrQueue([FromQuery] string? tvdbId) => GetArrQueue("sonarr", tvdbId);
+
+    /// <summary>
+    /// Drops a stuck Radarr download, blocklists the release and lets Radarr grab another one.
+    /// </summary>
+    [HttpDelete("Radarr/Queue/{id:int}")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public Task<IActionResult> RemoveRadarrQueueItem(int id) => RemoveArrQueueItem("radarr", id);
+
+    /// <summary>
+    /// Drops a stuck Sonarr download, blocklists the release and lets Sonarr grab another one. Every
+    /// episode of a season pack goes with it, since they share one download.
+    /// </summary>
+    [HttpDelete("Sonarr/Queue/{id:int}")]
+    [Authorize(Policy = "RequiresElevation")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public Task<IActionResult> RemoveSonarrQueueItem(int id) => RemoveArrQueueItem("sonarr", id);
+
+    private async Task<IActionResult> GetArrQueue(string service, string? titleId)
+    {
+        if (!SeerrConfigured())
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = "Seerr integration is not enabled" });
+        }
+
+        var result = await _sessionService.GetArrQueueAsync(service, titleId, this.IsAdminFromClaims(), HttpContext.RequestAborted);
+        return ArrResult(result);
+    }
+
+    private async Task<IActionResult> RemoveArrQueueItem(string service, int id)
+    {
+        if (!SeerrConfigured())
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = "Seerr integration is not enabled" });
+        }
+
+        var result = await _sessionService.RemoveArrQueueItemAsync(service, id, HttpContext.RequestAborted);
+        return ArrResult(result);
+    }
+
+    private static bool SeerrConfigured()
+    {
+        var config = MoonfinPlugin.Instance?.Configuration;
+        return config?.SeerrEnabled == true && !string.IsNullOrEmpty(config.GetEffectiveSeerrUrl());
+    }
+
+    private IActionResult ArrResult(SeerrProxyResponse result)
+    {
+        if (result.Body == null)
+        {
+            return StatusCode(result.StatusCode);
+        }
+
+        Response.StatusCode = result.StatusCode;
+        return File(result.Body, string.IsNullOrWhiteSpace(result.ContentType) ? MediaTypeNames.Application.Json : result.ContentType);
+    }
+
     private async Task<IActionResult> GetArrCalendar(string service)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
