@@ -208,6 +208,7 @@ public sealed class GameArtworkCatalog
     private readonly ILogger<GameArtworkCatalog>? _logger;
     private readonly TimeSpan _persistDebounce;
     private readonly ConcurrentDictionary<string, Lazy<Task<LibraryCatalog>>> _libraries = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _recoveredLibraries = new(StringComparer.OrdinalIgnoreCase);
     private long _documentWrites;
     private long _previewScanLookups;
     private readonly JsonSerializerOptions _jsonOptions = new()
@@ -215,6 +216,16 @@ public sealed class GameArtworkCatalog
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
     };
+
+    /// <summary>Whether one or more library catalogs failed startup recovery and need a later retry.</summary>
+    public bool HasPendingRecovery { get; private set; }
+
+    /// <summary>Resets startup recovery tracking (e.g. across service stop/restart cycles).</summary>
+    public void ResetStartupRecovery()
+    {
+        _recoveredLibraries.Clear();
+        HasPendingRecovery = false;
+    }
 
     /// <summary>Creates a catalog below a plugin-owned directory (normally game-artwork-catalog).</summary>
     public GameArtworkCatalog(string root, ILogger<GameArtworkCatalog>? logger = null, TimeSpan? persistDebounce = null)
@@ -1277,15 +1288,33 @@ public sealed class GameArtworkCatalog
 
         if (!Directory.Exists(_root))
         {
+            HasPendingRecovery = false;
             return Array.Empty<ArtworkCatalogWorkItem>();
         }
 
         var files = Directory.EnumerateFiles(_root, "*.json", SearchOption.TopDirectoryOnly).ToArray();
         var work = new List<ArtworkCatalogWorkItem>();
+        var hasFailures = false;
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var document = ReadDocument(file);
+
+            var libraryKey = Path.GetFileNameWithoutExtension(file);
+            if (_recoveredLibraries.ContainsKey(libraryKey))
+            {
+                continue;
+            }
+
+            var document = ReadDocument(file, out var accessError);
+            if (document == null && accessError != null)
+            {
+                hasFailures = true;
+                _logger?.LogWarning(accessError, "Failed to read game artwork catalog {Path} during startup recovery", file);
+                continue;
+            }
+
+            _recoveredLibraries.TryAdd(libraryKey, 0);
+
             if (document == null)
             {
                 continue;
@@ -1306,6 +1335,7 @@ public sealed class GameArtworkCatalog
             }
         }
 
+        HasPendingRecovery = hasFailures;
         return work;
     }
 
@@ -1351,9 +1381,9 @@ public sealed class GameArtworkCatalog
         {
             return await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch
+        catch when (lazy.Value.IsFaulted)
         {
-            _libraries.TryRemove(normalizedLibraryId, out _);
+            _libraries.TryRemove(new KeyValuePair<string, Lazy<Task<LibraryCatalog>>>(normalizedLibraryId, lazy));
             throw;
         }
     }
@@ -1361,14 +1391,20 @@ public sealed class GameArtworkCatalog
     private Task<LibraryCatalog> LoadLibraryAsync(string libraryId)
     {
         var path = GetLibraryPath(libraryId);
-        var document = ReadDocument(path) ?? new PersistedCatalog { LibraryId = libraryId };
+        var document = ReadDocument(path, out var accessError);
+        if (document == null && accessError != null)
+        {
+            throw accessError;
+        }
+
+        document ??= new PersistedCatalog { LibraryId = libraryId };
         document.LibraryId = NormalizeLibraryId(document.LibraryId);
         document.Entries ??= new Dictionary<string, ArtworkCatalogEntry>(StringComparer.Ordinal);
         document.Systems ??= new Dictionary<string, PersistedSystem>(StringComparer.OrdinalIgnoreCase);
         return Task.FromResult(new LibraryCatalog(path, document));
     }
 
-    private PersistedCatalog? ReadDocument(string path)
+    private PersistedCatalog? ReadDocument(string path, out Exception? accessError)
     {
         var document = GameFiles.ReadWithRecovery(path, json =>
         {
@@ -1390,12 +1426,7 @@ public sealed class GameArtworkCatalog
             {
                 return null;
             }
-        }, out var accessError);
-
-        if (accessError != null)
-        {
-            throw accessError;
-        }
+        }, out accessError);
 
         return document;
     }
@@ -1548,14 +1579,24 @@ public sealed class GameArtworkCatalog
     /// <summary>Writes every loaded library whose in-memory state is ahead of its file.</summary>
     private async Task FlushLoadedLibrariesAsync(CancellationToken cancellationToken)
     {
-        foreach (var lazy in _libraries.Values.ToArray())
+        foreach (var pair in _libraries.ToArray())
         {
-            if (!lazy.IsValueCreated)
+            if (!pair.Value.IsValueCreated)
             {
                 continue;
             }
 
-            var library = await lazy.Value.ConfigureAwait(false);
+            LibraryCatalog library;
+            try
+            {
+                library = await pair.Value.Value.ConfigureAwait(false);
+            }
+            catch when (pair.Value.Value.IsFaulted)
+            {
+                _libraries.TryRemove(pair);
+                continue;
+            }
+
             await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {

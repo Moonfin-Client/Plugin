@@ -456,12 +456,17 @@ namespace Emby.Plugins.Moonfin.Services
 
         public async Task ClearSessionAsync(Guid userId)
         {
+            var path = GetSessionPath(userId);
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
                 // Takes the backup with it, otherwise recovery could bring back a session the
                 // user just signed out of.
-                AtomicFile.DeleteWithSidecars(GetSessionPath(userId));
+                AtomicFile.DeleteWithSidecars(path);
+                if (File.Exists(path) || File.Exists(AtomicFile.BackupPath(path)))
+                {
+                    throw new IOException("Failed to delete Seerr session file for user " + userId);
+                }
             }
             finally { _lock.Release(); }
         }
@@ -568,7 +573,17 @@ namespace Emby.Plugins.Moonfin.Services
             if (string.IsNullOrEmpty(seerrUrl))
                 return ErrorResponse(503, "Seerr URL not configured");
 
-            var session = await LoadSessionAsync(userId).ConfigureAwait(false);
+            SeerrSession? session;
+            try
+            {
+                session = await LoadSessionAsync(userId).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.ErrorException("Failed to read Seerr session for user " + userId + " during proxy request: " + path, ex);
+                return ErrorResponse(500, "Cannot access session file");
+            }
+
             if (session == null)
                 return ErrorResponse(401, "Not authenticated with Seerr", "NO_SESSION");
 
@@ -1045,7 +1060,7 @@ namespace Emby.Plugins.Moonfin.Services
                     return (s, err);
                 }).ConfigureAwait(false);
 
-                if (accessError != null)
+                if (session == null && accessError != null)
                 {
                     _logger.ErrorException("Failed to load Seerr session for user " + userId + " due to access error", accessError);
                     throw accessError;

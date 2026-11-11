@@ -516,6 +516,7 @@ public sealed partial class GameArtworkReconciliationService
             }
 
             _startupRecoveryDone = false;
+            _catalog.ResetStartupRecovery();
             _rdbUpdateCheckDone = false;
             stop.Dispose();
             lock (_lifecycleGate)
@@ -866,10 +867,10 @@ public sealed partial class GameArtworkReconciliationService
                 recovery = await _catalog.GetStartupRecoveryWorkAsync(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // Latched only after the read succeeds. Latching first would let one failed or
+                // Latched only after the read succeeds for all libraries. Latching first would let one failed or
                 // cancelled startup pass strand the recoverable jobs until the next process start,
                 // which the timer this replaced used to paper over by simply trying again.
-                _startupRecoveryDone = true;
+                _startupRecoveryDone = !_catalog.HasPendingRecovery;
                 if (recovery.Count > 0)
                 {
                     _logger.LogDebug("Rebuilding {Count} recoverable game-artwork jobs from the catalog during reconciliation", recovery.Count);

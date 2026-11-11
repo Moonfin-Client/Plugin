@@ -803,6 +803,10 @@ public class SeerrSessionService
                 // Takes the backup with it, otherwise recovery could bring back a session the
                 // user just signed out of.
                 AtomicFile.DeleteWithSidecars(path);
+                if (File.Exists(path) || File.Exists(AtomicFile.BackupPath(path)))
+                {
+                    throw new IOException($"Failed to delete Seerr session file for user {userId}");
+                }
                 _logger.LogInformation("Seerr session cleared for user {UserId}", userId);
             }
         }
@@ -843,7 +847,22 @@ public class SeerrSessionService
             };
         }
 
-        var session = await LoadSessionAsync(userId);
+        SeerrSession? session;
+        try
+        {
+            session = await LoadSessionAsync(userId);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(ex, "Failed to read Seerr session for user {UserId} during proxy request: {Path}", userId, path);
+            return new SeerrProxyResponse
+            {
+                StatusCode = 500,
+                Body = JsonSerializer.SerializeToUtf8Bytes(new { error = "Cannot access session file" }),
+                ContentType = "application/json"
+            };
+        }
+
         if (session == null)
         {
             return new SeerrProxyResponse
@@ -1517,7 +1536,7 @@ public class SeerrSessionService
                 json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions),
                 out var accessError);
 
-            if (accessError != null)
+            if (session == null && accessError != null)
             {
                 _logger.LogWarning(accessError, "Failed to load Seerr session for user {UserId} due to access error", userId);
                 throw accessError;

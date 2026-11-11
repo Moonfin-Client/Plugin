@@ -683,6 +683,53 @@ public sealed class GameArtworkCatalogTests : IDisposable
     }
 
     [Fact]
+    public async Task StartupRecovery_IsolatesInaccessibleLibraryAndLeavesPending()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var keyA = ArtworkCatalogKey.Create("library-a", "SNES\\GameA.sfc", "game-a", "boxart");
+        var keyB = ArtworkCatalogKey.Create("library-b", "SNES\\GameB.sfc", "game-b", "boxart");
+        await catalog.GetOrCreateAsync(keyA, "snes", "provider-v1");
+        await catalog.GetOrCreateAsync(keyB, "snes", "provider-v1");
+        await catalog.FlushAsync();
+
+        var pathA = catalog.GetLibraryPath("library-a");
+        var recoveryCatalog = new GameArtworkCatalog(_root);
+
+        using (new FileStream(pathA, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var recovered = await recoveryCatalog.GetStartupRecoveryWorkAsync();
+
+            // Library B was accessible and recovered its pending work
+            Assert.Contains(recovered, item => item.Entry.Key == keyB);
+            Assert.DoesNotContain(recovered, item => item.Entry.Key == keyA);
+            Assert.True(recoveryCatalog.HasPendingRecovery);
+        }
+
+        // Once lock is released, retrying recovery completes library A
+        var retried = await recoveryCatalog.GetStartupRecoveryWorkAsync();
+        Assert.Contains(retried, item => item.Entry.Key == keyA);
+        Assert.False(recoveryCatalog.HasPendingRecovery);
+    }
+
+    [Fact]
+    public async Task GetLibraryAsync_CallerCancellationDoesNotEvictHealthyLoad()
+    {
+        var catalog = new GameArtworkCatalog(_root);
+        var key = Key("cached");
+        await catalog.GetOrCreateAsync(key, "snes", "provider-v1");
+
+        // Cancelled caller token should throw OperationCanceledException
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => catalog.GetAsync(key, cts.Token));
+
+        // Cache was not evicted; entry is still immediately accessible
+        var healthy = await catalog.GetAsync(key);
+        Assert.NotNull(healthy);
+        Assert.Equal(key, healthy!.Key);
+    }
+
+    [Fact]
     public async Task ProjectionAndPrune_KeepCurrentGameIdsAndInvalidateStalePreviewState()
     {
         var catalog = new GameArtworkCatalog(_root);
