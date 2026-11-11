@@ -208,9 +208,6 @@ public sealed class GameArtworkCatalog
     private readonly ILogger<GameArtworkCatalog>? _logger;
     private readonly TimeSpan _persistDebounce;
     private readonly ConcurrentDictionary<string, Lazy<Task<LibraryCatalog>>> _libraries = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, byte> _recoveredLibraries = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _recoveryLock = new();
-    private long _recoveryEpoch;
     private long _documentWrites;
     private long _previewScanLookups;
     private readonly JsonSerializerOptions _jsonOptions = new()
@@ -218,20 +215,6 @@ public sealed class GameArtworkCatalog
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
     };
-
-    /// <summary>Whether one or more library catalogs failed startup recovery and need a later retry.</summary>
-    public bool HasPendingRecovery { get; private set; }
-
-    /// <summary>Resets startup recovery tracking (e.g. across service stop/restart cycles).</summary>
-    public void ResetStartupRecovery()
-    {
-        lock (_recoveryLock)
-        {
-            _recoveryEpoch++;
-            _recoveredLibraries.Clear();
-            HasPendingRecovery = false;
-        }
-    }
 
     /// <summary>Creates a catalog below a plugin-owned directory (normally game-artwork-catalog).</summary>
     public GameArtworkCatalog(string root, ILogger<GameArtworkCatalog>? logger = null, TimeSpan? persistDebounce = null)
@@ -1287,12 +1270,6 @@ public sealed class GameArtworkCatalog
     /// <summary>Returns work that must be rebuilt into worker queues during plugin startup.</summary>
     public async Task<IReadOnlyList<ArtworkCatalogWorkItem>> GetStartupRecoveryWorkAsync(CancellationToken cancellationToken = default)
     {
-        long epoch;
-        lock (_recoveryLock)
-        {
-            epoch = _recoveryEpoch;
-        }
-
         // This reads the files rather than the loaded documents, and the reconciliation service
         // calls it on every pass, not only at startup. Flushing first keeps the file the single
         // source of truth here, so a debounced transition cannot be re-queued as unfinished work.
@@ -1300,73 +1277,32 @@ public sealed class GameArtworkCatalog
 
         if (!Directory.Exists(_root))
         {
-            lock (_recoveryLock)
-            {
-                if (_recoveryEpoch == epoch)
-                {
-                    HasPendingRecovery = false;
-                }
-            }
             return Array.Empty<ArtworkCatalogWorkItem>();
         }
 
         var files = Directory.EnumerateFiles(_root, "*.json", SearchOption.TopDirectoryOnly).ToArray();
         var work = new List<ArtworkCatalogWorkItem>();
-        var completedKeys = new List<string>();
-        var hasFailures = false;
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var libraryKey = Path.GetFileNameWithoutExtension(file);
-            if (_recoveredLibraries.ContainsKey(libraryKey))
+            var document = ReadDocument(file);
+            if (document == null)
             {
                 continue;
             }
 
-            var document = ReadDocument(file, out var accessError);
-            if (document == null && accessError != null)
+            foreach (var entry in document.Entries.Values)
             {
-                hasFailures = true;
-                _logger?.LogWarning(accessError, "Failed to read game artwork catalog {Path} during startup recovery", file);
-                continue;
-            }
-
-            if (document != null)
-            {
-                foreach (var entry in document.Entries.Values)
+                switch (entry.State)
                 {
-                    if (entry == null)
-                    {
-                        continue;
-                    }
-
-                    switch (entry.State)
-                    {
-                        case ArtworkCatalogState.Pending:
-                        case ArtworkCatalogState.Retryable:
-                            work.Add(new ArtworkCatalogWorkItem(entry, ArtworkCatalogWorkStage.AcquireOriginal, entry.RetryAfterUtc));
-                            break;
-                        case ArtworkCatalogState.OriginalReady when string.IsNullOrWhiteSpace(entry.ThumbnailPath):
-                            work.Add(new ArtworkCatalogWorkItem(entry, ArtworkCatalogWorkStage.DeriveThumbnail, entry.RetryAfterUtc));
-                            break;
-                    }
+                    case ArtworkCatalogState.Pending:
+                    case ArtworkCatalogState.Retryable:
+                        work.Add(new ArtworkCatalogWorkItem(entry, ArtworkCatalogWorkStage.AcquireOriginal, entry.RetryAfterUtc));
+                        break;
+                    case ArtworkCatalogState.OriginalReady when string.IsNullOrWhiteSpace(entry.ThumbnailPath):
+                        work.Add(new ArtworkCatalogWorkItem(entry, ArtworkCatalogWorkStage.DeriveThumbnail, entry.RetryAfterUtc));
+                        break;
                 }
-            }
-
-            completedKeys.Add(libraryKey);
-        }
-
-        lock (_recoveryLock)
-        {
-            if (_recoveryEpoch == epoch)
-            {
-                foreach (var key in completedKeys)
-                {
-                    _recoveredLibraries.TryAdd(key, 0);
-                }
-
-                HasPendingRecovery = hasFailures;
             }
         }
 
@@ -1406,50 +1342,25 @@ public sealed class GameArtworkCatalog
         }
     }
 
-    private async Task<LibraryCatalog> GetLibraryAsync(string normalizedLibraryId, CancellationToken cancellationToken)
+    private Task<LibraryCatalog> GetLibraryAsync(string normalizedLibraryId, CancellationToken cancellationToken)
     {
         var lazy = _libraries.GetOrAdd(
             normalizedLibraryId,
             id => new Lazy<Task<LibraryCatalog>>(() => LoadLibraryAsync(id), LazyThreadSafetyMode.ExecutionAndPublication));
-        Task<LibraryCatalog> task;
-        try
-        {
-            task = lazy.Value;
-        }
-        catch
-        {
-            _libraries.TryRemove(new KeyValuePair<string, Lazy<Task<LibraryCatalog>>>(normalizedLibraryId, lazy));
-            throw;
-        }
-
-        try
-        {
-            return await task.WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch when (task.IsFaulted)
-        {
-            _libraries.TryRemove(new KeyValuePair<string, Lazy<Task<LibraryCatalog>>>(normalizedLibraryId, lazy));
-            throw;
-        }
+        return lazy.Value.WaitAsync(cancellationToken);
     }
 
     private Task<LibraryCatalog> LoadLibraryAsync(string libraryId)
     {
         var path = GetLibraryPath(libraryId);
-        var document = ReadDocument(path, out var accessError);
-        if (document == null && accessError != null)
-        {
-            throw accessError;
-        }
-
-        document ??= new PersistedCatalog { LibraryId = libraryId };
+        var document = ReadDocument(path) ?? new PersistedCatalog { LibraryId = libraryId };
         document.LibraryId = NormalizeLibraryId(document.LibraryId);
         document.Entries ??= new Dictionary<string, ArtworkCatalogEntry>(StringComparer.Ordinal);
         document.Systems ??= new Dictionary<string, PersistedSystem>(StringComparer.OrdinalIgnoreCase);
         return Task.FromResult(new LibraryCatalog(path, document));
     }
 
-    private PersistedCatalog? ReadDocument(string path, out Exception? accessError)
+    private PersistedCatalog? ReadDocument(string path)
     {
         var document = GameFiles.ReadWithRecovery(path, json =>
         {
@@ -1471,8 +1382,7 @@ public sealed class GameArtworkCatalog
             {
                 return null;
             }
-        }, out accessError);
-
+        });
         return document;
     }
 
@@ -1488,12 +1398,6 @@ public sealed class GameArtworkCatalog
         foreach (var storageKey in parsed.Entries.Keys.ToArray())
         {
             var entry = parsed.Entries[storageKey];
-            if (entry == null)
-            {
-                parsed.Entries.Remove(storageKey);
-                continue;
-            }
-
             if (string.IsNullOrWhiteSpace(entry.SystemId))
             {
                 continue;
@@ -1630,35 +1534,14 @@ public sealed class GameArtworkCatalog
     /// <summary>Writes every loaded library whose in-memory state is ahead of its file.</summary>
     private async Task FlushLoadedLibrariesAsync(CancellationToken cancellationToken)
     {
-        foreach (var pair in _libraries.ToArray())
+        foreach (var lazy in _libraries.Values.ToArray())
         {
-            if (!pair.Value.IsValueCreated)
+            if (!lazy.IsValueCreated)
             {
                 continue;
             }
 
-            LibraryCatalog library;
-            Task<LibraryCatalog> task;
-            try
-            {
-                task = pair.Value.Value;
-            }
-            catch
-            {
-                _libraries.TryRemove(pair);
-                continue;
-            }
-
-            try
-            {
-                library = await task.ConfigureAwait(false);
-            }
-            catch when (task.IsFaulted)
-            {
-                _libraries.TryRemove(pair);
-                continue;
-            }
-
+            var library = await lazy.Value.ConfigureAwait(false);
             await library.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {

@@ -4,7 +4,6 @@ using MediaBrowser.Controller.QuickConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using Moonfin.Calendar;
 using Moonfin.Seerr;
 using Moonfin.Server.Helpers;
@@ -36,7 +35,6 @@ public class SeerrProxyController : ControllerBase
     private readonly TmdbRatingService _ratings;
     private readonly MoonfinSettingsService _settings;
     private readonly ILibraryManager _libraryManager;
-    private readonly ILogger<SeerrProxyController> _logger;
 
     public SeerrProxyController(
         SeerrSessionService sessionService,
@@ -44,8 +42,7 @@ public class SeerrProxyController : ControllerBase
         ServerRatingLimitService ratingLimits,
         TmdbRatingService ratings,
         MoonfinSettingsService settings,
-        ILibraryManager libraryManager,
-        ILogger<SeerrProxyController> logger)
+        ILibraryManager libraryManager)
     {
         _sessionService = sessionService;
         _provisioning = provisioning;
@@ -53,7 +50,6 @@ public class SeerrProxyController : ControllerBase
         _ratings = ratings;
         _settings = settings;
         _libraryManager = libraryManager;
-        _logger = logger;
     }
 
     /// <summary>
@@ -289,15 +285,7 @@ public class SeerrProxyController : ControllerBase
             HttpMethod.Post,
             "auth/logout");
 
-        try
-        {
-            await _sessionService.ClearSessionAsync(userId.Value);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to clear Seerr session for user {UserId} during logout", userId.Value);
-            return StatusCode(500, new { success = false, error = $"Failed to clear Seerr session during logout: {ex.Message}" });
-        }
+        await _sessionService.ClearSessionAsync(userId.Value);
 
         return Ok(new { success = true, message = "Logged out from Seerr" });
     }

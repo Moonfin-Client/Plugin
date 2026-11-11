@@ -55,24 +55,16 @@ namespace Emby.Plugins.Moonfin.Services
             _lock.Wait();
             try
             {
-                Exception? accessError;
                 var prefs = AtomicFile.ReadWithRecovery(
                     path,
-                    json => JsonSerializer.Deserialize<NotificationPrefs>(json, _jsonOptions),
-                    out accessError);
-                if (accessError != null)
-                {
-                    _logger.ErrorException("Failed to read notification prefs for user " + userId + " due to access error", accessError);
-                    throw accessError;
-                }
-
+                    json => JsonSerializer.Deserialize<NotificationPrefs>(json, _jsonOptions));
                 if (prefs != null)
                 {
                     prefs.JellyfinUserId = userId;
                     return prefs;
                 }
             }
-            catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
+            catch (Exception ex)
             {
                 _logger.ErrorException("Failed to read notification prefs for user " + userId, ex);
             }
@@ -149,15 +141,7 @@ namespace Emby.Plugins.Moonfin.Services
                 var fileName = Path.GetFileNameWithoutExtension(path);
                 if (!Guid.TryParse(fileName, out var userId)) continue;
 
-                NotificationPrefs prefs;
-                try
-                {
-                    prefs = GetPrefs(userId);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    continue;
-                }
+                var prefs = GetPrefs(userId);
                 if (predicate(prefs)) yield return userId;
             }
         }

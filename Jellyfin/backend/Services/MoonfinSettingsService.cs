@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
@@ -16,7 +17,7 @@ namespace Moonfin.Server.Services;
 /// <summary>
 /// Service for managing Moonfin user settings storage with device profile support.
 /// </summary>
-public class MoonfinSettingsService : IDisposable
+public class MoonfinSettingsService
 {
     private readonly string _dataPath;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -25,6 +26,8 @@ public class MoonfinSettingsService : IDisposable
     private static readonly SemaphoreSlim _lock = new(1, 1);
     private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<Channel<string>, byte>> _sseChannels = new();
 
+    // Hide Watched follows the account's own HidePlayedInLatest, which lives behind
+    // IUserManager, so it's reached by reflection the way the rest of the plugin reaches users.
     private static readonly Type? UserManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
 
     private static readonly MethodInfo? GetUserDtoMethod = UserManagerType?
@@ -36,69 +39,14 @@ public class MoonfinSettingsService : IDisposable
     private static readonly MethodInfo? UpdateConfigurationMethod = UserManagerType?
         .GetMethod("UpdateConfigurationAsync", [typeof(Guid), typeof(UserConfiguration)]);
 
-    private Func<bool, CancellationToken, Task>? _upgradePreferenceChanged;
-    private int _userHideUpgradesCache = -1;
-    private int _lastKnownUserHideUpgrades = -1;
-    private int _hideUpgradesCacheGeneration;
-    private readonly object _hideUpgradesCacheGate = new();
-    private int _lastAppliedUpgradeState = -1;
-    private int _upgradeScanRetryCount;
-    private bool _upgradeScanRetryScheduled;
-    private bool _upgradeWorkerRunning;
-    private bool _upgradeSyncStopping;
-    private bool _upgradeSyncPending;
-    private CancellationTokenSource _upgradeSyncCts = new();
-    private readonly object _upgradeSyncGate = new();
-    private Task _upgradeSyncWorker = Task.CompletedTask;
+    // Counts each user's saves, so a HidePlayedInLatest write from an older save never lands
+    // after a newer one.
     private readonly ConcurrentDictionary<Guid, long> _userSaveGenerations = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _nativeSyncLocks = new();
 
-    internal Action? BeforePublishHideUpgradesScanForTesting { get; set; }
+    internal Func<string, MoonfinSettingsProfile?>? AdminDefaultsOverrideForTesting { get; set; }
+
     internal Action<Guid>? BeforeNativeSyncWaitForTesting { get; set; }
-
-    internal bool IsUpgradeWorkerRunningForTesting
-    {
-        get
-        {
-            lock (_upgradeSyncGate)
-            {
-                return _upgradeWorkerRunning;
-            }
-        }
-    }
-
-    internal Func<bool, CancellationToken, Task>? UpgradePreferenceChanged
-    {
-        get
-        {
-            lock (_upgradeSyncGate)
-            {
-                return _upgradePreferenceChanged;
-            }
-        }
-        set
-        {
-            lock (_upgradeSyncGate)
-            {
-                _upgradePreferenceChanged = value;
-                if (value != null && _upgradeSyncStopping)
-                {
-                    _upgradeSyncStopping = false;
-                    _upgradeSyncCts.Dispose();
-                    _upgradeSyncCts = new CancellationTokenSource();
-                }
-            }
-        }
-    }
-
-    public void InvalidateHideUpgradesCache()
-    {
-        lock (_hideUpgradesCacheGate)
-        {
-            _hideUpgradesCacheGeneration++;
-            Volatile.Write(ref _userHideUpgradesCache, -1);
-        }
-    }
 
     // Resolve and merge reflect over every property on each call, and the profile carries a
     // couple of hundred of them, so the lookup is cached rather than repeated per request.
@@ -170,15 +118,11 @@ public class MoonfinSettingsService : IDisposable
     /// <summary>
     /// Loads settings, falling back to the backup copy when the file is missing or unreadable.
     /// </summary>
-    private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath) =>
-        ReadSettingsWithRecovery(filePath, out _);
-
-    private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath, out Exception? accessError)
+    private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath)
     {
         return AtomicFile.ReadWithRecovery(
             filePath,
-            json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions),
-            out accessError);
+            json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions));
     }
 
     public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId)
@@ -188,13 +132,7 @@ public class MoonfinSettingsService : IDisposable
         await _lock.WaitAsync();
         try
         {
-            var settings = ReadSettingsWithRecovery(filePath, out var accessError);
-            if (accessError != null)
-            {
-                _logger.LogError(accessError, "Failed to read settings for user {UserId} due to access error", userId);
-                throw accessError;
-            }
-
+            var settings = ReadSettingsWithRecovery(filePath);
             if (settings == null)
             {
                 return null;
@@ -212,7 +150,7 @@ public class MoonfinSettingsService : IDisposable
 
             return settings;
         }
-        catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Error reading settings for user {UserId}", userId);
             return null;
@@ -240,8 +178,8 @@ public class MoonfinSettingsService : IDisposable
         await _lock.WaitAsync();
         try
         {
-            var settings = ReadSettingsWithRecovery(filePath, out var accessError);
-            if (accessError != null || settings == null)
+            var settings = ReadSettingsWithRecovery(filePath);
+            if (settings == null)
             {
                 return;
             }
@@ -443,8 +381,8 @@ public class MoonfinSettingsService : IDisposable
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
-        MoonfinUserSettings? savedSnapshot = null;
-        long? savedGeneration = null;
+        MoonfinUserSettings saved;
+        long saveGeneration;
 
         await _lock.WaitAsync();
         try
@@ -457,12 +395,7 @@ public class MoonfinSettingsService : IDisposable
 
             if (mergeMode == "merge")
             {
-                var existingSettings = ReadSettingsWithRecovery(filePath, out var accessError);
-                if (accessError != null)
-                {
-                    _logger.LogError(accessError, "Failed to read existing settings for user {UserId} due to access error; aborting merge", userId);
-                    throw accessError;
-                }
+                var existingSettings = ReadSettingsWithRecovery(filePath);
 
                 // Migrate v1 if needed
                 if (existingSettings != null && existingSettings.NeedsMigration)
@@ -497,22 +430,18 @@ public class MoonfinSettingsService : IDisposable
                     CustomHomeSectionIds(finalSettings)));
 
             settingsChanged = SettingsDiffer(beforeComparisonJson, finalSettings);
-            savedSnapshot = finalSettings;
 
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
-            savedGeneration = _userSaveGenerations.AddOrUpdate(userId, 1, static (_, prev) => prev + 1);
-            InvalidateHideUpgradesCache();
+            saved = finalSettings;
+            saveGeneration = NextSaveGeneration(userId);
         }
         finally
         {
             _lock.Release();
         }
 
-        if (savedSnapshot != null)
-        {
-            await SyncRecentRowPreferencesAsync(userId, savedSnapshot, null, savedGeneration).ConfigureAwait(false);
-        }
+        await SyncHideWatchedAsync(userId, saved, null, saveGeneration).ConfigureAwait(false);
 
         // A merge that changed nothing is the client echoing state it already
         // holds. Broadcasting it anyway sends the echo straight back and keeps
@@ -533,19 +462,13 @@ public class MoonfinSettingsService : IDisposable
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
-        MoonfinUserSettings? savedSnapshot = null;
-        long? savedGeneration = null;
+        MoonfinUserSettings saved;
+        long saveGeneration;
 
         await _lock.WaitAsync();
         try
         {
-            var settings = ReadSettingsWithRecovery(filePath, out var accessError);
-            if (accessError != null)
-            {
-                _logger.LogError(accessError, "Failed to read existing settings for user {UserId} due to access error; aborting profile save", userId);
-                throw accessError;
-            }
-            settings ??= new MoonfinUserSettings();
+            var settings = ReadSettingsWithRecovery(filePath) ?? new MoonfinUserSettings();
 
             if (settings.NeedsMigration)
             {
@@ -608,22 +531,18 @@ public class MoonfinSettingsService : IDisposable
                     CustomHomeSectionIds(savedProfile)));
 
             settingsChanged = SettingsDiffer(beforeComparisonJson, settings);
-            savedSnapshot = settings;
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
-            savedGeneration = _userSaveGenerations.AddOrUpdate(userId, 1, static (_, prev) => prev + 1);
-            InvalidateHideUpgradesCache();
+            saved = settings;
+            saveGeneration = NextSaveGeneration(userId);
         }
         finally
         {
             _lock.Release();
         }
 
-        if (savedSnapshot != null)
-        {
-            await SyncRecentRowPreferencesAsync(userId, savedSnapshot, profileName, savedGeneration).ConfigureAwait(false);
-        }
+        await SyncHideWatchedAsync(userId, saved, profileName, saveGeneration).ConfigureAwait(false);
 
         // Same echo guard as SaveUserSettingsAsync.
         if (notifySettingsChanged && settingsChanged)
@@ -1247,9 +1166,9 @@ public class MoonfinSettingsService : IDisposable
         {
             try
             {
-                var (writtenSettings, saveGen) = await WriteDefaultsOnlyAsync(userId, push, "admin-reset").ConfigureAwait(false);
+                var (written, saveGeneration) = await WriteDefaultsOnlyAsync(userId, push, "admin-reset");
                 usersReset++;
-                await SyncRecentRowPreferencesAsync(userId, writtenSettings, null, saveGen).ConfigureAwait(false);
+                await SyncHideWatchedAsync(userId, written, null, saveGeneration).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1275,7 +1194,6 @@ public class MoonfinSettingsService : IDisposable
                     if (File.Exists(filePath))
                     {
                         AtomicFile.DeleteWithSidecars(filePath);
-                        InvalidateHideUpgradesCache();
                         orphansDeleted++;
                     }
                 }
@@ -1290,7 +1208,6 @@ public class MoonfinSettingsService : IDisposable
             }
         }
 
-        _ = ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
         return (usersReset, orphansDeleted);
     }
 
@@ -1317,22 +1234,21 @@ public class MoonfinSettingsService : IDisposable
         }
 
         var filePath = GetUserSettingsPath(userId);
-        long saveGen;
+        long saveGeneration;
 
         await _lock.WaitAsync();
         try
         {
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
-            saveGen = _userSaveGenerations.AddOrUpdate(userId, 1, static (_, prev) => prev + 1);
-            InvalidateHideUpgradesCache();
+            saveGeneration = NextSaveGeneration(userId);
         }
         finally
         {
             _lock.Release();
         }
 
-        return (settings, saveGen);
+        return (settings, saveGeneration);
     }
 
     private MoonfinSettingsProfile CloneProfile(MoonfinSettingsProfile source)
@@ -1656,14 +1572,11 @@ public class MoonfinSettingsService : IDisposable
             // Takes the backup with it, otherwise a deleted user's settings could come back
             // through recovery.
             AtomicFile.DeleteWithSidecars(filePath);
-            InvalidateHideUpgradesCache();
         }
         finally
         {
             _lock.Release();
         }
-
-        _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
     public async Task DeleteProfileAsync(Guid userId, string profileName)
@@ -1686,14 +1599,11 @@ public class MoonfinSettingsService : IDisposable
             settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
-            InvalidateHideUpgradesCache();
         }
         finally
         {
             _lock.Release();
         }
-
-        _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
     public bool UserSettingsExist(Guid userId)
@@ -1802,17 +1712,10 @@ public class MoonfinSettingsService : IDisposable
             var fileName = Path.GetFileNameWithoutExtension(file);
             if (Guid.TryParse(fileName, out var userId))
             {
-                try
+                var settings = await GetUserSettingsAsync(userId);
+                if (settings != null)
                 {
-                    var settings = await GetUserSettingsAsync(userId);
-                    if (settings != null)
-                    {
-                        result.Add((userId, settings));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to read settings for user {UserId} during bulk read", userId);
+                    result.Add((userId, settings));
                 }
             }
         }
@@ -1820,120 +1723,13 @@ public class MoonfinSettingsService : IDisposable
         return result;
     }
 
-    internal TimeSpan UpgradeScanRetryDelayForTesting { get; set; } = TimeSpan.FromSeconds(2);
-    internal Func<string, MoonfinSettingsProfile?>? AdminDefaultsOverrideForTesting { get; set; }
+    private long NextSaveGeneration(Guid userId) =>
+        _userSaveGenerations.AddOrUpdate(userId, 1, static (_, previous) => previous + 1);
 
-    public bool IsAnyHideUpgradesEnabled() => IsAnyHideUpgradesEnabled(out _);
-
-    internal bool IsAnyHideUpgradesEnabled(out bool scanIncomplete)
-    {
-        scanIncomplete = false;
-        var config = MoonfinPlugin.Instance?.Configuration;
-        if (config?.DefaultUserSettings?.HideUpgradesInRecentRows == true ||
-            config?.GetDefaultsFor("tv")?.HideUpgradesInRecentRows == true ||
-            config?.GetDefaultsFor("desktop")?.HideUpgradesInRecentRows == true ||
-            config?.GetDefaultsFor("mobile")?.HideUpgradesInRecentRows == true)
-        {
-            return true;
-        }
-
-        while (true)
-        {
-            int scanGeneration;
-            lock (_hideUpgradesCacheGate)
-            {
-                var cached = Volatile.Read(ref _userHideUpgradesCache);
-                if (cached != -1)
-                {
-                    return cached == 1;
-                }
-
-                scanGeneration = _hideUpgradesCacheGeneration;
-            }
-
-            if (!Directory.Exists(_dataPath))
-            {
-                lock (_hideUpgradesCacheGate)
-                {
-                    if (_hideUpgradesCacheGeneration == scanGeneration)
-                    {
-                        Volatile.Write(ref _lastKnownUserHideUpgrades, 0);
-                        Volatile.Write(ref _userHideUpgradesCache, 0);
-                        return false;
-                    }
-                }
-
-                continue;
-            }
-
-            var anyConfirmedEnabled = false;
-            var anyBackupEnabled = false;
-            var hadAccessError = false;
-            foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
-            {
-                var fileName = Path.GetFileNameWithoutExtension(file);
-                if (!Guid.TryParse(fileName, out _))
-                {
-                    continue;
-                }
-
-                var settings = ReadSettingsWithRecovery(file, out var accessError);
-                if (accessError != null)
-                {
-                    hadAccessError = true;
-                    _logger.LogDebug(accessError, "Could not scan HideUpgrades preference from {Path}", file);
-                }
-
-                if (settings == null)
-                {
-                    continue;
-                }
-
-                var hasEnabled =
-                    settings.Global?.HideUpgradesInRecentRows == true ||
-                    settings.Tv?.HideUpgradesInRecentRows == true ||
-                    settings.Desktop?.HideUpgradesInRecentRows == true ||
-                    settings.Mobile?.HideUpgradesInRecentRows == true;
-
-                if (hasEnabled)
-                {
-                    if (accessError == null)
-                    {
-                        anyConfirmedEnabled = true;
-                        break;
-                    }
-
-                    anyBackupEnabled = true;
-                }
-            }
-
-            BeforePublishHideUpgradesScanForTesting?.Invoke();
-
-            if (!anyConfirmedEnabled && hadAccessError)
-            {
-                scanIncomplete = true;
-                var known = Volatile.Read(ref _lastKnownUserHideUpgrades);
-                if (known != -1)
-                {
-                    return known == 1;
-                }
-
-                var applied = Volatile.Read(ref _lastAppliedUpgradeState);
-                return applied != -1 ? applied == 1 : anyBackupEnabled;
-            }
-
-            lock (_hideUpgradesCacheGate)
-            {
-                if (_hideUpgradesCacheGeneration == scanGeneration)
-                {
-                    Volatile.Write(ref _lastKnownUserHideUpgrades, anyConfirmedEnabled ? 1 : 0);
-                    Volatile.Write(ref _userHideUpgradesCache, anyConfirmedEnabled ? 1 : 0);
-                    return anyConfirmedEnabled;
-                }
-            }
-        }
-    }
-
+    /// <summary>
+    /// Moves HidePlayedInLatest to match every user who inherits a Hide Watched admin default,
+    /// after an admin changes one. A user who saves while this runs keeps their own value.
+    /// </summary>
     internal async Task SyncHideWatchedForAffectedUsersAsync(CancellationToken cancellationToken = default)
     {
         if (_serviceProvider == null || GetUserDtoMethod == null || UpdateConfigurationMethod == null)
@@ -1941,7 +1737,17 @@ public class MoonfinSettingsService : IDisposable
             return;
         }
 
-        var users = UserReflection.AllUsers(_serviceProvider);
+        IEnumerable? users;
+        try
+        {
+            users = UserReflection.AllUsers(_serviceProvider);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not list users to apply the Hide Watched default");
+            return;
+        }
+
         if (users == null)
         {
             return;
@@ -1954,33 +1760,24 @@ public class MoonfinSettingsService : IDisposable
                 return;
             }
 
-            if (user == null || user.GetType().GetProperty("Id")?.GetValue(user) is not Guid userId || userId == Guid.Empty)
+            if (user?.GetType().GetProperty("Id")?.GetValue(user) is not Guid userId || userId == Guid.Empty)
             {
                 continue;
             }
 
-            var expectedGen = _userSaveGenerations.GetOrAdd(userId, 0L);
-            MoonfinUserSettings? settings;
             try
             {
-                settings = ReadSettingsWithRecovery(GetUserSettingsPath(userId), out var accessError);
-                if (accessError != null)
+                var expectedGeneration = _userSaveGenerations.GetOrAdd(userId, 0L);
+                var settings = ReadSettingsWithRecovery(GetUserSettingsPath(userId)) ?? new MoonfinUserSettings();
+                var hideWatched = ResolveHideWatchedWithDefaults(settings, "global");
+                if (hideWatched.HasValue)
                 {
-                    _logger.LogDebug(accessError, "Skipping HidePlayedInLatest default sync for user {UserId} due to access error", userId);
-                    continue;
+                    await SyncNativeHideWatchedAsync(userId, hideWatched.Value, expectedGeneration).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Skipping HidePlayedInLatest default sync for user {UserId}", userId);
-                continue;
-            }
-
-            var effectiveSettings = settings ?? new MoonfinUserSettings();
-            var hideWatched = ResolveHideWatchedWithDefaults(effectiveSettings, "global");
-            if (hideWatched.HasValue)
-            {
-                await SyncNativeHideWatchedAsync(userId, hideWatched.Value, expectedGen).ConfigureAwait(false);
+                _logger.LogDebug(ex, "Skipping the Hide Watched default for user {UserId}", userId);
             }
         }
     }
@@ -1991,10 +1788,9 @@ public class MoonfinSettingsService : IDisposable
             : AdminDefaultsFor(profileName);
 
     /// <summary>
-    /// Resolves effective <c>HideWatchedInRecentRows</c> for a user's single native
-    /// <c>HidePlayedInLatest</c> toggle. When neither the active/global user profile nor the
-    /// admin global default sets a value, device profiles/defaults resolve with <c>true</c> taking
-    /// precedence over <c>false</c> across devices so hiding watched items on any device is honored.
+    /// The Hide Watched value for a user's single HidePlayedInLatest. When neither the active
+    /// or global profile nor the admin global default sets one, any device that hides watched
+    /// items wins over one that shows them.
     /// </summary>
     internal bool? ResolveHideWatchedWithDefaults(MoonfinUserSettings settings, string? activeProfileName)
     {
@@ -2010,54 +1806,41 @@ public class MoonfinSettingsService : IDisposable
             return settings.Global.HideWatchedInRecentRows;
         }
 
-        var userDeviceValues = new[]
-        {
+        var deviceValue = AnyDeviceHides(
             settings.Tv?.HideWatchedInRecentRows,
             settings.Desktop?.HideWatchedInRecentRows,
-            settings.Mobile?.HideWatchedInRecentRows,
-        };
-        if (userDeviceValues.Any(v => v == true))
+            settings.Mobile?.HideWatchedInRecentRows);
+        if (deviceValue.HasValue)
         {
-            return true;
+            return deviceValue;
         }
 
-        if (userDeviceValues.Any(v => v == false))
+        var adminDefault = GetAdminDefaultsForProfile(profileName)?.HideWatchedInRecentRows
+            ?? GetAdminDefaultsForProfile("global")?.HideWatchedInRecentRows;
+        if (adminDefault.HasValue)
         {
-            return false;
+            return adminDefault;
         }
 
-        var activeAdminDefault = GetAdminDefaultsForProfile(profileName)?.HideWatchedInRecentRows;
-        if (activeAdminDefault.HasValue)
-        {
-            return activeAdminDefault;
-        }
-
-        var globalAdminDefault = GetAdminDefaultsForProfile("global")?.HideWatchedInRecentRows;
-        if (globalAdminDefault.HasValue)
-        {
-            return globalAdminDefault;
-        }
-
-        var adminDeviceDefaults = new[]
-        {
+        return AnyDeviceHides(
             GetAdminDefaultsForProfile("tv")?.HideWatchedInRecentRows,
             GetAdminDefaultsForProfile("desktop")?.HideWatchedInRecentRows,
-            GetAdminDefaultsForProfile("mobile")?.HideWatchedInRecentRows,
-        };
-        if (adminDeviceDefaults.Any(v => v == true))
-        {
-            return true;
-        }
-
-        if (adminDeviceDefaults.Any(v => v == false))
-        {
-            return false;
-        }
-
-        return null;
+            GetAdminDefaultsForProfile("mobile")?.HideWatchedInRecentRows);
     }
 
-    private async Task SyncNativeHideWatchedAsync(Guid userId, bool hideWatched, long? expectedSaveGeneration)
+    private static bool? AnyDeviceHides(params bool?[] values) =>
+        values.Any(v => v == true) ? true : values.Any(v => v == false) ? false : null;
+
+    private async Task SyncHideWatchedAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName, long saveGeneration)
+    {
+        var hideWatched = ResolveHideWatchedWithDefaults(settings, activeProfileName);
+        if (hideWatched.HasValue)
+        {
+            await SyncNativeHideWatchedAsync(userId, hideWatched.Value, saveGeneration).ConfigureAwait(false);
+        }
+    }
+
+    private async Task SyncNativeHideWatchedAsync(Guid userId, bool hideWatched, long expectedSaveGeneration)
     {
         if (_serviceProvider == null || GetUserDtoMethod == null || UpdateConfigurationMethod == null)
         {
@@ -2069,27 +1852,28 @@ public class MoonfinSettingsService : IDisposable
         await syncGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (expectedSaveGeneration.HasValue &&
-                _userSaveGenerations.TryGetValue(userId, out var currentGen) &&
-                currentGen != expectedSaveGeneration.Value)
+            if (_userSaveGenerations.TryGetValue(userId, out var currentGeneration) &&
+                currentGeneration != expectedSaveGeneration)
             {
                 return;
             }
 
             var userManager = UserReflection.UserManager(_serviceProvider);
             var user = UserReflection.ResolveUser(_serviceProvider, userId);
-            if (userManager != null && user != null)
+            if (userManager == null || user == null)
             {
-                var args = new object?[GetUserDtoMethod.GetParameters().Length];
-                args[0] = user;
-                var userConfig = (GetUserDtoMethod.Invoke(userManager, args) as UserDto)?.Configuration;
-                if (userConfig != null && userConfig.HidePlayedInLatest != hideWatched)
+                return;
+            }
+
+            var args = new object?[GetUserDtoMethod.GetParameters().Length];
+            args[0] = user;
+            var userConfig = (GetUserDtoMethod.Invoke(userManager, args) as UserDto)?.Configuration;
+            if (userConfig != null && userConfig.HidePlayedInLatest != hideWatched)
+            {
+                userConfig.HidePlayedInLatest = hideWatched;
+                if (UpdateConfigurationMethod.Invoke(userManager, [userId, userConfig]) is Task updateTask)
                 {
-                    userConfig.HidePlayedInLatest = hideWatched;
-                    if (UpdateConfigurationMethod.Invoke(userManager, [userId, userConfig]) is Task updateTask)
-                    {
-                        await updateTask.ConfigureAwait(false);
-                    }
+                    await updateTask.ConfigureAwait(false);
                 }
             }
         }
@@ -2100,297 +1884,6 @@ public class MoonfinSettingsService : IDisposable
         finally
         {
             syncGate.Release();
-        }
-    }
-
-    private async Task SyncRecentRowPreferencesAsync(
-        Guid userId,
-        MoonfinUserSettings settings,
-        string? activeProfileName,
-        long? expectedSaveGeneration = null)
-    {
-        var hideWatched = ResolveHideWatchedWithDefaults(settings, activeProfileName);
-        if (hideWatched.HasValue)
-        {
-            await SyncNativeHideWatchedAsync(userId, hideWatched.Value, expectedSaveGeneration).ConfigureAwait(false);
-        }
-
-        _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
-    }
-
-    internal Task ScheduleUpgradePreferenceSyncIfNeeded(Guid userId, bool force = false)
-    {
-        lock (_upgradeSyncGate)
-        {
-            if (force)
-            {
-                _lastAppliedUpgradeState = -1;
-            }
-
-            if (_upgradeSyncStopping || _upgradePreferenceChanged == null)
-            {
-                return _upgradeSyncWorker;
-            }
-
-            _upgradeSyncPending = true;
-
-            if (!_upgradeWorkerRunning)
-            {
-                _upgradeWorkerRunning = true;
-                var token = _upgradeSyncCts.Token;
-                _upgradeSyncWorker = Task.Run(() => DrainUpgradePreferenceSyncAsync(userId, token), CancellationToken.None);
-            }
-
-            return _upgradeSyncWorker;
-        }
-    }
-
-    private TimeSpan ComputeUpgradeRetryDelay(int retryAttempt)
-    {
-        var baseTicks = Math.Max(1L, UpgradeScanRetryDelayForTesting.Ticks);
-        var shift = Math.Clamp(retryAttempt, 0, 3);
-        var scaledTicks = baseTicks <= (long.MaxValue >> shift) ? baseTicks << shift : long.MaxValue;
-        var capTicks = Math.Max(baseTicks, TimeSpan.FromMinutes(1).Ticks);
-        return TimeSpan.FromTicks(Math.Min(scaledTicks, capTicks));
-    }
-
-    private void ScheduleUpgradeScanRetry(Guid userId, CancellationToken cancellationToken)
-    {
-        TimeSpan delay;
-        lock (_upgradeSyncGate)
-        {
-            if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested || _upgradeScanRetryScheduled)
-            {
-                return;
-            }
-
-            _upgradeScanRetryScheduled = true;
-            delay = ComputeUpgradeRetryDelay(_upgradeScanRetryCount);
-            if (_upgradeScanRetryCount < 16)
-            {
-                _upgradeScanRetryCount++;
-            }
-        }
-
-        _ = Task.Delay(delay, cancellationToken).ContinueWith(
-            t =>
-            {
-                lock (_upgradeSyncGate)
-                {
-                    _upgradeScanRetryScheduled = false;
-                }
-
-                if (!t.IsCanceled)
-                {
-                    _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
-                }
-            },
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
-    }
-
-    private async Task DrainUpgradePreferenceSyncAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            lock (_upgradeSyncGate)
-            {
-                if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
-                {
-                    _upgradeWorkerRunning = false;
-                    _upgradeSyncPending = false;
-                    return;
-                }
-
-                _upgradeSyncPending = false;
-            }
-
-            bool anyEnabled;
-            bool scanIncomplete;
-            try
-            {
-                anyEnabled = IsAnyHideUpgradesEnabled(out scanIncomplete);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                lock (_upgradeSyncGate)
-                {
-                    _lastAppliedUpgradeState = -1;
-                    _upgradeWorkerRunning = false;
-                    _upgradeSyncPending = false;
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                lock (_upgradeSyncGate)
-                {
-                    _lastAppliedUpgradeState = -1;
-                    if (_upgradeSyncPending && !_upgradeSyncStopping && !cancellationToken.IsCancellationRequested)
-                    {
-                        continue;
-                    }
-
-                    _upgradeWorkerRunning = false;
-                }
-
-                _logger.LogDebug(ex, "Could not scan HideUpgrades preference for user {UserId}", userId);
-                ScheduleUpgradeScanRetry(userId, cancellationToken);
-                return;
-            }
-
-            var targetState = anyEnabled ? 1 : 0;
-
-            Func<bool, CancellationToken, Task>? callback;
-            var shouldReturn = false;
-            var shouldScheduleRetry = false;
-            lock (_upgradeSyncGate)
-            {
-                if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
-                {
-                    _upgradeWorkerRunning = false;
-                    _upgradeSyncPending = false;
-                    return;
-                }
-
-                callback = _upgradePreferenceChanged;
-                if (callback == null)
-                {
-                    _upgradeWorkerRunning = false;
-                    _upgradeSyncPending = false;
-                    return;
-                }
-
-                if (_lastAppliedUpgradeState == targetState)
-                {
-                    if (!scanIncomplete)
-                    {
-                        _upgradeScanRetryCount = 0;
-                    }
-
-                    if (_upgradeSyncPending)
-                    {
-                        continue;
-                    }
-
-                    _upgradeWorkerRunning = false;
-                    shouldScheduleRetry = scanIncomplete;
-                    shouldReturn = true;
-                }
-            }
-
-            if (shouldReturn)
-            {
-                if (shouldScheduleRetry)
-                {
-                    ScheduleUpgradeScanRetry(userId, cancellationToken);
-                }
-
-                return;
-            }
-
-            try
-            {
-                await callback(targetState == 1, cancellationToken).ConfigureAwait(false);
-
-                var scheduleRetryForIncomplete = false;
-                lock (_upgradeSyncGate)
-                {
-                    if (_upgradeSyncStopping || cancellationToken.IsCancellationRequested)
-                    {
-                        _lastAppliedUpgradeState = -1;
-                        _upgradeWorkerRunning = false;
-                        _upgradeSyncPending = false;
-                        return;
-                    }
-
-                    _lastAppliedUpgradeState = targetState;
-                    if (!scanIncomplete)
-                    {
-                        _upgradeScanRetryCount = 0;
-                    }
-                    else if (!_upgradeSyncPending)
-                    {
-                        _upgradeWorkerRunning = false;
-                        scheduleRetryForIncomplete = true;
-                    }
-                }
-
-                if (scheduleRetryForIncomplete)
-                {
-                    ScheduleUpgradeScanRetry(userId, cancellationToken);
-                    return;
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                lock (_upgradeSyncGate)
-                {
-                    _lastAppliedUpgradeState = -1;
-                    _upgradeWorkerRunning = false;
-                    _upgradeSyncPending = false;
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                lock (_upgradeSyncGate)
-                {
-                    _lastAppliedUpgradeState = -1;
-                    if (_upgradeSyncPending && !_upgradeSyncStopping && !cancellationToken.IsCancellationRequested)
-                    {
-                        continue;
-                    }
-
-                    _upgradeWorkerRunning = false;
-                }
-
-                _logger.LogDebug(ex, "Could not apply upgrade date preference for user {UserId}", userId);
-                ScheduleUpgradeScanRetry(userId, cancellationToken);
-                return;
-            }
-        }
-    }
-
-    internal async Task StopUpgradePreferenceSyncAsync(CancellationToken cancellationToken = default)
-    {
-        Task workerToDrain;
-        CancellationTokenSource ctsToCancel;
-        lock (_upgradeSyncGate)
-        {
-            _upgradeSyncStopping = true;
-            _upgradeSyncPending = false;
-            _upgradePreferenceChanged = null;
-            ctsToCancel = _upgradeSyncCts;
-            workerToDrain = _upgradeSyncWorker;
-        }
-
-        try
-        {
-            ctsToCancel.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-
-        if (!workerToDrain.IsCompleted)
-        {
-            var completed = await Task.WhenAny(workerToDrain, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
-            if (completed == workerToDrain)
-            {
-                await workerToDrain.ConfigureAwait(false);
-            }
-        }
-    }
-
-    public void Dispose()
-    {
-        using var drainTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        StopUpgradePreferenceSyncAsync(drainTimeout.Token).GetAwaiter().GetResult();
-        lock (_upgradeSyncGate)
-        {
-            _upgradeSyncCts.Dispose();
         }
     }
 }

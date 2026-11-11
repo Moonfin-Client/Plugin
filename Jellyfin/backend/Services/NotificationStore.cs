@@ -56,21 +56,14 @@ public class NotificationStore
         {
             var prefs = AtomicFile.ReadWithRecovery(
                 path,
-                json => JsonSerializer.Deserialize<NotificationPrefs>(json, _jsonOptions),
-                out var accessError);
-            if (accessError != null)
-            {
-                _logger.LogError(accessError, "Failed to read notification prefs for user {UserId} due to access error", userId);
-                throw accessError;
-            }
-
+                json => JsonSerializer.Deserialize<NotificationPrefs>(json, _jsonOptions));
             if (prefs != null)
             {
                 prefs.JellyfinUserId = userId;
                 return prefs;
             }
         }
-        catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to read notification prefs for user {UserId}", userId);
         }
@@ -179,16 +172,7 @@ public class NotificationStore
                 continue;
             }
 
-            NotificationPrefs prefs;
-            try
-            {
-                prefs = GetPrefs(userId);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                continue;
-            }
-
+            var prefs = GetPrefs(userId);
             if (predicate(prefs))
             {
                 yield return userId;

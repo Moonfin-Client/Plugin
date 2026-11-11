@@ -77,40 +77,20 @@ namespace Emby.Plugins.Moonfin.Services
         public static T? ReadWithRecovery<T>(string path, Func<string, T?> parse)
             where T : class
         {
-            Exception? ignored;
-            return ReadWithRecovery(path, parse, out ignored);
-        }
-
-        /// <summary>
-        /// Reads and parses path with backup recovery, reporting any underlying file or directory
-        /// access exception when neither copy can be read.
-        /// </summary>
-        public static T? ReadWithRecovery<T>(string path, Func<string, T?> parse, out Exception? accessError)
-            where T : class
-        {
             T? fromMain;
-            Exception? mainError;
-            if (TryReadAndParse(path, parse, out fromMain, out mainError))
+            if (TryReadAndParse(path, parse, out fromMain))
             {
-                accessError = null;
                 return fromMain;
             }
 
             var backup = BackupPath(path);
             T? fromBackup;
-            Exception? backupError;
-            if (TryReadAndParse(backup, parse, out fromBackup, out backupError))
+            if (TryReadAndParse(backup, parse, out fromBackup))
             {
-                accessError = mainError;
-                if (mainError == null)
-                {
-                    TryPromoteBackup(path, backup);
-                }
-
+                TryPromoteBackup(path, backup);
                 return fromBackup;
             }
 
-            accessError = mainError ?? backupError;
             return null;
         }
 
@@ -122,89 +102,24 @@ namespace Emby.Plugins.Moonfin.Services
             TryDelete(TempPath(path));
         }
 
-        private static bool TryReadAndParse<T>(
-            string path,
-            Func<string, T?> parse,
-            out T? result,
-            out Exception? accessError)
+        private static bool TryReadAndParse<T>(string path, Func<string, T?> parse, out T? result)
             where T : class
         {
             result = null;
-            accessError = null;
-
-            string text;
-            try
+            if (!File.Exists(path))
             {
-                text = File.ReadAllText(path);
-            }
-            catch (FileNotFoundException)
-            {
-                return false;
-            }
-            catch (DirectoryNotFoundException ex)
-            {
-                Exception? dirError;
-                if (IsInaccessibleParentDirectory(path, ex, out dirError))
-                {
-                    accessError = dirError;
-                }
-
-                return false;
-            }
-            catch (Exception ex)
-            {
-                accessError = ex;
                 return false;
             }
 
             try
             {
-                result = parse(text);
+                result = parse(File.ReadAllText(path));
                 return result != null;
             }
             catch
             {
                 return false;
             }
-        }
-
-        private static bool IsInaccessibleParentDirectory(
-            string path,
-            DirectoryNotFoundException ex,
-            out Exception? dirError)
-        {
-            dirError = null;
-            try
-            {
-                var current = Path.GetDirectoryName(path);
-                while (!string.IsNullOrEmpty(current))
-                {
-                    if (File.Exists(current))
-                    {
-                        dirError = ex;
-                        return true;
-                    }
-
-                    if (Directory.Exists(current))
-                    {
-                        using (var enumerator = Directory.EnumerateFileSystemEntries(current).GetEnumerator())
-                        {
-                            _ = enumerator.MoveNext();
-                        }
-
-                        return false;
-                    }
-
-                    current = Path.GetDirectoryName(current);
-                }
-            }
-            catch (Exception probeEx)
-            {
-                dirError = probeEx;
-                return true;
-            }
-
-            return false;
         }
 
         // Restores the good copy so later reads hit the main file. Copying rather than renaming is
@@ -226,19 +141,14 @@ namespace Emby.Plugins.Moonfin.Services
         {
             try
             {
-                File.Delete(path);
-            }
-            catch (DirectoryNotFoundException ex)
-            {
-                Exception? dirError;
-                if (IsInaccessibleParentDirectory(path, ex, out dirError))
+                if (File.Exists(path))
                 {
-                    throw dirError ?? ex;
+                    File.Delete(path);
                 }
             }
-            catch (FileNotFoundException)
+            catch
             {
-                // File is genuinely missing.
+                // Cleanup only.
             }
         }
     }

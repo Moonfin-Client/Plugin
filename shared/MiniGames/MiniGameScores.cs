@@ -139,17 +139,7 @@ public class MiniGameScoreService
     {
         lock (_gate)
         {
-            Dictionary<string, List<MiniGameScore>> boards;
-            try
-            {
-                boards = _store.Load();
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return Array.Empty<MiniGameBoardEntry>();
-            }
-
-            boards.TryGetValue(gameId, out var rows);
+            _store.Load().TryGetValue(gameId, out var rows);
             return Ranked(rows ?? Enumerable.Empty<MiniGameScore>())
                 .Take(BoardSize)
                 .Select(r => new MiniGameBoardEntry
@@ -171,15 +161,7 @@ public class MiniGameScoreService
         var id = userId.ToString("N");
         lock (_gate)
         {
-            Dictionary<string, List<MiniGameScore>> boards;
-            try
-            {
-                boards = _store.Load();
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return null;
-            }
+            var boards = _store.Load();
             if (!boards.TryGetValue(gameId, out var rows) || rows == null)
             {
                 rows = new List<MiniGameScore>();

@@ -73,7 +73,6 @@ public sealed partial class GameArtworkReconciliationService
     private Timer? _libraryWatcherDebounce;
     private long _lastWatcherOverflowWarningTicks = long.MinValue / 2;
     private bool _startupRecoveryDone;
-    private List<ArtworkCatalogWorkItem> _pendingRecoveryWork = new();
     private bool _rdbUpdateCheckDone;
     private int _reopenMetadataDeferred;
     private int _nextRemoteQueueVersion;
@@ -517,8 +516,6 @@ public sealed partial class GameArtworkReconciliationService
             }
 
             _startupRecoveryDone = false;
-            _pendingRecoveryWork.Clear();
-            _catalog.ResetStartupRecovery();
             _rdbUpdateCheckDone = false;
             stop.Dispose();
             lock (_lifecycleGate)
@@ -863,279 +860,162 @@ public sealed partial class GameArtworkReconciliationService
             // 20k ROMs), so it only makes sense to pay for once, on the first (startup) pass. Later
             // passes -- now triggered by RefreshLibrary completions instead of a timer -- rely on
             // the ordinary per-candidate state already tracked in the catalog.
+            IReadOnlyList<ArtworkCatalogWorkItem> recovery = Array.Empty<ArtworkCatalogWorkItem>();
             if (!_startupRecoveryDone)
             {
-                var startupWork = await _catalog.GetStartupRecoveryWorkAsync(cancellationToken).ConfigureAwait(false);
+                recovery = await _catalog.GetStartupRecoveryWorkAsync(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (startupWork.Count > 0)
-                {
-                    _pendingRecoveryWork.AddRange(startupWork);
-                }
 
-                // Latched only after the read succeeds for all libraries. Latching first would let one failed or
+                // Latched only after the read succeeds. Latching first would let one failed or
                 // cancelled startup pass strand the recoverable jobs until the next process start,
                 // which the timer this replaced used to paper over by simply trying again.
-                _startupRecoveryDone = !_catalog.HasPendingRecovery;
-            }
-
-            if (_pendingRecoveryWork.Count > 0)
-            {
-                _logger.LogDebug("Rebuilding {Count} recoverable game-artwork jobs from the catalog during reconciliation", _pendingRecoveryWork.Count);
-                _pendingRecoveryWork = await EnqueueRecoveryAsync(_pendingRecoveryWork, cancellationToken).ConfigureAwait(false);
+                _startupRecoveryDone = true;
+                if (recovery.Count > 0)
+                {
+                    _logger.LogDebug("Rebuilding {Count} recoverable game-artwork jobs from the catalog during reconciliation", recovery.Count);
+                }
             }
 
             var runRdbUpdateCheck = !_rdbUpdateCheckDone;
-            var rdbCandidatesIncomplete = false;
-            var incompletePlatforms = new HashSet<string>(StringComparer.Ordinal);
-            var deferAllPlatformClears = false;
             var libraryCandidates = new List<(string LibraryId, List<ArtworkCandidate> Candidates)>();
             foreach (var library in _games.GetGameLibraries())
             {
                 // Pruning against a RomM library that hasn't answered yet would delete its art.
                 if (!_games.IsLibraryInventoryReady(library.Id))
                 {
-                    rdbCandidatesIncomplete = true;
-                    await CollectIncompleteLibraryPlatformsAsync(library, incompletePlatforms, () => deferAllPlatformClears = true, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
-                var candidatesCollected = false;
-                try
+                var reconciledSystems = new List<(GameSystem System, List<ArtworkCandidate> All, List<ArtworkCandidate> Boxart)>();
+                foreach (var system in _games.GetSystems(library.Id))
                 {
-                    var reconciledSystems = new List<(GameSystem System, List<ArtworkCandidate> All, List<ArtworkCandidate> Boxart)>();
-                    foreach (var system in _games.GetSystems(library.Id))
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var allCandidates = CreateSystemCandidates(library, system);
-                        var candidates = allCandidates.Where(candidate => candidate.Kind == GameThumbService.ThumbKind.Boxart).ToList();
-                        reconciledSystems.Add((system, allCandidates, candidates));
-                    }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var allCandidates = CreateSystemCandidates(library, system);
+                    var candidates = allCandidates.Where(candidate => candidate.Kind == GameThumbService.ThumbKind.Boxart).ToList();
+                    reconciledSystems.Add((system, allCandidates, candidates));
+                }
 
-                    if (runRdbUpdateCheck)
-                    {
-                        libraryCandidates.Add((library.Id, reconciledSystems.SelectMany(item => item.All).ToList()));
-                    }
+                if (runRdbUpdateCheck)
+                {
+                    libraryCandidates.Add((library.Id, reconciledSystems.SelectMany(item => item.All).ToList()));
+                }
 
-                    candidatesCollected = true;
-
-                    var orphaned = await _catalog.PruneAsync(
+                var orphaned = await _catalog.PruneAsync(
+                    library.Id,
+                    reconciledSystems.SelectMany(item => item.All).Select(candidate => candidate.Key),
+                    cancellationToken).ConfigureAwait(false);
+                var deletable = orphaned.Where(IsManagedArtworkPath).ToList();
+                if (deletable.Count > 0)
+                {
+                    // Deleting cached artwork is the one destructive thing reconciliation does and
+                    // it was previously silent, which made a mass loss impossible to attribute.
+                    _logger.LogWarning(
+                        "Deleting {Count} orphaned game artwork files for library {LibraryId} (of {Orphaned} reported); first: {Sample}",
+                        deletable.Count,
                         library.Id,
-                        reconciledSystems.SelectMany(item => item.All).Select(candidate => candidate.Key),
+                        orphaned.Count,
+                        string.Join(", ", deletable.Take(3)));
+                }
+
+                foreach (var path in deletable)
+                {
+                    try { File.Delete(path); } catch (Exception ex) { _logger.LogDebug(ex, "Removing orphaned game artwork {Path} failed", path); }
+                }
+
+                var repaired = await _catalog.RepairMissingArtifactsAsync(library.Id, cancellationToken).ConfigureAwait(false);
+                if (repaired > 0)
+                {
+                    _logger.LogWarning(
+                        "Reopened {Count} game artwork entries whose cached files were missing for library {LibraryId}",
+                        repaired,
+                        library.Id);
+                }
+
+                var measured = await _catalog.BackfillDimensionsAsync(library.Id, cancellationToken).ConfigureAwait(false);
+                if (measured > 0)
+                {
+                    _logger.LogInformation(
+                        "Recorded dimensions for {Count} cached game artwork entries in library {LibraryId}",
+                        measured,
+                        library.Id);
+                }
+
+                foreach (var (system, allCandidates, candidates) in reconciledSystems)
+                {
+                    // Persist a complete current game/role projection. Only box art is normally
+                    // prewarmed; snap/title stay pending until a visible client priority hint.
+                    await _catalog.SynchronizeProjectionAsync(
+                        library.Id,
+                        allCandidates.Select(candidate => new ArtworkCatalogProjectionEntry(candidate.Key, candidate.SystemId, candidate.GameId)),
+                        ProviderVersion,
+                        new ArtworkCatalogSystemMetadata(system.Id, system.Name, system.Core, system.GameCount),
                         cancellationToken).ConfigureAwait(false);
-                    var deletable = orphaned.Where(IsManagedArtworkPath).ToList();
-                    if (deletable.Count > 0)
+
+                    if (candidates.Count == 0)
                     {
-                        // Deleting cached artwork is the one destructive thing reconciliation does and
-                        // it was previously silent, which made a mass loss impossible to attribute.
-                        _logger.LogWarning(
-                            "Deleting {Count} orphaned game artwork files for library {LibraryId} (of {Orphaned} reported); first: {Sample}",
-                            deletable.Count,
-                            library.Id,
-                            orphaned.Count,
-                            string.Join(", ", deletable.Take(3)));
+                        continue;
                     }
 
-                    foreach (var path in deletable)
+                    var inventoryGeneration = Hash(string.Join("\n", candidates
+                        .OrderBy(candidate => candidate.GameId, StringComparer.Ordinal)
+                        .Select(candidate => candidate.GameId + "|" + candidate.Key.RomFingerprint)));
+                    var discovery = await _catalog.GetOrCreatePreviewDiscoveryAsync(
+                        library.Id,
+                        candidates[0].SystemId,
+                        inventoryGeneration,
+                        candidates.Select(candidate => candidate.GameId),
+                        cancellationToken).ConfigureAwait(false);
+                    // One index rather than a FirstOrDefault per candidate, which cost systems
+                    // times candidates squared on every pass. TryAdd keeps the first match the
+                    // FirstOrDefault would have taken.
+                    var candidatesByGameId = new Dictionary<string, ArtworkCandidate>(candidates.Count, StringComparer.Ordinal);
+                    foreach (var candidate in candidates)
                     {
-                        try { File.Delete(path); } catch (Exception ex) { _logger.LogDebug(ex, "Removing orphaned game artwork {Path} failed", path); }
+                        candidatesByGameId.TryAdd(candidate.GameId, candidate);
                     }
 
-                    var repaired = await _catalog.RepairMissingArtifactsAsync(library.Id, cancellationToken).ConfigureAwait(false);
-                    if (repaired > 0)
+                    var ordered = new List<ArtworkCandidate>(discovery.PreviewCandidateGameIds.Count);
+                    foreach (var gameId in discovery.PreviewCandidateGameIds)
                     {
-                        _logger.LogWarning(
-                            "Reopened {Count} game artwork entries whose cached files were missing for library {LibraryId}",
-                            repaired,
-                            library.Id);
-                    }
-
-                    var measured = await _catalog.BackfillDimensionsAsync(library.Id, cancellationToken).ConfigureAwait(false);
-                    if (measured > 0)
-                    {
-                        _logger.LogInformation(
-                            "Recorded dimensions for {Count} cached game artwork entries in library {LibraryId}",
-                            measured,
-                            library.Id);
-                    }
-
-                    foreach (var (system, allCandidates, candidates) in reconciledSystems)
-                    {
-                        // Persist a complete current game/role projection. Only box art is normally
-                        // prewarmed; snap/title stay pending until a visible client priority hint.
-                        await _catalog.SynchronizeProjectionAsync(
-                            library.Id,
-                            allCandidates.Select(candidate => new ArtworkCatalogProjectionEntry(candidate.Key, candidate.SystemId, candidate.GameId)),
-                            ProviderVersion,
-                            new ArtworkCatalogSystemMetadata(system.Id, system.Name, system.Core, system.GameCount),
-                            cancellationToken).ConfigureAwait(false);
-
-                        if (candidates.Count == 0)
+                        if (candidatesByGameId.TryGetValue(gameId, out var candidate))
                         {
-                            continue;
-                        }
-
-                        var inventoryGeneration = Hash(string.Join("\n", candidates
-                            .OrderBy(candidate => candidate.GameId, StringComparer.Ordinal)
-                            .Select(candidate => candidate.GameId + "|" + candidate.Key.RomFingerprint)));
-                        var discovery = await _catalog.GetOrCreatePreviewDiscoveryAsync(
-                            library.Id,
-                            candidates[0].SystemId,
-                            inventoryGeneration,
-                            candidates.Select(candidate => candidate.GameId),
-                            cancellationToken).ConfigureAwait(false);
-                        // One index rather than a FirstOrDefault per candidate, which cost systems
-                        // times candidates squared on every pass. TryAdd keeps the first match the
-                        // FirstOrDefault would have taken.
-                        var candidatesByGameId = new Dictionary<string, ArtworkCandidate>(candidates.Count, StringComparer.Ordinal);
-                        foreach (var candidate in candidates)
-                        {
-                            candidatesByGameId.TryAdd(candidate.GameId, candidate);
-                        }
-
-                        var ordered = new List<ArtworkCandidate>(discovery.PreviewCandidateGameIds.Count);
-                        foreach (var gameId in discovery.PreviewCandidateGameIds)
-                        {
-                            if (candidatesByGameId.TryGetValue(gameId, out var candidate))
-                            {
-                                ordered.Add(candidate);
-                            }
-                        }
-
-                        discovery = await _catalog.RecomputePreviewSelectionAsync(
-                            library.Id,
-                            candidates[0].SystemId,
-                            inventoryGeneration,
-                            cancellationToken).ConfigureAwait(false);
-                        var selectionComplete = string.Equals(
-                            discovery.PreviewSelectionGeneration,
-                            inventoryGeneration,
-                            StringComparison.Ordinal);
-                        var previewQueued = selectionComplete;
-                        foreach (var candidate in ordered)
-                        {
-                            var lane = previewQueued ? ArtworkLane.Bulk : ArtworkLane.Preview;
-                            if (await QueueCandidateAsync(candidate, lane, cancellationToken, reopenMetadataDeferred).ConfigureAwait(false) &&
-                                lane == ArtworkLane.Preview)
-                            {
-                                previewQueued = true;
-                            }
+                            ordered.Add(candidate);
                         }
                     }
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    rdbCandidatesIncomplete |= !candidatesCollected;
-                    if (!candidatesCollected)
+
+                    discovery = await _catalog.RecomputePreviewSelectionAsync(
+                        library.Id,
+                        candidates[0].SystemId,
+                        inventoryGeneration,
+                        cancellationToken).ConfigureAwait(false);
+                    var selectionComplete = string.Equals(
+                        discovery.PreviewSelectionGeneration,
+                        inventoryGeneration,
+                        StringComparison.Ordinal);
+                    var previewQueued = selectionComplete;
+                    foreach (var candidate in ordered)
                     {
-                        await CollectIncompleteLibraryPlatformsAsync(library, incompletePlatforms, () => deferAllPlatformClears = true, cancellationToken).ConfigureAwait(false);
+                        var lane = previewQueued ? ArtworkLane.Bulk : ArtworkLane.Preview;
+                        if (await QueueCandidateAsync(candidate, lane, cancellationToken, reopenMetadataDeferred).ConfigureAwait(false) &&
+                            lane == ArtworkLane.Preview)
+                        {
+                            previewQueued = true;
+                        }
                     }
-                    _logger.LogWarning(ex, "Failed to reconcile game library {LibraryId}; skipping to next library", library.Id);
                 }
             }
+
+            await EnqueueRecoveryAsync(recovery, cancellationToken).ConfigureAwait(false);
 
             if (runRdbUpdateCheck)
             {
-                var clearedAll = true;
-                if (libraryCandidates.Count > 0)
-                {
-                    clearedAll = await CheckRdbUpdatesAsync(
-                        libraryCandidates,
-                        platform => _thumbs.EnsureRdbUpdateCheckedAsync(platform, cancellationToken),
-                        null,
-                        deferAllPlatformClears ? null : incompletePlatforms,
-                        deferAllPlatformClears,
-                        cancellationToken).ConfigureAwait(false);
-                }
-
-                if (!rdbCandidatesIncomplete && clearedAll)
-                {
-                    _rdbUpdateCheckDone = true;
-                }
+                _rdbUpdateCheckDone = true;
+                await CheckRdbUpdatesAsync(
+                    libraryCandidates,
+                    platform => _thumbs.EnsureRdbUpdateCheckedAsync(platform, cancellationToken),
+                    null,
+                    cancellationToken).ConfigureAwait(false);
             }
-    }
-
-    private async Task CollectIncompleteLibraryPlatformsAsync(
-        GameLibrary library,
-        ISet<string> platforms,
-        Action onUnknownPlatforms,
-        CancellationToken cancellationToken)
-    {
-        var foundAny = false;
-        var persistedFailed = false;
-        try
-        {
-            var systems = _games.GetSystems(library.Id);
-            foreach (var system in systems)
-            {
-                foreach (var core in CoresForIncompleteLibraryPlatformCollection(system.Core, system.Name))
-                {
-                    foreach (var platform in GameArtworkStore.CandidatePlatformsFor(core, false, system.Name))
-                    {
-                        platforms.Add(platform);
-                        foundAny = true;
-                    }
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to inspect systems for incomplete library {LibraryId}", library.Id);
-        }
-
-        try
-        {
-            var persistedMetadata = await _catalog.GetSystemMetadataAsync(library.Id, cancellationToken).ConfigureAwait(false);
-            foreach (var meta in persistedMetadata)
-            {
-                foreach (var core in CoresForIncompleteLibraryPlatformCollection(meta.Core, meta.Name))
-                {
-                    foreach (var platform in GameArtworkStore.CandidatePlatformsFor(core, false, meta.Name))
-                    {
-                        platforms.Add(platform);
-                        foundAny = true;
-                    }
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            persistedFailed = true;
-            _logger.LogDebug(ex, "Failed to read persisted catalog metadata for incomplete library {LibraryId}", library.Id);
-        }
-
-        if (persistedFailed || !foundAny)
-        {
-            onUnknownPlatforms();
-        }
-    }
-
-    private static IEnumerable<string> CoresForIncompleteLibraryPlatformCollection(string core, string systemName)
-    {
-        if (GameSystemCoreResolver.IsArcade(core, systemName))
-        {
-            if (string.IsNullOrEmpty(core) ||
-                string.Equals(core, ArcadeCompatibilityService.FbneoCore, StringComparison.Ordinal) ||
-                string.Equals(core, ArcadeCompatibilityService.MameCore, StringComparison.Ordinal))
-            {
-                return [ArcadeCompatibilityService.FbneoCore, ArcadeCompatibilityService.MameCore];
-            }
-
-            return [core, ArcadeCompatibilityService.FbneoCore, ArcadeCompatibilityService.MameCore];
-        }
-
-        return [core];
     }
 
     private List<ArtworkCandidate> CreateSystemCandidates(GameLibrary library, GameSystem system) =>
@@ -1215,38 +1095,14 @@ public sealed partial class GameArtworkReconciliationService
             var platforms = candidates
                 .SelectMany(candidate => PlatformsOf(candidate, platformsBySource))
                 .ToHashSet(StringComparer.Ordinal);
-            var incompletePlatforms = new HashSet<string>(StringComparer.Ordinal);
-            var deferAllPlatformClears = false;
-            var everyLibrary = new List<(string LibraryId, List<ArtworkCandidate> Candidates)>();
-            foreach (var item in _games.GetGameLibraries())
-            {
-                if (!_games.IsLibraryInventoryReady(item.Id))
-                {
-                    await CollectIncompleteLibraryPlatformsAsync(item, incompletePlatforms, () => deferAllPlatformClears = true, cancellationToken).ConfigureAwait(false);
-                    continue;
-                }
-
-                try
-                {
-                    everyLibrary.Add((item.Id, _games.GetSystems(item.Id).SelectMany(system => CreateSystemCandidates(item, system)).ToList()));
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    await CollectIncompleteLibraryPlatformsAsync(item, incompletePlatforms, () => deferAllPlatformClears = true, cancellationToken).ConfigureAwait(false);
-                    _logger.LogWarning(ex, "Failed to collect candidates for library {LibraryId} during refresh", item.Id);
-                }
-            }
-
+            var everyLibrary = _games.GetGameLibraries()
+                .Where(item => _games.IsLibraryInventoryReady(item.Id))
+                .Select(item => (item.Id, _games.GetSystems(item.Id).SelectMany(system => CreateSystemCandidates(item, system)).ToList()))
+                .ToList();
             await CheckRdbUpdatesAsync(
                 everyLibrary,
                 platform => _thumbs.CheckRdbUpdateNowAsync(platform, cancellationToken),
                 platforms,
-                deferAllPlatformClears ? null : incompletePlatforms,
-                deferAllPlatformClears,
                 cancellationToken).ConfigureAwait(false);
 
             _thumbs.ClearLookupCaches();
@@ -1289,12 +1145,10 @@ public sealed partial class GameArtworkReconciliationService
     // Checks each platform the libraries' lookups can consult, independent of artwork acquisition,
     // and reopens that platform's Missing entries when its RDB changed how games match. A failure
     // here only defers the reopen: the marker stays until the catalog change is saved.
-    private async Task<bool> CheckRdbUpdatesAsync(
+    private async Task CheckRdbUpdatesAsync(
         IReadOnlyList<(string LibraryId, List<ArtworkCandidate> Candidates)> libraryCandidates,
         Func<string, Task<RdbCheckResult>> checkPlatform,
         ISet<string>? onlyPlatforms,
-        ISet<string>? deferClearPlatforms,
-        bool deferAllClears,
         CancellationToken cancellationToken)
     {
         var platformsBySource = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
@@ -1321,7 +1175,6 @@ public sealed partial class GameArtworkReconciliationService
             }
         }
 
-        var clearedAll = true;
         foreach (var (platform, members) in byPlatform.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1356,19 +1209,8 @@ public sealed partial class GameArtworkReconciliationService
                     }
                 }
 
-                if (deferAllClears || deferClearPlatforms?.Contains(platform) == true)
-                {
-                    clearedAll = false;
-                    _logger.LogInformation(
-                        "Reopened {Count} missing game artwork entries after {Platform} metadata update; keeping reopen pending for incomplete libraries",
-                        reopenedCount,
-                        platform);
-                }
-                else
-                {
-                    _thumbs.ClearRdbPendingReopen(platform, check.Digest);
-                    _logger.LogInformation("Reopened {Count} missing game artwork entries after the {Platform} metadata update", reopenedCount, platform);
-                }
+                _thumbs.ClearRdbPendingReopen(platform, check.Digest);
+                _logger.LogInformation("Reopened {Count} missing game artwork entries after the {Platform} metadata update", reopenedCount, platform);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -1376,12 +1218,9 @@ public sealed partial class GameArtworkReconciliationService
             }
             catch (Exception ex)
             {
-                clearedAll = false;
                 _logger.LogWarning(ex, "Checking {Platform} game metadata for updates failed", platform);
             }
         }
-
-        return clearedAll;
     }
 
     private async Task<bool> QueueCandidateAsync(
@@ -1421,55 +1260,36 @@ public sealed partial class GameArtworkReconciliationService
         }
     }
 
-    private Task<List<ArtworkCatalogWorkItem>> EnqueueRecoveryAsync(IReadOnlyList<ArtworkCatalogWorkItem> recovery, CancellationToken cancellationToken)
+    private Task EnqueueRecoveryAsync(IReadOnlyList<ArtworkCatalogWorkItem> recovery, CancellationToken cancellationToken)
     {
-        var remaining = new List<ArtworkCatalogWorkItem>();
         foreach (var item in recovery)
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                remaining.Add(item);
-                continue;
-            }
-
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(item.Entry.GameId) || !TryParseKind(item.Entry.Key.Role, out var kind))
             {
                 continue;
             }
 
-            try
+            var candidate = TryCreateCandidate(item.Entry.Key.LibraryId, item.Entry.GameId, kind);
+            if (candidate == null || !string.Equals(candidate.Key.StorageKey, item.Entry.Key.StorageKey, StringComparison.Ordinal))
             {
-                var candidate = TryCreateCandidate(item.Entry.Key.LibraryId, item.Entry.GameId, kind);
-                if (candidate == null || !string.Equals(candidate.Key.StorageKey, item.Entry.Key.StorageKey, StringComparison.Ordinal))
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                if (item.Stage == ArtworkCatalogWorkStage.DeriveThumbnail &&
-                    !string.IsNullOrWhiteSpace(item.Entry.OriginalPath) &&
-                    IsManagedArtworkPath(item.Entry.OriginalPath) &&
-                    File.Exists(item.Entry.OriginalPath))
-                {
-                    QueueThumbnail(candidate with { OriginalPath = item.Entry.OriginalPath }, item.NotBeforeUtc);
-                }
-                else if (item.Stage == ArtworkCatalogWorkStage.AcquireOriginal)
-                {
-                    QueueRemote(candidate, ArtworkLane.Bulk, item.NotBeforeUtc);
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            if (item.Stage == ArtworkCatalogWorkStage.DeriveThumbnail &&
+                !string.IsNullOrWhiteSpace(item.Entry.OriginalPath) &&
+                IsManagedArtworkPath(item.Entry.OriginalPath) &&
+                File.Exists(item.Entry.OriginalPath))
             {
-                remaining.Add(item);
-                throw;
+                QueueThumbnail(candidate with { OriginalPath = item.Entry.OriginalPath }, item.NotBeforeUtc);
             }
-            catch (Exception ex)
+            else if (item.Stage == ArtworkCatalogWorkStage.AcquireOriginal)
             {
-                _logger.LogWarning(ex, "Failed to enqueue recovery item {StorageKey} for library {LibraryId}; retaining for retry", item.Entry.Key.StorageKey, item.Entry.Key.LibraryId);
-                remaining.Add(item);
+                QueueRemote(candidate, ArtworkLane.Bulk, item.NotBeforeUtc);
             }
         }
 
-        return Task.FromResult(remaining);
+        return Task.CompletedTask;
     }
 
     private async Task RemoteWorkerAsync(CancellationToken cancellationToken)

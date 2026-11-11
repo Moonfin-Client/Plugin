@@ -11,7 +11,6 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Services;
 using Moonfin.Calendar;
@@ -23,13 +22,12 @@ namespace Emby.Plugins.Moonfin.Api
         private const int MaxDetailsBackdropBlur = 40;
 
         private readonly IAuthorizationContext _authContext;
-        private readonly ILogger _logger;
+
 
         public IRequest Request { get; set; } = null!;
         public IHttpResultFactory ResultFactory { get; set; } = null!;
-        internal MoonfinSettingsService? SettingsOverrideForTesting { get; set; }
 
-        private MoonfinSettingsService Settings => SettingsOverrideForTesting ?? Plugin.Instance?.SettingsService
+        private MoonfinSettingsService Settings => Plugin.Instance?.SettingsService
             ?? throw new InvalidOperationException("MoonfinSettingsService not initialized");
 
         private ILibraryManager? LibraryManager => PluginServices.LibraryManager;
@@ -38,7 +36,6 @@ namespace Emby.Plugins.Moonfin.Api
         {
             _authContext = appHost.Resolve<IAuthorizationContext>();
             ResultFactory = appHost.Resolve<IHttpResultFactory>();
-            _logger = appHost.Resolve<ILogManager>().GetLogger("MoonfinSettings");
         }
 
         private object Json(object? body) => MoonfinJson.Result(Request, ResultFactory, body);
@@ -599,16 +596,7 @@ namespace Emby.Plugins.Moonfin.Api
             if (user == null) return Json(401, new { Error = "User not authenticated" });
 
             var profile = request.Profile ?? "global";
-            MoonfinSettingsProfile? resolved = null;
-            try
-            {
-                resolved = await Settings.GetResolvedProfileAsync(user.Id, profile).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _logger.Warn("Failed to read settings for user " + user.Id + " in GetMediaBar; falling back to random items: " + ex.Message);
-            }
-
+            var resolved = await Settings.GetResolvedProfileAsync(user.Id, profile).ConfigureAwait(false);
             var isFallback = resolved == null;
             var settings = resolved ?? Settings.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 
@@ -619,18 +607,17 @@ namespace Emby.Plugins.Moonfin.Api
             if (LibraryManager == null)
                 return Json(new { Items = Array.Empty<object>(), TotalRecordCount = 0 });
 
+            var hideWatched = !isFallback && settings.HideWatchedInRecentRows == true;
             List<BaseItem> items;
             // The picked libraries and collections draw as one pool whatever the source type, and the
             // library and collection sources from before fall through to the random draw.
             var parentIds = isFallback
                 ? null
                 : (settings.MediaBarLibraryIds ?? new List<string>()).Concat(settings.MediaBarCollectionIds ?? new List<string>()).ToList();
-            var hideWatchedInRecent = !isFallback && settings.HideWatchedInRecentRows == true;
-            var hideUpgradesInRecent = !isFallback && settings.HideUpgradesInRecentRows == true;
             if (sourceType == "recentlyAdded")
-                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated, hideWatchedInRecent, hideUpgradesInRecent);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated, hideWatched);
             else if (sourceType == "recentlyReleased")
-                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate, hideWatchedInRecent, hideUpgradesInRecent);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate, hideWatched);
             else if (sourceType == "newReleases")
                 items = QueryNewReleaseSeries(parentIds, settings.MediaBarNewReleaseDays ?? 30, limit, user, excludedNames);
             else
@@ -689,26 +676,7 @@ namespace Emby.Plugins.Moonfin.Api
         /// genre-name exclusion. Shuffled, or newest first by <paramref name="orderBy"/>. A release date
         /// still to come isn't recently released.
         /// </summary>
-        private static bool HasAnyAncestor(BaseItem item, HashSet<long> ancestorIds)
-        {
-            for (var parent = item.Parent; parent != null; parent = parent.Parent)
-            {
-                if (ancestorIds.Contains(parent.InternalId))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static DateTime EffectiveDateCreatedFor(BaseItem item, bool hideUpgrades)
-        {
-            var fallbackUtc = item.DateCreated.UtcDateTime;
-            return PluginServices.MediaUpgrades?.EffectiveDateCreated(item.Id, fallbackUtc, hideUpgrades) ?? fallbackUtc;
-        }
-
-        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null, bool excludePlayed = false, bool hideUpgrades = false)
+        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null, bool excludePlayed = false)
         {
             var lm = LibraryManager;
             if (lm == null) return new List<BaseItem>();
@@ -725,6 +693,7 @@ namespace Emby.Plugins.Moonfin.Api
                 User = user,
                 Limit = candidates
             };
+
             if (excludePlayed) query.IsPlayed = false;
 
             if (containerGuids != null && containerGuids.Count > 0)
@@ -749,38 +718,6 @@ namespace Emby.Plugins.Moonfin.Api
                 seq = seq.Where(i => i.Genres == null || !i.Genres.Any(excludedNames.Contains));
 
             var list = seq.ToList();
-            if (orderBy == ItemSortBy.DateCreated)
-            {
-                var upgrades = PluginServices.MediaUpgrades;
-                if (upgrades != null)
-                {
-                    var ancestorSet = query.AncestorIds != null && query.AncestorIds.Length > 0
-                        ? new HashSet<long>(query.AncestorIds)
-                        : null;
-                    var seen = new HashSet<Guid>(list.Select(i => i.Id));
-                    foreach (var (upgradedId, _) in upgrades.Ledger.GetDesiredDatesForUpgradedItems(hideUpgrades))
-                    {
-                        if (seen.Contains(upgradedId)) continue;
-                        var extra = lm.GetItemById(upgradedId);
-                        if (extra == null || extra.IsVirtualItem) continue;
-                        if (extra is not MediaBrowser.Controller.Entities.Movies.Movie &&
-                            extra is not MediaBrowser.Controller.Entities.TV.Series) continue;
-                        if (!extra.IsVisible(user) || !HasBackdropImage(extra)) continue;
-                        if (excludePlayed && extra.IsPlayed(user)) continue;
-                        if (excludedNames != null && extra.Genres != null && extra.Genres.Any(excludedNames.Contains)) continue;
-                        if (ancestorSet != null && !HasAnyAncestor(extra, ancestorSet)) continue;
-
-                        seen.Add(extra.Id);
-                        list.Add(extra);
-                    }
-                }
-
-                return list
-                    .OrderByDescending(i => EffectiveDateCreatedFor(i, hideUpgrades))
-                    .Take(limit)
-                    .ToList();
-            }
-
             if (orderBy != null) return list.Take(limit).ToList();
 
             var rng = new Random();

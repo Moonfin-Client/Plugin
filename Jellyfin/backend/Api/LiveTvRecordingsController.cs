@@ -66,7 +66,6 @@ public class LiveTvRecordingsController : ControllerBase
     [Authorize(Policy = LiveTvManagement)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult> Dismiss([FromRoute] Guid itemId, CancellationToken cancellationToken)
     {
         var userId = this.GetUserIdFromClaims();
@@ -75,12 +74,9 @@ public class LiveTvRecordingsController : ControllerBase
             return Unauthorized();
         }
 
-        return await _service.DismissWithOutcomeAsync(itemId, userId.Value, cancellationToken).ConfigureAwait(false) switch
-        {
-            StoreMutationOutcome.Succeeded => NoContent(),
-            StoreMutationOutcome.Unavailable => StatusCode(StatusCodes.Status503ServiceUnavailable),
-            _ => NotFound(),
-        };
+        return await _service.DismissAsync(itemId, userId.Value, cancellationToken).ConfigureAwait(false)
+            ? NoContent()
+            : NotFound();
     }
 
     /// <summary>
@@ -92,7 +88,6 @@ public class LiveTvRecordingsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<CompleteShowingResponse>> RequestCompleteShowing(
         [FromBody] CompleteShowingBody body,
         CancellationToken cancellationToken)
@@ -111,12 +106,9 @@ public class LiveTvRecordingsController : ControllerBase
         var (request, refusal) = await _service.RequestCompleteShowingAsync(body.ProgramId, userId.Value, cancellationToken).ConfigureAwait(false);
         if (request == null)
         {
-            return refusal switch
-            {
-                CompleteShowingRefusal.NoEpisodeNumbers => BadRequest("The program needs season and episode numbers, or movie classification with a title and description."),
-                CompleteShowingRefusal.Unavailable => StatusCode(StatusCodes.Status503ServiceUnavailable),
-                _ => NotFound(),
-            };
+            return refusal == CompleteShowingRefusal.NoEpisodeNumbers
+                ? BadRequest("The program needs season and episode numbers, or movie classification with a title and description.")
+                : NotFound();
         }
 
         return Ok(new CompleteShowingResponse
@@ -137,9 +129,6 @@ public class LiveTvRecordingsController : ControllerBase
 
     [HttpPost("CompleteShowing/Suggestion")]
     [Authorize(Policy = LiveTvManagement)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult> ScheduleSuggestedShowing([FromBody] SuggestedShowingBody body, CancellationToken cancellationToken)
     {
         var userId = this.GetUserIdFromClaims();
@@ -153,12 +142,8 @@ public class LiveTvRecordingsController : ControllerBase
             return BadRequest();
         }
 
-        return await _service.ScheduleSuggestedShowingWithOutcomeAsync(body.ProgramId, body.Showing, userId.Value, cancellationToken).ConfigureAwait(false) switch
-        {
-            StoreMutationOutcome.Succeeded => NoContent(),
-            StoreMutationOutcome.Unavailable => StatusCode(StatusCodes.Status503ServiceUnavailable),
-            _ => Conflict("The selected airing is no longer available or no longer matches."),
-        };
+        return await _service.ScheduleSuggestedShowingAsync(body.ProgramId, body.Showing, userId.Value, cancellationToken).ConfigureAwait(false)
+            ? NoContent() : Conflict("The selected airing is no longer available or no longer matches.");
     }
 
     /// <summary>The server-wide settings.</summary>

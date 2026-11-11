@@ -1,8 +1,5 @@
-using System.Reflection;
 using System.Text;
 using Emby.Plugins.Moonfin.Services;
-using MediaBrowser.Model.Logging;
-using Moonfin.Upgrades;
 using Xunit;
 
 namespace Emby.Plugins.Moonfin.Tests;
@@ -187,105 +184,6 @@ public class AtomicFileTests : IDisposable
     public void DeleteWithSidecars_ShrugsOffFilesThatAreNotThere()
     {
         Assert.Null(Record.Exception(() => AtomicFile.DeleteWithSidecars(NewPath())));
-    }
-
-    [Fact]
-    public void DeleteWithSidecars_ThrowsWhenDirectoryIsInaccessible()
-    {
-        var blockedParent = NewPath();
-        File.WriteAllText(blockedParent, "not-a-directory");
-        var blockedPath = Path.Combine(blockedParent, "session.json");
-
-        Assert.ThrowsAny<IOException>(() => AtomicFile.DeleteWithSidecars(blockedPath));
-    }
-
-    [Fact]
-    public void ReadWithRecovery_DistinguishesInaccessibleParentFromMissingFile()
-    {
-        var missingPath = NewPath();
-        Assert.Null(AtomicFile.ReadWithRecovery(missingPath, Parse, out var missingError));
-        Assert.Null(missingError);
-
-        var blockedParent = NewPath();
-        File.WriteAllText(blockedParent, "not-a-directory");
-        var blockedPath = Path.Combine(blockedParent, "upgrade-dates.json");
-        Assert.Null(AtomicFile.ReadWithRecovery(blockedPath, Parse, out var accessError));
-        Assert.NotNull(accessError);
-        Assert.ThrowsAny<IOException>(() => new EmbyStateFile().Read(blockedPath, Parse));
-    }
-
-    [Fact]
-    public void ReadWithRecovery_PreservesAccessErrorWhenPrimaryFailsEvenIfBackupSucceeds()
-    {
-        var path = NewPath();
-        File.WriteAllText(path, "{\"v\":2}");
-        File.WriteAllText(AtomicFile.BackupPath(path), "{\"v\":1}");
-
-        using (var lockStream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-        {
-            // Primary has access error (sharing violation), but backup is intact.
-            var recovered = AtomicFile.ReadWithRecovery(path, Parse, out var accessError);
-            Assert.Equal("{\"v\":1}", recovered);
-            Assert.NotNull(accessError);
-            Assert.IsAssignableFrom<IOException>(accessError);
-
-            // Two-argument overload returns the backup copy.
-            Assert.Equal("{\"v\":1}", AtomicFile.ReadWithRecovery(path, Parse));
-
-            // State-file adapter must reject the access error and throw.
-            Assert.ThrowsAny<IOException>(() => new EmbyStateFile().Read(path, Parse));
-        }
-
-        // The primary file should not have been overwritten or promoted.
-        Assert.Equal("{\"v\":2}", File.ReadAllText(path));
-    }
-
-    [Fact]
-    public void FilePinStore_RejectsUnreadablePrimaryWithReadableBackup()
-    {
-        var pinDir = Path.Combine(_root, "pins");
-        Directory.CreateDirectory(pinDir);
-        var userId = Guid.NewGuid();
-        var primaryPath = Path.Combine(pinDir, userId.ToString("N") + ".json");
-        var backupPath = AtomicFile.BackupPath(primaryPath);
-
-        File.WriteAllText(primaryPath, "{\"Hash\":\"new-hash\",\"Salt\":\"new-salt\",\"Iterations\":100000}");
-        File.WriteAllText(backupPath, "{\"Hash\":\"old-hash\",\"Salt\":\"old-salt\",\"Iterations\":100000}");
-
-        var pinStore = new FilePinStore(pinDir, NoOpLogger.Create());
-
-        using (var lockStream = new FileStream(primaryPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-        {
-            Assert.ThrowsAny<IOException>(() => pinStore.Load(userId));
-        }
-
-        // Verifying primary was not overwritten with old hash
-        Assert.Contains("new-hash", File.ReadAllText(primaryPath));
-    }
-
-    [Fact]
-    public void MediaUpgradeLedger_RejectsUnreadablePrimaryWithReadableBackup()
-    {
-        var path = NewPath();
-        var backupPath = AtomicFile.BackupPath(path);
-        File.WriteAllText(path, "[{\"ItemType\":\"Movie\",\"Name\":\"New Movie\"}]");
-        File.WriteAllText(backupPath, "[{\"ItemType\":\"Movie\",\"Name\":\"Old Movie\"}]");
-
-        var stateFile = new EmbyStateFile();
-        using (var lockStream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-        {
-            Assert.ThrowsAny<IOException>(() => stateFile.Read<List<MediaUpgradeRecord>>(path, json => new List<MediaUpgradeRecord>()));
-            var ledger = new MediaUpgradeLedger(path, stateFile);
-            Assert.Equal(0, ledger.Count);
-        }
-
-        Assert.Contains("New Movie", File.ReadAllText(path));
-    }
-
-    private class NoOpLogger : DispatchProxy
-    {
-        public static ILogger Create() => Create<ILogger, NoOpLogger>();
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
     }
 
     public void Dispose()

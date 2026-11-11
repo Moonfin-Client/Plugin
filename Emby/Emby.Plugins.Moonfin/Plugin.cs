@@ -100,30 +100,14 @@ namespace Emby.Plugins.Moonfin
         {
             var oldUrl = Configuration?.PublicServerUrl;
             var oldGames = GamesSignature(Configuration);
-            var oldHideWatchedGlobal = Configuration?.DefaultUserSettings?.HideWatchedInRecentRows;
-            var oldHideWatchedTv = Configuration?.GetDefaultsFor("tv")?.HideWatchedInRecentRows;
-            var oldHideWatchedDesktop = Configuration?.GetDefaultsFor("desktop")?.HideWatchedInRecentRows;
-            var oldHideWatchedMobile = Configuration?.GetDefaultsFor("mobile")?.HideWatchedInRecentRows;
+            var oldHideWatched = HideWatchedDefaults(Configuration);
             base.UpdateConfiguration(configuration);
             var newUrl = Configuration?.PublicServerUrl;
 
-            try
+            // Users who inherit a changed Hide Watched default get their HidePlayedInLatest moved to match.
+            if (HideWatchedDefaults(Configuration) != oldHideWatched)
             {
-                if (SettingsService != null)
-                {
-                    _ = SettingsService.ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
-                    if (oldHideWatchedGlobal != Configuration?.DefaultUserSettings?.HideWatchedInRecentRows ||
-                        oldHideWatchedTv != Configuration?.GetDefaultsFor("tv")?.HideWatchedInRecentRows ||
-                        oldHideWatchedDesktop != Configuration?.GetDefaultsFor("desktop")?.HideWatchedInRecentRows ||
-                        oldHideWatchedMobile != Configuration?.GetDefaultsFor("mobile")?.HideWatchedInRecentRows)
-                    {
-                        _ = SettingsService.SyncHideWatchedForAffectedUsersAsync(CancellationToken.None);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Debug("Moonfin upgrade preference sync after config save failed: " + ex.Message);
+                _ = SettingsService?.SyncHideWatchedForAffectedUsersAsync(CancellationToken.None);
             }
 
             // Re-watch and re-scan the ROM roots when the game settings change, so a newly picked
@@ -153,6 +137,12 @@ namespace Emby.Plugins.Moonfin
                 }
             }
         }
+
+        private static (bool?, bool?, bool?, bool?) HideWatchedDefaults(PluginConfiguration? config) => (
+            config?.DefaultUserSettings?.HideWatchedInRecentRows,
+            config?.GetDefaultsFor("tv")?.HideWatchedInRecentRows,
+            config?.GetDefaultsFor("desktop")?.HideWatchedInRecentRows,
+            config?.GetDefaultsFor("mobile")?.HideWatchedInRecentRows);
 
         private static string GamesSignature(PluginConfiguration? config) =>
             config == null

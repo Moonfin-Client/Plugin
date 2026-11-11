@@ -30,24 +30,11 @@ namespace Emby.Plugins.Moonfin.Services
         private static readonly string[] NonSessionCookieNames = { "XSRF-TOKEN", "_csrf" };
 
         public SeerrSessionService(ILogger logger)
-            : this(logger, null)
-        {
-        }
-
-        internal SeerrSessionService(ILogger logger, string? sessionsPath)
         {
             _logger = logger;
-            if (!string.IsNullOrEmpty(sessionsPath))
-            {
-                _sessionsPath = sessionsPath;
-            }
-            else
-            {
-                var dataPath = Plugin.Instance?.DataFolderPath
-                    ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Emby-Server", "programdata", "plugins", "Moonfin");
-                _sessionsPath = Path.Combine(dataPath, "seerr-sessions");
-            }
-
+            var dataPath = Plugin.Instance?.DataFolderPath
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Emby-Server", "programdata", "plugins", "Moonfin");
+            _sessionsPath = Path.Combine(dataPath, "seerr-sessions");
             _jsonOptions = new JsonSerializerOptions
             {
                 WriteIndented = true,
@@ -59,14 +46,7 @@ namespace Emby.Plugins.Moonfin.Services
 
         private void EnsureDirectory()
         {
-            try
-            {
-                if (!Directory.Exists(_sessionsPath)) Directory.CreateDirectory(_sessionsPath);
-            }
-            catch
-            {
-                // Access errors will be caught and reported during read/write/clear operations.
-            }
+            if (!Directory.Exists(_sessionsPath)) Directory.CreateDirectory(_sessionsPath);
         }
 
         private string GetSessionPath(Guid userId) => Path.Combine(_sessionsPath, $"{userId}.json");
@@ -476,17 +456,12 @@ namespace Emby.Plugins.Moonfin.Services
 
         public async Task ClearSessionAsync(Guid userId)
         {
-            var path = GetSessionPath(userId);
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
                 // Takes the backup with it, otherwise recovery could bring back a session the
                 // user just signed out of.
-                AtomicFile.DeleteWithSidecars(path);
-                if (File.Exists(path) || File.Exists(AtomicFile.BackupPath(path)))
-                {
-                    throw new IOException("Failed to delete Seerr session file for user " + userId);
-                }
+                AtomicFile.DeleteWithSidecars(GetSessionPath(userId));
             }
             finally { _lock.Release(); }
         }
@@ -593,17 +568,7 @@ namespace Emby.Plugins.Moonfin.Services
             if (string.IsNullOrEmpty(seerrUrl))
                 return ErrorResponse(503, "Seerr URL not configured");
 
-            SeerrSession? session;
-            try
-            {
-                session = await LoadSessionAsync(userId).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _logger.ErrorException("Failed to read Seerr session for user " + userId + " during proxy request: " + path, ex);
-                return ErrorResponse(500, "Cannot access session file");
-            }
-
+            var session = await LoadSessionAsync(userId).ConfigureAwait(false);
             if (session == null)
                 return ErrorResponse(401, "Not authenticated with Seerr", "NO_SESSION");
 
@@ -1070,25 +1035,11 @@ namespace Emby.Plugins.Moonfin.Services
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var (session, accessError) = await Task.Run(() =>
-                {
-                    Exception? err;
-                    var s = AtomicFile.ReadWithRecovery(
-                        path,
-                        json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions),
-                        out err);
-                    return (s, err);
-                }).ConfigureAwait(false);
-
-                if (session == null && accessError != null)
-                {
-                    _logger.ErrorException("Failed to load Seerr session for user " + userId + " due to access error", accessError);
-                    throw accessError;
-                }
-
-                return session;
+                return await Task.Run(() => AtomicFile.ReadWithRecovery(
+                    path,
+                    json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions))).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
+            catch (Exception ex)
             {
                 _logger.ErrorException("Failed to load Seerr session for user " + userId, ex);
                 return null;

@@ -290,7 +290,7 @@ public partial class GamesService
     /// False while a RomM library has never loaded. Background passes skip it until then, so
     /// an unreachable RomM reads as "not yet known" rather than "has no games".
     /// </summary>
-    public virtual bool IsLibraryInventoryReady(string libraryId) =>
+    public bool IsLibraryInventoryReady(string libraryId) =>
         _romm == null || !_romm.Owns(libraryId) || _romm.IsReady();
 
     /// <summary>

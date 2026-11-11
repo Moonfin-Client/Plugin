@@ -56,7 +56,6 @@
        same files from the repo's shared folder. -->
   <ItemGroup>
     <Compile Include="../../shared/Calendar/*.cs" Link="Calendar/%(Filename)%(Extension)" />
-    <Compile Include="../../shared/Upgrades/*.cs" Link="Upgrades/%(Filename)%(Extension)" />
     <Compile Include="../../shared/LiveTv/*.cs" Link="LiveTv/%(Filename)%(Extension)" />
     <Compile Include="../../shared/MiniGames/*.cs" Link="MiniGames/%(Filename)%(Extension)" />
     <Compile Include="../../shared/Pin/*.cs" Link="Pin/%(Filename)%(Extension)" />

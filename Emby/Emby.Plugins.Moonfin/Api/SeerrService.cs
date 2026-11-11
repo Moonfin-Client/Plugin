@@ -8,7 +8,6 @@ using Emby.Plugins.Moonfin.Services;
 using MediaBrowser.Common;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Net;
-using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
 using Moonfin.Calendar;
 using Moonfin.Seasonal;
@@ -18,7 +17,6 @@ namespace Emby.Plugins.Moonfin.Api
 {
     public class SeerrService : IService, IRequiresRequest, IHasResultFactory
     {
-        private readonly ILogger _logger;
         private readonly IAuthorizationContext _authContext;
 
         // How long a status check trusts Seerr's last answer about a session before asking again.
@@ -32,7 +30,6 @@ namespace Emby.Plugins.Moonfin.Api
 
         public SeerrService(IApplicationHost appHost)
         {
-            _logger = appHost.Resolve<ILogManager>().GetLogger("MoonfinSeerr");
             _authContext = appHost.Resolve<IAuthorizationContext>();
             ResultFactory = appHost.Resolve<IHttpResultFactory>();
         }
@@ -116,17 +113,7 @@ namespace Emby.Plugins.Moonfin.Api
             if (userId == null) { Request.Response.StatusCode = 401; return new { error = "User not authenticated" }; }
 
             await Session.ProxyRequestAsync(userId.Value, HttpMethod.Post, "auth/logout").ConfigureAwait(false);
-            try
-            {
-                await Session.ClearSessionAsync(userId.Value).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.ErrorException("Failed to clear Seerr session for user " + userId.Value + " during logout", ex);
-                Request.Response.StatusCode = 500;
-                return new { success = false, error = "Failed to clear Seerr session during logout: " + ex.Message };
-            }
-
+            await Session.ClearSessionAsync(userId.Value).ConfigureAwait(false);
             return new { success = true, message = "Logged out from Seerr" };
         }
 

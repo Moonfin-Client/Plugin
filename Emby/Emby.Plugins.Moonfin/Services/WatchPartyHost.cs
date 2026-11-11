@@ -88,18 +88,7 @@ namespace Emby.Plugins.Moonfin.Services
                 foreach (var user in _userManager.GetUserList(new UserQuery()))
                 {
                     var id = user.Id.ToString("N");
-                    bool wantsAlerts;
-                    try
-                    {
-                        wantsAlerts = await WantsAlerts(user.Id).ConfigureAwait(false);
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        _logger.Debug("Could not load settings for user " + user.Id + " during watch party announce: " + ex.Message);
-                        continue;
-                    }
-
-                    if (skip.Contains(id) || !wantsAlerts || FindItem(id, announcement.ContentId) == null)
+                    if (skip.Contains(id) || !await WantsAlerts(user.Id).ConfigureAwait(false) || FindItem(id, announcement.ContentId) == null)
                     {
                         continue;
                     }

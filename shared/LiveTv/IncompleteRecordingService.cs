@@ -70,14 +70,6 @@ public sealed class IncompleteRecordingService : IDisposable
 
     // Written under the lock and read without it, so the watcher never enumerates the store.
     private long _nextRunTicks;
-    private long _storeRetryAtTicks;
-
-    // Observations and library events collected while the store cannot be read from disk.
-    // Guarded by _lock and reconciled into persisted state once Load() succeeds.
-    private readonly IncompleteRecordingStoreData _outageData = new();
-    private readonly List<string> _pendingStoppedTimerIds = new();
-    private readonly List<PendingLibraryEvent> _pendingLibraryEvents = new();
-    private bool _outageDataNeedsSave;
 
     // What library events can concern, rebuilt under the lock whenever the store changes. Null
     // until the store is loaded, when every event is handled.
@@ -147,20 +139,8 @@ public sealed class IncompleteRecordingService : IDisposable
     /// the next window's start, the safety-net check or the daily request search, whichever is first.
     /// Safe to call without the lock, since it reads only what the last pass worked out.
     /// </summary>
-    public DateTime NextRunAt()
-    {
-        var storeRetryTicks = Interlocked.Read(ref _storeRetryAtTicks);
-        var nextRunTicks = Interlocked.Read(ref _nextRunTicks);
-        if (storeRetryTicks > 0)
-        {
-            var effectiveTicks = nextRunTicks > 0 && nextRunTicks < storeRetryTicks
-                ? nextRunTicks
-                : storeRetryTicks;
-            return new DateTime(effectiveTicks, DateTimeKind.Utc);
-        }
-
-        return _timersStale ? Now : new DateTime(nextRunTicks, DateTimeKind.Utc);
-    }
+    public DateTime NextRunAt() =>
+        _timersStale ? Now : new DateTime(Interlocked.Read(ref _nextRunTicks), DateTimeKind.Utc);
 
     /// <summary>Whether a newly added item could be a file an incomplete recording wrote.</summary>
     public bool MayConcernAddedItem(LibraryItem item) =>
@@ -220,34 +200,13 @@ public sealed class IncompleteRecordingService : IDisposable
                 return;
             }
 
+            var data = Load();
             var now = Now;
-            var storeRetryTicks = Interlocked.Read(ref _storeRetryAtTicks);
-            IncompleteRecordingStoreData? data = null;
-            if (storeRetryTicks == 0 || now.Ticks >= storeRetryTicks)
-            {
-                data = Load();
-                if (data == null)
-                {
-                    Interlocked.Exchange(ref _storeRetryAtTicks, (now + IncompleteRecordingRules.SafetyNetInterval).Ticks);
-                }
-            }
-
             var previousTimers = _timers;
 
             if (_timersStale || _timersLoadedAt == null || now - _timersLoadedAt >= IncompleteRecordingRules.SafetyNetInterval)
             {
                 await ReloadTimersAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            if (data == null)
-            {
-                StartSnapshots(_outageData, now);
-                Sample(_outageData, now);
-                MarkStoppedRecordings(_outageData, captureUnmatched: true);
-                var retryAt = new DateTime(Interlocked.Read(ref _storeRetryAtTicks), DateTimeKind.Utc);
-                var outageNext = ComputeOutageNextRunAt(_outageData, Now, retryAt);
-                Interlocked.Exchange(ref _nextRunTicks, outageNext.Ticks);
-                return;
             }
 
             foreach (var stale in _lastSeenIdle.Where(e => now - e.Value > TimeSpan.FromDays(1)).Select(e => e.Key).ToList())
@@ -260,15 +219,12 @@ public sealed class IncompleteRecordingService : IDisposable
                 _timerCreatedAt.TryRemove(stale, out _);
             }
 
-            var changed = _outageDataNeedsSave;
-            _outageDataNeedsSave = false;
-            changed |= StartSnapshots(data, now);
+            var changed = StartSnapshots(data, now);
             changed |= Sample(data, now);
             changed |= TrackScheduledRequests(data, now, previousTimers);
             changed |= await RetryUntagsAsync(data, cancellationToken).ConfigureAwait(false);
             changed |= MarkStoppedRecordings(data);
             changed |= await JudgeClosedAsync(data, now, cancellationToken).ConfigureAwait(false);
-            changed |= await ReplayPendingLibraryEventsAsync(data, now, cancellationToken).ConfigureAwait(false);
             changed |= ApplySettings(data);
 
             // Without a current list of timers a search can't tell which showings already have
@@ -311,18 +267,7 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
-            if (data == null)
-            {
-                _pendingLibraryEvents.Add(PendingLibraryEvent.Added(item));
-                return;
-            }
-
-            var now = Now;
-            var changed = _outageDataNeedsSave;
-            _outageDataNeedsSave = false;
-            changed |= await ReplayPendingLibraryEventsAsync(data, now, cancellationToken).ConfigureAwait(false);
-            changed |= await TryAttachAsync(data, item, now, cancellationToken).ConfigureAwait(false);
-            if (changed)
+            if (await TryAttachAsync(data, item, Now, cancellationToken).ConfigureAwait(false))
             {
                 Save(data);
             }
@@ -349,17 +294,24 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
-            if (data == null)
+            var records = data.Records.Where(r => !r.Dismissed && r.TaggedItemIds.Contains(item.Id)).ToList();
+            if (records.Count == 0 || _host.GetTags(item.Id) is not { } tags || HasIncompleteTag(tags))
             {
-                _pendingLibraryEvents.Add(PendingLibraryEvent.TagRemoved(item.Id));
                 return;
             }
 
             var now = Now;
-            var changed = _outageDataNeedsSave;
-            _outageDataNeedsSave = false;
-            changed |= await ReplayPendingLibraryEventsAsync(data, now, cancellationToken).ConfigureAwait(false);
-            changed |= HandleTagRemovedCore(data, item.Id, now);
+            var changed = false;
+            foreach (var record in records)
+            {
+                record.Dismissed = true;
+                record.DismissedAt = now;
+                changed = true;
+                _logger.Info(
+                    "The incomplete tag was removed from {ItemId} ({Recording}) outside Moonfin; it is treated as complete and won't be deleted",
+                    item.Id, Describe(record));
+            }
+
             if (changed)
             {
                 Save(data);
@@ -383,17 +335,32 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
-            if (data == null)
+            var now = Now;
+            var changed = false;
+            foreach (var record in data.Records.Where(r => r.ItemIds.Contains(itemId)).ToList())
             {
-                _pendingLibraryEvents.Add(PendingLibraryEvent.Removed(itemId));
-                return;
+                // A copy this service deleted was logged when deleted.
+                if (!record.Dismissed && !_deletedByService.Remove(itemId))
+                {
+                    _logger.Info(
+                        "Incomplete copy {ItemId} of {Recording} left the library, deleted or moved outside Moonfin",
+                        itemId, Describe(record));
+                }
+
+                foreach (var fragment in record.Fragments)
+                {
+                    fragment.ItemIds.Remove(itemId);
+                }
+
+                record.TaggedItemIds.Remove(itemId);
+                if (!record.ItemIds.Any() && now - record.JudgedAt >= IncompleteRecordingRules.AttachWindow)
+                {
+                    data.Records.Remove(record);
+                }
+
+                changed = true;
             }
 
-            var now = Now;
-            var changed = _outageDataNeedsSave;
-            _outageDataNeedsSave = false;
-            changed |= await ReplayPendingLibraryEventsAsync(data, now, cancellationToken).ConfigureAwait(false);
-            changed |= HandleItemRemovedCore(data, itemId, now);
             if (changed)
             {
                 Save(data);
@@ -403,119 +370,6 @@ public sealed class IncompleteRecordingService : IDisposable
         {
             _lock.Release();
         }
-    }
-
-    private bool HandleTagRemovedCore(IncompleteRecordingStoreData data, Guid itemId, DateTime now)
-    {
-        var records = data.Records.Where(r => !r.Dismissed && r.TaggedItemIds.Contains(itemId)).ToList();
-        if (records.Count == 0 || _host.GetTags(itemId) is not { } tags || HasIncompleteTag(tags))
-        {
-            return false;
-        }
-
-        var changed = false;
-        foreach (var record in records)
-        {
-            var closedRequest = DismissRecordAndAutoRequest(data, record, now);
-            changed = true;
-            _logger.Info(
-                closedRequest
-                    ? "The incomplete tag was removed from {ItemId} ({Recording}) outside Moonfin; it is treated as complete, won't be deleted, and the search for a later showing stopped"
-                    : "The incomplete tag was removed from {ItemId} ({Recording}) outside Moonfin; it is treated as complete and won't be deleted",
-                itemId, Describe(record));
-        }
-
-        return changed;
-    }
-
-    private bool HandleItemRemovedCore(IncompleteRecordingStoreData data, Guid itemId, DateTime now)
-    {
-        var changed = false;
-        foreach (var record in data.Records.Where(r => r.ItemIds.Contains(itemId)).ToList())
-        {
-            // A copy this service deleted was logged when deleted.
-            if (!record.Dismissed && !_deletedByService.Remove(itemId))
-            {
-                _logger.Info(
-                    "Incomplete copy {ItemId} of {Recording} left the library, deleted or moved outside Moonfin",
-                    itemId, Describe(record));
-            }
-
-            foreach (var fragment in record.Fragments)
-            {
-                fragment.ItemIds.Remove(itemId);
-            }
-
-            record.TaggedItemIds.Remove(itemId);
-            if (!record.ItemIds.Any() && now - record.JudgedAt >= IncompleteRecordingRules.AttachWindow)
-            {
-                data.Records.Remove(record);
-            }
-
-            changed = true;
-        }
-
-        return changed;
-    }
-
-    private static bool DismissRecordAndAutoRequest(IncompleteRecordingStoreData data, IncompleteRecord record, DateTime now)
-    {
-        record.Dismissed = true;
-        record.DismissedAt = now;
-
-        if (record.RequestId == null)
-        {
-            return false;
-        }
-
-        if (data.Records.Any(other => !ReferenceEquals(other, record) && !other.Dismissed && other.RequestId == record.RequestId))
-        {
-            return false;
-        }
-
-        var request = data.Requests.FirstOrDefault(r => r.Id == record.RequestId);
-        if (request != null && !request.Explicit && CompleteShowingState.IsOpen(request.State))
-        {
-            request.State = CompleteShowingState.Dismissed;
-            request.PendingProgramId = null;
-            request.ClosedAt = now;
-            return true;
-        }
-
-        return false;
-    }
-
-    private async Task<bool> ReplayPendingLibraryEventsAsync(
-        IncompleteRecordingStoreData data,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        if (_pendingLibraryEvents.Count == 0)
-        {
-            return false;
-        }
-
-        var pending = _pendingLibraryEvents.ToList();
-        _pendingLibraryEvents.Clear();
-
-        var changed = false;
-        foreach (var ev in pending)
-        {
-            switch (ev.Kind)
-            {
-                case PendingLibraryEventKind.Added when ev.Item != null:
-                    changed |= await TryAttachAsync(data, ev.Item, now, cancellationToken).ConfigureAwait(false);
-                    break;
-                case PendingLibraryEventKind.TagRemoved:
-                    changed |= HandleTagRemovedCore(data, ev.ItemId, now);
-                    break;
-                case PendingLibraryEventKind.Removed:
-                    changed |= HandleItemRemovedCore(data, ev.ItemId, now);
-                    break;
-            }
-        }
-
-        return changed;
     }
 
     /// <summary>
@@ -529,10 +383,6 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
-            if (data == null)
-            {
-                return Array.Empty<IncompleteRecordingStateDto>();
-            }
             var ids = itemIds?.ToList() is { Count: > 0 } given
                 ? given
                 : data.Records.Where(r => !r.Dismissed).SelectMany(r => r.ItemIds).ToList();
@@ -573,31 +423,28 @@ public sealed class IncompleteRecordingService : IDisposable
     /// request opened for it closes too, since the user is satisfied with this copy. An explicit
     /// request someone asked for stays. A timer already scheduled is left alone.
     /// </summary>
-    public async Task<bool> DismissAsync(Guid itemId, Guid userId, CancellationToken cancellationToken) =>
-        await DismissWithOutcomeAsync(itemId, userId, cancellationToken).ConfigureAwait(false) == StoreMutationOutcome.Succeeded;
-
-    /// <summary>
-    /// Keep as Complete, distinguishing a transient store load outage from an unknown or invisible item.
-    /// </summary>
-    public async Task<StoreMutationOutcome> DismissWithOutcomeAsync(Guid itemId, Guid userId, CancellationToken cancellationToken)
+    public async Task<bool> DismissAsync(Guid itemId, Guid userId, CancellationToken cancellationToken)
     {
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var data = Load();
-            if (data == null)
-            {
-                return StoreMutationOutcome.Unavailable;
-            }
             var record = data.Records.FirstOrDefault(r => r.ItemIds.Contains(itemId));
             if (record == null || !_host.IsVisibleTo(itemId, userId))
             {
-                return StoreMutationOutcome.Rejected;
+                return false;
             }
 
             var now = Now;
-            if (DismissRecordAndAutoRequest(data, record, now))
+            record.Dismissed = true;
+            record.DismissedAt = now;
+
+            var request = record.RequestId == null ? null : data.Requests.FirstOrDefault(r => r.Id == record.RequestId);
+            if (request != null && !request.Explicit && CompleteShowingState.IsOpen(request.State))
             {
+                request.State = CompleteShowingState.Dismissed;
+                request.PendingProgramId = null;
+                request.ClosedAt = now;
                 _logger.Info(
                     "{Recording} ({ItemId}) was marked Keep as Complete; it won't be deleted, and the search for a later showing stopped",
                     Describe(record), itemId);
@@ -617,7 +464,7 @@ public sealed class IncompleteRecordingService : IDisposable
             }
 
             Save(data);
-            return StoreMutationOutcome.Succeeded;
+            return true;
         }
         finally
         {
@@ -651,10 +498,6 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
-            if (data == null)
-            {
-                return (null, CompleteShowingRefusal.Unavailable);
-            }
             var now = Now;
             await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
             var request = FindOpenRequest(data, key);
@@ -702,10 +545,6 @@ public sealed class IncompleteRecordingService : IDisposable
         try
         {
             var data = Load();
-            if (data == null)
-            {
-                return new();
-            }
             await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
             return _timersCurrent ? CompleteShowingOptionsCore(data, programId, userId) : new();
         }
@@ -760,32 +599,21 @@ public sealed class IncompleteRecordingService : IDisposable
 
     /// <summary>Records the confirmed airing; only identified episodes/movies enter recovery.</summary>
     public async Task<bool> ScheduleSuggestedShowingAsync(string programId, SuggestedShowing showing,
-        Guid userId, CancellationToken cancellationToken) =>
-        await ScheduleSuggestedShowingWithOutcomeAsync(programId, showing, userId, cancellationToken).ConfigureAwait(false) == StoreMutationOutcome.Succeeded;
-
-    /// <summary>
-    /// Records the confirmed airing, distinguishing a transient store load outage from airing or guide conflicts.
-    /// </summary>
-    public async Task<StoreMutationOutcome> ScheduleSuggestedShowingWithOutcomeAsync(string programId, SuggestedShowing showing,
         Guid userId, CancellationToken cancellationToken)
     {
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var data = Load();
-            if (data == null)
-            {
-                return StoreMutationOutcome.Unavailable;
-            }
             await RefreshRequestTimersAsync(data, cancellationToken).ConfigureAwait(false);
             if (!_timersCurrent)
             {
                 _logger.Warn(null, "Could not record the confirmed showing of {Program}: the Live TV timers could not be loaded", showing.Name);
-                return StoreMutationOutcome.Rejected;
+                return false;
             }
 
             var source = VisibleProgram(programId, userId);
-            if (source == null) return StoreMutationOutcome.Rejected;
+            if (source == null) return false;
             var name = source.Key is { } sourceKey ? Describe(sourceKey) : source.SeriesName;
             var request = source.Key == null ? null : FindOpenRequest(data, source.Key);
             var bookedId = request?.State == CompleteShowingState.Scheduled ? request.ScheduledProgramId : request?.PendingProgramId;
@@ -797,14 +625,14 @@ public sealed class IncompleteRecordingService : IDisposable
                 Save(data);
                 ScheduleNextRun(data, Now);
                 _logger.Info("A user confirmed the showing of {Recording} already booked at {Start} on {Channel}", name, booked.StartDate, booked.ChannelName);
-                return StoreMutationOutcome.Succeeded;
+                return true;
             }
 
             if (!string.Equals(showing.CancellationVersion ?? string.Empty, CancellationVersion(data, showing.ProgramId), StringComparison.Ordinal)
                 && LiveTimerFor(showing.ProgramId) == null)
             {
                 _logger.Info("Did not record the confirmed showing of {Recording} at {Start}: its recording was cancelled after it was offered", name, showing.StartDate);
-                return StoreMutationOutcome.Rejected;
+                return false;
             }
 
             var candidate = VisibleProgram(showing.ProgramId, userId);
@@ -816,14 +644,14 @@ public sealed class IncompleteRecordingService : IDisposable
                 || candidate.SeriesName != showing.Name || (candidate.Overview ?? string.Empty) != showing.Description)
             {
                 _logger.Info("Did not record the confirmed showing of {Recording} at {Start}: the guide changed since it was offered", name, showing.StartDate);
-                return StoreMutationOutcome.Rejected;
+                return false;
             }
 
             if (request != null && ((request.State == CompleteShowingState.Scheduled && request.ScheduledProgramId != candidate.Id)
                 || (request.PendingProgramId != null && request.PendingProgramId != candidate.Id && LiveTimerFor(request.PendingProgramId) != null)))
             {
                 _logger.Info("Did not record the confirmed showing of {Recording} at {Start}: a different showing is already booked", name, showing.StartDate);
-                return StoreMutationOutcome.Rejected;
+                return false;
             }
 
             var createdRequest = request == null && source.Key != null;
@@ -858,7 +686,7 @@ public sealed class IncompleteRecordingService : IDisposable
                     }
 
                     _logger.Warn(null, "Could not schedule the confirmed showing of {Recording} at {Start} on {Channel}", name, candidate.StartDate, candidate.ChannelName);
-                    return StoreMutationOutcome.Rejected;
+                    return false;
                 }
             }
 
@@ -876,7 +704,7 @@ public sealed class IncompleteRecordingService : IDisposable
                     name, candidate.StartDate, candidate.ChannelName);
             }
 
-            return StoreMutationOutcome.Succeeded;
+            return true;
         }
         finally
         {
@@ -1366,24 +1194,17 @@ public sealed class IncompleteRecordingService : IDisposable
 
     // A timer cancelled while its recording ran was stopped on purpose. Jellyfin only cancels a
     // running timer when someone does, so the short file is what they asked for.
-    private bool MarkStoppedRecordings(IncompleteRecordingStoreData data, bool captureUnmatched = false)
+    private bool MarkStoppedRecordings(IncompleteRecordingStoreData data)
     {
         var changed = false;
         while (_stoppedTimers.TryDequeue(out var id))
         {
-            var matched = false;
             foreach (var snapshot in data.Snapshots.Where(s => s.JudgedAt == null
                 && (string.Equals(s.TimerId, id, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(s.ApiId, id, StringComparison.OrdinalIgnoreCase))))
             {
                 snapshot.StoppedByUser = true;
                 changed = true;
-                matched = true;
-            }
-
-            if (captureUnmatched && !matched)
-            {
-                _pendingStoppedTimerIds.Add(id);
             }
         }
 
@@ -1959,154 +1780,23 @@ public sealed class IncompleteRecordingService : IDisposable
 
     private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 
-    private DateTime ComputeOutageNextRunAt(IncompleteRecordingStoreData outageData, DateTime now, DateTime storeRetryAt)
-    {
-        if (outageData.Snapshots.Any(s => s.JudgedAt == null))
-        {
-            var sampleAt = now + IncompleteRecordingRules.SampleInterval;
-            return sampleAt < storeRetryAt ? sampleAt : storeRetryAt;
-        }
-
-        var next = storeRetryAt;
-        foreach (var timer in _timers.Where(IsLive))
-        {
-            if (timer.WindowStart <= now && now < timer.WindowEnd)
-            {
-                var sampleAt = now + IncompleteRecordingRules.SampleInterval;
-                return sampleAt < storeRetryAt ? sampleAt : storeRetryAt;
-            }
-
-            if (timer.WindowStart > now && timer.WindowStart < next)
-            {
-                next = timer.WindowStart;
-            }
-        }
-
-        return next;
-    }
-
-    private IncompleteRecordingStoreData? Load()
+    private IncompleteRecordingStoreData Load()
     {
         if (_data != null)
         {
             return _data;
         }
 
-        try
-        {
-            _data = _stateFile.Read(_storePath, json => JsonSerializer.Deserialize<IncompleteRecordingStoreData>(json, JsonOptions))
-                ?? new IncompleteRecordingStoreData();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _logger.Warn(ex, "Could not load incomplete recordings from {Path}; deferring processing until the store can be read", _storePath);
-            return null;
-        }
-
-        Interlocked.Exchange(ref _storeRetryAtTicks, 0);
-        if (ReconcileOutageSnapshots(_data))
-        {
-            _outageDataNeedsSave = true;
-        }
-
+        _data = _stateFile.Read(_storePath, json => JsonSerializer.Deserialize<IncompleteRecordingStoreData>(json, JsonOptions))
+            ?? new IncompleteRecordingStoreData();
         RefreshTracked(_data);
         return _data;
-    }
-
-    private bool ReconcileOutageSnapshots(IncompleteRecordingStoreData data)
-    {
-        var changed = false;
-
-        foreach (var outageSnapshot in _outageData.Snapshots)
-        {
-            var existing = data.Snapshots.FirstOrDefault(s =>
-                s.JudgedAt == null && string.Equals(s.TimerId, outageSnapshot.TimerId, StringComparison.OrdinalIgnoreCase));
-            if (existing == null)
-            {
-                data.Snapshots.Add(outageSnapshot);
-                changed = true;
-                continue;
-            }
-
-            if (outageSnapshot.StoppedByUser && !existing.StoppedByUser)
-            {
-                existing.StoppedByUser = true;
-                changed = true;
-            }
-
-            foreach (var fragment in outageSnapshot.Fragments)
-            {
-                var match = existing.Fragments.FirstOrDefault(f =>
-                    string.Equals(f.Path, fragment.Path, StringComparison.Ordinal)
-                    && string.Equals(f.ProcessId, fragment.ProcessId, StringComparison.Ordinal));
-                if (match == null)
-                {
-                    existing.Fragments.Add(fragment);
-                    changed = true;
-                }
-                else
-                {
-                    if (fragment.CoveredSeconds > match.CoveredSeconds)
-                    {
-                        match.CoveredSeconds = fragment.CoveredSeconds;
-                        changed = true;
-                    }
-
-                    if (fragment.UnknownSeconds > match.UnknownSeconds)
-                    {
-                        match.UnknownSeconds = fragment.UnknownSeconds;
-                        changed = true;
-                    }
-
-                    if (fragment.LastSampleAt > match.LastSampleAt)
-                    {
-                        match.LastSampleAt = fragment.LastSampleAt;
-                        match.LastSize = fragment.LastSize;
-                        changed = true;
-                    }
-
-                    if (fragment.Ended && !match.Ended)
-                    {
-                        match.Ended = true;
-                        changed = true;
-                    }
-                }
-            }
-        }
-
-        _outageData.Snapshots.Clear();
-
-        if (_pendingStoppedTimerIds.Count > 0)
-        {
-            foreach (var id in _pendingStoppedTimerIds)
-            {
-                foreach (var snapshot in data.Snapshots.Where(s => s.JudgedAt == null
-                    && (string.Equals(s.TimerId, id, StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(s.ApiId, id, StringComparison.OrdinalIgnoreCase))))
-                {
-                    if (!snapshot.StoppedByUser)
-                    {
-                        snapshot.StoppedByUser = true;
-                        changed = true;
-                    }
-                }
-            }
-
-            _pendingStoppedTimerIds.Clear();
-        }
-
-        return changed;
     }
 
     private void RefreshTracked(IncompleteRecordingStoreData data) => _tracked = new TrackedItems(data);
 
     private void Save(IncompleteRecordingStoreData data)
     {
-        if (_data == null)
-        {
-            return;
-        }
-
         RefreshTracked(data);
         try
         {
@@ -2158,38 +1848,6 @@ public sealed class IncompleteRecordingService : IDisposable
         private static string Stem(string path) =>
             Path.Combine(Path.GetDirectoryName(path) ?? string.Empty, Path.GetFileNameWithoutExtension(path));
     }
-
-    private enum PendingLibraryEventKind
-    {
-        Added,
-        TagRemoved,
-        Removed,
-    }
-
-    private readonly struct PendingLibraryEvent
-    {
-        private PendingLibraryEvent(PendingLibraryEventKind kind, Guid itemId, LibraryItem? item)
-        {
-            Kind = kind;
-            ItemId = itemId;
-            Item = item;
-        }
-
-        public PendingLibraryEventKind Kind { get; }
-        public Guid ItemId { get; }
-        public LibraryItem? Item { get; }
-
-        public static PendingLibraryEvent Added(LibraryItem item) => new(PendingLibraryEventKind.Added, item.Id, item);
-        public static PendingLibraryEvent TagRemoved(Guid itemId) => new(PendingLibraryEventKind.TagRemoved, itemId, null);
-        public static PendingLibraryEvent Removed(Guid itemId) => new(PendingLibraryEventKind.Removed, itemId, null);
-    }
-}
-
-public enum StoreMutationOutcome
-{
-    Succeeded,
-    Rejected,
-    Unavailable,
 }
 
 public enum CompleteShowingRefusal
@@ -2197,5 +1855,4 @@ public enum CompleteShowingRefusal
     None,
     NotFound,
     NoEpisodeNumbers,
-    Unavailable,
 }

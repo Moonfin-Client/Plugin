@@ -26,28 +26,14 @@ public class SeerrSessionService
     public SeerrSessionService(
         ILogger<SeerrSessionService> logger,
         IHttpClientFactory httpClientFactory)
-        : this(logger, httpClientFactory, null)
-    {
-    }
-
-    internal SeerrSessionService(
-        ILogger<SeerrSessionService> logger,
-        IHttpClientFactory httpClientFactory,
-        string? sessionsPath)
     {
         _logger = logger;
         _httpClientFactory = httpClientFactory;
 
-        if (!string.IsNullOrEmpty(sessionsPath))
-        {
-            _sessionsPath = sessionsPath;
-        }
-        else
-        {
-            var dataPath = MoonfinPlugin.Instance?.DataFolderPath
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
-            _sessionsPath = Path.Combine(dataPath, "seerr-sessions");
-        }
+        var dataPath = MoonfinPlugin.Instance?.DataFolderPath
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Jellyfin", "plugins", "Moonfin");
+
+        _sessionsPath = Path.Combine(dataPath, "seerr-sessions");
 
         _jsonOptions = new JsonSerializerOptions
         {
@@ -61,16 +47,9 @@ public class SeerrSessionService
 
     private void EnsureDirectory()
     {
-        try
+        if (!Directory.Exists(_sessionsPath))
         {
-            if (!Directory.Exists(_sessionsPath))
-            {
-                Directory.CreateDirectory(_sessionsPath);
-            }
-        }
-        catch
-        {
-            // Access errors will be caught and reported during read/write/clear operations.
+            Directory.CreateDirectory(_sessionsPath);
         }
     }
 
@@ -819,15 +798,13 @@ public class SeerrSessionService
         try
         {
             var path = GetSessionPath(userId);
-            // Takes the backup with it, otherwise recovery could bring back a session the
-            // user just signed out of.
-            AtomicFile.DeleteWithSidecars(path);
             if (File.Exists(path) || File.Exists(AtomicFile.BackupPath(path)))
             {
-                throw new IOException($"Failed to delete Seerr session file for user {userId}");
+                // Takes the backup with it, otherwise recovery could bring back a session the
+                // user just signed out of.
+                AtomicFile.DeleteWithSidecars(path);
+                _logger.LogInformation("Seerr session cleared for user {UserId}", userId);
             }
-
-            _logger.LogInformation("Seerr session cleared for user {UserId}", userId);
         }
         finally
         {
@@ -866,22 +843,7 @@ public class SeerrSessionService
             };
         }
 
-        SeerrSession? session;
-        try
-        {
-            session = await LoadSessionAsync(userId);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _logger.LogError(ex, "Failed to read Seerr session for user {UserId} during proxy request: {Path}", userId, path);
-            return new SeerrProxyResponse
-            {
-                StatusCode = 500,
-                Body = JsonSerializer.SerializeToUtf8Bytes(new { error = "Cannot access session file" }),
-                ContentType = "application/json"
-            };
-        }
-
+        var session = await LoadSessionAsync(userId);
         if (session == null)
         {
             return new SeerrProxyResponse
@@ -1550,20 +1512,11 @@ public class SeerrSessionService
         await _lock.WaitAsync();
         try
         {
-            var session = AtomicFile.ReadWithRecovery(
+            return AtomicFile.ReadWithRecovery(
                 path,
-                json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions),
-                out var accessError);
-
-            if (session == null && accessError != null)
-            {
-                _logger.LogWarning(accessError, "Failed to load Seerr session for user {UserId} due to access error", userId);
-                throw accessError;
-            }
-
-            return session;
+                json => JsonSerializer.Deserialize<SeerrSession>(json, _jsonOptions));
         }
-        catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load Seerr session for user {UserId}", userId);
             return null;
