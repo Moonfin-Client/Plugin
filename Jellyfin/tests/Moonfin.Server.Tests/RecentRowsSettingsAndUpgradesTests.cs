@@ -308,12 +308,12 @@ public sealed class RecentRowsSettingsAndUpgradesTests
         };
 
         // 1. First live copy arrives.
-        var upgraded1 = ledger.ObserveArrival(candidate1, hideUpgradesEnabled: true, out var desiredUtc1);
+        var upgraded1 = ledger.ObserveArrival(candidate1, hideUpgradesEnabled: true, out var desiredUtc1, isItemLive: id => id == movie1Id);
         Assert.False(upgraded1);
         Assert.Null(desiredUtc1);
 
         // 2. Second live copy arrives (different ItemId, both active in library).
-        var upgraded2 = ledger.ObserveArrival(candidate2, hideUpgradesEnabled: true, out var desiredUtc2);
+        var upgraded2 = ledger.ObserveArrival(candidate2, hideUpgradesEnabled: true, out var desiredUtc2, isItemLive: id => id == movie1Id);
         Assert.False(upgraded2);
         Assert.Null(desiredUtc2);
 

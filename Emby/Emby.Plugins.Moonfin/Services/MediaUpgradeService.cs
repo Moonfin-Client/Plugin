@@ -267,7 +267,7 @@ namespace Emby.Plugins.Moonfin.Services
                 }
 
                 var hideUpgrades = GetHideUpgradesCached();
-                if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc) && desiredUtc.HasValue)
+                if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc, id => _libraryManager.GetItemById(id) != null) && desiredUtc.HasValue)
                 {
                     UpdateItemDate(item, desiredUtc.Value);
                 }

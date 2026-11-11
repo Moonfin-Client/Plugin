@@ -334,7 +334,8 @@ public sealed class MediaUpgradeLedger
     public bool ObserveArrival(
         MediaUpgradeCandidate candidate,
         bool hideUpgradesEnabled,
-        out DateTime? desiredDateCreatedUtc)
+        out DateTime? desiredDateCreatedUtc,
+        Func<Guid, bool>? isItemLive = null)
     {
         desiredDateCreatedUtc = null;
         if (candidate == null || candidate.ItemId == Guid.Empty)
@@ -357,7 +358,7 @@ public sealed class MediaUpgradeLedger
             }
 
             var dateUtc = NormalizeUtc(candidate.DateCreatedUtc);
-            var existing = FindRecord(candidate.ItemId, keys);
+            var existing = FindRecord(candidate.ItemId, keys, isItemLive);
 
             if (existing == null)
             {
@@ -479,7 +480,7 @@ public sealed class MediaUpgradeLedger
         }
     }
 
-    private MediaUpgradeRecord? FindRecord(Guid itemId, List<string> keys)
+    private MediaUpgradeRecord? FindRecord(Guid itemId, List<string> keys, Func<Guid, bool>? isItemLive = null)
     {
         if (_records == null)
         {
@@ -499,6 +500,13 @@ public sealed class MediaUpgradeLedger
                 {
                     return byKeyRecord;
                 }
+
+                if (isItemLive != null && isItemLive(byKeyRecord.ItemId))
+                {
+                    continue;
+                }
+
+                return byKeyRecord;
             }
         }
 

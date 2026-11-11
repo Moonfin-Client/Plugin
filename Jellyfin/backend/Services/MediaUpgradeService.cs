@@ -257,7 +257,7 @@ public sealed class MediaUpgradeService : IHostedService
             }
 
             var hideUpgrades = GetHideUpgradesCached();
-            if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc) && desiredUtc.HasValue)
+            if (_ledger.ObserveArrival(candidate, hideUpgrades, out var desiredUtc, id => _libraryManager.GetItemById(id) != null) && desiredUtc.HasValue)
             {
                 _ = Task.Run(() => UpdateItemDateAsync(item, desiredUtc.Value, CancellationToken.None));
             }
