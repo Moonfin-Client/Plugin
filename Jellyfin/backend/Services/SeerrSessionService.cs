@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Moonfin.Calendar;
@@ -1052,13 +1053,33 @@ public class SeerrSessionService
         ContentType = "application/json"
     };
 
+    /// <summary>A stored Seerr session of the Seerr owner or an admin, for server-side reads.</summary>
+    public SeerrSession? FindAdminSession() => EnumerateSessions().FirstOrDefault(
+        s => s.SeerrUserId == OwnerSeerrUserId || (s.Permissions & AdminBit) != 0);
+
+    /// <summary>
+    /// The whole queue of the default Radarr or Sonarr, for the stuck download check. Null when
+    /// there's no admin session or arr, or the arr couldn't be read.
+    /// </summary>
+    public async Task<JsonArray?> ReadWholeArrQueueAsync(string service, CancellationToken cancellationToken = default)
+    {
+        var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
+        var (server, error) = await ResolveArrServerAsync(service, isSonarr);
+        if (server == null)
+        {
+            _logger.LogDebug("Stuck download check skipped {Service}: {Status}", service, error?.StatusCode);
+            return null;
+        }
+
+        return await StuckDownloads.ReadQueueAsync(ArrSender(service, server, cancellationToken), isSonarr);
+    }
+
     /// <summary>The default Sonarr or Radarr as Seerr has it, read through an admin Seerr session.</summary>
     private async Task<(ArrServerConnection? Server, SeerrProxyResponse? Error)> ResolveArrServerAsync(string service, bool isSonarr)
     {
         var settingsPath = isSonarr ? "settings/sonarr" : "settings/radarr";
 
-        var adminSession = EnumerateSessions().FirstOrDefault(
-            s => s.SeerrUserId == OwnerSeerrUserId || (s.Permissions & AdminBit) != 0);
+        var adminSession = FindAdminSession();
         if (adminSession == null)
         {
             return (null, CalendarError(503, "No admin Seerr session is available to read the arr settings"));

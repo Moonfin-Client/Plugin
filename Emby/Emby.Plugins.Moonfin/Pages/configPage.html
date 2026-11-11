@@ -2433,6 +2433,26 @@
                     </div>
 
                     <div class="verticalSection">
+                        <h3 class="sectionTitle">Stuck downloads</h3>
+                        <div class="checkboxContainer">
+                            <label>
+                                <input type="checkbox" id="StuckDownloadNotify" is="emby-checkbox" />
+                                <span>Notify when a request gets stuck</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Every 15 minutes, Moonfin checks the Radarr and Sonarr set up in Seerr. When a download is import
+                                blocked, has failed, or has stalled, the person who requested it and every Emby admin get one
+                                notification. Needs Seerr turned on above and an admin signed in to Seerr.
+                            </div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="StuckDownloadStalledHours">Stalled hours</label>
+                            <input type="number" id="StuckDownloadStalledHours" is="emby-input" min="1" max="168" step="1" />
+                            <div class="fieldDescription">How many hours a download can sit stalled before it counts as stuck.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
                         <h3 class="sectionTitle">MDBList Integration</h3>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="MdblistApiKey">Server-wide MDBList API Key</label>
