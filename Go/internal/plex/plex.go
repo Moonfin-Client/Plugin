@@ -11,7 +11,6 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -44,6 +43,8 @@ type Config struct {
 	// WatchPartyDir holds the watch party invite page and its preview image
 	// from shared/WatchParty.
 	WatchPartyDir string
+	// EmulatorJSDir holds the retro games player from shared/EmulatorJS.
+	EmulatorJSDir string
 }
 
 // How long a checked token is trusted before Plex is asked again.
@@ -61,6 +62,8 @@ type Companion struct {
 	owner     string
 
 	party *partyState
+
+	similar similarCache
 }
 
 type known struct {
@@ -96,6 +99,8 @@ func New(cfg Config) (*Companion, error) {
 		Pins:           true,
 		WebServer:      cfg.PMS,
 		SeerrPlexLogin: true,
+		Notify:         true,
+		AnimeDir:       filepath.Join(cfg.DataDir, "anime"),
 	})
 	c.startWatchParties()
 	return c, nil
@@ -285,29 +290,11 @@ func (c *Companion) sharedUser(ctx context.Context, token string) (int, string, 
 	if owner == "" {
 		return 0, "", fmt.Errorf("%w: the server owner hasn't signed in to the Moonbase admin page, so shared users can't be named yet", api.ErrSignedOut)
 	}
-	machine, err := c.machineIdentifier(ctx)
+	shares, err := c.shareList(ctx, owner)
 	if err != nil {
 		return 0, "", err
 	}
-	status, body, err := c.get(ctx, c.cfg.PlexTV+"/api/servers/"+url.PathEscape(machine)+"/shared_servers", owner)
-	if err != nil {
-		return 0, "", fmt.Errorf("reach plex.tv: %w", err)
-	}
-	if status != http.StatusOK {
-		return 0, "", fmt.Errorf("plex.tv answered %d to shared_servers", status)
-	}
-	var list struct {
-		Shares []struct {
-			UserID      int    `xml:"userID,attr"`
-			Username    string `xml:"username,attr"`
-			Email       string `xml:"email,attr"`
-			AccessToken string `xml:"accessToken,attr"`
-		} `xml:"SharedServer"`
-	}
-	if err := xml.Unmarshal(body, &list); err != nil {
-		return 0, "", fmt.Errorf("plex.tv sent an unreadable share list: %w", err)
-	}
-	for _, s := range list.Shares {
+	for _, s := range shares {
 		if s.UserID > 0 && subtle.ConstantTimeCompare([]byte(s.AccessToken), []byte(token)) == 1 {
 			name := cmp.Or(s.Username, s.Email)
 			if name == "" {

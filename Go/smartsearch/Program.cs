@@ -105,6 +105,22 @@ public static class Program
             });
         }
 
+        var catalog = new JsonArray();
+        foreach (var hit in results.Catalog)
+        {
+            if (hit.Entry.Payload.Length == 0)
+            {
+                continue;
+            }
+
+            catalog.Add((JsonNode)new JsonObject
+            {
+                ["payload"] = JsonNode.Parse(hit.Entry.Payload),
+                ["score"] = hit.Score,
+                ["similarity"] = hit.Similarity,
+            });
+        }
+
         var q = results.Query;
         return new JsonObject
         {
@@ -116,6 +132,7 @@ public static class Program
                 ["people"] = new JsonArray(q.People.Select(p => (JsonNode?)p).ToArray()),
             },
             ["library"] = library,
+            ["catalog"] = catalog,
         };
     }
 

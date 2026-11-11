@@ -365,10 +365,14 @@ func (s *Server) handleResolved(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resolved)
 }
 
-// handleStream can't stream: Silo buffers each plugin response and gives a
-// plugin call 10 seconds. The non-2xx answer makes Moonfin back off to one
-// retry every 30 seconds instead of reconnecting every second.
+// handleStream can't stream on Silo, which buffers each plugin response and
+// gives a plugin call 10 seconds. The non-2xx answer makes Moonfin back off to
+// one retry every 30 seconds instead of reconnecting every second.
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+	if s.notify.on {
+		s.serveStream(w, r)
+		return
+	}
 	writeJSON(w, http.StatusNotImplemented, M{"supported": false, "transport": "none"})
 }
 

@@ -6,6 +6,7 @@
 !shared/PosterBadges/flags/
 !shared/WatchParty/invite.html
 !shared/WatchParty/preview.png
+!shared/EmulatorJS/
 Go/dist/
 Go/web/moonfin/
 Go/smartsearch/bin/

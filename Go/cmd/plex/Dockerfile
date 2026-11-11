@@ -10,7 +10,11 @@ COPY Jellyfin/frontend web/moonfin/
 ARG VERSION=0.0.0-dev
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/moonbase-plex ./cmd/plex \
+# The push relay key comes in as the optional build secret relay_key, so it
+# stays out of the image's build history. Without it, push needs the Push
+# Relay Key setting.
+RUN --mount=type=secret,id=relay_key CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
+	-ldflags "-s -w -X main.version=${VERSION} -X github.com/Moonfin-Client/Plugin/Go/internal/api.builtInRelayKey=$(cat /run/secrets/relay_key 2>/dev/null)" -o /out/moonbase-plex ./cmd/plex \
 	&& mkdir -p /out/config
 
 # Smart search runs the same C# engine as the Jellyfin and Emby plugins.
@@ -30,6 +34,7 @@ COPY --from=build /out/moonbase-plex /moonbase-plex
 COPY --from=smartsearch /out/smartsearch /smartsearch
 COPY shared/PosterBadges/flags /flags
 COPY shared/WatchParty/invite.html shared/WatchParty/preview.png /watchparty/
+COPY shared/EmulatorJS/player.html shared/EmulatorJS/moonfin-bridge.js /emulatorjs/
 # A named volume takes this folder's owner, so the nonroot user can write it.
 COPY --from=build --chown=65532:65532 /out/config /config
 USER 65532:65532

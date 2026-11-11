@@ -43,6 +43,12 @@ type Host struct {
 	// SeerrPlexLogin lets callers sign in to Seerr with their Plex account,
 	// since UserID is their plex.tv account id.
 	SeerrPlexLogin bool
+	// Notify holds the settings stream open and sends phone pushes. Silo
+	// buffers each plugin response, so it leaves this off.
+	Notify bool
+	// AnimeDir keeps the anime markers' caches and log. Empty, or a catalog
+	// that isn't an AnimeCatalog, leaves the markers off.
+	AnimeDir string
 }
 
 var ErrSignedOut = errors.New("caller isn't signed in")
@@ -84,6 +90,10 @@ type Server struct {
 	// seerrMu guards the stored Seerr sessions.
 	seerrMu        sync.Mutex
 	seerrPlexLogin bool
+
+	notify      notifier
+	remindersMu sync.Mutex
+	anime       *animeMarkers
 }
 
 func NewServer(version string, h Host) *Server {
@@ -97,10 +107,18 @@ func NewServer(version string, h Host) *Server {
 		s.web = bundledWeb()
 	}
 	s.webTag = bundleTag(s.web)
+	s.notify.on = h.Notify
 	s.smart.helper = h.SmartSearch
+	s.anime = newAnimeMarkers(h.AnimeDir, h.Catalog)
 	s.routes()
 	if h.SmartSearch != nil {
 		s.scheduleSmartSearch()
+	}
+	if catalog, ok := h.Catalog.(ReminderCatalog); ok {
+		go s.watchReminders(catalog)
+	}
+	if s.anime != nil {
+		s.scheduleAnimeMarkers()
 	}
 	return s
 }
@@ -121,9 +139,15 @@ func (s *Server) routes() {
 	s.watchPartyRoutes()
 	s.smartRoutes()
 	s.calendarRoutes()
+	s.reminderRoutes()
+	s.notificationRoutes()
+	s.customRowRoutes()
 	s.seerrRoutes()
 	s.posterBadgeRoutes()
 	s.miniGameRoutes()
+	s.similarRoutes()
+	s.animeMarkerRoutes()
+	s.gameRoutes()
 	if s.pins {
 		s.pinRoutes()
 	}

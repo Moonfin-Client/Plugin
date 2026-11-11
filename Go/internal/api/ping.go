@@ -23,14 +23,14 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"tmdbPersonLinksSupported": true,
 		"tmdbReviewsSupported":     true,
 		"messagesSupported":        true,
-		"recommendationsSupported": false,
+		"recommendationsSupported": s.similarOn(cfg),
 		"pinSupported":             s.pins,
 		"clientLogSupported":       cfg.ClientLogUpload,
 		"smartSearchEnabled":       s.smartSearchOn(cfg),
 		"calendarAvailable":        s.calendarOn(cfg, callerOf(r)),
 		"calendarDaysBack":         cfg.CalendarDaysBack,
 		"calendarDaysAhead":        cfg.CalendarDaysAhead,
-		"calendarReminders":        false,
+		"calendarReminders":        s.remindersOn(),
 		"defaultSettings":          pingDefaults(cfg, r.URL.Query().Get("profile")),
 	})
 }

@@ -139,6 +139,11 @@ func (s *Server) handleSmartSearch(w http.ResponseWriter, r *http.Request) {
 			Score      float64 `json:"score"`
 			Similarity float64 `json:"similarity"`
 		} `json:"library"`
+		Catalog []struct {
+			Payload    json.RawMessage `json:"payload"`
+			Score      float64         `json:"score"`
+			Similarity float64         `json:"similarity"`
+		} `json:"catalog"`
 	}
 	args := map[string]any{"model": cfg.SmartSearchModel, "text": text, "candidates": smartCandidates}
 	if err := s.smart.helper.Call(ctx, "search", args, &found); err != nil {
@@ -188,8 +193,26 @@ func (s *Server) handleSmartSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Smart search here has no catalog of titles outside the library, so the Seerr list stays empty.
-	body := M{"Ready": true, "Items": items, "Seerr": []any{}}
+	seerr := []any{}
+	if seerrOn(cfg) {
+		for _, hit := range found.Catalog {
+			if len(seerr) >= limit {
+				break
+			}
+			if !debug {
+				seerr = append(seerr, hit.Payload)
+				continue
+			}
+			var payload M
+			if json.Unmarshal(hit.Payload, &payload) == nil {
+				payload["score"] = hit.Score
+				payload["similarity"] = hit.Similarity
+				seerr = append(seerr, payload)
+			}
+		}
+	}
+
+	body := M{"Ready": true, "Items": items, "Seerr": seerr}
 	if debug {
 		body["Query"] = found.Query
 		body["Milliseconds"] = time.Since(started).Milliseconds()

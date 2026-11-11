@@ -22,7 +22,7 @@ func main() {
 		os.Exit(2)
 	}
 	c, err := plex.New(plex.Config{PMS: pms, DataDir: envOr("MOONBASE_DATA", "/config"), Version: version, SmartSearchHelper: smartSearchHelper(), FlagsDir: besideProgram("MOONBASE_FLAGS", "flags"),
-		WatchPartyDir: besideProgram("MOONBASE_WATCHPARTY", "watchparty")})
+		WatchPartyDir: besideProgram("MOONBASE_WATCHPARTY", "watchparty"), EmulatorJSDir: besideProgram("MOONBASE_EMULATORJS", "emulatorjs")})
 	if err != nil {
 		slog.Error("start Moonbase", "error", err)
 		os.Exit(1)

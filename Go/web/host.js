@@ -41,6 +41,7 @@
                 'Smart Search': 'Not supported on Silo yet. These settings do nothing on Silo for now.'
             },
             liveTv: false,
+            customRows: false,
             ownRequests: true,
             serverRows: true
         },
@@ -51,23 +52,27 @@
             restored: 'Restored the changes you hadn’t saved before your Moonbase sign-in ended. Press Save to keep them.',
             sessionEnded: 'You’re signed out of Moonbase. Sign in again with your Plex account. Changes you tried to save are kept and come back when you do.',
             signInUrl: 'admin/signin',
-            hidden: ['Active Downloads'],
-            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay', 'SeerrWebhookBlock'],
+            hidden: ['Active Downloads', 'Live TV Recordings'],
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay', 'SeerrWebhookBlock', 'FcmServiceAccountJson', 'FcmServiceAccountPath'],
             unsupported: {
                 'Connecting to this server': 'Moonbase for Plex serves Moonfin Web at /Moonfin/Web/ on its own port, 32500 by default. With Default Server URL empty, the app offers the Plex address Moonbase uses.',
                 'Seerr Integration': 'Moonfin apps sign each person in to Seerr with their own Plex account, so Seerr has to use Plex sign-in and know them as a user of this server.',
-                'IMDb Charts': 'Not available on Plex. These settings do nothing on Plex.',
-                'Recommendations': 'Not available on Plex. These settings do nothing on Plex.',
-                'Anime Filler & Recap Markers': 'Not available on Plex. These settings do nothing on Plex.',
-                'Retro Games (EmulatorJS)': 'Not available on Plex. These settings do nothing on Plex.',
+                'IMDb Charts': 'Moonbase for Plex fetches a chart the first time an app asks for it and keeps it for a day, so the nightly sync switch does nothing here.',
+                'Anime Filler & Recap Markers': 'Moonbase for Plex runs the anime markers sync every night at 4:00. Fetch now gets one series right away.',
+                'Retro Games (EmulatorJS)': 'Plex has no game library type, so add a Plex library for your games, such as Other Videos pointed at the ROM folder, and pick it under Game libraries. Moonbase reads the ROMs itself, so mount that folder into the Moonbase container at the path Plex uses, or add a path mapping below the picker. For RomM, an empty Plex library is enough. Only people the Plex library is shared with see its games. Game details from the libretro and LaunchBox databases, arcade core picks and RomM accounts aren’t available on Plex.',
                 'Uploaded Themes': 'Moonbase for Plex keeps up to 5 themes. Apps pick up a new or changed theme the next time they sign in.',
                 'Web Plugin Status': 'Plex Web can’t load Moonfin add-ons, so this doesn’t apply on Plex.',
-                'MDBList Integration': 'Ratings work on Plex. The official MDBList lists don’t.',
-                'Smart Search': 'Works on Plex for your library. Titles you don’t have don’t show up on Plex yet. The index rebuilds a minute after Moonbase starts and every night at 3:00.',
-                'Calendar': 'Moonbase for Plex reads the calendar straight from Sonarr and Radarr, so set their addresses and API keys below. Reminders aren’t available on Plex.'
+                'Smart Search': 'The index rebuilds a minute after Moonbase starts and every night at 3:00.',
+                'Calendar': 'Moonbase for Plex reads the calendar straight from Sonarr and Radarr, so set their addresses and API keys below. A reminder goes off within a few minutes of its episode or movie arriving in a library.'
+            },
+            // Replaces the page's description of a switch, by the switch's id.
+            fieldNotes: {
+                RecommendationsProviderEnabled: 'Ranks the similar titles Moonfin apps show, using each person’s own Plex libraries. Plex Web and other Plex apps keep Plex’s own similar titles. With this off, Moonfin apps work out similar titles on their own.'
             },
             arr: true,
+            gameFolders: true,
             liveTv: true,
+            customRows: true,
             ownRequests: false,
             serverRows: false
         }
@@ -150,12 +155,14 @@
             if (draft) {
                 lastConfig = draft;
                 fillArrFields(draft);
+                fillGamePaths(draft);
                 fillLogUploadField(draft);
                 return Promise.resolve(clone(draft));
             }
             return this.getJSON(getUrl('Moonfin/Admin/Configuration')).then(function (config) {
                 lastConfig = config;
                 fillArrFields(config);
+                fillGamePaths(config);
                 fillLogUploadField(config);
                 return clone(config);
             }, function (error) {
@@ -173,6 +180,7 @@
         },
         updatePluginConfiguration: function (id, config) {
             readArrFields(config);
+            readGamePaths(config);
             readLogUploadField(config);
             return send('POST', getUrl('Moonfin/Admin/Configuration'), JSON.stringify(config), 'application/json').then(function () {
                 clearDraft();
@@ -211,11 +219,15 @@
         getImageUrl: function () {
             return '';
         },
-        // Only the poster label test can search, for movies and episodes on a
-        // host that reads its files. Every other list stays empty.
+        // Only the poster label test and the anime markers preview can search,
+        // on a host that reads its files and series. Every other list stays empty.
         getItems: function (userId, query) {
             var term = query && query.SearchTerm;
-            if (!term || !/Movie|Episode/.test(query.IncludeItemTypes || '')) {
+            var types = (query && query.IncludeItemTypes) || '';
+            if (term && types === 'Series') {
+                return this.getJSON(getUrl('Moonfin/AnimeMarkers/Search', { term: term }));
+            }
+            if (!term || !/Movie|Episode/.test(types)) {
                 return Promise.resolve({ Items: [], TotalRecordCount: 0 });
             }
             return this.getJSON(getUrl('Moonfin/PosterBadges/Search', { term: term }));
@@ -473,6 +485,12 @@
                 });
             };
         }
+        if (!host.customRows) {
+            // Silo can't match outside titles to its library, so it serves no chart or custom list rows.
+            for (var t = HOME_LAYOUT_TABS.length - 1; t >= 0; t--) {
+                if (HOME_LAYOUT_TABS[t].id === 'external' || HOME_LAYOUT_TABS[t].id === 'custom') HOME_LAYOUT_TABS.splice(t, 1);
+            }
+        }
         HOME_SECTION_DEFINITIONS.forEach(function (row) {
             if (!host.ownRequests) return;
             if (row.type === 'seerr_watchlist') row.label = 'Requests Watchlist';
@@ -548,6 +566,61 @@
             + '<input type="' + type + '" id="' + id + '" is="emby-input" autocomplete="off" placeholder="' + placeholder + '" /></div>';
     }
 
+    // Plex has no game library type, so Moonbase reads a picked library's
+    // folders itself, and may see them at other paths than Plex does.
+    var gamePathsFilled = false;
+
+    function addGamePathFields(page) {
+        var picker = page.querySelector('#GameLibraryPicker');
+        var container = picker && picker.closest('.inputContainer');
+        if (!container) return;
+        var block = document.createElement('div');
+        block.className = 'inputContainer';
+        block.id = 'GamesPathMappings';
+        block.innerHTML = '<label class="inputLabel">Game folder paths</label><div class="moonbasePathRows"></div>'
+            + '<button is="emby-button" type="button" class="raised emby-button">Add a path mapping</button>'
+            + '<div class="fieldDescription">Only needed when Plex and Moonbase see your game folders at different paths, like a Plex server on Windows. Give each folder as Plex sees it and where Moonbase finds the same folder. A library folder inside one of them is read from the Moonbase side instead.</div>';
+        block.querySelector('button').addEventListener('click', function () { addGamePathRow(block, '', ''); });
+        container.after(block);
+        FIELD_DEPENDENCIES.forEach(function (rule) {
+            if (rule.parent === 'GamesEnabled') rule.fields.push('GamesPathMappings');
+        });
+    }
+
+    function addGamePathRow(block, plexPath, moonbasePath) {
+        var row = document.createElement('div');
+        row.className = 'moonbasePathRow';
+        row.style.cssText = 'display: flex; gap: 0.5em; align-items: center; margin-bottom: 0.5em;';
+        row.innerHTML = '<input type="text" is="emby-input" class="emby-input" autocomplete="off" aria-label="Folder as Plex sees it" placeholder="As Plex sees it, like D:\\Games" />'
+            + '<input type="text" is="emby-input" class="emby-input" autocomplete="off" aria-label="Same folder in Moonbase" placeholder="In Moonbase, like /games" />'
+            + '<button is="emby-button" type="button" class="raised emby-button">Remove</button>';
+        var inputs = row.querySelectorAll('input');
+        inputs[0].value = plexPath;
+        inputs[1].value = moonbasePath;
+        row.querySelector('button').addEventListener('click', function () { row.remove(); });
+        block.querySelector('.moonbasePathRows').appendChild(row);
+    }
+
+    // Saving reads the configuration again, so only the first read fills the
+    // rows, or it would undo what the admin typed.
+    function fillGamePaths(config) {
+        var block = document.getElementById('GamesPathMappings');
+        if (!block || gamePathsFilled) return;
+        gamePathsFilled = true;
+        (config.GamesPathMappings || []).forEach(function (m) {
+            addGamePathRow(block, m.PlexPath || '', m.MoonbasePath || '');
+        });
+    }
+
+    function readGamePaths(config) {
+        var block = document.getElementById('GamesPathMappings');
+        if (!block) return;
+        config.GamesPathMappings = Array.prototype.map.call(block.querySelectorAll('.moonbasePathRow'), function (row) {
+            var inputs = row.querySelectorAll('input');
+            return { PlexPath: inputs[0].value.trim(), MoonbasePath: inputs[1].value.trim() };
+        }).filter(function (m) { return m.PlexPath && m.MoonbasePath; });
+    }
+
     // Saving reads the configuration again, so only the first read fills the
     // fields, or it would undo what the admin typed.
     function fillArrFields(config) {
@@ -605,10 +678,16 @@
     document.addEventListener('DOMContentLoaded', function () {
         var page = document.getElementById('MoonfinConfigPage');
         if (host.arr) addArrFields(page);
+        if (host.gameFolders) addGamePathFields(page);
         addLogUploadField(page);
         Object.keys(watchPartyNotes).forEach(function (id) {
             var note = document.getElementById(id);
             if (note) note.textContent = watchPartyNotes[id];
+        });
+        Object.keys(host.fieldNotes || {}).forEach(function (id) {
+            var box = document.getElementById(id);
+            var note = box && box.closest('.checkboxContainer').querySelector('.fieldDescription');
+            if (note) note.textContent = host.fieldNotes[id];
         });
         upgrade(document);
         renameServer(page);

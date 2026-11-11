@@ -32,6 +32,8 @@ type external struct {
 	// watchingNow lets one caller fetch the shared feed while the rest wait for
 	// its answer, since every fetch counts against the MDBList key's quota.
 	watchingNow sync.Mutex
+
+	imdbBase, letterboxdBase string
 }
 
 func newExternal() external {
@@ -41,6 +43,9 @@ func newExternal() external {
 		mdblistBase: "https://api.mdblist.com",
 		tmdbBase:    "https://api.themoviedb.org",
 		cache:       ttlCache{m: map[string]cached{}},
+
+		imdbBase:       "https://caching.graphql.imdb.com/",
+		letterboxdBase: "https://letterboxd.com",
 	}
 }
 

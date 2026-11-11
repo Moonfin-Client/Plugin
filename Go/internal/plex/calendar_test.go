@@ -167,7 +167,7 @@ func TestRadarrCalendarIsMatchedToTheCallersPlex(t *testing.T) {
 
 func TestPingOffersThePlexCalendar(t *testing.T) {
 	_, ping := send(calendarPlex(t), withToken("GET", "/Moonfin/Ping", "member", ""))
-	if ping["calendarAvailable"] != true || ping["calendarReminders"] != false || ping["calendarDaysAhead"] != 90.0 {
+	if ping["calendarAvailable"] != true || ping["calendarReminders"] != true || ping["calendarDaysAhead"] != 90.0 {
 		t.Fatalf("ping = %v", ping)
 	}
 }

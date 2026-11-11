@@ -78,6 +78,10 @@ func (s *Server) serveWebIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page = bytes.Replace(page, []byte(`<base href="/Moonfin/Web/">`), []byte(webBase), 1)
+	if s.isolateWebApp(r.Context()) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Embedder-Policy", "credentialless")
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(page)

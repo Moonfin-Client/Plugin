@@ -43,7 +43,9 @@ func fakeHelper(mode string) {
 				`{"key":"10","kind":"Movie","title":"Cast Away","year":2000},` +
 				`{"key":"person:Tom Hanks","kind":"Person","title":"Tom Hanks"},` +
 				`{"key":"12","kind":"Movie","title":"Cast Away","year":2000},` +
-				`{"key":"11","kind":"Movie","title":"Big","year":1988}]}`
+				`{"key":"11","kind":"Movie","title":"Big","year":1988}],` +
+				`"catalog":[{"payload":{"id":8358,"mediaType":"movie","title":"Cast Away"},"score":0.9},` +
+				`{"payload":{"id":2280,"mediaType":"movie","title":"Big"},"score":0.5}]}`
 		}
 		fmt.Printf(`{"id":%d,"ok":%s}`+"\n", req.ID, ok)
 	}
@@ -116,5 +118,22 @@ func TestSmartSearchBeforeTheFirstBuildStartsIt(t *testing.T) {
 	case <-catalog.read:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the search didn't start a build")
+	}
+}
+
+func TestSmartSearchSuggestsSeerrTitlesOnlyWithSeerrOn(t *testing.T) {
+	s, catalog := smartServer(t, "ready")
+	saveConfig(t, s, map[string]any{"SmartSearchEnabled": true})
+	s.rebuildSmartSearch(context.Background())
+	<-catalog.read
+
+	if _, got := call(t, s, userMain, "GET", "/Moonfin/SmartSearch", "", map[string]any{"query": "tom hanks island"}); len(got["Seerr"].([]any)) != 0 {
+		t.Fatalf("seerr with Seerr off = %v", got["Seerr"])
+	}
+	saveConfig(t, s, map[string]any{"SmartSearchEnabled": true, "SeerrEnabled": true, "SeerrUrl": "http://seerr.local:5055"})
+	_, got := call(t, s, userMain, "GET", "/Moonfin/SmartSearch", "", map[string]any{"query": "tom hanks island", "limit": 1})
+	seerr, _ := json.Marshal(got["Seerr"])
+	if want := `[{"id":8358,"mediaType":"movie","title":"Cast Away"}]`; string(seerr) != want {
+		t.Fatalf("seerr = %s, want %s", seerr, want)
 	}
 }

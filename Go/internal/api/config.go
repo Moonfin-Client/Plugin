@@ -23,6 +23,9 @@ type Config struct {
 	SmartSearchEnabled bool
 	// SmartSearchModel is "english" or "multilingual".
 	SmartSearchModel string
+	// RecommendationsProviderEnabled is Moonfin Recommends for similar items, on
+	// unless the admin turned it off.
+	RecommendationsProviderEnabled bool
 	// Defaults is DefaultUserSettings, the admin's defaults for every profile.
 	Defaults M
 	// DeviceDefaults is DefaultDeviceSettings, the admin's defaults for the
@@ -43,6 +46,9 @@ type Config struct {
 	// whether it looks for servers on the network.
 	WebDefaultServerURL, WebForcedServerURL string
 	WebRtcScan                              bool
+	// Pushes go through the relay at PushRelayURL, signed with
+	// PushRelayAppKey or else the key the build carries.
+	PushRelayURL, PushRelayAppKey string
 }
 
 // DefaultsFor is the admin's defaults for one profile.
@@ -128,6 +134,7 @@ func configFrom(c M) Config {
 	cfg.SeerrURL = normalizeSeerrURL(str(c["SeerrUrl"]))
 	cfg.SmartSearchEnabled, _ = c["SmartSearchEnabled"].(bool)
 	cfg.SmartSearchModel = str(c["SmartSearchModel"])
+	cfg.RecommendationsProviderEnabled = c["RecommendationsProviderEnabled"] != false
 	cfg.Defaults, _ = c["DefaultUserSettings"].(M)
 	cfg.DeviceDefaults, _ = c["DefaultDeviceSettings"].(M)
 	cfg.CalendarDaysBack = wholeNumber(c["CalendarDaysBack"], 14)
@@ -147,6 +154,8 @@ func configFrom(c M) Config {
 		}
 	}
 	cfg.WatchParty.MaxMembers = wholeNumber(c["WatchPartyMaxMembers"], cfg.WatchParty.MaxMembers)
+	cfg.PushRelayURL = strings.TrimSpace(str(c["PushRelayUrl"]))
+	cfg.PushRelayAppKey = strings.TrimSpace(str(c["PushRelayAppKey"]))
 	return cfg
 }
 
