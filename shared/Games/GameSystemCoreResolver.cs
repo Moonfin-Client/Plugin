@@ -184,6 +184,10 @@ internal static class GameSystemCoreResolver
         string.Equals(core, "mame", StringComparison.Ordinal) ||
         string.Equals(core, "arcade", StringComparison.Ordinal);
 
+    internal static bool IsArcade(string core, string systemName) =>
+        IsArcadeFamilyCore(core) ||
+        NormalizeSystemName(systemName) is "arcade" or "mame";
+
     /// <summary>
     /// PlayStation discs are often several files (a .cue and its .bin tracks), so the core gets
     /// the whole archive rather than one file pulled out of it.
@@ -264,7 +268,7 @@ internal static class GameSystemCoreResolver
         alias.Length >= 3 && (normalizedName.Contains(alias, StringComparison.Ordinal) ||
             alias.Contains(normalizedName, StringComparison.Ordinal));
 
-    private static string NormalizeSystemName(string name)
+    internal static string NormalizeSystemName(string name)
     {
         var builder = new StringBuilder(name.Length);
         foreach (var character in name)

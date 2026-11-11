@@ -1070,10 +1070,13 @@ public sealed partial class GameArtworkReconciliationService
             var systems = _games.GetSystems(library.Id);
             foreach (var system in systems)
             {
-                foreach (var platform in GameArtworkStore.CandidatePlatformsFor(system.Core, false, system.Name))
+                foreach (var core in CoresForIncompleteLibraryPlatformCollection(system.Core, system.Name))
                 {
-                    platforms.Add(platform);
-                    foundAny = true;
+                    foreach (var platform in GameArtworkStore.CandidatePlatformsFor(core, false, system.Name))
+                    {
+                        platforms.Add(platform);
+                        foundAny = true;
+                    }
                 }
             }
         }
@@ -1091,10 +1094,13 @@ public sealed partial class GameArtworkReconciliationService
             var persistedMetadata = await _catalog.GetSystemMetadataAsync(library.Id, cancellationToken).ConfigureAwait(false);
             foreach (var meta in persistedMetadata)
             {
-                foreach (var platform in GameArtworkStore.CandidatePlatformsFor(meta.Core, false, meta.Name))
+                foreach (var core in CoresForIncompleteLibraryPlatformCollection(meta.Core, meta.Name))
                 {
-                    platforms.Add(platform);
-                    foundAny = true;
+                    foreach (var platform in GameArtworkStore.CandidatePlatformsFor(core, false, meta.Name))
+                    {
+                        platforms.Add(platform);
+                        foundAny = true;
+                    }
                 }
             }
         }
@@ -1111,6 +1117,23 @@ public sealed partial class GameArtworkReconciliationService
         {
             onUnknownPlatforms();
         }
+    }
+
+    private static IEnumerable<string> CoresForIncompleteLibraryPlatformCollection(string core, string systemName)
+    {
+        if (GameSystemCoreResolver.IsArcade(core, systemName))
+        {
+            if (string.IsNullOrEmpty(core) ||
+                string.Equals(core, ArcadeCompatibilityService.FbneoCore, StringComparison.Ordinal) ||
+                string.Equals(core, ArcadeCompatibilityService.MameCore, StringComparison.Ordinal))
+            {
+                return [ArcadeCompatibilityService.FbneoCore, ArcadeCompatibilityService.MameCore];
+            }
+
+            return [core, ArcadeCompatibilityService.FbneoCore, ArcadeCompatibilityService.MameCore];
+        }
+
+        return [core];
     }
 
     private List<ArtworkCandidate> CreateSystemCandidates(GameLibrary library, GameSystem system) =>

@@ -908,6 +908,107 @@ public sealed class GameArtworkReconciliationServiceTests : IDisposable
         Assert.True((bool)rdbDoneField.GetValue(service)!);
     }
 
+    [Fact]
+    public async Task Reconciliation_DoesNotClearPendingReopenWhenArcadePlatformHasUnreadyLibrary()
+    {
+        var rootA = Path.Combine(_root, "Games-unready-" + Guid.NewGuid().ToString("N"));
+        var systemA = Path.Combine(rootA, "Arcade");
+        Directory.CreateDirectory(systemA);
+        var romPathA = Path.Combine(systemA, "gamea.zip");
+        await File.WriteAllBytesAsync(romPathA, [1, 2, 3]);
+
+        var rootB = Path.Combine(_root, "Games-ready-" + Guid.NewGuid().ToString("N"));
+        var systemB = Path.Combine(rootB, "MAME");
+        Directory.CreateDirectory(systemB);
+        var romPathB = Path.Combine(systemB, "gameb.zip");
+        await File.WriteAllBytesAsync(romPathB, [4, 5, 6]);
+
+        var libraryIdA = "lib-unready-" + Guid.NewGuid().ToString("N");
+        var libraryIdB = "lib-ready-" + Guid.NewGuid().ToString("N");
+
+        var catalogDir = Path.Combine(_root, "catalog-" + Guid.NewGuid().ToString("N"));
+        var catalog = new GameArtworkCatalog(catalogDir);
+
+        // Pre-seed catalog for Library A with Arcade system metadata (core "arcade")
+        var keyA = ArtworkCatalogKey.Create(libraryIdA, "Arcade/gamea.zip", $"{new FileInfo(romPathA).Length:x}-{new FileInfo(romPathA).LastWriteTimeUtc.Ticks:x}", "boxart");
+        await catalog.SynchronizeProjectionAsync(
+            libraryIdA,
+            [new ArtworkCatalogProjectionEntry(keyA, "Arcade", GamePathResolver.EncodeToken(romPathA))],
+            "1.0",
+            new ArtworkCatalogSystemMetadata("Arcade", "Arcade", "arcade", 1));
+        await catalog.MarkMissingAsync(keyA, "Arcade", "1.0");
+
+        // Seed Library B with Missing MAME artwork that should be reopened by RDB update check
+        var keyB = ArtworkCatalogKey.Create(libraryIdB, "MAME/gameb.zip", $"{new FileInfo(romPathB).Length:x}-{new FileInfo(romPathB).LastWriteTimeUtc.Ticks:x}", "boxart");
+        await catalog.SynchronizeProjectionAsync(
+            libraryIdB,
+            [new ArtworkCatalogProjectionEntry(keyB, "MAME", GamePathResolver.EncodeToken(romPathB))],
+            "1.0",
+            new ArtworkCatalogSystemMetadata("MAME", "MAME", "mame", 1));
+        await catalog.MarkMissingAsync(keyB, "MAME", "1.0");
+
+        // Setup RDB store with an update pending reopen for MAME
+        var rdbDir = Path.Combine(_root, "rdb-data-" + Guid.NewGuid().ToString("N"));
+        var metaDir = Path.Combine(rdbDir, "gamemeta");
+        Directory.CreateDirectory(metaDir);
+
+        const string platform = "MAME";
+        var rdbPath = Path.Combine(metaDir, platform + ".rdb");
+        var sidecarPath = Path.Combine(metaDir, platform + ".rdb.json");
+        await File.WriteAllBytesAsync(rdbPath, [10, 20, 30]);
+
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var digest = GamesCompat.LowerHex(sha.ComputeHash(new byte[] { 10, 20, 30 }));
+        await File.WriteAllTextAsync(sidecarPath, $"{{\"pendingReopenDigest\":\"{digest}\"}}");
+
+        var rdb = new RdbService(new ThrowingHttpClientFactory(), new NoOpLogger<RdbService>(), rdbDir)
+        {
+            ConfigOverrideForTests = new global::Moonfin.Server.PluginConfiguration(),
+        };
+        var handler = new CountingArtHandler();
+        var thumbs = new GameThumbService(
+            new FakeHttpClientFactory(handler),
+            new NoOpLogger<GameThumbService>(),
+            rdb,
+            Path.Combine(_root, "thumb-data-" + Guid.NewGuid().ToString("N")));
+
+        var libraryManager = new FakeLibraryManager(
+        [
+            new VirtualFolderInfo { Name = "Games A", ItemId = libraryIdA, Locations = [rootA] },
+            new VirtualFolderInfo { Name = "Games B", ItemId = libraryIdB, Locations = [rootB] },
+        ]);
+        var gamesService = new UnreadyGamesService(libraryManager, libraryIdA) { IsReady = false };
+
+        var service = new GameArtworkReconciliationService(
+            gamesService,
+            thumbs,
+            catalog,
+            NullLogger<GameArtworkReconciliationService>.Instance,
+            taskManager: null,
+            watchLibraryFileSystem: false);
+
+        // First pass: Library A is unready (Arcade), Library B is ready (MAME)
+        await ReconcileAsync(service);
+
+        // Ready Library B had its missing artwork reopened and queued
+        Assert.Contains("remote:" + keyB.StorageKey, QueuedRemoteIdentities(service));
+
+        // Even though Library A's persisted metadata has core "arcade", incomplete platform collection
+        // includes both Arcade and MAME, so ClearRdbPendingReopen for MAME was deferred!
+        var sidecarJson = await File.ReadAllTextAsync(sidecarPath);
+        Assert.Contains(digest, sidecarJson);
+
+        // Now Library A becomes ready
+        gamesService.IsReady = true;
+
+        // Second pass: both libraries are ready
+        await ReconcileAsync(service);
+
+        // ClearRdbPendingReopen has now executed and cleared the sidecar marker
+        sidecarJson = await File.ReadAllTextAsync(sidecarPath);
+        Assert.DoesNotContain(digest, sidecarJson);
+    }
+
     internal sealed class UnreadyGamesService : GamesService
     {
         private readonly string _unreadyLibraryId;
