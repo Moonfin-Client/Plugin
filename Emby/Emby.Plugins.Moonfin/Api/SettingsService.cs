@@ -11,6 +11,7 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Services;
 using Moonfin.Calendar;
@@ -22,7 +23,7 @@ namespace Emby.Plugins.Moonfin.Api
         private const int MaxDetailsBackdropBlur = 40;
 
         private readonly IAuthorizationContext _authContext;
-
+        private readonly ILogger _logger;
 
         public IRequest Request { get; set; } = null!;
         public IHttpResultFactory ResultFactory { get; set; } = null!;
@@ -36,6 +37,7 @@ namespace Emby.Plugins.Moonfin.Api
         {
             _authContext = appHost.Resolve<IAuthorizationContext>();
             ResultFactory = appHost.Resolve<IHttpResultFactory>();
+            _logger = appHost.Resolve<ILogManager>().GetLogger("MoonfinSettings");
         }
 
         private object Json(object? body) => MoonfinJson.Result(Request, ResultFactory, body);
@@ -596,7 +598,16 @@ namespace Emby.Plugins.Moonfin.Api
             if (user == null) return Json(401, new { Error = "User not authenticated" });
 
             var profile = request.Profile ?? "global";
-            var resolved = await Settings.GetResolvedProfileAsync(user.Id, profile).ConfigureAwait(false);
+            MoonfinSettingsProfile? resolved = null;
+            try
+            {
+                resolved = await Settings.GetResolvedProfileAsync(user.Id, profile).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.Warn("Failed to read settings for user " + user.Id + " in GetMediaBar; falling back to random items: " + ex.Message);
+            }
+
             var isFallback = resolved == null;
             var settings = resolved ?? Settings.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 

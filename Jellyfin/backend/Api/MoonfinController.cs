@@ -1242,7 +1242,16 @@ public class MoonfinController : ControllerBase
             return Unauthorized(new { Error = "User not authenticated" });
         }
 
-        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
+        MoonfinSettingsProfile? resolved = null;
+        try
+        {
+            resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Failed to read settings for user {UserId} in GetMediaBarItems; falling back to random items", userId.Value);
+        }
+
         var isFallback = resolved == null;
         var settings = resolved ?? _settingsService.AdminDefaultsFor(profile) ?? new MoonfinSettingsProfile();
 
