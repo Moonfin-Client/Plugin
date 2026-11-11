@@ -363,5 +363,76 @@ public sealed class RecentRowsSettingsAndUpgradesTests
             }
         }
     }
+
+    [Fact]
+    public async Task ScanPausedAcrossSaveDoesNotPublishStaleCacheValue()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "moonfin-scan-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            using var settings = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempRoot);
+            var userId = Guid.NewGuid();
+            var appliedStates = new List<bool>();
+            settings.UpgradePreferenceChanged = (enabled, _) =>
+            {
+                lock (appliedStates)
+                {
+                    appliedStates.Add(enabled);
+                }
+
+                return Task.CompletedTask;
+            };
+
+            // Seed user file with HideUpgradesInRecentRows = false and invalidate the cache so the next read scans files.
+            await settings.SaveProfileAsync(
+                userId,
+                "global",
+                new MoonfinSettingsProfile { HideUpgradesInRecentRows = false });
+            await settings.ScheduleUpgradePreferenceSyncIfNeeded(userId);
+            settings.InvalidateHideUpgradesCache();
+
+            var scanPaused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseScan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var pauseOnce = 0;
+            settings.BeforePublishHideUpgradesScanForTesting = () =>
+            {
+                if (Interlocked.CompareExchange(ref pauseOnce, 1, 0) == 0)
+                {
+                    scanPaused.TrySetResult();
+                    releaseScan.Task.GetAwaiter().GetResult();
+                }
+            };
+
+            // Start a background scan that reads the old false value and pauses before publishing to _userHideUpgradesCache.
+            var scanTask = Task.Run(() => settings.IsAnyHideUpgradesEnabled());
+            await scanPaused.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Save HideUpgradesInRecentRows = true while the stale scan is paused, then release the paused scan.
+            var saveTask = settings.SaveProfileAsync(
+                userId,
+                "global",
+                new MoonfinSettingsProfile { HideUpgradesInRecentRows = true });
+            releaseScan.TrySetResult();
+
+            var scanResult = await scanTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await saveTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await settings.ScheduleUpgradePreferenceSyncIfNeeded(userId).WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.True(scanResult);
+            Assert.True(settings.IsAnyHideUpgradesEnabled());
+            lock (appliedStates)
+            {
+                Assert.Equal([false, true], appliedStates);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
 }
 

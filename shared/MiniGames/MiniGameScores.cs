@@ -68,18 +68,9 @@ public sealed class FileMiniGameScoreStore : IMiniGameScoreStore
 
     private string FilePath => Path.Combine(_folder, "scores.json");
 
-    public Dictionary<string, List<MiniGameScore>> Load()
-    {
-        try
-        {
-            return _files.Read(FilePath, json => JsonSerializer.Deserialize<Dictionary<string, List<MiniGameScore>>>(json))
-                ?? new Dictionary<string, List<MiniGameScore>>();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return new Dictionary<string, List<MiniGameScore>>();
-        }
-    }
+    public Dictionary<string, List<MiniGameScore>> Load() =>
+        _files.Read(FilePath, json => JsonSerializer.Deserialize<Dictionary<string, List<MiniGameScore>>>(json))
+        ?? new Dictionary<string, List<MiniGameScore>>();
 
     public void Save(Dictionary<string, List<MiniGameScore>> boards)
     {
@@ -148,7 +139,17 @@ public class MiniGameScoreService
     {
         lock (_gate)
         {
-            _store.Load().TryGetValue(gameId, out var rows);
+            Dictionary<string, List<MiniGameScore>> boards;
+            try
+            {
+                boards = _store.Load();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Array.Empty<MiniGameBoardEntry>();
+            }
+
+            boards.TryGetValue(gameId, out var rows);
             return Ranked(rows ?? Enumerable.Empty<MiniGameScore>())
                 .Take(BoardSize)
                 .Select(r => new MiniGameBoardEntry
@@ -170,7 +171,15 @@ public class MiniGameScoreService
         var id = userId.ToString("N");
         lock (_gate)
         {
-            var boards = _store.Load();
+            Dictionary<string, List<MiniGameScore>> boards;
+            try
+            {
+                boards = _store.Load();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
             if (!boards.TryGetValue(gameId, out var rows) || rows == null)
             {
                 rows = new List<MiniGameScore>();

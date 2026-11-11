@@ -100,8 +100,16 @@ namespace Emby.Plugins.Moonfin.Services
             {
             }
 
-            _settings.StopUpgradePreferenceSync();
-            _startupTask.GetAwaiter().GetResult();
+            if (!_settings.StopUpgradePreferenceSync(TimeSpan.FromSeconds(5)))
+            {
+                _logger.Warn("Media upgrade preference sync worker did not finish before shutdown");
+            }
+
+            if (!_startupTask.Wait(TimeSpan.FromSeconds(5)))
+            {
+                _logger.Warn("Media upgrade startup task did not finish before shutdown");
+            }
+
             _stopCts.Dispose();
         }
 

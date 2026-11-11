@@ -38,12 +38,16 @@ public class MoonfinSettingsService : IDisposable
 
     private Func<bool, CancellationToken, Task>? _upgradePreferenceChanged;
     private int _userHideUpgradesCache = -1;
+    private int _hideUpgradesCacheGeneration;
+    private readonly object _hideUpgradesCacheGate = new();
     private int _lastAppliedUpgradeState = -1;
     private bool _upgradeWorkerRunning;
     private bool _upgradeSyncStopping;
     private CancellationTokenSource _upgradeSyncCts = new();
     private readonly object _upgradeSyncGate = new();
     private Task _upgradeSyncWorker = Task.CompletedTask;
+
+    internal Action? BeforePublishHideUpgradesScanForTesting { get; set; }
 
     internal Func<bool, CancellationToken, Task>? UpgradePreferenceChanged
     {
@@ -69,7 +73,14 @@ public class MoonfinSettingsService : IDisposable
         }
     }
 
-    public void InvalidateHideUpgradesCache() => Volatile.Write(ref _userHideUpgradesCache, -1);
+    public void InvalidateHideUpgradesCache()
+    {
+        lock (_hideUpgradesCacheGate)
+        {
+            _hideUpgradesCacheGeneration++;
+            Volatile.Write(ref _userHideUpgradesCache, -1);
+        }
+    }
 
     // Resolve and merge reflect over every property on each call, and the profile carries a
     // couple of hundred of them, so the lookup is cached rather than repeated per request.
@@ -1235,7 +1246,7 @@ public class MoonfinSettingsService : IDisposable
             }
         }
 
-        ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
+        _ = ScheduleUpgradePreferenceSyncIfNeeded(Guid.Empty);
         return (usersReset, orphansDeleted);
     }
 
@@ -1604,7 +1615,7 @@ public class MoonfinSettingsService : IDisposable
             _lock.Release();
         }
 
-        ScheduleUpgradePreferenceSyncIfNeeded(userId);
+        _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
     public async Task DeleteProfileAsync(Guid userId, string profileName)
@@ -1634,7 +1645,7 @@ public class MoonfinSettingsService : IDisposable
             _lock.Release();
         }
 
-        ScheduleUpgradePreferenceSyncIfNeeded(userId);
+        _ = ScheduleUpgradePreferenceSyncIfNeeded(userId);
     }
 
     public bool UserSettingsExist(Guid userId)
@@ -1765,45 +1776,70 @@ public class MoonfinSettingsService : IDisposable
             return true;
         }
 
-        var cached = Volatile.Read(ref _userHideUpgradesCache);
-        if (cached != -1)
+        while (true)
         {
-            return cached == 1;
-        }
-
-        if (!Directory.Exists(_dataPath))
-        {
-            Volatile.Write(ref _userHideUpgradesCache, 0);
-            return false;
-        }
-
-        var anyUserEnabled = false;
-        foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
-        {
-            var fileName = Path.GetFileNameWithoutExtension(file);
-            if (!Guid.TryParse(fileName, out _))
+            int scanGeneration;
+            lock (_hideUpgradesCacheGate)
             {
+                var cached = Volatile.Read(ref _userHideUpgradesCache);
+                if (cached != -1)
+                {
+                    return cached == 1;
+                }
+
+                scanGeneration = _hideUpgradesCacheGeneration;
+            }
+
+            if (!Directory.Exists(_dataPath))
+            {
+                lock (_hideUpgradesCacheGate)
+                {
+                    if (_hideUpgradesCacheGeneration == scanGeneration)
+                    {
+                        Volatile.Write(ref _userHideUpgradesCache, 0);
+                        return false;
+                    }
+                }
+
                 continue;
             }
 
-            var settings = ReadSettingsWithRecovery(file);
-            if (settings == null)
+            var anyUserEnabled = false;
+            foreach (var file in Directory.EnumerateFiles(_dataPath, "*.json"))
             {
-                continue;
+                var fileName = Path.GetFileNameWithoutExtension(file);
+                if (!Guid.TryParse(fileName, out _))
+                {
+                    continue;
+                }
+
+                var settings = ReadSettingsWithRecovery(file);
+                if (settings == null)
+                {
+                    continue;
+                }
+
+                if (settings.Global?.HideUpgradesInRecentRows == true ||
+                    settings.Tv?.HideUpgradesInRecentRows == true ||
+                    settings.Desktop?.HideUpgradesInRecentRows == true ||
+                    settings.Mobile?.HideUpgradesInRecentRows == true)
+                {
+                    anyUserEnabled = true;
+                    break;
+                }
             }
 
-            if (settings.Global?.HideUpgradesInRecentRows == true ||
-                settings.Tv?.HideUpgradesInRecentRows == true ||
-                settings.Desktop?.HideUpgradesInRecentRows == true ||
-                settings.Mobile?.HideUpgradesInRecentRows == true)
+            BeforePublishHideUpgradesScanForTesting?.Invoke();
+
+            lock (_hideUpgradesCacheGate)
             {
-                anyUserEnabled = true;
-                break;
+                if (_hideUpgradesCacheGeneration == scanGeneration)
+                {
+                    Volatile.Write(ref _userHideUpgradesCache, anyUserEnabled ? 1 : 0);
+                    return anyUserEnabled;
+                }
             }
         }
-
-        Volatile.Write(ref _userHideUpgradesCache, anyUserEnabled ? 1 : 0);
-        return anyUserEnabled;
     }
 
     private async Task SyncRecentRowPreferencesAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName)
@@ -1966,7 +2002,8 @@ public class MoonfinSettingsService : IDisposable
 
     public void Dispose()
     {
-        StopUpgradePreferenceSyncAsync(CancellationToken.None).GetAwaiter().GetResult();
+        using var drainTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        StopUpgradePreferenceSyncAsync(drainTimeout.Token).GetAwaiter().GetResult();
         lock (_upgradeSyncGate)
         {
             _upgradeSyncCts.Dispose();

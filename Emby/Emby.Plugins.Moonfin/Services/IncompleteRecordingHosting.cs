@@ -55,7 +55,7 @@ namespace Emby.Plugins.Moonfin.Services
             var result = AtomicFile.ReadWithRecovery(path, parse, out accessError);
             if (result == null && accessError != null)
             {
-                throw accessError;
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(accessError).Throw();
             }
 
             return result;

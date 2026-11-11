@@ -33,4 +33,24 @@ public sealed class FileMiniGameScoreStoreTests : IDisposable
         Assert.Equal(18420, board[0].Score);
         Assert.Contains("\"userId\":\"" + user.ToString("N") + "\"", File.ReadAllText(Path.Combine(_dir, "scores.json")));
     }
+
+    [Fact]
+    public void SubmitSkipsSaveOnReadErrorWhileTopReturnsEmptyBoard()
+    {
+        var firstUser = Guid.NewGuid();
+        var secondUser = Guid.NewGuid();
+        var service = new MiniGameScoreService(Store());
+        service.Submit("buffer-run", firstUser, "alice", 10000);
+
+        var scoresPath = Path.Combine(_dir, "scores.json");
+        using (new FileStream(scoresPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.Empty(service.Top("buffer-run"));
+            Assert.Null(service.Submit("buffer-run", secondUser, "bob", 20000));
+        }
+
+        var boardAfterUnlock = service.Top("buffer-run");
+        Assert.Equal("alice", Assert.Single(boardAfterUnlock).UserName);
+        Assert.Equal(10000, boardAfterUnlock[0].Score);
+    }
 }
