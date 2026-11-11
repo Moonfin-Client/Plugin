@@ -1442,23 +1442,48 @@ public class MoonfinController : ControllerBase
         var collectionCount = collectionIds?.Count ?? 0;
         if (libraryIds is not { Count: > 0 } && collectionCount == 0)
         {
-            var query = new InternalItemsQuery
+            var queryItemTypes = excludePlayed
+                ? new[] { new[] { BaseItemKind.Movie }, new[] { BaseItemKind.Series } }
+                : new[] { new[] { BaseItemKind.Movie, BaseItemKind.Series } };
+
+            var candidateItems = new List<BaseItem>();
+            foreach (var types in queryItemTypes)
             {
-                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                Limit = fetchLimit,
-                Recursive = true
-            };
+                var query = new InternalItemsQuery
+                {
+                    IncludeItemTypes = types,
+                    Limit = fetchLimit,
+                    Recursive = true
+                };
 
-            if (includedGenreIds != null) query.GenreIds = includedGenreIds;
-            if (excludePlayed) query.IsPlayed = false;
+                if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+                if (excludePlayed) query.IsPlayed = false;
 
-            if (!UserReflection.ApplyUser(query, queryUser)) return [];
+                if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
-            SetMediaBarOrder(query, order);
-            return _libraryManager.GetItemsResult(query).Items
-                .Where(item => UserReflection.IsVisibleTo(item, queryUser) && HasBackdropImage(item))
-                .Take(limit)
-                .ToList();
+                SetMediaBarOrder(query, order);
+                candidateItems.AddRange(_libraryManager.GetItemsResult(query).Items);
+            }
+
+            var visibleItems = candidateItems
+                .Where(item => UserReflection.IsVisibleTo(item, queryUser) && HasBackdropImage(item));
+
+            if (order != ItemSortBy.Random)
+            {
+                return visibleItems
+                    .OrderByDescending(item => order == ItemSortBy.DateCreated ? item.DateCreated : item.PremiereDate ?? DateTime.MinValue)
+                    .Take(limit)
+                    .ToList();
+            }
+
+            var randomList = visibleItems.ToList();
+            for (var i = randomList.Count - 1; i > 0; i--)
+            {
+                var j = Random.Shared.Next(i + 1);
+                (randomList[i], randomList[j]) = (randomList[j], randomList[i]);
+            }
+
+            return randomList.Take(limit).ToList();
         }
 
         List<Guid> allowedLibraryIds = libraryIds is { Count: > 0 } ? VisibleLibraryIds(libraryIds, queryUser) : [];
@@ -1472,26 +1497,33 @@ public class MoonfinController : ControllerBase
 
         foreach (var parentGuid in allowedLibraryIds)
         {
-            var query = new InternalItemsQuery
+            var queryItemTypes = excludePlayed
+                ? new[] { new[] { BaseItemKind.Movie }, new[] { BaseItemKind.Series } }
+                : new[] { new[] { BaseItemKind.Movie, BaseItemKind.Series } };
+
+            foreach (var types in queryItemTypes)
             {
-                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                ParentId = parentGuid,
-                Limit = perLibraryLimit,
-                Recursive = true
-            };
+                var query = new InternalItemsQuery
+                {
+                    IncludeItemTypes = types,
+                    ParentId = parentGuid,
+                    Limit = perLibraryLimit,
+                    Recursive = true
+                };
 
-            if (includedGenreIds != null) query.GenreIds = includedGenreIds;
-            if (excludePlayed) query.IsPlayed = false;
+                if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+                if (excludePlayed) query.IsPlayed = false;
 
-            if (!UserReflection.ApplyUser(query, queryUser)) return [];
+                if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
-            SetMediaBarOrder(query, order);
+                SetMediaBarOrder(query, order);
 
-            foreach (var item in _libraryManager.GetItemsResult(query).Items)
-            {
-                if (!seenIds.Add(item.Id)) continue;
-                if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
-                allItems.Add(item);
+                foreach (var item in _libraryManager.GetItemsResult(query).Items)
+                {
+                    if (!seenIds.Add(item.Id)) continue;
+                    if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
+                    allItems.Add(item);
+                }
             }
         }
 
@@ -1679,25 +1711,43 @@ public class MoonfinController : ControllerBase
 
             if (linkedIds.Length == 0) continue;
 
-            var query = new InternalItemsQuery
+            var queryItemTypes = excludePlayed
+                ? new[] { new[] { BaseItemKind.Movie }, new[] { BaseItemKind.Series } }
+                : new[] { new[] { BaseItemKind.Movie, BaseItemKind.Series } };
+
+            var collectionBatch = new List<BaseItem>();
+            foreach (var types in queryItemTypes)
             {
-                ItemIds = linkedIds,
-                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                Limit = linkedIds.Length
-            };
+                var query = new InternalItemsQuery
+                {
+                    ItemIds = linkedIds,
+                    IncludeItemTypes = types,
+                    Limit = linkedIds.Length
+                };
 
-            if (excludePlayed) query.IsPlayed = false;
+                if (excludePlayed) query.IsPlayed = false;
 
-            if (!UserReflection.ApplyUser(query, queryUser)) return [];
+                if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
-            foreach (var item in _libraryManager.GetItemsResult(query).Items)
-            {
-                if (!seenIds.Add(item.Id)) continue;
-                if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
-                if (excludedNames != null && item.Genres.Any(g => excludedNames.Contains(g))) continue;
+                foreach (var item in _libraryManager.GetItemsResult(query).Items)
+                {
+                    if (!seenIds.Add(item.Id)) continue;
+                    if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
+                    if (excludedNames != null && item.Genres.Any(g => excludedNames.Contains(g))) continue;
 
-                allItems.Add(item);
+                    collectionBatch.Add(item);
+                }
             }
+
+            var idIndex = linkedIds.Select((id, idx) => (id, idx)).ToDictionary(x => x.id, x => x.idx);
+            collectionBatch.Sort((a, b) =>
+            {
+                var idxA = idIndex.TryGetValue(a.Id, out var ia) ? ia : int.MaxValue;
+                var idxB = idIndex.TryGetValue(b.Id, out var ib) ? ib : int.MaxValue;
+                return idxA.CompareTo(idxB);
+            });
+
+            allItems.AddRange(collectionBatch);
         }
 
         return allItems.Take(limit).ToList();
