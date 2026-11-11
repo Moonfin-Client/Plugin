@@ -860,6 +860,45 @@ func TestWatchPartyStoreKeepsLiveRooms(t *testing.T) {
 	}
 }
 
+func TestWatchPartyEndingARoomFreesItsSlot(t *testing.T) {
+	s := newTestServer()
+	room := func(i int) string { return fmt.Sprintf("/Moonfin/WatchParty/00000000-0000-4000-8000-%012d", i) }
+	avatar := `{"url":"/avatars/presets/fox.svg"}`
+	for i := 0; i < watchPartyRoomsPerAccount; i++ {
+		call(t, s, other, "PUT", room(i)+"/Avatar", avatar, nil)
+	}
+	if code, _ := call(t, s, userMain, "DELETE", room(0), "", nil); code != http.StatusForbidden {
+		t.Fatalf("another account can't end a room, got %d", code)
+	}
+	if code, _ := call(t, s, other, "DELETE", room(0), "", nil); code != http.StatusNoContent {
+		t.Fatalf("with no subtitles claimed, the account that stored it ends it, got %d", code)
+	}
+	if _, got := call(t, s, other, "GET", room(0), "", nil); len(got) != 0 {
+		t.Fatalf("an ended room is gone: %v", got)
+	}
+	if code, _ := call(t, s, other, "PUT", room(99)+"/Avatar", avatar, nil); code != 200 {
+		t.Fatalf("the freed slot takes a new room, got %d", code)
+	}
+
+	if code, _ := call(t, s, userMain, "PUT", room(1), `{"subtitle":{"off":true}}`, nil); code != 200 {
+		t.Fatalf("the host claims the subtitles, got %d", code)
+	}
+	for _, c := range []caller{other, userKids} {
+		if code, _ := call(t, s, c, "DELETE", room(1), "", nil); code != http.StatusForbidden {
+			t.Fatalf("only the subtitles' owner ends a claimed room, profile %s got %d", c.profileID, code)
+		}
+	}
+	if code, _ := call(t, s, userMain, "DELETE", room(1), "", nil); code != http.StatusNoContent {
+		t.Fatalf("the host ends it, got %d", code)
+	}
+	if code, _ := call(t, s, userMain, "DELETE", room(1), "", nil); code != http.StatusNoContent {
+		t.Fatalf("ending a room that's already gone succeeds, got %d", code)
+	}
+	if code, _ := call(t, s, userMain, "DELETE", "/Moonfin/WatchParty/not-a-room", "", nil); code != 400 {
+		t.Fatalf("a malformed room id is refused, got %d", code)
+	}
+}
+
 // A host without profiles (Plex) lists just the account, which is the whole
 // of its settings.
 func TestAdminUsersWithoutProfiles(t *testing.T) {
