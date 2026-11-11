@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
@@ -5,7 +6,10 @@ using System.Threading.Channels;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using MediaBrowser.Model.Configuration;
+using MediaBrowser.Model.Dto;
 using Microsoft.Extensions.Logging;
+using Moonfin.Server.Helpers;
 using Moonfin.Server.Models;
 
 namespace Moonfin.Server.Services;
@@ -18,8 +22,31 @@ public class MoonfinSettingsService
     private readonly string _dataPath;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger<MoonfinSettingsService> _logger;
+    private readonly IServiceProvider? _serviceProvider;
     private static readonly SemaphoreSlim _lock = new(1, 1);
     private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<Channel<string>, byte>> _sseChannels = new();
+
+    // Hide Watched follows the account's own HidePlayedInLatest, which lives behind
+    // IUserManager, so it's reached by reflection the way the rest of the plugin reaches users.
+    private static readonly Type? UserManagerType = Type.GetType("MediaBrowser.Controller.Library.IUserManager, MediaBrowser.Controller");
+
+    private static readonly MethodInfo? GetUserDtoMethod = UserManagerType?
+        .GetMethods()
+        .Where(m => m.Name == "GetUserDto" && typeof(UserDto).IsAssignableFrom(m.ReturnType))
+        .OrderBy(m => m.GetParameters().Length)
+        .FirstOrDefault();
+
+    private static readonly MethodInfo? UpdateConfigurationMethod = UserManagerType?
+        .GetMethod("UpdateConfigurationAsync", [typeof(Guid), typeof(UserConfiguration)]);
+
+    // Counts each user's saves, so a HidePlayedInLatest write from an older save never lands
+    // after a newer one.
+    private readonly ConcurrentDictionary<Guid, long> _userSaveGenerations = new();
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _nativeSyncLocks = new();
+
+    internal Func<string, MoonfinSettingsProfile?>? AdminDefaultsOverrideForTesting { get; set; }
+
+    internal Action<Guid>? BeforeNativeSyncWaitForTesting { get; set; }
 
     // Resolve and merge reflect over every property on each call, and the profile carries a
     // couple of hundred of them, so the lookup is cached rather than repeated per request.
@@ -53,16 +80,17 @@ public class MoonfinSettingsService
         nameof(MoonfinSettingsProfile.MediaBarMdblistRatingSources),
     ];
 
-    public MoonfinSettingsService(ILogger<MoonfinSettingsService> logger)
-        : this(logger, MoonfinPlugin.ResolveDataFolderPath())
+    public MoonfinSettingsService(ILogger<MoonfinSettingsService> logger, IServiceProvider? serviceProvider = null)
+        : this(logger, MoonfinPlugin.ResolveDataFolderPath(), serviceProvider)
     {
     }
 
     /// <summary>Lets tests point the store at a temp directory.</summary>
-    internal MoonfinSettingsService(ILogger<MoonfinSettingsService> logger, string dataPath)
+    internal MoonfinSettingsService(ILogger<MoonfinSettingsService> logger, string dataPath, IServiceProvider? serviceProvider = null)
     {
         _logger = logger;
         _dataPath = dataPath;
+        _serviceProvider = serviceProvider;
 
         _jsonOptions = new JsonSerializerOptions
         {
@@ -353,6 +381,8 @@ public class MoonfinSettingsService
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
+        MoonfinUserSettings saved;
+        long saveGeneration;
 
         await _lock.WaitAsync();
         try
@@ -403,11 +433,15 @@ public class MoonfinSettingsService
 
             var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
+            saved = finalSettings;
+            saveGeneration = NextSaveGeneration(userId);
         }
         finally
         {
             _lock.Release();
         }
+
+        await SyncHideWatchedAsync(userId, saved, null, saveGeneration).ConfigureAwait(false);
 
         // A merge that changed nothing is the client echoing state it already
         // holds. Broadcasting it anyway sends the echo straight back and keeps
@@ -428,6 +462,8 @@ public class MoonfinSettingsService
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
+        MoonfinUserSettings saved;
+        long saveGeneration;
 
         await _lock.WaitAsync();
         try
@@ -498,11 +534,15 @@ public class MoonfinSettingsService
 
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
+            saved = settings;
+            saveGeneration = NextSaveGeneration(userId);
         }
         finally
         {
             _lock.Release();
         }
+
+        await SyncHideWatchedAsync(userId, saved, profileName, saveGeneration).ConfigureAwait(false);
 
         // Same echo guard as SaveUserSettingsAsync.
         if (notifySettingsChanged && settingsChanged)
@@ -1126,8 +1166,9 @@ public class MoonfinSettingsService
         {
             try
             {
-                await WriteDefaultsOnlyAsync(userId, push, "admin-reset");
+                var (written, saveGeneration) = await WriteDefaultsOnlyAsync(userId, push, "admin-reset");
                 usersReset++;
+                await SyncHideWatchedAsync(userId, written, null, saveGeneration).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -1170,7 +1211,7 @@ public class MoonfinSettingsService
         return (usersReset, orphansDeleted);
     }
 
-    private async Task WriteDefaultsOnlyAsync(
+    private async Task<(MoonfinUserSettings Settings, long SaveGeneration)> WriteDefaultsOnlyAsync(
         Guid userId,
         IReadOnlyDictionary<string, MoonfinSettingsProfile> push,
         string clientId)
@@ -1193,17 +1234,21 @@ public class MoonfinSettingsService
         }
 
         var filePath = GetUserSettingsPath(userId);
+        long saveGeneration;
 
         await _lock.WaitAsync();
         try
         {
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);
+            saveGeneration = NextSaveGeneration(userId);
         }
         finally
         {
             _lock.Release();
         }
+
+        return (settings, saveGeneration);
     }
 
     private MoonfinSettingsProfile CloneProfile(MoonfinSettingsProfile source)
@@ -1676,5 +1721,169 @@ public class MoonfinSettingsService
         }
 
         return result;
+    }
+
+    private long NextSaveGeneration(Guid userId) =>
+        _userSaveGenerations.AddOrUpdate(userId, 1, static (_, previous) => previous + 1);
+
+    /// <summary>
+    /// Moves HidePlayedInLatest to match every user who inherits a Hide Watched admin default,
+    /// after an admin changes one. A user who saves while this runs keeps their own value.
+    /// </summary>
+    internal async Task SyncHideWatchedForAffectedUsersAsync(CancellationToken cancellationToken = default)
+    {
+        if (_serviceProvider == null || GetUserDtoMethod == null || UpdateConfigurationMethod == null)
+        {
+            return;
+        }
+
+        IEnumerable? users;
+        try
+        {
+            users = UserReflection.AllUsers(_serviceProvider);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not list users to apply the Hide Watched default");
+            return;
+        }
+
+        if (users == null)
+        {
+            return;
+        }
+
+        foreach (var user in users)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (user?.GetType().GetProperty("Id")?.GetValue(user) is not Guid userId || userId == Guid.Empty)
+            {
+                continue;
+            }
+
+            try
+            {
+                var expectedGeneration = _userSaveGenerations.GetOrAdd(userId, 0L);
+                var settings = ReadSettingsWithRecovery(GetUserSettingsPath(userId)) ?? new MoonfinUserSettings();
+                var hideWatched = ResolveHideWatchedWithDefaults(settings, "global");
+                if (hideWatched.HasValue)
+                {
+                    await SyncNativeHideWatchedAsync(userId, hideWatched.Value, expectedGeneration).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Skipping the Hide Watched default for user {UserId}", userId);
+            }
+        }
+    }
+
+    private MoonfinSettingsProfile? GetAdminDefaultsForProfile(string profileName) =>
+        AdminDefaultsOverrideForTesting != null
+            ? AdminDefaultsOverrideForTesting(profileName)
+            : AdminDefaultsFor(profileName);
+
+    /// <summary>
+    /// The Hide Watched value for a user's single HidePlayedInLatest. When neither the active
+    /// or global profile nor the admin global default sets one, any device that hides watched
+    /// items wins over one that shows them.
+    /// </summary>
+    internal bool? ResolveHideWatchedWithDefaults(MoonfinUserSettings settings, string? activeProfileName)
+    {
+        var profileName = string.IsNullOrEmpty(activeProfileName) ? "global" : activeProfileName;
+        var resolved = ResolveProfile(settings, profileName);
+        if (resolved.HideWatchedInRecentRows.HasValue)
+        {
+            return resolved.HideWatchedInRecentRows;
+        }
+
+        if (settings.Global?.HideWatchedInRecentRows.HasValue == true)
+        {
+            return settings.Global.HideWatchedInRecentRows;
+        }
+
+        var deviceValue = AnyDeviceHides(
+            settings.Tv?.HideWatchedInRecentRows,
+            settings.Desktop?.HideWatchedInRecentRows,
+            settings.Mobile?.HideWatchedInRecentRows);
+        if (deviceValue.HasValue)
+        {
+            return deviceValue;
+        }
+
+        var adminDefault = GetAdminDefaultsForProfile(profileName)?.HideWatchedInRecentRows
+            ?? GetAdminDefaultsForProfile("global")?.HideWatchedInRecentRows;
+        if (adminDefault.HasValue)
+        {
+            return adminDefault;
+        }
+
+        return AnyDeviceHides(
+            GetAdminDefaultsForProfile("tv")?.HideWatchedInRecentRows,
+            GetAdminDefaultsForProfile("desktop")?.HideWatchedInRecentRows,
+            GetAdminDefaultsForProfile("mobile")?.HideWatchedInRecentRows);
+    }
+
+    private static bool? AnyDeviceHides(params bool?[] values) =>
+        values.Any(v => v == true) ? true : values.Any(v => v == false) ? false : null;
+
+    private async Task SyncHideWatchedAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName, long saveGeneration)
+    {
+        var hideWatched = ResolveHideWatchedWithDefaults(settings, activeProfileName);
+        if (hideWatched.HasValue)
+        {
+            await SyncNativeHideWatchedAsync(userId, hideWatched.Value, saveGeneration).ConfigureAwait(false);
+        }
+    }
+
+    private async Task SyncNativeHideWatchedAsync(Guid userId, bool hideWatched, long expectedSaveGeneration)
+    {
+        if (_serviceProvider == null || GetUserDtoMethod == null || UpdateConfigurationMethod == null)
+        {
+            return;
+        }
+
+        var syncGate = _nativeSyncLocks.GetOrAdd(userId, static _ => new SemaphoreSlim(1, 1));
+        BeforeNativeSyncWaitForTesting?.Invoke(userId);
+        await syncGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_userSaveGenerations.TryGetValue(userId, out var currentGeneration) &&
+                currentGeneration != expectedSaveGeneration)
+            {
+                return;
+            }
+
+            var userManager = UserReflection.UserManager(_serviceProvider);
+            var user = UserReflection.ResolveUser(_serviceProvider, userId);
+            if (userManager == null || user == null)
+            {
+                return;
+            }
+
+            var args = new object?[GetUserDtoMethod.GetParameters().Length];
+            args[0] = user;
+            var userConfig = (GetUserDtoMethod.Invoke(userManager, args) as UserDto)?.Configuration;
+            if (userConfig != null && userConfig.HidePlayedInLatest != hideWatched)
+            {
+                userConfig.HidePlayedInLatest = hideWatched;
+                if (UpdateConfigurationMethod.Invoke(userManager, [userId, userConfig]) is Task updateTask)
+                {
+                    await updateTask.ConfigureAwait(false);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not sync HidePlayedInLatest for user {UserId}", userId);
+        }
+        finally
+        {
+            syncGate.Release();
+        }
     }
 }

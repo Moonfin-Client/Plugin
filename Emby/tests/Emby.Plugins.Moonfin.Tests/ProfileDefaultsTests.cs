@@ -1,6 +1,9 @@
+using System.Reflection;
 using System.Xml.Serialization;
 using Emby.Plugins.Moonfin.Models;
 using Emby.Plugins.Moonfin.Services;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Library;
 using Xunit;
 
 namespace Emby.Plugins.Moonfin.Tests;
@@ -255,5 +258,105 @@ public sealed class ProfileDefaultsTests : IDisposable
 
         Assert.Equal(0, await _service.CopySettingsAsync(Guid.NewGuid(), [bob], ["global"], null, replace: true));
         Assert.Equal("never", Read(bob).Global!.ClockBehavior);
+    }
+
+    [Fact]
+    public void ResolveHideWatchedWithDefaultsHandlesDeviceOnlyAndConflictingDefaults()
+    {
+        var tvDefaults = new MoonfinSettingsProfile();
+        var desktopDefaults = new MoonfinSettingsProfile();
+        var mobileDefaults = new MoonfinSettingsProfile();
+        var globalDefaults = new MoonfinSettingsProfile();
+        _service.AdminDefaultsOverrideForTesting = profile => profile.ToLowerInvariant() switch
+        {
+            "tv" => tvDefaults,
+            "desktop" => desktopDefaults,
+            "mobile" => mobileDefaults,
+            _ => globalDefaults,
+        };
+
+        var unsetUser = new MoonfinUserSettings();
+
+        tvDefaults.HideWatchedInRecentRows = true;
+        Assert.True(_service.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+
+        desktopDefaults.HideWatchedInRecentRows = false;
+        Assert.True(_service.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+
+        tvDefaults.HideWatchedInRecentRows = null;
+        Assert.False(_service.ResolveHideWatchedWithDefaults(unsetUser, "global"));
+    }
+
+    private class EmbyDelegateProxy : DispatchProxy
+    {
+        private Func<MethodInfo, object?[]?, object?>? _handler;
+
+        public static T Create<T>(Func<MethodInfo, object?[]?, object?>? handler = null) where T : class
+        {
+            var proxy = Create<T, EmbyDelegateProxy>();
+            ((EmbyDelegateProxy)(object)proxy)._handler = handler;
+            return proxy;
+        }
+
+        protected override object? Invoke(MethodInfo? method, object?[]? args) =>
+            _handler != null ? _handler(method!, args) : null;
+    }
+
+    [Fact]
+    public async Task DefaultSweepLeavesAUserWhoSavesMidSweepAlone()
+    {
+        var prevUserManager = PluginServices.UserManager;
+        try
+        {
+            var user = new User { Id = Guid.NewGuid(), Name = "emby-unsaved-user" };
+            var config = new MediaBrowser.Model.Configuration.UserConfiguration { HidePlayedInLatest = true };
+            var userManager = EmbyDelegateProxy.Create<IUserManager>((method, args) =>
+            {
+                if (method.Name == nameof(IUserManager.GetUserList))
+                {
+                    return new[] { user };
+                }
+
+                if (method.Name == nameof(IUserManager.GetUserById))
+                {
+                    return user;
+                }
+
+                if (method.Name == nameof(IUserManager.GetUserConfiguration))
+                {
+                    return config;
+                }
+
+                if (method.Name == nameof(IUserManager.UpdateConfiguration) && args is { Length: 2 } && args[1] is MediaBrowser.Model.Configuration.UserConfiguration updated)
+                {
+                    config.HidePlayedInLatest = updated.HidePlayedInLatest;
+                    return null;
+                }
+
+                return null;
+            });
+
+            PluginServices.UserManager = userManager;
+            _service.AdminDefaultsOverrideForTesting = profile =>
+                profile == "global" ? new MoonfinSettingsProfile { HideWatchedInRecentRows = true } : null;
+
+            var concurrentSaveTriggered = 0;
+            _service.BeforeNativeSyncWaitForTesting = id =>
+            {
+                if (id == user.Id && Interlocked.CompareExchange(ref concurrentSaveTriggered, 1, 0) == 0)
+                {
+                    SeedAsync("global", new MoonfinSettingsProfile { HideWatchedInRecentRows = false }, user.Id)
+                        .GetAwaiter().GetResult();
+                }
+            };
+
+            await _service.SyncHideWatchedForAffectedUsersAsync();
+
+            Assert.False(config.HidePlayedInLatest);
+        }
+        finally
+        {
+            PluginServices.UserManager = prevUserManager;
+        }
     }
 }

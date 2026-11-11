@@ -100,8 +100,15 @@ namespace Emby.Plugins.Moonfin
         {
             var oldUrl = Configuration?.PublicServerUrl;
             var oldGames = GamesSignature(Configuration);
+            var oldHideWatched = HideWatchedDefaults(Configuration);
             base.UpdateConfiguration(configuration);
             var newUrl = Configuration?.PublicServerUrl;
+
+            // Users who inherit a changed Hide Watched default get their HidePlayedInLatest moved to match.
+            if (HideWatchedDefaults(Configuration) != oldHideWatched)
+            {
+                _ = SettingsService?.SyncHideWatchedForAffectedUsersAsync(CancellationToken.None);
+            }
 
             // Re-watch and re-scan the ROM roots when the game settings change, so a newly picked
             // library's games get artwork without waiting for a library scan or a restart.
@@ -130,6 +137,12 @@ namespace Emby.Plugins.Moonfin
                 }
             }
         }
+
+        private static (bool?, bool?, bool?, bool?) HideWatchedDefaults(PluginConfiguration? config) => (
+            config?.DefaultUserSettings?.HideWatchedInRecentRows,
+            config?.GetDefaultsFor("tv")?.HideWatchedInRecentRows,
+            config?.GetDefaultsFor("desktop")?.HideWatchedInRecentRows,
+            config?.GetDefaultsFor("mobile")?.HideWatchedInRecentRows);
 
         private static string GamesSignature(PluginConfiguration? config) =>
             config == null
