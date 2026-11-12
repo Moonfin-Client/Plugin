@@ -25,6 +25,8 @@
       version the plugin project restores against).
     -->
     <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90" />
+    <!-- Emby provides SharpCompress the same way, so the tests load the version it ships. -->
+    <PackageReference Include="SharpCompress" Version="0.33.0" />
   </ItemGroup>
 
   <ItemGroup>

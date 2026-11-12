@@ -1,3 +1,4 @@
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Services;
@@ -12,20 +13,37 @@ namespace Emby.Plugins.Moonfin.Api
     internal sealed class DiscSetZipResult : IAsyncStreamWriter
     {
         private readonly DiscSet _discSet;
+        private readonly string? _deleteAfter;
 
-        public DiscSetZipResult(DiscSet discSet)
+        /// <param name="deleteAfter">A temp file the set reads from, deleted once the zip is sent.</param>
+        public DiscSetZipResult(DiscSet discSet, string? deleteAfter = null)
         {
             _discSet = discSet;
+            _deleteAfter = deleteAfter;
         }
 
-        public Task WriteToAsync(IResponse response, CancellationToken cancellationToken)
+        public async Task WriteToAsync(IResponse response, CancellationToken cancellationToken)
         {
             response.ContentType = "application/zip";
             response.SetContentLength(_discSet.Length);
 
             // The zip is written synchronously, so it runs off the request thread.
             var output = response.OutputWriter.AsStream(leaveOpen: true);
-            return Task.Run(() => _discSet.WriteTo(output), cancellationToken);
+            try
+            {
+                await Task.Run(() => _discSet.WriteTo(output), cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (_deleteAfter != null)
+                {
+                    try { File.Delete(_deleteAfter); }
+                    catch (IOException)
+                    {
+                        // A temp file left behind is cleared with the rest of the temp folder.
+                    }
+                }
+            }
         }
     }
 }

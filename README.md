@@ -53,7 +53,7 @@ The plugin repository is the recommended route, because it updates through the c
 The Emby plugin is a drop-in zip, not a catalog plugin:
 
 1. Download the latest `Moonfin.Emby-x.x.x.x.zip` from [Releases](https://github.com/Moonfin-Client/Plugin/releases).
-2. Extract its contents (`Emby.Plugins.Moonfin.dll`, `SharpCompress.dll`, and the `web` folder) into your Emby plugins folder:
+2. Extract its contents (`Emby.Plugins.Moonfin.dll` and the `web` folder) into your Emby plugins folder:
    | Platform | Path |
    |----------|------|
    | Linux | `/var/lib/emby/plugins/` |

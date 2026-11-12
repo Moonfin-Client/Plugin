@@ -1,6 +1,8 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -50,13 +52,26 @@ const rommRomsJSON = `{ "items": [
   { "id": 3, "platform_id": 10, "name": "Missing", "missing_from_fs": true, "files": [ { "id": 6, "file_name": "a.sfc", "file_size_bytes": 9 } ] },
   { "id": 4, "platform_id": 10, "name": "Manual only", "files": [ { "id": 7, "file_name": "a.sfc", "file_size_bytes": 9, "category": "manual" } ] },
   { "id": 5, "platform_id": 10, "name": "Unlisted zip", "files": [ { "id": 8, "file_name": "a.zip", "file_size_bytes": 9 } ] },
-  { "id": 6, "platform_id": 10, "name": "Odd types", "player_count": 2, "files": "none" }
+  { "id": 6, "platform_id": 10, "name": "Odd types", "player_count": 2, "files": "none" },
+  { "id": 20, "platform_id": 8, "name": "Final Fantasy VII", "fs_name": "Final Fantasy VII (USA)",
+    "files": [ { "id": 31, "file_name": "Final Fantasy VII (USA) (Track 2).bin", "file_size_bytes": 1000 },
+               { "id": 30, "file_name": "Final Fantasy VII (USA) (Track 1).bin", "file_size_bytes": 7000 },
+               { "id": 32, "file_name": "Final Fantasy VII (USA).cue", "file_size_bytes": 200 },
+               { "id": 33, "file_name": "manual.pdf", "file_size_bytes": 5, "category": "manual" } ] },
+  { "id": 21, "platform_id": 8, "name": "Disc",
+    "files": [ { "id": 34, "file_name": "Disc.7z", "file_size_bytes": 300,
+      "archive_members": [ { "name": "Disc (Track 1).bin", "size": 2352 }, { "name": "Disc (Track 2).bin", "size": 1176 }, { "name": "Disc.cue", "size": 66 } ] } ] },
+  { "id": 22, "platform_id": 8, "name": "Tracks missing", "files": [ { "id": 35, "file_name": "Lonely.cue", "file_size_bytes": 200 } ] }
 ] }`
 
 func fakeRomm(t *testing.T) *httptest.Server {
 	t.Helper()
 	zipped := zipOf(t, [2]string{"docs/readme.txt", strings.Repeat("r", 100)}, [2]string{"roms/Zipped (USA).sfc", "ZIPPED SNES!!"})
 	seven, err := os.ReadFile("testdata/game.7z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	disc, err := os.ReadFile("testdata/disc.7z")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,6 +110,13 @@ func fakeRomm(t *testing.T) *httptest.Server {
 			w.Write(zipped)
 		case "/api/roms/9/content/Seven (USA).7z":
 			w.Write(seven)
+		case "/api/roms/20/content/Final Fantasy VII (USA)":
+			if got := r.URL.Query().Get("file_ids"); got != "31,30,32" {
+				t.Errorf("disc set file_ids = %s", got)
+			}
+			io.WriteString(w, "ROMM DISC SET ZIP")
+		case "/api/roms/21/content/Disc.7z":
+			w.Write(disc)
 		case "/api/firmware/3/content/scph5501.bin":
 			io.WriteString(w, "PSX BIOS")
 		default:
@@ -121,7 +143,7 @@ func TestRommLibraryServesTheAppsScreens(t *testing.T) {
 	for _, sys := range systems {
 		names = append(names, sys["id"].(string)+"/"+sys["core"].(string)+"/"+strconv.Itoa(int(sys["gameCount"].(float64))))
 	}
-	if want := []string{"Arcade/arcade/1", "SNES/snes/4"}; !slices.Equal(names, want) {
+	if want := []string{"Arcade/arcade/1", "PlayStation/psx/2", "SNES/snes/4"}; !slices.Equal(names, want) {
 		t.Fatalf("systems = %v, want %v", names, want)
 	}
 	_, list := getJSON[[]M](t, s, userMain, "/Moonfin/Games/section-9/Games", map[string]any{"system": "SNES"})
@@ -165,6 +187,30 @@ func TestRommLibraryServesTheAppsScreens(t *testing.T) {
 	}
 	if b := readAll(t, serve(context.Background(), s, userMain, "GET", "/Moonfin/Games/section-9/Rom/romm-8", "", nil)); len(b) != 0 {
 		t.Fatalf("missing upstream file sent %q", b)
+	}
+
+	_, discs := getJSON[[]M](t, s, userMain, "/Moonfin/Games/section-9/Games", map[string]any{"system": "PlayStation"})
+	titles = nil
+	for _, g := range discs {
+		titles = append(titles, g["id"].(string)+"="+g["fileName"].(string))
+	}
+	if want := []string{"romm-21=Disc.zip", "romm-20=Final Fantasy VII (USA).zip"}; !slices.Equal(titles, want) {
+		t.Fatalf("PlayStation games = %v, want %v", titles, want)
+	}
+	if b := readAll(t, serve(context.Background(), s, userMain, "GET", "/Moonfin/Games/section-9/Rom/romm-20", "", nil)); string(b) != "ROMM DISC SET ZIP" {
+		t.Fatalf("RomM disc set = %q", b)
+	}
+	b := readAll(t, serve(context.Background(), s, userMain, "GET", "/Moonfin/Games/section-9/Rom/romm-21", "", nil))
+	zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		t.Fatalf("repacked RomM .7z isn't a zip: %v", err)
+	}
+	var inside []string
+	for _, f := range zr.File {
+		inside = append(inside, f.Name)
+	}
+	if want := []string{"Disc (Track 1).bin", "Disc (Track 2).bin", "Disc.cue"}; !slices.Equal(inside, want) {
+		t.Fatalf("repacked RomM .7z holds %v, want %v", inside, want)
 	}
 
 	_, psx := getJSON[M](t, s, userMain, "/Moonfin/Games/section-9/Games/romm-12", nil)

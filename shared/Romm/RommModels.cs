@@ -44,13 +44,23 @@ public sealed class RommGame
 
     /// <summary>
     /// The name and size the app receives. For a zipped ROM that is the ROM inside the archive,
-    /// since the plugin unpacks it before sending it on.
+    /// since the plugin unpacks it before sending it on. A zip made on the way out, by RomM or by
+    /// the plugin, is given the size of the files in it, a little under the zip's own length.
     /// </summary>
     public string ServedName { get; set; } = string.Empty;
 
     public long ServedSizeBytes { get; set; }
 
     public bool UnpackArchive { get; set; }
+
+    /// <summary>The plugin rewrites the archive as a zip of everything in it, since the apps only unpack zips.</summary>
+    public bool RepackArchive { get; set; }
+
+    /// <summary>
+    /// Every file of a game that only plays as a set, like a PlayStation .cue and its tracks.
+    /// RomM sends them as one zip. Empty when <see cref="Rom"/> alone is sent.
+    /// </summary>
+    public List<int> FileIds { get; set; } = new List<int>();
 
     /// <summary>RomM's server path for the large cover, cache-busting query included.</summary>
     public string? CoverPath { get; set; }
@@ -142,12 +152,16 @@ public sealed class RommFileRules
         Func<string, string, bool> isPlayableForCore,
         Func<string, bool> isArchive,
         Func<string, bool> isKnownRomExtension,
-        Func<string, string, bool> keepArchiveIntact)
+        Func<string, string, bool> keepArchiveIntact,
+        Func<string, string, bool> isDiscSheet,
+        Func<string, string, bool> repackArchive)
     {
         IsPlayableForCore = isPlayableForCore;
         IsArchive = isArchive;
         IsKnownRomExtension = isKnownRomExtension;
         KeepArchiveIntact = keepArchiveIntact;
+        IsDiscSheet = isDiscSheet;
+        RepackArchive = repackArchive;
     }
 
     /// <summary>Whether a core can play a file, given the core and the file name.</summary>
@@ -159,6 +173,12 @@ public sealed class RommFileRules
 
     /// <summary>Whether an archive is sent as is, given the core and the file name. Arcade sets are.</summary>
     public Func<string, string, bool> KeepArchiveIntact { get; }
+
+    /// <summary>Whether a file is a .cue or .m3u that needs the files beside it, given the core and the file name.</summary>
+    public Func<string, string, bool> IsDiscSheet { get; }
+
+    /// <summary>Whether an archive goes out repacked as a zip, given the core and the file name. A PlayStation .7z does.</summary>
+    public Func<string, string, bool> RepackArchive { get; }
 }
 
 /// <summary>A save or state in RomM.</summary>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 
@@ -144,13 +145,30 @@ public static class RommParser
         JsonElement? chosen = null;
         var chosenIsArchive = false;
         long chosenSize = -1;
+        int? sheetId = null;
+        string? sheetName = null;
+        var setIds = new List<int>();
+        long setSize = 0;
         foreach (var file in Items(rom, "files"))
         {
             var name = Text(file, "file_name");
             var category = Text(file, "category");
-            if (name == null || Int(file, "id") == null ||
-                (category != null && !string.Equals(category, "game", StringComparison.OrdinalIgnoreCase)) ||
-                !rules.IsPlayableForCore(core, name))
+            var fileId = Int(file, "id");
+            if (name == null || fileId == null ||
+                (category != null && !string.Equals(category, "game", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            setIds.Add(fileId.Value);
+            setSize += Long(file, "file_size_bytes") ?? 0;
+            if (sheetId == null && rules.IsDiscSheet(core, name))
+            {
+                sheetId = fileId;
+                sheetName = name;
+            }
+
+            if (!rules.IsPlayableForCore(core, name))
             {
                 continue;
             }
@@ -166,6 +184,18 @@ public static class RommParser
                 chosenIsArchive = isArchive;
                 chosenSize = size;
             }
+        }
+
+        // A .cue needs its tracks and an .m3u its discs, so RomM is asked for every file of the
+        // game at once, which it sends as one zip the way its own player gets it.
+        if (sheetId != null && setIds.Count > 1)
+        {
+            var setName = Text(rom, "fs_name") ?? Path.GetFileNameWithoutExtension(sheetName!);
+            game.Rom = new RommFile { Id = sheetId.Value, FileName = setName };
+            game.FileIds = setIds;
+            game.ServedName = setName + ".zip";
+            game.ServedSizeBytes = setSize;
+            return true;
         }
 
         if (chosen == null)
@@ -185,6 +215,14 @@ public static class RommParser
         {
             game.ServedName = game.Rom.FileName;
             game.ServedSizeBytes = game.Rom.SizeBytes;
+            return true;
+        }
+
+        if (rules.RepackArchive(core, game.Rom.FileName))
+        {
+            game.ServedName = Path.ChangeExtension(game.Rom.FileName, ".zip");
+            game.ServedSizeBytes = Items(picked, "archive_members").Sum(member => Long(member, "size") ?? 0);
+            game.RepackArchive = true;
             return true;
         }
 

@@ -56,8 +56,6 @@ rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 cp "$DLL_PATH" "$OUTPUT_DIR/"
-# SharpCompress is not host-provided; ship it alongside the plugin (used for .7z ROM extraction).
-cp "$BUILD_OUT/SharpCompress.dll" "$OUTPUT_DIR/"
 
 # Bundle Flutter web assets if present
 if [ -d "web" ] && [ -f "web/index.html" ]; then
@@ -87,5 +85,5 @@ echo "  Package : ${ZIP_NAME}"
 echo "  Version : ${VERSION}"
 echo "  MD5     : ${CHECKSUM}"
 echo ""
-echo "Install: copy everything in ${OUTPUT_DIR}/ (${PLUGIN_NAME}.dll, SharpCompress.dll, and the web/ folder) into your Emby plugins/ directory and restart Emby."
+echo "Install: copy everything in ${OUTPUT_DIR}/ (${PLUGIN_NAME}.dll and the web/ folder) into your Emby plugins/ directory and restart Emby."
 echo "The web/ folder must sit beside the dll, otherwise the web frontend answers with a 404."

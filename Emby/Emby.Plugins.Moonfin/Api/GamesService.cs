@@ -686,14 +686,15 @@ namespace Emby.Plugins.Moonfin.Api
             var client = romm.CreateClient();
             if (game == null || client == null) return NotFound();
 
-            if (!game.UnpackArchive)
+            if (!game.UnpackArchive && !game.RepackArchive)
             {
                 return await ProxyRommAsync(range => client.SendRomAsync(HttpMethod.Get, game, range, Request.CancellationToken)).ConfigureAwait(false);
             }
 
-            // A zipped ROM is unpacked here like one in a folder library, so the app gets the same
-            // raw bytes either way.
+            // A zipped ROM is unpacked here and a PlayStation .7z is repacked as a zip, the same
+            // way a folder library does it.
             var temp = Path.Combine(Path.GetTempPath(), $"moonfin-romm-{Guid.NewGuid():N}{Path.GetExtension(game.Rom.FileName)}");
+            var tempInUse = false;
             try
             {
                 var status = await client.DownloadRomAsync(game, temp, MaxRommArchiveBytes, Request.CancellationToken).ConfigureAwait(false);
@@ -703,6 +704,15 @@ namespace Emby.Plugins.Moonfin.Api
                 }
 
                 if (status != HttpStatusCode.OK) return RommFailure(status);
+
+                if (game.RepackArchive)
+                {
+                    var discSet = DiscSet.ForSevenZip(temp);
+                    if (discSet == null) return NotFound();
+                    // The zip is written after this returns, so the result deletes the download.
+                    tempInUse = true;
+                    return new DiscSetZipResult(discSet, temp);
+                }
 
                 byte[]? rom;
                 try { rom = SharedGamesService.ExtractRomFromArchive(temp); }
@@ -717,7 +727,7 @@ namespace Emby.Plugins.Moonfin.Api
             }
             finally
             {
-                try { File.Delete(temp); }
+                try { if (!tempInUse) File.Delete(temp); }
                 catch (IOException)
                 {
                     // A temp file left behind is cleared with the rest of the temp folder.

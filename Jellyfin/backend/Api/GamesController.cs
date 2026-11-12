@@ -983,13 +983,13 @@ public class GamesController : ControllerBase
             return NotFound();
         }
 
-        if (!game.UnpackArchive)
+        if (!game.UnpackArchive && !game.RepackArchive)
         {
             return await ProxyRommAsync((method, range) => client.SendRomAsync(method, game, range, cancellationToken), cancellationToken).ConfigureAwait(false);
         }
 
-        // A zipped ROM is unpacked here like one in a folder library, so the app gets the same
-        // raw bytes either way. RomM listed the archive's contents, so a HEAD needs no download.
+        // A zipped ROM is unpacked here and a PlayStation .7z is repacked as a zip, the same way
+        // a folder library does it. RomM listed the archive's contents, so a HEAD needs no download.
         if (HttpMethods.IsHead(Request.Method))
         {
             Response.ContentType = "application/octet-stream";
@@ -1009,7 +1009,18 @@ public class GamesController : ControllerBase
                     new { error = $"The archive exceeds the {GamesService.MaxExtractedRomBytes / (1024 * 1024)} MB limit for extracted ROMs." });
             }
 
-            return status == HttpStatusCode.OK ? StreamExtractedRom(temp) : RommFailure(status);
+            if (status != HttpStatusCode.OK)
+            {
+                return RommFailure(status);
+            }
+
+            if (!game.RepackArchive)
+            {
+                return StreamExtractedRom(temp);
+            }
+
+            var discSet = DiscSet.ForSevenZip(temp);
+            return discSet == null ? NotFound() : await StreamDiscSetAsync(discSet).ConfigureAwait(false);
         }
         catch (HttpRequestException)
         {

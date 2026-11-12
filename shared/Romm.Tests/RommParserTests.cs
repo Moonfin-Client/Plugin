@@ -141,6 +141,75 @@ public class RommParserTests
     }
 
     [Fact]
+    public void SendsAPlayStationCueSheetWithItsTracksAsOneZip()
+    {
+        var game = Assert.Single(ParseRoms("""
+            [ { "id": 20, "platform_id": 8, "name": "Final Fantasy VII", "fs_name": "Final Fantasy VII (USA)",
+                "files": [
+                  { "id": 31, "file_name": "Final Fantasy VII (USA) (Track 2).bin", "file_size_bytes": 1000 },
+                  { "id": 30, "file_name": "Final Fantasy VII (USA) (Track 1).bin", "file_size_bytes": 700000000 },
+                  { "id": 32, "file_name": "Final Fantasy VII (USA).cue", "file_size_bytes": 200 },
+                  { "id": 33, "file_name": "manual.pdf", "file_size_bytes": 5, "category": "manual" } ] } ]
+            """));
+
+        Assert.Equal(32, game.Rom.Id);
+        Assert.Equal("Final Fantasy VII (USA)", game.Rom.FileName);
+        Assert.Equal(new[] { 31, 30, 32 }, game.FileIds);
+        Assert.Equal("Final Fantasy VII (USA).zip", game.ServedName);
+        Assert.Equal(700001200, game.ServedSizeBytes);
+        Assert.False(game.UnpackArchive);
+        Assert.False(game.RepackArchive);
+    }
+
+    [Fact]
+    public void SendsEveryDiscOfAPlayStationPlaylist()
+    {
+        var game = Assert.Single(ParseRoms("""
+            [ { "id": 21, "platform_id": 8, "name": "Metal Gear Solid", "fs_name": "Metal Gear Solid (USA)",
+                "files": [
+                  { "id": 40, "file_name": "Metal Gear Solid (USA) (Disc 1).chd", "file_size_bytes": 400 },
+                  { "id": 41, "file_name": "Metal Gear Solid (USA) (Disc 2).chd", "file_size_bytes": 500 },
+                  { "id": 42, "file_name": "Metal Gear Solid (USA).m3u", "file_size_bytes": 80 } ] } ]
+            """));
+
+        Assert.Equal(new[] { 40, 41, 42 }, game.FileIds);
+        Assert.Equal("Metal Gear Solid (USA).zip", game.ServedName);
+    }
+
+    [Fact]
+    public void LeavesOutACueSheetWithNoTracksAndNeverGroupsOtherSystems()
+    {
+        var games = ParseRoms("""
+            [ { "id": 22, "platform_id": 8, "name": "Tracks missing", "files": [ { "id": 50, "file_name": "Game.cue", "file_size_bytes": 200 } ] },
+              { "id": 23, "platform_id": 10, "name": "SNES with a cue", "files": [
+                  { "id": 51, "file_name": "Game.cue", "file_size_bytes": 200 },
+                  { "id": 52, "file_name": "Game.sfc", "file_size_bytes": 900 } ] } ]
+            """);
+
+        var snes = Assert.Single(games);
+        Assert.Equal(52, snes.Rom.Id);
+        Assert.Empty(snes.FileIds);
+        Assert.Equal("Game.sfc", snes.ServedName);
+    }
+
+    [Fact]
+    public void RepacksAPlayStationSevenZipAsAZip()
+    {
+        var game = Assert.Single(ParseRoms("""
+            [ { "id": 24, "platform_id": 8, "name": "Crash Bandicoot",
+                "files": [ { "id": 60, "file_name": "Crash Bandicoot (USA).7z", "file_size_bytes": 300,
+                  "archive_members": [ { "name": "Crash Bandicoot (USA).cue", "size": 100 },
+                                       { "name": "Crash Bandicoot (USA).bin", "size": 900 } ] } ] } ]
+            """));
+
+        Assert.True(game.RepackArchive);
+        Assert.False(game.UnpackArchive);
+        Assert.Equal("Crash Bandicoot (USA).7z", game.Rom.FileName);
+        Assert.Equal("Crash Bandicoot (USA).zip", game.ServedName);
+        Assert.Equal(1000, game.ServedSizeBytes);
+    }
+
+    [Fact]
     public void SnapshotSignatureChangesOnlyWhenWhatClientsSeeChanges()
     {
         var platforms = ParsePlatforms();
@@ -173,7 +242,7 @@ internal static class RommTestRules
 {
     private static readonly HashSet<string> RomExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".nes", ".sfc", ".gba", ".md", ".z64", ".nds", ".iso",
+        ".nes", ".sfc", ".gba", ".md", ".z64", ".nds", ".iso", ".chd",
     };
 
     private static readonly HashSet<string> Archives = new(StringComparer.OrdinalIgnoreCase) { ".zip", ".7z" };
@@ -184,7 +253,9 @@ internal static class RommTestRules
             : RomExtensions.Contains(Path.GetExtension(name)) || Archives.Contains(Path.GetExtension(name)),
         name => Archives.Contains(Path.GetExtension(name)),
         name => RomExtensions.Contains(Path.GetExtension(name)),
-        (core, name) => IsArcade(core) && Path.GetExtension(name).Equals(".zip", StringComparison.OrdinalIgnoreCase));
+        (core, name) => IsArcade(core) && Path.GetExtension(name).Equals(".zip", StringComparison.OrdinalIgnoreCase),
+        (core, name) => core == "psx" && Path.GetExtension(name).ToLowerInvariant() is ".cue" or ".m3u",
+        (core, name) => core == "psx" && Path.GetExtension(name).Equals(".7z", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsArcade(string core) => core is "arcade" or "mame";
 }

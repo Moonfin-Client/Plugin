@@ -213,12 +213,19 @@ internal static class GameSystemCoreResolver
     internal static bool IsLibraryGameFile(string core, string romPath) =>
         IsPlayableFileForCore(core, romPath) || (IsDiscSetCore(core) && IsCueSheet(romPath));
 
+    /// <summary>A PlayStation .cue or .m3u, which only works with the other files beside it.</summary>
+    internal static bool IsDiscSheet(string core, string path) =>
+        IsDiscSetCore(core) &&
+        (IsCueSheet(path) || string.Equals(Path.GetExtension(path), ".m3u", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>The same file rules, handed to the RomM reader so both library kinds agree.</summary>
     internal static readonly RommFileRules RommRules = new(
         IsPlayableFileForCore,
         IsArchive,
         IsKnownRomExtension,
-        ShouldPreserveArchiveForCore);
+        ShouldPreserveArchiveForCore,
+        IsDiscSheet,
+        ShouldRepackArchiveForCore);
 
     private static bool TryFuzzyMatchSystemCore(string normalizedName, out string core)
     {

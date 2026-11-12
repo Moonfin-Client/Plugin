@@ -11,8 +11,6 @@
     <RootNamespace>Emby.Plugins.Moonfin</RootNamespace>
     <AssemblyName>Emby.Plugins.Moonfin</AssemblyName>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <!-- Copy non host-provided package DLLs (SharpCompress) into the output so the plugin can ship them. -->
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,8 +26,11 @@
     <PackageReference Include="System.IO.Pipelines" Version="8.0.0">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <!-- Not host-provided: must ship in the plugin folder. -->
-    <PackageReference Include="SharpCompress" Version="1.0.0" />
+    <!-- Emby ships SharpCompress 0.33.0 and won't load another version, even one in the plugin folder. -->
+    <PackageReference Include="SharpCompress" Version="0.33.0">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
