@@ -2302,7 +2302,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             customListEl(view, 'DefaultCustomListMdblistUser').value = params.username || '';
             if (type === 'list_url') {
                 customListEl(view, 'DefaultCustomListMdblistUrl').value = params.username && params.listname
-                    ? 'https://mdblist.com/lists/' + params.username + '/' + params.listname
+                    ? customListSourceUrl(source, type, params)
                     : '';
             } else {
                 customListEl(view, 'DefaultCustomListMdblistList').value = params.listname || '';
@@ -2336,6 +2336,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             if (type === 'list_url') {
                 // Takes https://mdblist.com/lists/{username}/{listname} with an optional trailing
                 // slash, query or fragment. Anchoring on /lists/ keeps extra path segments out.
+                // An official list's movies or shows page, /lists/official/{movies|shows}/{slug},
+                // keeps just that type.
                 var rawUrl = customListEl(view, 'DefaultCustomListMdblistUrl').value.trim();
                 var queryStart = rawUrl.search(/[?#]/);
                 if (queryStart >= 0) rawUrl = rawUrl.slice(0, queryStart);
@@ -2343,8 +2345,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 var urlParts = rawUrl.split('/').filter(function (part) { return part.length > 0; });
                 var parsedUser = '';
                 var parsedList = '';
+                var parsedType = '';
                 var listsIndex = urlParts.lastIndexOf('lists');
-                if (listsIndex >= 0 && urlParts.length >= listsIndex + 3) {
+                if (listsIndex >= 0 && urlParts.length >= listsIndex + 4 && urlParts[listsIndex + 1].toLowerCase() === 'official'
+                    && /^(movies|shows)$/i.test(urlParts[listsIndex + 2])) {
+                    parsedUser = 'official';
+                    parsedType = urlParts[listsIndex + 2].toLowerCase() === 'movies' ? 'movie' : 'show';
+                    parsedList = urlParts[listsIndex + 3];
+                } else if (listsIndex >= 0 && urlParts.length >= listsIndex + 3) {
                     parsedUser = urlParts[listsIndex + 1];
                     parsedList = urlParts[listsIndex + 2];
                 } else if (urlParts.length >= 2) {
@@ -2353,6 +2361,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 }
                 params.username = parsedUser;
                 params.listname = parsedList;
+                if (parsedType) params.mediatype = parsedType;
             } else {
                 params.username = customListEl(view, 'DefaultCustomListMdblistUser').value.trim();
                 params.listname = customListEl(view, 'DefaultCustomListMdblistList').value.trim();
@@ -2366,7 +2375,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             return 'https://www.themoviedb.org/' + (type === 'movie_collection' ? 'collection/' : 'list/') + params.id;
         }
         if (source === 'letterboxd') return 'https://letterboxd.com/' + params.user + '/';
-        return 'https://mdblist.com/lists/' + params.username + '/' + params.listname + '/';
+        var mediaPath = params.mediatype === 'movie' ? 'movies/' : params.mediatype === 'show' ? 'shows/' : '';
+        return 'https://mdblist.com/lists/' + params.username + '/' + mediaPath + params.listname + '/';
     }
 
     function saveCustomListRow(view) {

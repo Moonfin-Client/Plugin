@@ -412,12 +412,13 @@ func (s *Server) mdbUserList(ctx context.Context, key string, params map[string]
 	case !mdbSlug.MatchString(user) || !mdbSlug.MatchString(list):
 		return nil, errors.New("Invalid MDBList list.")
 	}
-	return s.mdbListItems(ctx, key, "/lists/"+user+"/"+list+"/items", lang, mdbUserMax)
+	return s.mdbListItems(ctx, key, "/lists/"+user+"/"+list+"/items", lang, mdbUserMax, params["mediatype"])
 }
 
 // mdbListItems reads an MDBList list a page at a time, up to limit titles in
-// list order. A list comes as one array, or as pages of movies and shows.
-func (s *Server) mdbListItems(ctx context.Context, key, path, lang string, limit int) ([]rowItem, error) {
+// list order. A list comes as one array, or as pages of movies and shows, and
+// only keeps one of those when only is "movie" or "show".
+func (s *Server) mdbListItems(ctx context.Context, key, path, lang string, limit int, only string) ([]rowItem, error) {
 	q := url.Values{"apikey": {key}, "limit": {"100"}, "append_to_response": {"poster"}}
 	if lang != "" {
 		q.Set("lang", lang)
@@ -429,18 +430,26 @@ func (s *Server) mdbListItems(ctx context.Context, key, path, lang string, limit
 		if err != nil || status/100 != 2 {
 			return nil, errors.New(providerError("MDBList", status, err))
 		}
-		before, cursor := len(items), ""
+		fetched, cursor := 0, ""
 		switch p := page.(type) {
 		case []any:
+			fetched = len(p)
 			items = appendMdb(items, p, "movie")
 		case M:
 			movies, _ := p["movies"].([]any)
 			shows, _ := p["shows"].([]any)
-			items = appendMdb(appendMdb(items, movies, "movie"), shows, "show")
+			fetched = len(movies) + len(shows)
+			if only != "show" {
+				items = appendMdb(items, movies, "movie")
+			}
+			if only != "movie" {
+				items = appendMdb(items, shows, "show")
+			}
 			pagination, _ := p["pagination"].(M)
 			cursor = text(pagination, "next_cursor")
 		}
-		if cursor == "" || len(items) == before {
+		// A page of only the other type isn't the end of the list.
+		if cursor == "" || fetched == 0 {
 			break
 		}
 		q.Set("cursor", cursor)
@@ -723,7 +732,7 @@ func (s *Server) handleOfficialListItems(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	items, err := cachedList(&s.ext.cache, "mdblist-official:"+slug+":"+strconv.Itoa(limit), false, func() ([]rowItem, error) {
-		return s.mdbListItems(ctx, key, "/lists/official/"+slug+"/items", "", limit)
+		return s.mdbListItems(ctx, key, "/lists/official/"+slug+"/items", "", limit, "")
 	})
 	if err != nil {
 		writeJSON(w, http.StatusOK, M{"success": false, "slug": slug, "error": err.Error(), "items": []any{}})

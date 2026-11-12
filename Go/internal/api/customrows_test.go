@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -66,6 +67,10 @@ func rowProviders(t *testing.T, hits *atomic.Int32) *httptest.Server {
 				"shows":[{"rank":3,"title":"Game of Thrones","ids":{"tmdb":1399,"tvdb":121361}}],"pagination":{"next_cursor":"p2"}}`)
 		case r.URL.Path == "/lists/someone/best/items" && q.Get("cursor") == "p2":
 			io.WriteString(w, `{"movies":[{"id":603,"rank":1,"title":"The Matrix","mediatype":"movie","poster":false}],"shows":[],"pagination":{}}`)
+		case r.URL.Path == "/lists/official/week/items" && q.Get("cursor") == "":
+			io.WriteString(w, `{"movies":[],"shows":[{"id":1399,"rank":1,"title":"Game of Thrones"}],"pagination":{"next_cursor":"w2"}}`)
+		case r.URL.Path == "/lists/official/week/items" && q.Get("cursor") == "w2":
+			io.WriteString(w, `{"movies":[{"id":603,"rank":2,"title":"The Matrix"}],"shows":[{"id":94997,"rank":3,"title":"House of the Dragon"}],"pagination":{}}`)
 		case r.URL.Path == "/lists/official" && q.Get("apikey") == "mdb-key":
 			io.WriteString(w, `[{"slug":"top","name":"Top Watched","mediatype":null,"items":2},{"slug":"","name":"no slug"}]`)
 		case r.URL.Path == "/lists/official/top/items" && q.Get("apikey") == "mdb-key":
@@ -213,6 +218,28 @@ func TestMdbListUserListFollowsTheCursorInRankOrder(t *testing.T) {
 	q["params"] = `{"username":"..","listname":"best"}`
 	if _, got := call(t, s, userMain, "GET", "/Moonfin/CustomRows/Items", "", q); got["success"] != false {
 		t.Fatalf("a name that climbs the path must be refused: %v", got)
+	}
+}
+
+func TestMdbListOfficialListKeepsOnlyTheChosenType(t *testing.T) {
+	s, _, _ := rowServer(t)
+	withKeys(t, s, "mdb-key", "")
+	names := func(params string) string {
+		var out []string
+		for _, it := range rowItems(t, s, userMain, map[string]any{"source": "mdblist", "type": "list_url", "params": params}) {
+			out = append(out, it["name"].(string)+"#"+strconv.Itoa(int(it["rank"].(float64))))
+		}
+		return strings.Join(out, ",")
+	}
+	// The first page only has a show, so a movies row has to keep paging past it.
+	for params, want := range map[string]string{
+		`{"username":"official","listname":"week","mediatype":"movie"}`: "The Matrix#1",
+		`{"username":"official","listname":"week","mediatype":"show"}`:  "Game of Thrones#1,House of the Dragon#2",
+		`{"username":"official","listname":"week"}`:                     "Game of Thrones#1,The Matrix#2,House of the Dragon#3",
+	} {
+		if got := names(params); got != want {
+			t.Errorf("%s = %s, want %s", params, got, want)
+		}
 	}
 }
 

@@ -194,6 +194,7 @@ namespace Emby.Plugins.Moonfin.Api
 
             paramsMap.TryGetValue("username", out var username);
             paramsMap.TryGetValue("listname", out var listname);
+            paramsMap.TryGetValue("mediatype", out var mediatype);
 
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(listname))
                 throw new ArgumentException("MDBList requires both username and listname parameters.");
@@ -217,8 +218,6 @@ namespace Emby.Plugins.Moonfin.Api
                 using var document = JsonDocument.Parse(json);
                 var root = document.RootElement;
 
-                var countBefore = items.Count;
-
                 if (root.ValueKind == JsonValueKind.Array)
                 {
                     // A flat array is a single page with no pagination object.
@@ -228,11 +227,7 @@ namespace Emby.Plugins.Moonfin.Api
 
                 if (root.ValueKind != JsonValueKind.Object) break;
 
-                if (root.TryGetProperty("movies", out var moviesProp) && moviesProp.ValueKind == JsonValueKind.Array)
-                    AppendMdbListItems(moviesProp, items);
-
-                if (root.TryGetProperty("shows", out var showsProp) && showsProp.ValueKind == JsonValueKind.Array)
-                    AppendMdbListItems(showsProp, items);
+                var pageCount = AppendMdbListPage(root, items, mediatype);
 
                 cursor = null;
                 if (root.TryGetProperty("pagination", out var paginationProp)
@@ -243,7 +238,7 @@ namespace Emby.Plugins.Moonfin.Api
                     cursor = cursorProp.GetString();
                 }
 
-                if (string.IsNullOrEmpty(cursor) || items.Count == countBefore) break;
+                if (string.IsNullOrEmpty(cursor) || pageCount == 0) break;
             }
 
             // Movies and shows arrive as separate arrays per page, so restore true list order.
@@ -291,6 +286,27 @@ namespace Emby.Plugins.Moonfin.Api
             }
 
             return items;
+        }
+
+        /// <summary>
+        /// Adds a page's movies and shows, or only one of them for an official list opened as
+        /// movies or shows. Returns how many titles the page held, so paging stops at an empty
+        /// page and not at one that only had the other type.
+        /// </summary>
+        internal static int AppendMdbListPage(JsonElement page, List<CustomRowItem> items, string? mediatype)
+        {
+            var count = 0;
+            foreach (var (property, type) in new[] { ("movies", "movie"), ("shows", "show") })
+            {
+                if (page.TryGetProperty(property, out var list) && list.ValueKind == JsonValueKind.Array)
+                {
+                    count += list.GetArrayLength();
+                    if (mediatype is not ("movie" or "show") || mediatype == type)
+                        AppendMdbListItems(list, items);
+                }
+            }
+
+            return count;
         }
 
         /// <summary>

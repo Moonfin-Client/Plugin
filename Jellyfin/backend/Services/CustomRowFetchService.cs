@@ -206,6 +206,7 @@ public class CustomRowFetchService
 
         paramsMap.TryGetValue("username", out var username);
         paramsMap.TryGetValue("listname", out var listname);
+        paramsMap.TryGetValue("mediatype", out var mediatype);
 
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(listname))
         {
@@ -235,8 +236,6 @@ public class CustomRowFetchService
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
 
-            var countBefore = items.Count;
-
             if (root.ValueKind == JsonValueKind.Array)
             {
                 AppendMdbListItems(root, items);
@@ -248,15 +247,7 @@ public class CustomRowFetchService
                 break;
             }
 
-            if (root.TryGetProperty("movies", out var moviesProp) && moviesProp.ValueKind == JsonValueKind.Array)
-            {
-                AppendMdbListItems(moviesProp, items);
-            }
-
-            if (root.TryGetProperty("shows", out var showsProp) && showsProp.ValueKind == JsonValueKind.Array)
-            {
-                AppendMdbListItems(showsProp, items);
-            }
+            var pageCount = AppendMdbListPage(root, items, mediatype);
 
             cursor = null;
             if (root.TryGetProperty("pagination", out var paginationProp)
@@ -267,7 +258,7 @@ public class CustomRowFetchService
                 cursor = cursorProp.GetString();
             }
 
-            if (string.IsNullOrEmpty(cursor) || items.Count == countBefore)
+            if (string.IsNullOrEmpty(cursor) || pageCount == 0)
             {
                 break;
             }
@@ -332,6 +323,29 @@ public class CustomRowFetchService
         }
 
         return items;
+    }
+
+    /// <summary>
+    /// Adds a page's movies and shows, or only one of them for an official list opened as movies
+    /// or shows. Returns how many titles the page held, so paging stops at an empty page and not
+    /// at one that only had the other type.
+    /// </summary>
+    internal static int AppendMdbListPage(JsonElement page, List<CustomRowItem> items, string? mediatype)
+    {
+        var count = 0;
+        foreach (var (property, type) in new[] { ("movies", "movie"), ("shows", "show") })
+        {
+            if (page.TryGetProperty(property, out var list) && list.ValueKind == JsonValueKind.Array)
+            {
+                count += list.GetArrayLength();
+                if (mediatype is not ("movie" or "show") || mediatype == type)
+                {
+                    AppendMdbListItems(list, items);
+                }
+            }
+        }
+
+        return count;
     }
 
     private static void AppendMdbListItems(JsonElement itemsArray, List<CustomRowItem> items)
