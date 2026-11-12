@@ -341,6 +341,34 @@ public class GamesController : ControllerBase
         return Ok(_gamesService.GetGames(libraryId, system, this.GetUserIdFromClaims()));
     }
 
+    /// <summary>A library's newest games for the home screen, by date added or with sort=released by release year.</summary>
+    [HttpGet("{libraryId}/Recent")]
+    [Authorize]
+    [Produces(MediaTypeNames.Application.Json)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<RecentGame>>> GetRecentGames(
+        [FromRoute] string libraryId,
+        [FromQuery] string? sort,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!GamesEnabled())
+        {
+            return Ok(Array.Empty<RecentGame>());
+        }
+
+        var games = _gamesService.GetRecentGames(
+            libraryId,
+            this.GetUserIdFromClaims(),
+            string.Equals(sort, "released", StringComparison.OrdinalIgnoreCase),
+            Math.Clamp(limit ?? 16, 1, 100));
+        var artwork = await _artwork
+            .GetSystemArtworkBatchAsync(libraryId, games.Select(game => game.System).Distinct(StringComparer.Ordinal), cancellationToken)
+            .ConfigureAwait(false);
+        GameArtworkApi.AttachBoxart(libraryId, games, artwork);
+        return Ok(games);
+    }
+
     /// <summary>Resolves a single game's full detail (ROM, core, BIOS files).</summary>
     [HttpGet("{libraryId}/Games/{gameId}")]
     [Authorize]

@@ -70,6 +70,9 @@ public sealed class RommGame
     /// <summary>RomM's last change to the game, part of the artwork identity.</summary>
     public string UpdatedAt { get; set; } = string.Empty;
 
+    /// <summary>When RomM first listed the game, its date added.</summary>
+    public string? CreatedAt { get; set; }
+
     public string? Summary { get; set; }
 
     public string? Genre { get; set; }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -417,7 +418,14 @@ public partial class GamesService
             return Array.Empty<GameSummary>();
         }
 
-        var result = new List<GameSummary>();
+        return EnumerateLocalGames(library, systemId)
+            .Select(entry => entry.Game)
+            .OrderBy(g => g.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private IEnumerable<(GameSummary Game, string RomPath)> EnumerateLocalGames(GameLibrary library, string? systemId)
+    {
         foreach (var root in library.Locations)
         {
             foreach (var systemDir in SafeEnumerateDirectories(root))
@@ -441,22 +449,112 @@ public partial class GamesService
                     // Compatibility resolution hashes every archive entry. Keep the browse
                     // endpoint inexpensive: only resolve an arcade game's effective core when
                     // its detail page is requested, where the user can also select an override.
-                    result.Add(new GameSummary
+                    yield return (new GameSummary
                     {
                         Id = GamePathResolver.EncodeToken(rom),
                         Title = ResolveTitle(systemDir, rom),
                         System = systemName,
                         Core = core,
                         FileName = Path.GetFileName(rom)
-                    });
+                    }, rom);
                 }
             }
         }
-
-        return result
-            .OrderBy(g => g.Title, StringComparer.OrdinalIgnoreCase)
-            .ToList();
     }
+
+    /// <summary>
+    /// A library's newest games for the home screen, by when they were added or, for
+    /// <paramref name="byRelease"/>, by release year with undated games left out. The metadata
+    /// comes from RomM or LaunchBox only, since the .rdb lookup can hash every ROM in the library.
+    /// </summary>
+    public IReadOnlyList<RecentGame> GetRecentGames(string libraryId, Guid? userId, bool byRelease, int limit)
+    {
+        var games = new List<(RecentGame Game, RommGame? Romm)>();
+        if (_romm?.Owns(libraryId) == true)
+        {
+            var snapshot = _romm.ForUser(userId).Snapshot();
+            foreach (var game in snapshot?.Games ?? Enumerable.Empty<RommGame>())
+            {
+                var platform = snapshot!.FindPlatform(game.PlatformId);
+                if (platform == null)
+                {
+                    continue;
+                }
+
+                games.Add((new RecentGame
+                {
+                    Id = RommSource.GameId(game),
+                    Title = game.Title,
+                    System = platform.SystemId,
+                    Core = platform.Core,
+                    FileName = game.ServedName,
+                    DateAdded = RommDate(game.CreatedAt) ?? RommDate(game.UpdatedAt) ?? DateTime.MinValue,
+                }, game));
+            }
+        }
+        else
+        {
+            var library = GetGameLibraries().FirstOrDefault(l => SameId(l.Id, libraryId));
+            if (library != null)
+            {
+                games.AddRange(EnumerateLocalGames(library, null).Select(entry => (new RecentGame
+                {
+                    Id = entry.Game.Id,
+                    Title = entry.Game.Title,
+                    System = entry.Game.System,
+                    Core = entry.Game.Core,
+                    FileName = entry.Game.FileName,
+                    DateAdded = FileDateAdded(entry.RomPath),
+                }, (RommGame?)null)));
+            }
+        }
+
+        // The year sorts the whole list for Recently Released. Otherwise only the games that
+        // make the row are looked up.
+        if (byRelease)
+        {
+            games.ForEach(entry => FillRecentMetadata(entry.Game, entry.Romm));
+        }
+
+        var sorted = byRelease
+            ? games.Where(entry => entry.Game.Year != null).OrderByDescending(entry => entry.Game.Year).ThenByDescending(entry => entry.Game.DateAdded)
+            : games.OrderByDescending(entry => entry.Game.DateAdded);
+        var recent = sorted.Take(limit).ToList();
+        if (!byRelease)
+        {
+            recent.ForEach(entry => FillRecentMetadata(entry.Game, entry.Romm));
+        }
+
+        return recent.Select(entry => entry.Game).ToList();
+    }
+
+    // RomM's own metadata wins and LaunchBox fills the rest, the way a game's detail does.
+    private void FillRecentMetadata(RecentGame game, RommGame? romm)
+    {
+        var lb = _launchBox?.TryLookup(game.Core, game.Title, game.FileName);
+        game.Year = romm?.Year ?? lb?.Year;
+        game.Overview = romm?.Summary ?? lb?.Overview;
+    }
+
+    // Copies and unzipped sets often keep a ROM's original modified time, so the
+    // file's arrival on this disk counts when it's later.
+    private static DateTime FileDateAdded(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.CreationTimeUtc > info.LastWriteTimeUtc ? info.CreationTimeUtc : info.LastWriteTimeUtc;
+        }
+        catch (Exception)
+        {
+            return DateTime.MinValue;
+        }
+    }
+
+    private static DateTime? RommDate(string? value) =>
+        DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date)
+            ? date
+            : null;
 
     /// <summary>
     /// The result of locating a game's ROM on disk and resolving its effective system/arcade

@@ -112,6 +112,7 @@ public static class RommParser
             CoverPath = Text(rom, "path_cover_large"),
             ScreenshotPath = Strings(rom, "merged_screenshots").FirstOrDefault(),
             UpdatedAt = Text(rom, "updated_at") ?? string.Empty,
+            CreatedAt = Text(rom, "created_at"),
             Summary = Text(rom, "summary"),
             Region = Join(Strings(rom, "regions")),
         };

@@ -92,6 +92,8 @@ type rommGame struct {
 	// PlayStation .cue and its tracks, which RomM sends as one zip.
 	FileIDs []int
 	Meta    M
+	// Added is when RomM first listed the game.
+	Added time.Time
 }
 
 type rommSnapshot struct {
@@ -163,6 +165,7 @@ func parseRommRom(raw json.RawMessage, platforms map[int]rommPlatform) (rommGame
 		Cover       string   `json:"path_cover_large"`
 		Screenshots []string `json:"merged_screenshots"`
 		Summary     string   `json:"summary"`
+		CreatedAt   string   `json:"created_at"`
 		Regions     []string `json:"regions"`
 		Missing     bool     `json:"missing_from_fs"`
 		Files       []struct {
@@ -192,6 +195,12 @@ func parseRommRom(raw json.RawMessage, platforms map[int]rommPlatform) (rommGame
 	}
 	game := rommGame{ID: r.ID, PlatformID: r.PlatformID, Title: firstText(r.Name, r.FsNameNoExt, r.FsName, strconv.Itoa(r.ID)),
 		Cover: strings.TrimSpace(r.Cover)}
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999999999"} {
+		if t, err := time.Parse(layout, r.CreatedAt); err == nil {
+			game.Added = t.UTC()
+			break
+		}
+	}
 	if shots := nonEmpty(r.Screenshots); len(shots) > 0 {
 		game.Screenshot = shots[0]
 	}
@@ -396,9 +405,30 @@ func (s *rommSnapshot) gameList(system string) []M {
 		if !ok || system != "" && !strings.EqualFold(p.SystemID, system) {
 			continue
 		}
-		out = append(out, M{"id": rommGamePrefix + strconv.Itoa(g.ID), "title": g.Title, "system": p.SystemID, "core": p.Core, "fileName": g.ServedName})
+		out = append(out, rommSummary(g, p))
 	}
 	sortByFold(out, "title")
+	return out
+}
+
+func rommSummary(g rommGame, p rommPlatform) M {
+	return M{"id": rommGamePrefix + strconv.Itoa(g.ID), "title": g.Title, "system": p.SystemID, "core": p.Core, "fileName": g.ServedName}
+}
+
+func (s *rommSnapshot) recentList() []M {
+	out := []M{}
+	for _, g := range s.games {
+		if p, ok := s.platform(g.PlatformID); ok {
+			m := rommSummary(g, p)
+			m["dateAdded"] = g.Added
+			for _, key := range []string{"year", "overview"} {
+				if v, ok := g.Meta[key]; ok {
+					m[key] = v
+				}
+			}
+			out = append(out, m)
+		}
+	}
 	return out
 }
 

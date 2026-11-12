@@ -74,6 +74,24 @@ public static class GameArtworkApi
         return panels;
     }
 
+    /// <summary>Adds each game's cataloged box art, read in one catalog pass for the whole row.</summary>
+    public static void AttachBoxart(
+        string libraryId,
+        IEnumerable<RecentGame> games,
+        IReadOnlyDictionary<string, GameArtworkSystemReadResult> artworkBySystem)
+    {
+        foreach (var game in games)
+        {
+            var entry = artworkBySystem.TryGetValue(game.System, out var artwork)
+                ? artwork.Entries.FirstOrDefault(e => e.Role == "boxart" && string.Equals(e.GameId, game.Id, StringComparison.Ordinal))
+                : null;
+            if (entry != null)
+            {
+                game.Boxart = ToDescriptor(libraryId, game.Id, entry.Role, entry.Entry);
+            }
+        }
+    }
+
     /// <summary>Adds each system's preview panels, read in one catalog pass for the whole page.</summary>
     public static void AttachPreviews(
         string libraryId,

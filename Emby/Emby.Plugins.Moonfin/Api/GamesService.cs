@@ -91,6 +91,24 @@ namespace Emby.Plugins.Moonfin.Api
             return Json(games.GetGames(request.LibraryId, request.System, UserId()));
         }
 
+        public async Task<object> Get(GetRecentGamesRequest request)
+        {
+            var games = Games();
+            var artwork = Artwork();
+            if (!GamesEnabled() || games == null || artwork == null) return Json(Array.Empty<object>());
+
+            var recent = games.GetRecentGames(
+                request.LibraryId,
+                UserId(),
+                string.Equals(request.Sort, "released", StringComparison.OrdinalIgnoreCase),
+                Math.Clamp(request.Limit ?? 16, 1, 100));
+            var artworkBySystem = await artwork
+                .GetSystemArtworkBatchAsync(request.LibraryId, recent.Select(game => game.System).Distinct(StringComparer.Ordinal), Request.CancellationToken)
+                .ConfigureAwait(false);
+            GameArtworkApi.AttachBoxart(request.LibraryId, recent, artworkBySystem);
+            return Json(recent);
+        }
+
         public async Task<object> Get(GetGameDetailRequest request)
         {
             var games = Games();
