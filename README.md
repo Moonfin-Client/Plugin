@@ -121,17 +121,17 @@ The list below is for Jellyfin and Emby. Moonbase for Plex covers most of it too
 - **Next air dates** for series, taken from the Sonarr your Seerr is connected to, or from TMDB through the server when there's no Sonarr.
 - **Anime filler and recap markers** that badge episodes as Filler, Mixed, Recap or canon using AnimeFillerList and MyAnimeList, plus Subbed and Dubbed pills read from the audio tracks in your own files, or the shorter Sub and Dub. Shows match even when your library titles aren't in English. No account or API key needed.
 - **A seasonal home row** of holiday movies your users own, plus Seerr suggestions, around New Year's, Valentine's Day, Easter, Pride, Halloween, Thanksgiving, Christmas, Lunar New Year and Diwali, following each user's parental limit.
-- **Seerr integration** with a built-in proxy that keeps each user to their parental limit, single sign-on, optional request and issue notifications, and a download status that says when a Radarr or Sonarr download is stuck, with a way for admins to grab a different release. The step-by-step guide is [Seerr Setup](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Setup).
-- **Push notifications** that reach Moonfin apps even when they are closed, covering Seerr activity, new media added to your library, and admin broadcasts. See [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications).
-- **Admin tools** for setting server-wide defaults across every client setting, for all devices or only TV, desktop or mobile, hiding libraries and adding custom list rows for new users, pushing defaults to existing users or copying one user's settings to others, and broadcasting a message to everyone at once.
+- **Seerr integration** with a built-in proxy that keeps each user to their parental limit, single sign-on, optional request and issue notifications, and a download status that says when a Radarr or Sonarr download is stuck, with a way for admins to grab a different release and an optional notification when one gets stuck. The step-by-step guide is [Seerr Setup](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Setup).
+- **Push notifications** that reach Moonfin apps even when they are closed, covering Seerr activity, stuck downloads, calendar reminders, new media added to your library, and admin broadcasts. See [Seerr Notifications](https://github.com/Moonfin-Client/Plugin/wiki/Seerr-Notifications).
+- **Admin tools** for setting server-wide defaults across every client setting, for all devices or only TV, desktop or mobile, hiding libraries or keeping them out of Recently Added and adding custom list rows for new users, pushing defaults to existing users or copying one user's settings to others, and broadcasting a message to everyone at once.
 - **Sign-in PINs kept on the server**, so a user's PIN follows them to every device. Wrong guesses are slowed down, and admins can set or reset anyone's PIN.
 - **Live TV recording checks** that mark recordings which missed part of their airing as Incomplete, and can record the next full showing for you.
 - **Settings backup and restore**: Moonbase keeps a spare copy of your server-wide settings and offers to put it back if they ever come back reset.
 - **App reports on Emby**, so the apps' Send report to server button works there too. Jellyfin has this built in.
 - **Server messages**: an admin can write a note (title, Markdown body, color, audience, start and end dates, an optional link button) that shows up in people's apps, even if they were offline when it was sent.
 - **Custom themes** with a built-in editor, plus server-side upload and validation.
-- **Retro games** support for browsing and playing game libraries, from folders or a RomM server, with saves synced per user. Each user can link their own RomM account so their saves sync with RomM too. On Jellyfin, an optional switch lets PSP games start in the web app. See [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games).
-- **Custom rows** built from Letterboxd, TMDB, MDBList and IMDb lists, cached on the server and filtered by each user's parental limit, plus MDBList's Watching Now row.
+- **Retro games** support for browsing and playing game libraries, from folders or a RomM server, with saves synced per user. Each user can link their own RomM account so their saves sync with RomM too. An optional switch lets PSP games start in the web app. See [Retro Games](https://github.com/Moonfin-Client/Plugin/wiki/Retro-Games).
+- **Custom rows** built from Letterboxd, TMDB, MDBList and IMDb lists, cached on the server and filtered by each user's parental limit, plus the Watching on MDBList row.
 - **Watch Parties**, rooms where people watch the same thing together on their own devices, with chat, reactions, lobby voting, party alerts and an invite page. See [Watch Parties](https://github.com/Moonfin-Client/Plugin/wiki/Watch-Parties).
 - **A Sonarr and Radarr calendar** for the apps, with reminders that tell people when a new episode or movie arrives. See [Calendar](https://github.com/Moonfin-Client/Plugin/wiki/Calendar).
 - **Smart Search**, which finds titles from a description in plain words, with new and upcoming titles from Seerr for what the server doesn't have. See [Smart Search](https://github.com/Moonfin-Client/Plugin/wiki/Smart-Search).
@@ -140,6 +140,7 @@ The list below is for Jellyfin and Emby. Moonbase for Plex covers most of it too
 - **An active downloads dashboard** with live transcode metrics in the admin panel, plus a per-client view so a transcoded download can show its own progress and ETA.
 - **Personal ratings served back to clients**, so a library can be sorted by your own rating and filtered by liked or disliked, which neither server can do on its own.
 - **Audiobook bookmarks and notes** stored on the server and synced between clients.
+- **After Hours scoreboards**, the top 3 for each of the apps' hidden games, shared by everyone on the server.
 
 ## Configuration
 
@@ -148,7 +149,7 @@ Open your server dashboard, go to Plugins, and select **Moonbase**. The [Admin G
 - Your Seerr URL and whether Seerr is enabled
 - Shared MDBList and TMDB API keys, so individual users don't need their own. The TMDB key also feeds the seasonal row and the rating checks on custom rows
 - Whether Moonbase Sync is on (required for the Seerr and ratings integrations)
-- Anime markers, and on Jellyfin whether Moonfin Recommends handles similar items
+- Poster labels and anime markers on the Labels tab, and whether Moonfin Recommends handles similar items
 - Incomplete recording detection and re-recording on the Live TV tab
 - Users' sign-in PINs on the Accounts tab
 - Default user settings that new users inherit, with a button to push them to existing users
