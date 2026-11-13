@@ -359,4 +359,22 @@ public sealed class ProfileDefaultsTests : IDisposable
             PluginServices.UserManager = prevUserManager;
         }
     }
+
+    [Fact]
+    public async Task CarouselRowTypeRoundTripsThroughAProfileAndATvDefault()
+    {
+        var userId = await SeedAsync("tv", new MoonfinSettingsProfile { HomeRowsStyle = "carousel" });
+        var settings = Read(userId);
+        Assert.Equal("carousel", settings.Tv!.HomeRowsStyle);
+        Assert.Equal("carousel", _service.ResolveProfile(settings, "tv", new PluginConfiguration()).HomeRowsStyle);
+
+        var config = new PluginConfiguration
+        {
+            DefaultDeviceSettings = new MoonfinDeviceDefaults
+            {
+                Tv = new MoonfinSettingsProfile { HomeRowsStyle = "carousel" },
+            },
+        };
+        Assert.Equal("carousel", _service.ResolveProfile(new MoonfinUserSettings(), "tv", config).HomeRowsStyle);
+    }
 }

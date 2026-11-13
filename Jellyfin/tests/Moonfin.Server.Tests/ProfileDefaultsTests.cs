@@ -260,4 +260,22 @@ public sealed class ProfileDefaultsTests : IDisposable
         Assert.Equal(0, await _service.CopySettingsAsync(Guid.NewGuid(), [bob], ["global"], null, replace: true));
         Assert.Equal("never", Read(bob).Global!.ClockBehavior);
     }
+
+    [Fact]
+    public async Task CarouselRowTypeRoundTripsThroughAProfileAndATvDefault()
+    {
+        var userId = await SeedAsync("tv", new MoonfinSettingsProfile { HomeRowsStyle = "carousel" });
+        var settings = Read(userId);
+        Assert.Equal("carousel", settings.Tv!.HomeRowsStyle);
+        Assert.Equal("carousel", _service.ResolveProfile(settings, "tv", new PluginConfiguration()).HomeRowsStyle);
+
+        var config = new PluginConfiguration
+        {
+            DefaultDeviceSettings = new MoonfinDeviceDefaults
+            {
+                Tv = new MoonfinSettingsProfile { HomeRowsStyle = "carousel" },
+            },
+        };
+        Assert.Equal("carousel", _service.ResolveProfile(new MoonfinUserSettings(), "tv", config).HomeRowsStyle);
+    }
 }
