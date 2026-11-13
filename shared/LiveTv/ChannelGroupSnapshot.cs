@@ -69,9 +69,9 @@ namespace Moonfin.LiveTv
 
         // Only a complete read can clear a previous ID conflict.
         // Each viewer can only resolve conflicts for channels they can access.
-        public void UpdateConflicts(HashSet<string> known, bool preserveKnown = false)
+        public void UpdateConflicts(HashSet<string> known)
         {
-            if (MissingTuner || preserveKnown)
+            if (MissingTuner)
                 _ambiguous.UnionWith(known.Where(_visibleIds.Contains));
             else
                 known.ExceptWith(_visibleIds);
@@ -80,8 +80,6 @@ namespace Moonfin.LiveTv
 
         public ChannelGroupSnapshot(IEnumerable<string> visibleIds) =>
             _visibleIds = new HashSet<string>(visibleIds, StringComparer.OrdinalIgnoreCase);
-
-        public bool IsVisible(string id) => _visibleIds.Contains(id);
 
         public bool Covers(IEnumerable<string> visibleIds) => _visibleIds.IsSupersetOf(visibleIds);
 
@@ -117,13 +115,6 @@ namespace Moonfin.LiveTv
             }
         }
 
-        public ChannelGroupResult ForVisibleChannels(IEnumerable<(string ClientId, string ExternalId)> channels)
-        {
-            var result = new ChannelGroupResult();
-            AddVisibleChannelsTo(result, channels);
-            return result;
-        }
-
         public void AddVisibleChannelsTo(ChannelGroupResult result, IEnumerable<(string ClientId, string ExternalId)> channels)
         {
             foreach (var channel in channels)
@@ -131,7 +122,7 @@ namespace Moonfin.LiveTv
                 if (string.IsNullOrEmpty(channel.ExternalId) || _ambiguous.Contains(channel.ExternalId) ||
                     !_channels.TryGetValue(channel.ExternalId, out var source) || source.ExternalId != channel.ExternalId)
                 {
-                    // Either server may return no tuners after losing its cache.
+                    // The tuner may return no channels after losing its cache.
                     result.Partial = true;
                     result.UnresolvedChannelIds ??= new List<string>();
                     // A duplicate channel ID has no safe group. Only a missing tuner result

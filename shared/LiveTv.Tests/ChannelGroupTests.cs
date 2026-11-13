@@ -1,8 +1,3 @@
-using System;
-
-
-
-
 using Moonfin.LiveTv;
 using Xunit;
 
@@ -19,12 +14,14 @@ namespace Moonfin.Tests
             snapshot.Add(1, "A", "same", new[] { "Sport" });
             snapshot.Add(2, "B", "other", new[] { "Kids" });
             snapshot.Add(2, "B", "untagged", null);
-            var visible = snapshot.ForVisibleChannels(new[] { ("c1", "same"), ("c2", "other"), ("c3", "untagged") });
+            var visible = new ChannelGroupResult();
+            snapshot.AddVisibleChannelsTo(visible, new[] { ("c1", "same"), ("c2", "other"), ("c3", "untagged") });
             Assert.True(visible.Partial);
             Assert.Equal("c2", Assert.Single(visible.Groups).Key);
             Assert.Empty(visible.UnresolvedChannelIds!);
 
-            var mixed = snapshot.ForVisibleChannels(new[] { ("c1", "same"), ("c4", "offline") });
+            var mixed = new ChannelGroupResult();
+            snapshot.AddVisibleChannelsTo(mixed, new[] { ("c1", "same"), ("c4", "offline") });
             Assert.Equal(new[] { "c4" }, mixed.UnresolvedChannelIds);
             Assert.Empty(mixed.Groups);
         }
