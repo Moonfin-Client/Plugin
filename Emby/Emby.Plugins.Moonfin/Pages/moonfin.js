@@ -2879,6 +2879,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setPosterBadgeRules(view, config.PosterBadgeRules, config.PosterBadgeDefaults);
             view.querySelector('#FcmServiceAccountJson').value = config.FcmServiceAccountJson || '';
             view.querySelector('#FcmServiceAccountPath').value = config.FcmServiceAccountPath || '';
+            view.querySelector('#PushRelayEnabled').checked = config.PushRelayEnabled !== false;
             view.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
             view.querySelector('#PushRelayAppKey').value = config.PushRelayAppKey || '';
             view.querySelector('#WebDefaultServerUrl').value = config.WebDefaultServerUrl || '';
@@ -3288,6 +3289,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.PosterBadgeDefaults = getPosterBadgeDefaults();
             config.FcmServiceAccountJson = view.querySelector('#FcmServiceAccountJson').value || null;
             config.FcmServiceAccountPath = view.querySelector('#FcmServiceAccountPath').value || null;
+            config.PushRelayEnabled = view.querySelector('#PushRelayEnabled').checked;
             config.PushRelayUrl = (view.querySelector('#PushRelayUrl').value || '').trim()
                 || 'https://push.moonfin.io/send';
             config.PushRelayAppKey = (view.querySelector('#PushRelayAppKey').value || '').trim() || null;

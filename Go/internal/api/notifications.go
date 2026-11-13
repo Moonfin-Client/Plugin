@@ -208,16 +208,25 @@ func (s *Server) saveWithin(ctx context.Context, key string, v any) (bool, error
 	return true, nil
 }
 
+// pushKey is the key pushes are signed with, or "" when push is off: the host
+// has no notifications, the admin turned the relay off, or there's no relay
+// address or key.
+func (s *Server) pushKey(cfg Config) string {
+	if !s.notify.on || !cfg.PushRelayEnabled || cfg.PushRelayURL == "" {
+		return ""
+	}
+	return cmp.Or(cfg.PushRelayAppKey, builtInRelayKey)
+}
+
 // pushToUser sends a push to each of the account's phones through the relay,
-// and forgets the devices the relay says are gone. Push is off without a
-// relay address and key.
+// and forgets the devices the relay says are gone.
 func (s *Server) pushToUser(ctx context.Context, userID int, title, body, route string) {
 	if !s.notify.on {
 		return
 	}
 	cfg := s.config(ctx)
-	key := cmp.Or(cfg.PushRelayAppKey, builtInRelayKey)
-	if cfg.PushRelayURL == "" || key == "" {
+	key := s.pushKey(cfg)
+	if key == "" {
 		return
 	}
 	all, err := s.loadDevices(ctx)

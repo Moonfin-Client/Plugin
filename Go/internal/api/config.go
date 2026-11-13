@@ -47,8 +47,10 @@ type Config struct {
 	WebDefaultServerURL, WebForcedServerURL string
 	WebRtcScan                              bool
 	// Pushes go through the relay at PushRelayURL, signed with
-	// PushRelayAppKey or else the key the build carries.
+	// PushRelayAppKey or else the key the build carries, unless the admin
+	// turned PushRelayEnabled off.
 	PushRelayURL, PushRelayAppKey string
+	PushRelayEnabled              bool
 }
 
 // DefaultsFor is the admin's defaults for one profile.
@@ -156,6 +158,7 @@ func configFrom(c M) Config {
 	cfg.WatchParty.MaxMembers = wholeNumber(c["WatchPartyMaxMembers"], cfg.WatchParty.MaxMembers)
 	cfg.PushRelayURL = strings.TrimSpace(str(c["PushRelayUrl"]))
 	cfg.PushRelayAppKey = strings.TrimSpace(str(c["PushRelayAppKey"]))
+	cfg.PushRelayEnabled = c["PushRelayEnabled"] != false
 	return cfg
 }
 

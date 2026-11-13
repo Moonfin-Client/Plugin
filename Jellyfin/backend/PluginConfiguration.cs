@@ -343,6 +343,12 @@ public class PluginConfiguration : BasePluginConfiguration, IGamesConfig
     public string PushRelayUrl { get; set; } = "https://push.moonfin.io/send";
 
     /// <summary>
+    /// Whether push may go through the hosted relay. When off, push only works with a service
+    /// account configured.
+    /// </summary>
+    public bool PushRelayEnabled { get; set; } = true;
+
+    /// <summary>
     /// Optional override for the relay app key, for anyone running their own relay. When empty
     /// the key stamped into the build is used. This is a secret and is never logged.
     /// </summary>
@@ -366,12 +372,12 @@ public class PluginConfiguration : BasePluginConfiguration, IGamesConfig
         !string.IsNullOrWhiteSpace(FcmServiceAccountJson);
 
     /// <summary>
-    /// True when push can run: either a service account (direct self-hosted send) or a usable
-    /// relay key (hosted default send) is available.
+    /// True when push can run: either a service account (direct self-hosted send) or the relay
+    /// is turned on and has a usable key (hosted default send).
     /// </summary>
     public bool PushEnabled =>
         HasServiceAccount ||
-        GetRelayAppKey() != null;
+        (PushRelayEnabled && GetRelayAppKey() != null);
 
     /// <summary>
     /// Resolves the effective service-account JSON, preferring the file path when set.

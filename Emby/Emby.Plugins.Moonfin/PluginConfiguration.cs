@@ -62,6 +62,9 @@ namespace Emby.Plugins.Moonfin
         /// <summary>URL of the hosted push relay that holds the shared service account and forwards to FCM. The plugin posts tokens plus payload here by default so self-hosters need no service account.</summary>
         public string PushRelayUrl { get; set; } = "https://push.moonfin.io/send";
 
+        /// <summary>Whether push may go through the hosted relay. When off, push only works with a service account configured.</summary>
+        public bool PushRelayEnabled { get; set; } = true;
+
         /// <summary>Optional override for the relay app key, for anyone running their own relay. When empty the key stamped into the build is used. Secret: never logged.</summary>
         public string? PushRelayAppKey { get; set; }
 
@@ -79,8 +82,8 @@ namespace Emby.Plugins.Moonfin
             !string.IsNullOrWhiteSpace(FcmServiceAccountPath) ||
             !string.IsNullOrWhiteSpace(FcmServiceAccountJson);
 
-        /// <summary>True when push can run: either a service account (direct self-hosted send) or a usable relay key (hosted default send) is available.</summary>
-        public bool PushEnabled => HasServiceAccount || GetRelayAppKey() != null;
+        /// <summary>True when push can run: either a service account (direct self-hosted send) or the relay is turned on and has a usable key (hosted default send).</summary>
+        public bool PushEnabled => HasServiceAccount || (PushRelayEnabled && GetRelayAppKey() != null);
 
         /// <summary>Resolves the effective service-account JSON, preferring the file path when set. Returns null when neither source yields usable content.</summary>
         public string? GetFcmServiceAccountJson()

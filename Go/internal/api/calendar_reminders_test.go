@@ -346,6 +346,36 @@ func TestAnArrivalFiresTheReminderOnce(t *testing.T) {
 	}
 }
 
+// With the hosted relay turned off nothing reaches it, and the ping tells the
+// apps there's no push.
+func TestTurningTheRelayOffStopsPush(t *testing.T) {
+	ctx := context.Background()
+	relay := newFakeRelay(t)
+	s := reminderServer(store.NewMemKV(), &reminderCatalog{})
+	sends := func() int {
+		relay.mu.Lock()
+		defer relay.mu.Unlock()
+		return len(relay.sends)
+	}
+	saveConfig(t, s, map[string]any{"PushRelayUrl": relay.URL, "PushRelayAppKey": "relay-key"})
+	call(t, s, userMain, "POST", "/Moonfin/Notifications/Register", `{"token":"phone","deviceId":"d1"}`, nil)
+	if _, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", nil); ping["pushSupported"] != true {
+		t.Fatalf("relay on, ping = %v", ping)
+	}
+	s.pushToUser(ctx, 3, "Hi", "there", "/")
+	if sends() != 1 {
+		t.Fatalf("relay on, pushes = %d", sends())
+	}
+	saveConfig(t, s, map[string]any{"PushRelayUrl": relay.URL, "PushRelayAppKey": "relay-key", "PushRelayEnabled": false})
+	if _, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", nil); ping["pushSupported"] != false {
+		t.Fatalf("relay off, ping = %v", ping)
+	}
+	s.pushToUser(ctx, 3, "Hi", "there", "/")
+	if sends() != 1 {
+		t.Fatalf("relay off, pushes = %d", sends())
+	}
+}
+
 func TestDeviceRegistrationReplacesTheSameDevice(t *testing.T) {
 	s := reminderServer(store.NewMemKV(), &reminderCatalog{})
 	if code, got := call(t, s, userMain, "POST", "/Moonfin/Notifications/Register", `{"platform":"ios"}`, nil); code != 400 || got["error"] != "Token is required" {

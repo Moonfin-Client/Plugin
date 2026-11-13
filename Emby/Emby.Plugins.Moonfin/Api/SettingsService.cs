@@ -111,6 +111,8 @@ namespace Emby.Plugins.Moonfin.Api
                 calendarReminders = true,
                 // Older plugins leave this out, so the app shows no download queue details.
                 arrQueueAvailable = seerrEnabled && !string.IsNullOrEmpty(config?.GetEffectiveSeerrUrl()),
+                // Older plugins leave this out, which the app reads as true.
+                pushSupported = config?.PushEnabled ?? false,
                 defaultSettings = MoonfinSettingsService.AdminDefaultsFor(request.Profile, config)
             });
         }

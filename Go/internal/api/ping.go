@@ -35,6 +35,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"calendarDaysAhead":        cfg.CalendarDaysAhead,
 		"calendarReminders":        s.remindersOn(),
 		"arrQueueAvailable":        arrQueueOn(cfg),
+		"pushSupported":            s.pushKey(cfg) != "",
 		"defaultSettings":          pingDefaults(cfg, r.URL.Query().Get("profile")),
 	})
 }

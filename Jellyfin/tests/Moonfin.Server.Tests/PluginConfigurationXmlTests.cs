@@ -134,4 +134,20 @@ public class PluginConfigurationXmlTests
         Assert.DoesNotContain((char)0xD83D, read.Messages[0].Body);
         Assert.DoesNotContain((char)0xDE80, read.Messages[0].Body);
     }
+
+    [Fact]
+    public void ConfigSavedBeforeTheRelaySwitchKeepsPushOn()
+    {
+        var read = Deserialize(Encoding.UTF8.GetBytes(
+            "<?xml version=\"1.0\"?><PluginConfiguration><PushRelayAppKey>key</PushRelayAppKey></PluginConfiguration>"));
+
+        Assert.True(read.PushRelayEnabled);
+        Assert.True(read.PushEnabled);
+
+        read.PushRelayEnabled = false;
+        Assert.False(read.PushEnabled);
+
+        read.FcmServiceAccountJson = "{}";
+        Assert.True(read.PushEnabled);
+    }
 }

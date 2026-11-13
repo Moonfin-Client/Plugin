@@ -46,7 +46,7 @@ namespace Emby.Plugins.Moonfin.Services
             var config = Plugin.Instance?.Configuration;
             var relayUrl = config?.PushRelayUrl;
             var appKey = config?.GetRelayAppKey();
-            if (string.IsNullOrWhiteSpace(relayUrl) || string.IsNullOrWhiteSpace(appKey))
+            if (config?.PushRelayEnabled != true || string.IsNullOrWhiteSpace(relayUrl) || string.IsNullOrWhiteSpace(appKey))
                 return empty;
 
             var payload = new Dictionary<string, object>

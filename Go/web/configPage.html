@@ -2116,6 +2116,15 @@
                                 </button>
                             </div>
                         </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="PushRelayEnabled" is="emby-checkbox" />
+                                <span>Send push notifications through the hosted Moonfin relay</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Turning this off stops the push notifications that go through the relay.
+                            </div>
+                        </div>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="PushRelayUrl">Push Relay URL (Optional)</label>
                             <input type="text" id="PushRelayUrl" is="emby-input" placeholder="https://push.moonfin.io/send" />
@@ -11318,6 +11327,7 @@
                     document.querySelector('#StuckDownloadNotify').checked = config.StuckDownloadNotify === true;
                     document.querySelector('#StuckDownloadStalledHours').value = config.StuckDownloadStalledHours != null ? config.StuckDownloadStalledHours : 6;
                     loadWebhookProvisioningStatus();
+                    document.querySelector('#PushRelayEnabled').checked = config.PushRelayEnabled !== false;
                     document.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
                     document.querySelector('#PushRelayAppKey').value = config.PushRelayAppKey || '';
                     document.querySelector('#FcmServiceAccountJson').value = config.FcmServiceAccountJson || '';
@@ -12251,6 +12261,7 @@
                         config.CalendarCacheMinutes = wholeNumberIn(document.querySelector('#CalendarCacheMinutes').value, 0, 1440, 5);
                         config.StuckDownloadNotify = document.querySelector('#StuckDownloadNotify').checked;
                         config.StuckDownloadStalledHours = wholeNumberIn(document.querySelector('#StuckDownloadStalledHours').value, 1, 168, 6);
+                        config.PushRelayEnabled = document.querySelector('#PushRelayEnabled').checked;
                         config.PushRelayUrl = document.querySelector('#PushRelayUrl').value || 'https://push.moonfin.io/send';
                         config.PushRelayAppKey = document.querySelector('#PushRelayAppKey').value || null;
                         config.FcmServiceAccountJson = document.querySelector('#FcmServiceAccountJson').value || null;

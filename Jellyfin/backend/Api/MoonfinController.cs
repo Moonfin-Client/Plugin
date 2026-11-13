@@ -156,6 +156,7 @@ public class MoonfinController : ControllerBase
             CalendarReminders = true,
             ArrQueueAvailable = config?.SeerrEnabled == true && !string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()),
             SocketRelay = config?.EnableSocketRelay ?? false,
+            PushSupported = config?.PushEnabled ?? false,
             DefaultSettings = _settingsService.AdminDefaultsFor(profile)
         });
     }
@@ -1925,6 +1926,13 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("arrQueueAvailable")]
     public bool? ArrQueueAvailable { get; set; }
+
+    /// <summary>
+    /// True when the server can deliver push right now, through its own service account or the
+    /// hosted relay. Older plugins leave it out, so the app reads a missing value as true.
+    /// </summary>
+    [JsonPropertyName("pushSupported")]
+    public bool? PushSupported { get; set; }
 
     [JsonPropertyName("defaultSettings")]
     public MoonfinSettingsProfile? DefaultSettings { get; set; }
