@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -36,6 +37,96 @@ type arrQueueTitle struct {
 	Monitored   *bool `json:"monitored"`
 	HasFile     *bool `json:"hasFile"`
 	IsAvailable *bool `json:"isAvailable"`
+	// The fields a client tells a title the arr hasn't found from one that
+	// isn't out yet with, kept raw so that an odd value only leaves its own
+	// field out. ReleaseDate is the day a movie reaches its minimum
+	// availability, an estimate when Radarr only knows the cinema date, and
+	// LastSearchTime its last indexer search. Seasons carry Sonarr's
+	// episodeCount (monitored aired episodes plus any with a file),
+	// episodeFileCount and nextAiring (the next monitored episode).
+	ReleaseDate    json.RawMessage `json:"releaseDate"`
+	LastSearchTime json.RawMessage `json:"lastSearchTime"`
+	Seasons        json.RawMessage `json:"seasons"`
+}
+
+// availability adds Radarr's release date and last search, or each Sonarr
+// season's counts and next airing, under the arr's own names. A field the arr
+// left out, or sent as something else, stays out.
+func (t arrQueueTitle) availability(out M, sonarr bool) {
+	if !sonarr {
+		putArrText(out, "releaseDate", t.ReleaseDate)
+		putArrText(out, "lastSearchTime", t.LastSearchTime)
+		return
+	}
+	var seasons []json.RawMessage
+	if json.Unmarshal(t.Seasons, &seasons) != nil || seasons == nil {
+		return
+	}
+	shaped := []M{}
+	for _, raw := range seasons {
+		var season, stats map[string]json.RawMessage
+		var number *int
+		if json.Unmarshal(raw, &season) != nil || json.Unmarshal(season["seasonNumber"], &number) != nil || number == nil {
+			continue
+		}
+		item := M{"seasonNumber": *number}
+		var monitored *bool
+		if json.Unmarshal(season["monitored"], &monitored) == nil && monitored != nil {
+			item["monitored"] = *monitored
+		}
+		_ = json.Unmarshal(season["statistics"], &stats)
+		for _, name := range []string{"episodeCount", "episodeFileCount"} {
+			var count *int
+			if json.Unmarshal(stats[name], &count) == nil && count != nil {
+				item[name] = *count
+			}
+		}
+		putArrText(item, "nextAiring", stats["nextAiring"])
+		shaped = append(shaped, item)
+	}
+	out["seasons"] = shaped
+}
+
+// putArrText adds a string the arr sent under name, and nothing otherwise.
+func putArrText(out M, name string, raw json.RawMessage) {
+	var text string
+	if json.Unmarshal(raw, &text) == nil && text != "" {
+		out[name] = text
+	}
+}
+
+// arrCommand is what searching reads from each of the arr's commands.
+type arrCommand struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Body   struct {
+		MovieIDs  []int `json:"movieIds"`
+		SeriesID  int   `json:"seriesId"`
+		SeriesIDs []int `json:"seriesIds"`
+	} `json:"body"`
+}
+
+// searching is whether a queued or running search names the title: Radarr's
+// MoviesSearch by its movie ids, and Sonarr's SeriesSearch, SeasonSearch or
+// MissingEpisodeSearch by the series id. Seerr and Sonarr start a
+// MissingEpisodeSearch for a new request. A search over every missing title
+// names no series, so it isn't counted, and neither is an EpisodeSearch, which
+// only names episodes. An entry that can't be read is skipped.
+func searching(commands []json.RawMessage, sonarr bool, id int) bool {
+	return slices.ContainsFunc(commands, func(raw json.RawMessage) bool {
+		var c arrCommand
+		if json.Unmarshal(raw, &c) != nil {
+			return false
+		}
+		if !strings.EqualFold(c.Status, "queued") && !strings.EqualFold(c.Status, "started") {
+			return false
+		}
+		if sonarr {
+			named := strings.EqualFold(c.Name, "SeriesSearch") || strings.EqualFold(c.Name, "SeasonSearch") || strings.EqualFold(c.Name, "MissingEpisodeSearch")
+			return named && (c.Body.SeriesID == id || slices.Contains(c.Body.SeriesIDs, id))
+		}
+		return strings.EqualFold(c.Name, "MoviesSearch") && slices.Contains(c.Body.MovieIDs, id)
+	})
 }
 
 // arrQueueEntry is what removal reads from each entry of the whole queue.
@@ -87,6 +178,7 @@ func (s *Server) handleArrQueue(w http.ResponseWriter, r *http.Request, sonarr b
 			out["hasFile"] = title.HasFile
 			out["isAvailable"] = title.IsAvailable
 		}
+		title.availability(out, sonarr)
 		details := "api/v3/queue/details?movieId=" + strconv.Itoa(title.ID)
 		if sonarr {
 			details = "api/v3/queue/details?seriesId=" + strconv.Itoa(title.ID) + "&includeEpisode=true"
@@ -100,6 +192,19 @@ func (s *Server) handleArrQueue(w http.ResponseWriter, r *http.Request, sonarr b
 			var rec map[string]json.RawMessage
 			if json.Unmarshal(raw, &rec) == nil && rec != nil {
 				items = append(items, shapeQueueEntry(rec, sonarr, admin))
+			}
+		}
+		// A download in the queue or a movie already on disk answers whether
+		// the arr is searching, so it isn't asked. The queue is the answer, so
+		// a command list that can't be read leaves searching out rather than
+		// failing it.
+		if len(items) == 0 && (title.HasFile == nil || !*title.HasFile) {
+			raw, status, err := s.arrRequest(ctx, arr, http.MethodGet, "api/v3/command", nil)
+			var commands []json.RawMessage
+			if err == nil && status/100 == 2 && json.Unmarshal(raw, &commands) == nil && commands != nil {
+				out["searching"] = searching(commands, sonarr, title.ID)
+			} else {
+				slog.DebugContext(ctx, "could not read the "+service+" command list, so searching is left out", "status", status, "error", err)
 			}
 		}
 	}

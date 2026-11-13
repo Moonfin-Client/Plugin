@@ -1016,7 +1016,12 @@ public class SeerrSessionService
             return QueueError(error!);
         }
 
-        return ToProxyResponse(await ArrQueue.ReadAsync(ArrSender(service, server, cancellationToken), isSonarr, titleId, isAdmin));
+        return ToProxyResponse(await ArrQueue.ReadAsync(
+            ArrSender(service, server, cancellationToken),
+            isSonarr,
+            titleId,
+            isAdmin,
+            message => _logger.LogDebug("{Message}", message)));
     }
 
     /// <summary>Drops a stuck download, blocklists its release and lets the arr grab another.</summary>
