@@ -10,6 +10,7 @@ import (
 
 func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	cfg := s.config(r.Context())
+	_, rowsOn := s.catalog.(RowCatalog)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"installed":                true,
 		"version":                  s.version,
@@ -23,6 +24,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"tmdbPersonLinksSupported": true,
 		"tmdbReviewsSupported":     true,
 		"tmdbDetailsSupported":     true,
+		"discoverChartsSupported":  rowsOn,
 		"messagesSupported":        true,
 		"recommendationsSupported": s.similarOn(cfg),
 		"pinSupported":             s.pins,

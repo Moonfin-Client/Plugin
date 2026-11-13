@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
@@ -84,7 +85,7 @@ const (
 const noOfficialLists = "MDBList's official lists need a server-wide MDBList key and Sync MDBList official lists turned on."
 
 var (
-	rowSources    = []string{"imdb", "tmdb", "tmdb_chart", "mdblist", "letterboxd"}
+	rowSources    = []string{"imdb", "tmdb", "tmdb_chart", "tmdb_discover", "justwatch", "mdblist", "letterboxd"}
 	tmdbChartPath = regexp.MustCompile(`^[a-z_]+(/[a-z_]+){1,2}$`)
 	// mdbSlug can't start with a dot, so ".." can't climb out of the list path.
 	mdbSlug     = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$`)
@@ -160,6 +161,10 @@ func (s *Server) handleCustomRowItems(w http.ResponseWriter, r *http.Request) {
 			items, err = s.tmdbList(ctx, tmdbKey, typ, params["id"], lang)
 		case "tmdb_chart":
 			items, err = s.tmdbChart(ctx, tmdbKey, typ, lang)
+		case "tmdb_discover":
+			items, err = s.tmdbDiscover(ctx, tmdbKey, typ, params["region"], lang, time.Now().UTC())
+		case "justwatch":
+			items, err = s.justWatchChart(ctx, mdbKey, typ, params["region"])
 		case "mdblist":
 			items, err = s.mdbUserList(ctx, mdbKey, params, lang)
 		case "letterboxd":
@@ -380,6 +385,131 @@ func (s *Server) tmdbChart(ctx context.Context, key, path, lang string) ([]rowIt
 	return tmdbRowItems(body.Results, mediaType), nil
 }
 
+// discoverProviders are TMDB's ids for each streaming service. A service can
+// sit under more than one id across regions, and TMDB reads a pipe as "or".
+var discoverProviders = map[string]string{
+	"netflix": "8", "prime_video": "9|119", "disney_plus": "337", "hbo_max": "1899|384", "apple_tv": "350", "paramount_plus": "531|2303",
+}
+
+var regionCode = regexp.MustCompile(`^[A-Za-z]{2}$`)
+
+// chartRegion is the two-letter region an app sent, upper-cased, or US.
+func chartRegion(region string) string {
+	if r := strings.TrimSpace(region); regionCode.MatchString(r) {
+		return strings.ToUpper(r)
+	}
+	return "US"
+}
+
+// discoverPaths mirrors shared/Tmdb/TmdbDiscoverCharts.cs, so every host
+// serves the same rows. It's nil for a chart this server doesn't know.
+func discoverPaths(name, region string, today time.Time) []string {
+	r := chartRegion(region)
+	if service, ok := strings.CutPrefix(name, "provider_"); ok {
+		ids, ok := discoverProviders[service]
+		if !ok {
+			return nil
+		}
+		q := "with_watch_providers=" + ids + "&watch_region=" + r + "&with_watch_monetization_types=flatrate&sort_by=popularity.desc"
+		return []string{"discover/movie?" + q, "discover/tv?" + q}
+	}
+	switch name {
+	case "korean_dramas":
+		return []string{"discover/tv?with_original_language=ko&with_genres=18&sort_by=popularity.desc"}
+	case "anime":
+		return []string{"discover/tv?with_original_language=ja&with_genres=16&sort_by=popularity.desc"}
+	case "new_digital_movies":
+		return []string{"discover/movie?with_release_type=4&region=" + r + "&release_date.gte=" + today.AddDate(0, 0, -60).Format(time.DateOnly) +
+			"&release_date.lte=" + today.Format(time.DateOnly) + "&sort_by=popularity.desc"}
+	case "hidden_gems":
+		return []string{"discover/movie?vote_average.gte=7.5&vote_count.gte=300&vote_count.lte=2000&without_genres=99,10770&sort_by=vote_average.desc"}
+	}
+	return nil
+}
+
+// tmdbDiscover reads one of Moonbase's named discover charts. A streaming
+// service's chart reads its movies and its shows and merges them by popularity.
+func (s *Server) tmdbDiscover(ctx context.Context, key, name, region, lang string, today time.Time) ([]rowItem, error) {
+	if key == "" {
+		return nil, errors.New("TMDB API key is not configured.")
+	}
+	paths := discoverPaths(name, region, today)
+	if paths == nil {
+		return nil, errors.New("Unsupported TMDB discover chart: " + name)
+	}
+	var results []M
+	for _, p := range paths {
+		path, query, _ := strings.Cut(p, "?")
+		q, _ := url.ParseQuery(query)
+		maps.Copy(q, langQuery(lang))
+		var body struct {
+			Results []M `json:"results"`
+		}
+		if msg := s.tmdb(ctx, key, path, q, &body); msg != "" {
+			return nil, errors.New(msg)
+		}
+		kind := "movie"
+		if strings.HasSuffix(path, "/tv") {
+			kind = "tv"
+		}
+		for _, r := range body.Results {
+			if text(r, "media_type") == "" {
+				r["media_type"] = kind
+			}
+			results = append(results, r)
+		}
+	}
+	if len(paths) > 1 {
+		slices.SortStableFunc(results, func(a, b M) int {
+			pa, _ := num(a["popularity"])
+			pb, _ := num(b["popularity"])
+			return cmp.Compare(pb, pa)
+		})
+	}
+	return tmdbRowItems(results, "movie"), nil
+}
+
+// justWatchCountry is the country MDBList's JustWatch charts cover for a
+// region, or US for the rest.
+func justWatchCountry(region string) string {
+	switch r := chartRegion(region); r {
+	case "US", "GB", "CA", "AU", "DE":
+		return r
+	case "UK":
+		return "GB"
+	}
+	return "US"
+}
+
+// justWatchChart reads a JustWatch streaming chart through MDBList, which
+// matches each title to its ids.
+func (s *Server) justWatchChart(ctx context.Context, key, typ, region string) ([]rowItem, error) {
+	switch {
+	case key == "":
+		return nil, errors.New("MDBList API key is not configured.")
+	case typ != "movie" && typ != "show":
+		return nil, errors.New("Unsupported JustWatch chart: " + typ)
+	}
+	q := url.Values{"apikey": {key}, "country": {justWatchCountry(region)}, "period": {"daily"}, "x": {"20"}}
+	var page struct {
+		Results []any `json:"results"`
+	}
+	status, err := s.getJSON(ctx, s.ext.mdblistBase+"/justwatch/streaming-charts/"+typ+"?"+q.Encode(), "", &page)
+	if err != nil || status/100 != 2 {
+		return nil, errors.New(providerError("MDBList", status, err))
+	}
+	// A title MDBList couldn't match carries no ids, so it can't become a card.
+	items := []rowItem{}
+	for _, it := range appendMdb(nil, page.Results, typ) {
+		if it.ProviderIDs.Tmdb == "" && it.ProviderIDs.Imdb == "" {
+			continue
+		}
+		it.Rank = len(items) + 1
+		items = append(items, it)
+	}
+	return items, nil
+}
+
 // tmdbRowItems reads TMDB results. Only trending and lists mark each one's
 // media type, so the rest take fallback.
 func tmdbRowItems(results []M, fallback string) []rowItem {
@@ -473,7 +603,10 @@ func appendMdb(items []rowItem, list []any, bucket string) []rowItem {
 		item := rowItem{Name: cmp.Or(text(m, "title"), "Unknown"), Type: "Movie", PosterURL: tmdbPath(text(m, "poster")),
 			ProviderIDs: rowIDs{Imdb: cmp.Or(text(ids, "imdb"), text(m, "imdb_id")), Tmdb: cmp.Or(idText(ids["tmdb"]), idText(m["id"])),
 				Tvdb: cmp.Or(idText(ids["tvdb"]), idText(m["tvdb_id"]))}}
+		// A JustWatch chart row names its year "year".
 		if n, ok := num(m["release_year"]); ok {
+			item.ProductionYear = int(n)
+		} else if n, ok := num(m["year"]); ok {
 			item.ProductionYear = int(n)
 		}
 		if n, ok := num(m["rank"]); ok {

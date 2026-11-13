@@ -141,6 +141,7 @@ public class MoonfinController : ControllerBase
             TmdbPersonLinksSupported = true,
             TmdbReviewsSupported = true,
             TmdbDetailsSupported = true,
+            DiscoverChartsSupported = true,
             MessagesSupported = true,
             PinSupported = true,
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
@@ -1848,6 +1849,13 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("tmdbDetailsSupported")]
     public bool? TmdbDetailsSupported { get; set; }
+
+    /// <summary>
+    /// True when the custom rows endpoint serves the justwatch and tmdb_discover sources. Older
+    /// plugins leave it out, so the apps don't offer those rows.
+    /// </summary>
+    [JsonPropertyName("discoverChartsSupported")]
+    public bool? DiscoverChartsSupported { get; set; }
 
     /// <summary>
     /// True when this plugin has the admin messages endpoints. Older plugins leave it out, so

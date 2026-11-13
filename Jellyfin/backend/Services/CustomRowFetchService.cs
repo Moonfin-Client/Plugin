@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
+using Moonfin.Tmdb;
 
 namespace Moonfin.Server.Services;
 
@@ -132,7 +133,14 @@ public class CustomRowFetchService
         {
             "mdblist" => await FetchMdbList(type, parsedParams, userId, language, cancellationToken),
             "tmdb" => await FetchTmdb(type, parsedParams, userId, language, cancellationToken),
-            "tmdb_chart" => await FetchTmdbChart(type, userId, language, cancellationToken),
+            "tmdb_chart" => await FetchTmdbChart(new[] { type }, userId, language, cancellationToken),
+            "tmdb_discover" => await FetchTmdbChart(
+                TmdbDiscoverCharts.Paths(type, parsedParams.GetValueOrDefault("region"), DateTime.UtcNow)
+                    ?? throw new NotSupportedException($"Unsupported TMDB discover chart: {type}"),
+                userId,
+                language,
+                cancellationToken),
+            "justwatch" => await FetchJustWatch(type, parsedParams, userId, cancellationToken),
             "letterboxd" => await FetchLetterboxd(type, parsedParams, userId, language, cancellationToken),
             _ => throw new NotSupportedException($"Unsupported custom row source: {source}")
         };
@@ -385,7 +393,9 @@ public class CustomRowFetchService
                 : "Unknown";
 
             int? year = null;
-            if (item.TryGetProperty("release_year", out var yearProp) && yearProp.ValueKind == JsonValueKind.Number)
+            // A JustWatch chart row names its year "year".
+            if ((item.TryGetProperty("release_year", out var yearProp) || item.TryGetProperty("year", out yearProp))
+                && yearProp.ValueKind == JsonValueKind.Number)
             {
                 year = yearProp.GetInt32();
             }
@@ -587,7 +597,7 @@ public class CustomRowFetchService
     }
 
     private async Task<List<CustomRowItem>> FetchTmdbChart(
-        string type,
+        IReadOnlyList<string> paths,
         Guid? userId,
         string? language,
         CancellationToken cancellationToken)
@@ -598,60 +608,129 @@ public class CustomRowFetchService
             throw new InvalidOperationException("TMDB API key is not configured.");
         }
 
-        // type is the API path the client sends, so movie/popular, trending/movie/day and the rest.
-        var url = BuildTmdbChartUrl(type, language);
+        // Each path is a TMDB API path, so movie/popular, trending/movie/day or a discover query.
         var client = CreateClient();
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        TmdbRequestHelper.ApplyAuth(req, tmdbKey);
-        using var response = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        var results = new List<(JsonElement Item, string MediaType)>();
+        foreach (var path in paths)
         {
-            throw new Exception($"TMDB API returned status {(int)response.StatusCode} for chart {type}");
+            using var req = new HttpRequestMessage(HttpMethod.Get, BuildTmdbChartUrl(path, language));
+            TmdbRequestHelper.ApplyAuth(req, tmdbKey);
+            using var response = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"TMDB API returned status {(int)response.StatusCode} for chart {path}");
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("results", out var resultsProp) && resultsProp.ValueKind == JsonValueKind.Array)
+            {
+                var mediaType = ChartMediaType(path);
+                results.AddRange(resultsProp.EnumerateArray().Select(r => (r.Clone(), mediaType)));
+            }
         }
 
-        var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (paths.Count > 1)
+        {
+            // A streaming service's movies and shows are two reads, so popularity puts them back in one chart.
+            results = results
+                .OrderByDescending(r => r.Item.TryGetProperty("popularity", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDouble() : 0)
+                .ToList();
+        }
+
+        var items = new List<CustomRowItem>();
+        int rank = 1;
+        foreach (var (item, fallbackType) in results)
+        {
+            var itemId = item.TryGetProperty("id", out var iId) ? iId.GetInt64().ToString() : string.Empty;
+            var title = item.TryGetProperty("title", out var tProp)
+                ? tProp.GetString()
+                : (item.TryGetProperty("name", out var nProp) ? nProp.GetString() : string.Empty);
+            var mediaType = item.TryGetProperty("media_type", out var mProp)
+                ? mProp.GetString()
+                : fallbackType;
+            var releaseDate = item.TryGetProperty("release_date", out var rdProp)
+                ? rdProp.GetString()
+                : (item.TryGetProperty("first_air_date", out var fadProp) ? fadProp.GetString() : null);
+            int? year = null;
+            if (!string.IsNullOrEmpty(releaseDate) && releaseDate.Length >= 4 && int.TryParse(releaseDate.Substring(0, 4), out var y))
+            {
+                year = y;
+            }
+            var finalType = (mediaType ?? "movie").Equals("tv", StringComparison.OrdinalIgnoreCase) ? "Series" : "Movie";
+            var posterPath = item.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
+            var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
+
+            items.Add(new CustomRowItem
+            {
+                Id = long.TryParse(itemId, out var parsedId) ? parsedId : null,
+                Name = title ?? string.Empty,
+                Type = finalType,
+                ProductionYear = year,
+                Rank = rank++,
+                ProviderIds = new CustomRowItemProviderIds
+                {
+                    Tmdb = itemId
+                },
+                PosterUrl = posterPath,
+                BackdropUrl = backdropPath
+            });
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// A JustWatch streaming chart for the user's country, read through MDBList, which matches each
+    /// title to its ids.
+    /// </summary>
+    private async Task<List<CustomRowItem>> FetchJustWatch(
+        string type,
+        Dictionary<string, string> paramsMap,
+        Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        if (type != "movie" && type != "show")
+        {
+            throw new NotSupportedException($"Unsupported JustWatch chart: {type}");
+        }
+
+        var apiKey = await ResolveMdblistApiKey(userId);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new InvalidOperationException("MDBList API key is not configured.");
+        }
+
+        paramsMap.TryGetValue("region", out var region);
+        var url = $"https://api.mdblist.com/justwatch/streaming-charts/{type}?apikey={Uri.EscapeDataString(apiKey)}" +
+            $"&country={TmdbDiscoverCharts.JustWatchCountry(region)}&period=daily&x=20";
+        using var response = await CreateClient().GetAsync(url, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new Exception($"MDBList API returned status {(int)response.StatusCode} for the JustWatch chart");
+        }
+
+        return ParseJustWatchChart(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), type);
+    }
+
+    internal static List<CustomRowItem> ParseJustWatchChart(string json, string type)
+    {
         using var doc = JsonDocument.Parse(json);
         var items = new List<CustomRowItem>();
-
-        if (doc.RootElement.TryGetProperty("results", out var resultsProp) && resultsProp.ValueKind == JsonValueKind.Array)
+        if (doc.RootElement.ValueKind != JsonValueKind.Object
+            || !doc.RootElement.TryGetProperty("results", out var rows)
+            || rows.ValueKind != JsonValueKind.Array)
         {
-            int rank = 1;
-            foreach (var item in resultsProp.EnumerateArray())
-            {
-                var itemId = item.TryGetProperty("id", out var iId) ? iId.GetInt64().ToString() : string.Empty;
-                var title = item.TryGetProperty("title", out var tProp)
-                    ? tProp.GetString()
-                    : (item.TryGetProperty("name", out var nProp) ? nProp.GetString() : string.Empty);
-                var mediaType = item.TryGetProperty("media_type", out var mProp)
-                    ? mProp.GetString()
-                    : ChartMediaType(type);
-                var releaseDate = item.TryGetProperty("release_date", out var rdProp)
-                    ? rdProp.GetString()
-                    : (item.TryGetProperty("first_air_date", out var fadProp) ? fadProp.GetString() : null);
-                int? year = null;
-                if (!string.IsNullOrEmpty(releaseDate) && releaseDate.Length >= 4 && int.TryParse(releaseDate.Substring(0, 4), out var y))
-                {
-                    year = y;
-                }
-                var finalType = (mediaType ?? "movie").Equals("tv", StringComparison.OrdinalIgnoreCase) ? "Series" : "Movie";
-                var posterPath = item.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
-                var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
+            return items;
+        }
 
-                items.Add(new CustomRowItem
-                {
-                    Id = long.TryParse(itemId, out var parsedId) ? parsedId : null,
-                    Name = title ?? string.Empty,
-                    Type = finalType,
-                    ProductionYear = year,
-                    Rank = rank++,
-                    ProviderIds = new CustomRowItemProviderIds
-                    {
-                        Tmdb = itemId
-                    },
-                    PosterUrl = posterPath,
-                    BackdropUrl = backdropPath
-                });
-            }
+        // A title MDBList couldn't match carries no ids, so it can't become a card.
+        AppendMdbListItems(rows, items);
+        items = items.Where(i => !string.IsNullOrEmpty(i.ProviderIds?.Tmdb) || !string.IsNullOrEmpty(i.ProviderIds?.Imdb)).ToList();
+        for (var i = 0; i < items.Count; i++)
+        {
+            items[i].Type = type == "show" ? "Series" : "Movie";
+            items[i].Rank = i + 1;
         }
 
         return items;
