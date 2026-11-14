@@ -280,7 +280,7 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mediaBarNewMovieDetail")]
     public bool? MediaBarNewMovieDetail { get; set; }
 
-    /// <summary>Whether the New Releases source leaves out new movies with no tagline.</summary>
+    /// <summary>Whether the New Releases source leaves out new movies with no tagline. Only applies while <see cref="MediaBarNewMovieDetail"/> is on.</summary>
     [JsonPropertyName("mediaBarNewMovieTaglineOnly")]
     public bool? MediaBarNewMovieTaglineOnly { get; set; }
 
