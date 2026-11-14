@@ -118,8 +118,12 @@ public class MoonfinController : ControllerBase
     /// Ping endpoint to check if Moonfin plugin is installed.
     /// </summary>
     /// <returns>Plugin status information including admin defaults.</returns>
+    /// <remarks>
+    /// Skips the access-schedule check so a client outside its user's hours can still find out
+    /// the plugin is there and whether it can ask for the server time.
+    /// </remarks>
     [HttpGet("Ping")]
-    [Authorize]
+    [Authorize(Policy = "IgnoreParentalControl")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<MoonfinPingResponse> Ping([FromQuery] string? profile = null)
     {
@@ -146,6 +150,7 @@ public class MoonfinController : ControllerBase
             PinSupported = true,
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             ExtendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
+            TimeSupported = true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             SmartSearchEnabled = config?.SmartSearchEnabled ?? false,
             CalendarAvailable = config?.SeerrEnabled == true
@@ -1889,6 +1894,13 @@ public class MoonfinPingResponse
     /// <summary>Movie recovery and user-confirmed current-guide suggestions.</summary>
     [JsonPropertyName("extendedCompleteShowingsSupported")]
     public bool? ExtendedCompleteShowingsSupported { get; set; }
+
+    /// <summary>
+    /// True when this plugin reports the server's clock and time zone at Moonfin/Time. Older
+    /// plugins leave it out, so the app falls back to the device clock.
+    /// </summary>
+    [JsonPropertyName("timeSupported")]
+    public bool? TimeSupported { get; set; }
 
     /// <summary>
     /// True when this plugin supports server-side recommendations scoring.
