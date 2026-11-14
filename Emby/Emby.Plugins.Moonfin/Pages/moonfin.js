@@ -586,9 +586,12 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultDisplaySinceYouWatchedRows', fields: ['DefaultSinceYouWatchedSource', 'DefaultSinceYouWatchedSourceType', 'DefaultSinceYouWatchedSourceItem', 'DefaultSinceYouWatched1Enabled', 'DefaultSinceYouWatched2Enabled', 'DefaultSinceYouWatched3Enabled', 'DefaultSinceYouWatched4Enabled', 'DefaultSinceYouWatched5Enabled'] },
         { parent: 'DefaultSinceYouWatchedSource', off: ['online'], fields: ['DefaultSinceYouWatchedIncludeWatched'] },
         { parent: 'DefaultDisplayStudiosRows', fields: ['DefaultStudiosRowSortBy', 'DefaultStudiosRowSortOrder'] },
-        { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
+        { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultMediaBarNewReleaseKinds', 'DefaultMediaBarNewMovieBasis', 'DefaultMediaBarNewMovieDays', 'DefaultMediaBarNewMovieMaxAgeMonths', 'DefaultMediaBarNewMovieDetail', 'DefaultMediaBarNewMovieTaglineOnly', 'DefaultMediaBarNewMovieMinRating', 'DefaultMediaBarMixTypes', 'DefaultMediaBarUpcomingEpisodes', 'DefaultMediaBarUpcomingMovies', 'DefaultMediaBarUpcomingDays', 'DefaultMediaBarFollowedFirst', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
         { parent: 'DefaultMediaBarMode', off: ['off', 'bookshelf', 'aya'], fields: ['DefaultMediaBarRatingsHeading', 'DefaultMediaBarMdblistEnabled', 'DefaultMediaBarMdblistRatingSourcesList', 'DefaultMediaBarMdblistShowRatingNames', 'DefaultMediaBarMdblistShowRatingBadges'] },
         { parent: 'DefaultMediaBarAutoAdvance', fields: ['DefaultMediaBarIntervalMs'] },
+        { parent: 'DefaultMediaBarNewMovieBasis', off: ['releaseDate'], fields: ['DefaultMediaBarNewMovieMaxAgeMonths'] },
+        { parent: 'DefaultMediaBarNewReleaseBanner', fields: ['DefaultMediaBarNewReleaseKinds'] },
+        { parent: 'DefaultMediaBarNewMovieDetail', fields: ['DefaultMediaBarNewMovieTaglineOnly'] },
         { parent: 'DefaultMediaBarTrailerPreview', fields: ['DefaultMediaBarTrailerAudio', 'DefaultTrailerVolume', 'DefaultMediaBarTrailerCaptions'] },
         { parent: 'DefaultHomeRowsStyle', off: ['v1'], fields: ['DefaultModernCardsOnMyMediaRow', 'DefaultModernHomeRowsPadding'] },
         { parent: 'DefaultHomeRowsStyle', off: ['v2', 'carousel'], fields: ['DefaultClassicHomeRowsPadding', 'DefaultHomeRowInfoOverlay', 'DefaultHomeImageTypeContinueWatching', 'DefaultHomeRowsImageTypeOverride'] },
@@ -3007,6 +3010,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultMediaBarRowPeek', defaults.mediaBarRowPeek);
         setNullableBoolSelect(view, '#DefaultMediaBarNewReleaseBanner', defaults.mediaBarNewReleaseBanner);
         setSelectValue(view, '#DefaultMediaBarNewReleaseDays', defaults.mediaBarNewReleaseDays, 'Configured window');
+        setSelectValue(view, '#DefaultMediaBarNewReleaseKinds', defaults.mediaBarNewReleaseKinds, 'Configured labels');
+        setSelectValue(view, '#DefaultMediaBarNewMovieBasis', defaults.mediaBarNewMovieBasis, 'Configured basis');
+        setSelectValue(view, '#DefaultMediaBarNewMovieDays', defaults.mediaBarNewMovieDays, 'Configured window');
+        setSelectValue(view, '#DefaultMediaBarNewMovieMaxAgeMonths', defaults.mediaBarNewMovieMaxAgeMonths, 'Configured limit');
+        setNullableBoolSelect(view, '#DefaultMediaBarNewMovieDetail', defaults.mediaBarNewMovieDetail);
+        setNullableBoolSelect(view, '#DefaultMediaBarNewMovieTaglineOnly', defaults.mediaBarNewMovieTaglineOnly);
+        setSelectValue(view, '#DefaultMediaBarNewMovieMinRating', defaults.mediaBarNewMovieMinRating, 'Configured rating');
+        setNullableBoolSelect(view, '#DefaultMediaBarMixTypes', defaults.mediaBarMixTypes);
+        setNullableBoolSelect(view, '#DefaultMediaBarUpcomingEpisodes', defaults.mediaBarUpcomingEpisodes);
+        setNullableBoolSelect(view, '#DefaultMediaBarUpcomingMovies', defaults.mediaBarUpcomingMovies);
+        setSelectValue(view, '#DefaultMediaBarUpcomingDays', defaults.mediaBarUpcomingDays, 'Configured horizon');
+        setNullableBoolSelect(view, '#DefaultMediaBarFollowedFirst', defaults.mediaBarFollowedFirst);
         setNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
         setNullableBoolSelect(view, '#DefaultMediaBarTrailerAudio', defaults.mediaBarTrailerAudio);
         bindNullableRangeInput(view, '#DefaultTrailerVolume', '%');
@@ -3455,6 +3470,18 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.mediaBarRowPeek = getNullableBoolSelect(view, '#DefaultMediaBarRowPeek');
         d.mediaBarNewReleaseBanner = getNullableBoolSelect(view, '#DefaultMediaBarNewReleaseBanner');
         d.mediaBarNewReleaseDays = getNullableIntInput(view, '#DefaultMediaBarNewReleaseDays');
+        d.mediaBarNewReleaseKinds = view.querySelector('#DefaultMediaBarNewReleaseKinds').value || null;
+        d.mediaBarNewMovieBasis = view.querySelector('#DefaultMediaBarNewMovieBasis').value || null;
+        d.mediaBarNewMovieDays = getNullableIntInput(view, '#DefaultMediaBarNewMovieDays');
+        d.mediaBarNewMovieMaxAgeMonths = getNullableIntInput(view, '#DefaultMediaBarNewMovieMaxAgeMonths');
+        d.mediaBarNewMovieDetail = getNullableBoolSelect(view, '#DefaultMediaBarNewMovieDetail');
+        d.mediaBarNewMovieTaglineOnly = getNullableBoolSelect(view, '#DefaultMediaBarNewMovieTaglineOnly');
+        d.mediaBarNewMovieMinRating = getNullableIntInput(view, '#DefaultMediaBarNewMovieMinRating');
+        d.mediaBarMixTypes = getNullableBoolSelect(view, '#DefaultMediaBarMixTypes');
+        d.mediaBarUpcomingEpisodes = getNullableBoolSelect(view, '#DefaultMediaBarUpcomingEpisodes');
+        d.mediaBarUpcomingMovies = getNullableBoolSelect(view, '#DefaultMediaBarUpcomingMovies');
+        d.mediaBarUpcomingDays = getNullableIntInput(view, '#DefaultMediaBarUpcomingDays');
+        d.mediaBarFollowedFirst = getNullableBoolSelect(view, '#DefaultMediaBarFollowedFirst');
         d.mediaBarTrailerPreview = getNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview');
         d.mediaBarTrailerAudio = getNullableBoolSelect(view, '#DefaultMediaBarTrailerAudio');
         d.trailerVolume = getNullableRangeInput(view, '#DefaultTrailerVolume');
