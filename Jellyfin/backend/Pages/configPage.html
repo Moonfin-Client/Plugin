@@ -3621,7 +3621,7 @@
                                 <div class="fieldDescription">Flag series in the media bar with a new season or new episodes that aired recently.</div>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseDays">New Release Window</label>
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseDays">New Episode Window</label>
                                 <select id="DefaultMediaBarNewReleaseDays" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="7">7 days</option>
@@ -3631,6 +3631,141 @@
                                     <option value="90">90 days</option>
                                 </select>
                                 <div class="fieldDescription">How long after an episode airs it still counts as new, for the banner and the New Seasons &amp; Episodes source.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseKinds">New Release Labels</label>
+                                <select id="DefaultMediaBarNewReleaseKinds" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="newSeries,newSeason,newEpisodes,newMovie">Series and movies</option>
+                                    <option value="newSeries,newSeason,newEpisodes">Series only</option>
+                                    <option value="newMovie">Movies only</option>
+                                </select>
+                                <div class="fieldDescription">Which titles get a label: new series, new seasons and new episodes, new movies.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewMovieBasis">New Movie Based On</label>
+                                <select id="DefaultMediaBarNewMovieBasis" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="releaseDate">Release date</option>
+                                    <option value="dateAdded">Date added to the server</option>
+                                </select>
+                                <div class="fieldDescription">Release date catches streaming releases right away, and cinema releases when they reach the server. Date added flags everything that just arrived.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewMovieDays">New Movie Window</label>
+                                <select id="DefaultMediaBarNewMovieDays" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="30">30 days</option>
+                                    <option value="60">60 days</option>
+                                    <option value="90">90 days</option>
+                                    <option value="120">120 days</option>
+                                    <option value="180">180 days</option>
+                                    <option value="365">365 days</option>
+                                </select>
+                                <div class="fieldDescription">How long a movie stays new. Cinema releases reach servers months later, so this is longer than the series window.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewMovieMaxAgeMonths">New Movie Release Limit</label>
+                                <select id="DefaultMediaBarNewMovieMaxAgeMonths" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="3">Released in the last 3 months</option>
+                                    <option value="6">Released in the last 6 months</option>
+                                    <option value="12">Released in the last 12 months</option>
+                                    <option value="24">Released in the last 24 months</option>
+                                </select>
+                                <div class="fieldDescription">With Date added, an older movie that just arrived is not flagged as new.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewMovieDetail">New Movie Tagline</label>
+                                <select id="DefaultMediaBarNewMovieDetail" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Under the New Movie label, show the movie's tagline in the server's metadata language. With none, the label stays on its own.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewMovieTaglineOnly">Only Movies With a Tagline</label>
+                                <select id="DefaultMediaBarNewMovieTaglineOnly" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">In the New Releases source, leave out new movies that have no tagline. Only applies while New Movie Tagline is on.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewMovieMinRating">New Movie Minimum Rating</label>
+                                <select id="DefaultMediaBarNewMovieMinRating" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="0">No minimum</option>
+                                    <option value="5">0.5 and above</option>
+                                    <option value="10">1 and above</option>
+                                    <option value="15">1.5 and above</option>
+                                    <option value="20">2 and above</option>
+                                    <option value="25">2.5 and above</option>
+                                    <option value="30">3 and above</option>
+                                    <option value="35">3.5 and above</option>
+                                    <option value="40">4 and above</option>
+                                    <option value="45">4.5 and above</option>
+                                    <option value="50">5 and above</option>
+                                    <option value="55">5.5 and above</option>
+                                    <option value="60">6 and above</option>
+                                    <option value="65">6.5 and above</option>
+                                    <option value="70">7 and above</option>
+                                    <option value="75">7.5 and above</option>
+                                    <option value="80">8 and above</option>
+                                    <option value="85">8.5 and above</option>
+                                    <option value="90">9 and above</option>
+                                    <option value="95">9.5 and above</option>
+                                    <option value="100">10 and above</option>
+                                </select>
+                                <div class="fieldDescription">Only movies rated this high count as new. Uses the MDBList score cached by Moonbase, or the server's own rating.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarMixTypes">Mix Movies and Series</label>
+                                <select id="DefaultMediaBarMixTypes" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Movies and series take turns in the media bar, as long as each has titles. Only applies when the bar shows both.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarUpcomingEpisodes">Upcoming Episodes</label>
+                                <select id="DefaultMediaBarUpcomingEpisodes" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Series on the server get a label like "New Episode, This Thursday" from the Sonarr calendar. Needs Sonarr linked through Seerr.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarUpcomingMovies">Upcoming Movies</label>
+                                <select id="DefaultMediaBarUpcomingMovies" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">The New Releases source shows up to two movies Radarr expects digitally within the horizon. Needs Radarr linked through Seerr, and a TMDB key for their logos.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarUpcomingDays">Upcoming Horizon</label>
+                                <select id="DefaultMediaBarUpcomingDays" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="3">3 days</option>
+                                    <option value="7">7 days</option>
+                                    <option value="14">14 days</option>
+                                </select>
+                                <div class="fieldDescription">How many days ahead the upcoming labels and movies look.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarFollowedFirst">Followed Series First</label>
+                                <select id="DefaultMediaBarFollowedFirst" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Put series the user has started at the front of the media bar.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Excluded Genres</label>
@@ -6326,9 +6461,12 @@
                 { parent: 'DefaultDisplaySinceYouWatchedRows', fields: ['DefaultSinceYouWatchedSource', 'DefaultSinceYouWatchedSourceType', 'DefaultSinceYouWatchedSourceItem', 'DefaultSinceYouWatched1Enabled', 'DefaultSinceYouWatched2Enabled', 'DefaultSinceYouWatched3Enabled', 'DefaultSinceYouWatched4Enabled', 'DefaultSinceYouWatched5Enabled'] },
                 { parent: 'DefaultSinceYouWatchedSource', off: ['online'], fields: ['DefaultSinceYouWatchedIncludeWatched'] },
                 { parent: 'DefaultDisplayStudiosRows', fields: ['DefaultStudiosRowSortBy', 'DefaultStudiosRowSortOrder'] },
-                { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
+                { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultMediaBarNewReleaseKinds', 'DefaultMediaBarNewMovieBasis', 'DefaultMediaBarNewMovieDays', 'DefaultMediaBarNewMovieMaxAgeMonths', 'DefaultMediaBarNewMovieDetail', 'DefaultMediaBarNewMovieTaglineOnly', 'DefaultMediaBarNewMovieMinRating', 'DefaultMediaBarMixTypes', 'DefaultMediaBarUpcomingEpisodes', 'DefaultMediaBarUpcomingMovies', 'DefaultMediaBarUpcomingDays', 'DefaultMediaBarFollowedFirst', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
                 { parent: 'DefaultMediaBarMode', off: ['off', 'bookshelf', 'aya'], fields: ['DefaultMediaBarRatingsHeading', 'DefaultMediaBarMdblistEnabled', 'DefaultMediaBarMdblistRatingSourcesList', 'DefaultMediaBarMdblistShowRatingNames', 'DefaultMediaBarMdblistShowRatingBadges'] },
                 { parent: 'DefaultMediaBarAutoAdvance', fields: ['DefaultMediaBarIntervalMs'] },
+                { parent: 'DefaultMediaBarNewMovieBasis', off: ['releaseDate'], fields: ['DefaultMediaBarNewMovieMaxAgeMonths'] },
+                { parent: 'DefaultMediaBarNewReleaseBanner', fields: ['DefaultMediaBarNewReleaseKinds'] },
+                { parent: 'DefaultMediaBarNewMovieDetail', fields: ['DefaultMediaBarNewMovieTaglineOnly'] },
                 { parent: 'DefaultMediaBarTrailerPreview', fields: ['DefaultMediaBarTrailerAudio', 'DefaultTrailerVolume', 'DefaultMediaBarTrailerCaptions'] },
                 { parent: 'DefaultHomeRowsStyle', off: ['v1'], fields: ['DefaultModernCardsOnMyMediaRow', 'DefaultModernHomeRowsPadding'] },
                 { parent: 'DefaultHomeRowsStyle', off: ['v2', 'carousel'], fields: ['DefaultClassicHomeRowsPadding', 'DefaultHomeRowInfoOverlay', 'DefaultHomeImageTypeContinueWatching', 'DefaultHomeRowsImageTypeOverride'] },
@@ -11482,6 +11620,18 @@
                     setNullableBoolSelect('#DefaultMediaBarRowPeek', defaults.mediaBarRowPeek);
                     setNullableBoolSelect('#DefaultMediaBarNewReleaseBanner', defaults.mediaBarNewReleaseBanner);
                     setSelectValue('#DefaultMediaBarNewReleaseDays', defaults.mediaBarNewReleaseDays, 'Configured window');
+                    setSelectValue('#DefaultMediaBarNewReleaseKinds', defaults.mediaBarNewReleaseKinds, 'Configured labels');
+                    setSelectValue('#DefaultMediaBarNewMovieBasis', defaults.mediaBarNewMovieBasis, 'Configured basis');
+                    setSelectValue('#DefaultMediaBarNewMovieDays', defaults.mediaBarNewMovieDays, 'Configured window');
+                    setSelectValue('#DefaultMediaBarNewMovieMaxAgeMonths', defaults.mediaBarNewMovieMaxAgeMonths, 'Configured limit');
+                    setNullableBoolSelect('#DefaultMediaBarNewMovieDetail', defaults.mediaBarNewMovieDetail);
+                    setNullableBoolSelect('#DefaultMediaBarNewMovieTaglineOnly', defaults.mediaBarNewMovieTaglineOnly);
+                    setSelectValue('#DefaultMediaBarNewMovieMinRating', defaults.mediaBarNewMovieMinRating, 'Configured rating');
+                    setNullableBoolSelect('#DefaultMediaBarMixTypes', defaults.mediaBarMixTypes);
+                    setNullableBoolSelect('#DefaultMediaBarUpcomingEpisodes', defaults.mediaBarUpcomingEpisodes);
+                    setNullableBoolSelect('#DefaultMediaBarUpcomingMovies', defaults.mediaBarUpcomingMovies);
+                    setSelectValue('#DefaultMediaBarUpcomingDays', defaults.mediaBarUpcomingDays, 'Configured horizon');
+                    setNullableBoolSelect('#DefaultMediaBarFollowedFirst', defaults.mediaBarFollowedFirst);
                     setNullableBoolSelect('#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
                     setNullableBoolSelect('#DefaultMediaBarTrailerAudio', defaults.mediaBarTrailerAudio);
                     bindNullableRangeInput('#DefaultTrailerVolume', '%');
@@ -12483,6 +12633,18 @@
                     ds.mediaBarRowPeek = getNullableBoolSelect('#DefaultMediaBarRowPeek');
                     ds.mediaBarNewReleaseBanner = getNullableBoolSelect('#DefaultMediaBarNewReleaseBanner');
                     ds.mediaBarNewReleaseDays = getNullableIntInput('#DefaultMediaBarNewReleaseDays');
+                    ds.mediaBarNewReleaseKinds = document.querySelector('#DefaultMediaBarNewReleaseKinds').value || null;
+                    ds.mediaBarNewMovieBasis = document.querySelector('#DefaultMediaBarNewMovieBasis').value || null;
+                    ds.mediaBarNewMovieDays = getNullableIntInput('#DefaultMediaBarNewMovieDays');
+                    ds.mediaBarNewMovieMaxAgeMonths = getNullableIntInput('#DefaultMediaBarNewMovieMaxAgeMonths');
+                    ds.mediaBarNewMovieDetail = getNullableBoolSelect('#DefaultMediaBarNewMovieDetail');
+                    ds.mediaBarNewMovieTaglineOnly = getNullableBoolSelect('#DefaultMediaBarNewMovieTaglineOnly');
+                    ds.mediaBarNewMovieMinRating = getNullableIntInput('#DefaultMediaBarNewMovieMinRating');
+                    ds.mediaBarMixTypes = getNullableBoolSelect('#DefaultMediaBarMixTypes');
+                    ds.mediaBarUpcomingEpisodes = getNullableBoolSelect('#DefaultMediaBarUpcomingEpisodes');
+                    ds.mediaBarUpcomingMovies = getNullableBoolSelect('#DefaultMediaBarUpcomingMovies');
+                    ds.mediaBarUpcomingDays = getNullableIntInput('#DefaultMediaBarUpcomingDays');
+                    ds.mediaBarFollowedFirst = getNullableBoolSelect('#DefaultMediaBarFollowedFirst');
                     ds.mediaBarTrailerPreview = getNullableBoolSelect('#DefaultMediaBarTrailerPreview');
                     ds.mediaBarTrailerAudio = getNullableBoolSelect('#DefaultMediaBarTrailerAudio');
                     ds.trailerVolume = getNullableRangeInput('#DefaultTrailerVolume');

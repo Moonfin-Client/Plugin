@@ -75,6 +75,18 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaBarSourceType")] public string? MediaBarSourceType { get; set; }
         [JsonPropertyName("mediaBarNewReleaseBanner")] public bool? MediaBarNewReleaseBanner { get; set; }
         [JsonPropertyName("mediaBarNewReleaseDays")] public int? MediaBarNewReleaseDays { get; set; }
+        [JsonPropertyName("mediaBarNewReleaseKinds")] public string? MediaBarNewReleaseKinds { get; set; }
+        [JsonPropertyName("mediaBarNewMovieBasis")] public string? MediaBarNewMovieBasis { get; set; }
+        [JsonPropertyName("mediaBarNewMovieDays")] public int? MediaBarNewMovieDays { get; set; }
+        [JsonPropertyName("mediaBarNewMovieMaxAgeMonths")] public int? MediaBarNewMovieMaxAgeMonths { get; set; }
+        [JsonPropertyName("mediaBarNewMovieMinRating")] public int? MediaBarNewMovieMinRating { get; set; }
+        [JsonPropertyName("mediaBarNewMovieDetail")] public bool? MediaBarNewMovieDetail { get; set; }
+        [JsonPropertyName("mediaBarNewMovieTaglineOnly")] public bool? MediaBarNewMovieTaglineOnly { get; set; }
+        [JsonPropertyName("mediaBarFollowedFirst")] public bool? MediaBarFollowedFirst { get; set; }
+        [JsonPropertyName("mediaBarMixTypes")] public bool? MediaBarMixTypes { get; set; }
+        [JsonPropertyName("mediaBarUpcomingEpisodes")] public bool? MediaBarUpcomingEpisodes { get; set; }
+        [JsonPropertyName("mediaBarUpcomingMovies")] public bool? MediaBarUpcomingMovies { get; set; }
+        [JsonPropertyName("mediaBarUpcomingDays")] public int? MediaBarUpcomingDays { get; set; }
         [JsonPropertyName("mediaBarCollectionIds")] public List<string>? MediaBarCollectionIds { get; set; }
         [JsonPropertyName("mediaBarLibraryIds")] public List<string>? MediaBarLibraryIds { get; set; }
         [JsonPropertyName("mediaBarExcludedGenres")] public List<string>? MediaBarExcludedGenres { get; set; }

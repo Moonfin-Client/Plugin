@@ -174,6 +174,64 @@ public class MdbListController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// One rating out of 10 per title, read from the cache only. The media bar asks before it
+    /// shows, so this never calls MDBList: a title missing from the cache is just left out.
+    /// </summary>
+    [HttpPost("CachedRatings")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public ActionResult<MdbListCachedRatingsResponse> GetCachedRatings([FromBody] MdbListCachedRatingsRequest? body)
+    {
+        var type = body?.Type?.Trim().ToLowerInvariant() ?? "movie";
+        if (type != "movie" && type != "show")
+        {
+            return BadRequest(new { Error = "Invalid type. Expected: movie or show" });
+        }
+
+        var ratings = new Dictionary<string, double>();
+        foreach (var tmdbId in (body?.TmdbIds ?? new List<string>()).Take(MaxCachedRatingIds))
+        {
+            var id = tmdbId?.Trim();
+            if (string.IsNullOrEmpty(id) || ratings.ContainsKey(id))
+            {
+                continue;
+            }
+
+            // A stale score still beats none here, so anything still in the file is used.
+            var cached = _cacheService.TryGet($"{type}:{id}", CachedRatingsMaxAge);
+            if (CachedScore(cached) is { } score)
+            {
+                ratings[id] = score;
+            }
+        }
+
+        return Ok(new MdbListCachedRatingsResponse { Ratings = ratings });
+    }
+
+    private const int MaxCachedRatingIds = 200;
+
+    private static readonly TimeSpan CachedRatingsMaxAge = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// IMDb's rating, else TMDb's or Trakt's score brought back to 10. IMDb comes first
+    /// because it's the one people read as "is it good".
+    /// </summary>
+    internal static double? CachedScore(List<MdbListRating>? ratings)
+    {
+        if (ratings == null)
+        {
+            return null;
+        }
+
+        double? Of(string source) => ratings.Find(r => string.Equals(r.Source, source, StringComparison.OrdinalIgnoreCase)) is { } r
+            ? (source == "imdb" ? r.Value : r.Score / 10)
+            : null;
+
+        return Of("imdb") ?? Of("tmdb") ?? Of("trakt");
+    }
+
     private ActionResult<MdbListResponse> NegativeResult(string cacheKey, string error)
     {
         _negativeCache[cacheKey] = (DateTimeOffset.UtcNow, error);
@@ -597,6 +655,23 @@ public class TolerantStringConverter : JsonConverter<string?>
         else
             writer.WriteStringValue(value);
     }
+}
+
+public class MdbListCachedRatingsRequest
+{
+    /// <summary>"movie" or "show". Movie when left out.</summary>
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [JsonPropertyName("tmdbIds")]
+    public List<string>? TmdbIds { get; set; }
+}
+
+public class MdbListCachedRatingsResponse
+{
+    /// <summary>Rating out of 10 by TMDb id, only for titles the cache knows.</summary>
+    [JsonPropertyName("ratings")]
+    public Dictionary<string, double> Ratings { get; set; } = new();
 }
 
 public class MdbListResponse

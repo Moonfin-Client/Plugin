@@ -251,6 +251,59 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mediaBarNewReleaseDays")]
     public int? MediaBarNewReleaseDays { get; set; }
 
+    /// <summary>
+    /// Which labels the bar shows, comma separated: newSeries, newSeason, newEpisodes, newMovie.
+    /// </summary>
+    [JsonPropertyName("mediaBarNewReleaseKinds")]
+    public string? MediaBarNewReleaseKinds { get; set; }
+
+    /// <summary>What makes a movie new: "releaseDate" or "dateAdded".</summary>
+    [JsonPropertyName("mediaBarNewMovieBasis")]
+    public string? MediaBarNewMovieBasis { get; set; }
+
+    /// <summary>How many days a movie stays new, counted from its release or its arrival.</summary>
+    [JsonPropertyName("mediaBarNewMovieDays")]
+    public int? MediaBarNewMovieDays { get; set; }
+
+    /// <summary>With "dateAdded", how many months after its release a movie can still be new.</summary>
+    [JsonPropertyName("mediaBarNewMovieMaxAgeMonths")]
+    public int? MediaBarNewMovieMaxAgeMonths { get; set; }
+
+    /// <summary>
+    /// The rating a new movie needs, in tenths of a point out of 10, so 65 is 6.5. 0 means no
+    /// minimum.
+    /// </summary>
+    [JsonPropertyName("mediaBarNewMovieMinRating")]
+    public int? MediaBarNewMovieMinRating { get; set; }
+
+    /// <summary>Whether the new movie label shows the movie's tagline under it.</summary>
+    [JsonPropertyName("mediaBarNewMovieDetail")]
+    public bool? MediaBarNewMovieDetail { get; set; }
+
+    /// <summary>Whether the New Releases source leaves out new movies with no tagline. Only applies while <see cref="MediaBarNewMovieDetail"/> is on.</summary>
+    [JsonPropertyName("mediaBarNewMovieTaglineOnly")]
+    public bool? MediaBarNewMovieTaglineOnly { get; set; }
+
+    /// <summary>Series the user has started go first in the bar.</summary>
+    [JsonPropertyName("mediaBarFollowedFirst")]
+    public bool? MediaBarFollowedFirst { get; set; }
+
+    /// <summary>Movies and series take turns on the bar, as long as each has titles.</summary>
+    [JsonPropertyName("mediaBarMixTypes")]
+    public bool? MediaBarMixTypes { get; set; }
+
+    /// <summary>Series on the server get a label when an episode comes out within the horizon.</summary>
+    [JsonPropertyName("mediaBarUpcomingEpisodes")]
+    public bool? MediaBarUpcomingEpisodes { get; set; }
+
+    /// <summary>The New Releases source shows movies Radarr expects within the horizon.</summary>
+    [JsonPropertyName("mediaBarUpcomingMovies")]
+    public bool? MediaBarUpcomingMovies { get; set; }
+
+    /// <summary>How many days ahead the upcoming labels and movies look.</summary>
+    [JsonPropertyName("mediaBarUpcomingDays")]
+    public int? MediaBarUpcomingDays { get; set; }
+
     [JsonPropertyName("mediaBarCollectionIds")]
     public List<string>? MediaBarCollectionIds { get; set; }
 
