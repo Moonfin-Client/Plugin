@@ -3100,6 +3100,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultLibraryCardTitles', defaults.libraryCardTitles);
         setNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings', defaults.useDetailedSubHeadings);
         setNullableBoolSelect(view, '#DefaultHideBackdropsInLibraries', defaults.hideBackdropsInLibraries);
+        setNullableBoolSelect(view, '#DefaultHideLibraryWatchProgress', defaults.hideLibraryWatchProgress);
+        setNullableBoolSelect(view, '#DefaultHideLibraryUnwatchedCount', defaults.hideLibraryUnwatchedCount);
 
         setNullableBoolSelect(view, '#DefaultShowShuffleButton', defaults.showShuffleButton);
         setNullableBoolSelect(view, '#DefaultShowGenresButton', defaults.showGenresButton);
@@ -3551,6 +3553,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.libraryCardTitles = getNullableBoolSelect(view, '#DefaultLibraryCardTitles');
         d.useDetailedSubHeadings = getNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings');
         d.hideBackdropsInLibraries = getNullableBoolSelect(view, '#DefaultHideBackdropsInLibraries');
+        d.hideLibraryWatchProgress = getNullableBoolSelect(view, '#DefaultHideLibraryWatchProgress');
+        d.hideLibraryUnwatchedCount = getNullableBoolSelect(view, '#DefaultHideLibraryUnwatchedCount');
 
         d.showShuffleButton = getNullableBoolSelect(view, '#DefaultShowShuffleButton');
         d.showGenresButton = getNullableBoolSelect(view, '#DefaultShowGenresButton');
