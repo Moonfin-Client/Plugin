@@ -116,6 +116,7 @@ public class LiveTvRecordingsController : ControllerBase
             State = IncompleteRecordingRules.DisplayState(request),
             ScheduledStart = request.ScheduledStart,
             ChannelName = request.ScheduledChannelName,
+            OtherOwners = _service.OtherOwners(request, userId.Value, RecordingOwnershipConfig.Enabled()).Select(OwnerDto.From).ToList(),
         });
     }
 
@@ -201,4 +202,8 @@ public sealed class CompleteShowingResponse
 
     [JsonPropertyName("channelName")]
     public string? ChannelName { get; set; }
+
+    /// <summary>Everyone else waiting for this showing, so the client can say who is also waiting.</summary>
+    [JsonPropertyName("otherOwners")]
+    public List<OwnerDto> OtherOwners { get; set; } = new();
 }

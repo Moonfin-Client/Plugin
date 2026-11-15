@@ -34,6 +34,34 @@ public sealed class IncompleteRecordingHostedService : BackgroundService
     protected override Task ExecuteAsync(CancellationToken stoppingToken) => _watcher.RunAsync(stoppingToken);
 }
 
+/// <summary>The recording owners settings and store location as the plugin configuration has them.</summary>
+public static class RecordingOwnershipConfig
+{
+    public static bool Enabled() => MoonfinPlugin.Instance?.Configuration?.LiveTvRecordingOwners ?? true;
+
+    /// <summary>
+    /// The owners file's path. Throws until the plugin instance exists, so the file is never
+    /// written to <see cref="MoonfinPlugin.ResolveDataFolderPath"/>'s AppData fallback.
+    /// </summary>
+    public static string StorePath() =>
+        MoonfinPlugin.Instance?.DataFolderPath is { } folder
+            ? Path.Combine(folder, RecordingOwnershipService.StoreFileName)
+            : throw new InvalidOperationException("The Moonfin plugin isn't loaded yet, so the recording owners file has no home");
+}
+
+/// <summary>Runs the recording ownership watcher for as long as the server does.</summary>
+public sealed class RecordingOwnershipHostedService : BackgroundService
+{
+    private readonly RecordingOwnershipWatcher _watcher;
+
+    public RecordingOwnershipHostedService(RecordingOwnershipWatcher watcher)
+    {
+        _watcher = watcher;
+    }
+
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => _watcher.RunAsync(stoppingToken);
+}
+
 /// <summary>Sends the feature's log lines to Jellyfin's logger, keeping their structure.</summary>
 internal sealed class JellyfinRecordingLog : IRecordingLog
 {

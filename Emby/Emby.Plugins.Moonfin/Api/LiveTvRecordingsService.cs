@@ -117,6 +117,7 @@ namespace Emby.Plugins.Moonfin.Api
                 state = IncompleteRecordingRules.DisplayState(showing),
                 scheduledStart = showing.ScheduledStart,
                 channelName = showing.ScheduledChannelName,
+                otherOwners = OwnerList(service.OtherOwners(showing, user.Id, OwnersEnabled())),
             });
         }
 
@@ -179,6 +180,160 @@ namespace Emby.Plugins.Moonfin.Api
             plugin.Configuration.LiveTvDeleteIncompleteCopies = settings.DeleteIncompleteCopies;
             plugin.SaveConfiguration();
             return Json(IncompleteRecordingConfig.Read());
+        }
+
+        // ---- Recording owners (My Recordings) ----
+
+        private static bool OwnersEnabled() => Plugin.Instance?.Configuration?.LiveTvRecordingOwners ?? true;
+
+        private object OwnersNotFound() => Json(404, new { error = "Recording owners are not available" });
+
+        private static object[] OwnerList(System.Collections.Generic.IEnumerable<OwnerInfo> owners) =>
+            owners.Select(o => (object)new { userId = o.UserId.ToString("N"), name = o.Name, imageTag = o.ImageTag }).ToArray();
+
+        private static bool ProgramVisible(string programId, Guid userId)
+        {
+            var host = PluginServices.RecordingHost;
+            var program = host?.GetProgram(programId);
+            return program != null && host!.IsVisibleTo(program.ItemId, userId);
+        }
+
+        private object OwnershipResult(OwnershipOutcome outcome) =>
+            Json(new { id = outcome.Id, owners = OwnerList(outcome.Owners), joined = outcome.Joined });
+
+        /// <summary>Records a program as the caller, or joins the timer that already records it.</summary>
+        public async Task<object> Post(RecordOwnerRequest request)
+        {
+            var service = PluginServices.RecordingOwners;
+            if (service == null) return NotReady();
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            if (user == null) return NoUser();
+            if (user.Policy?.EnableLiveTvManagement != true) return NotAllowed();
+            if (!OwnersEnabled()) return OwnersNotFound();
+
+            var body = await MoonfinJson.ReadBodyAsync<RecordOwnerBody>(request.RequestStream).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(body?.ProgramId)) return Json(400, new { error = "programId is required." });
+            if (!ProgramVisible(body!.ProgramId!, user.Id)) return Json(404, new { error = "No guide program with that id" });
+
+            var attempt = await service.TryRecordProgramAsync(body.ProgramId!, user.Id, CancellationToken.None).ConfigureAwait(false);
+            return attempt.Outcome == null
+                ? Json(409, new { error = attempt.ErrorOr("The server could not schedule the recording.") })
+                : OwnershipResult(attempt.Outcome);
+        }
+
+        /// <summary>Records a program's series as the caller, or joins the rule that already records it.</summary>
+        public async Task<object> Post(RecordSeriesOwnerRequest request)
+        {
+            var service = PluginServices.RecordingOwners;
+            if (service == null) return NotReady();
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            if (user == null) return NoUser();
+            if (user.Policy?.EnableLiveTvManagement != true) return NotAllowed();
+            if (!OwnersEnabled()) return OwnersNotFound();
+
+            var body = await MoonfinJson.ReadBodyAsync<RecordOwnerBody>(request.RequestStream).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(body?.ProgramId)) return Json(400, new { error = "programId is required." });
+            if (!ProgramVisible(body!.ProgramId!, user.Id)) return Json(404, new { error = "No guide program with that id" });
+
+            var attempt = await service.TryRecordSeriesAsync(body.ProgramId!, user.Id, body.Settings, CancellationToken.None).ConfigureAwait(false);
+            return attempt.Outcome == null
+                ? Json(409, new { error = attempt.ErrorOr("The server could not create the series recording.") })
+                : OwnershipResult(attempt.Outcome);
+        }
+
+        /// <summary>Adds the caller to the owners of an existing timer, series rule or recording.</summary>
+        public async Task<object> Post(ClaimOwnerRequest request)
+        {
+            var service = PluginServices.RecordingOwners;
+            if (service == null) return NotReady();
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            if (user == null) return NoUser();
+            if (user.Policy?.EnableLiveTvAccess != true) return NotAllowed();
+            if (!OwnersEnabled()) return OwnersNotFound();
+
+            var body = await MoonfinJson.ReadBodyAsync<ClaimOwnerBody>(request.RequestStream).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(body?.Id)) return Json(400, new { error = "id is required." });
+
+            OwnedKind kind;
+            switch (body!.Kind?.ToLowerInvariant())
+            {
+                case "timer": kind = OwnedKind.Timer; break;
+                case "series": kind = OwnedKind.Series; break;
+                case "item": kind = OwnedKind.Item; break;
+                default: return Json(400, new { error = "kind must be timer, series or item." });
+            }
+
+            var id = body.Id!;
+            if (kind == OwnedKind.Item)
+            {
+                var itemId = ResolveItem(id);
+                if (itemId == null || PluginServices.RecordingHost?.IsVisibleTo(itemId.Value, user.Id) != true)
+                {
+                    return Json(404, new { error = "No recording with that id" });
+                }
+
+                id = itemId.Value.ToString("N");
+            }
+
+            var owners = await service.ClaimAsync(kind, id, user.Id, CancellationToken.None).ConfigureAwait(false);
+            return owners == null
+                ? Json(404, new { error = "Nothing to claim with that id" })
+                : Json(new { owners = OwnerList(owners) });
+        }
+
+        /// <summary>The owners of the given timers, series rules and recordings, in one call.</summary>
+        public async Task<object> Post(LookupOwnersRequest request)
+        {
+            var service = PluginServices.RecordingOwners;
+            if (service == null) return NotReady();
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            if (user == null) return NoUser();
+            if (user.Policy?.EnableLiveTvAccess != true) return NotAllowed();
+            if (!OwnersEnabled()) return OwnersNotFound();
+
+            var body = await MoonfinJson.ReadBodyAsync<LookupOwnersBody>(request.RequestStream).ConfigureAwait(false);
+            var itemIds = (body?.ItemIds ?? new System.Collections.Generic.List<string>())
+                .Select(s => ResolveItem(s?.Trim()))
+                .Where(id => id != null)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+
+            var lookup = await service.LookupAsync(
+                body?.TimerIds ?? new System.Collections.Generic.List<string>(),
+                body?.SeriesTimerIds ?? new System.Collections.Generic.List<string>(),
+                itemIds,
+                user.Id,
+                CancellationToken.None).ConfigureAwait(false);
+
+            var timers = lookup.Timers.ToDictionary(p => p.Key, p => OwnerList(p.Value));
+            var seriesTimers = lookup.SeriesTimers.ToDictionary(p => p.Key, p => OwnerList(p.Value));
+            var items = lookup.Items.ToDictionary(p => ClientId(p.Key.ToString("N")), p => OwnerList(p.Value));
+
+            // recordingItemIds is left out, not sent as null, when the server can't tell: clients
+            // read a missing field as "unknown".
+            return lookup.RecordingItemIds == null
+                ? Json(new { timers, seriesTimers, items })
+                : Json(new { timers, seriesTimers, items, recordingItemIds = lookup.RecordingItemIds.Select(i => ClientId(i.ToString("N"))).ToArray() });
+        }
+
+        /// <summary>Everything the caller owns. Timer ids may be stale; clients intersect them with the live timer list.</summary>
+        public async Task<object> Get(GetMyOwnedRequest request)
+        {
+            var service = PluginServices.RecordingOwners;
+            if (service == null) return NotReady();
+            var user = AuthHelpers.GetCurrentUser(Request, _authContext);
+            if (user == null) return NoUser();
+            if (user.Policy?.EnableLiveTvAccess != true) return NotAllowed();
+            if (!OwnersEnabled()) return OwnersNotFound();
+
+            var mine = await service.GetMineAsync(user.Id, CancellationToken.None).ConfigureAwait(false);
+            return Json(new
+            {
+                timerIds = mine.TimerIds,
+                seriesTimerIds = mine.SeriesTimerIds,
+                itemIds = mine.ItemIds.Select(i => ClientId(i.ToString("N"))).ToArray(),
+            });
         }
 
         // Emby clients send numeric item ids, and the feature keys items by their Guid.
