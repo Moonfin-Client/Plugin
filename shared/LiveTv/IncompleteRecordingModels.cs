@@ -307,9 +307,25 @@ public sealed class CompleteShowingRequest
     /// <summary>Opened by a user from the Record prompt, so it survives the automatic setting being turned off.</summary>
     public bool Explicit { get; set; }
 
+    /// <summary>
+    /// The first user who asked, kept so files written before OwnerUserIds still load: a request
+    /// read with no owners but this set is seeded with it.
+    /// </summary>
     public Guid? RequestedByUserId { get; set; }
 
-    internal CompleteShowingRequest Copy() => (CompleteShowingRequest)MemberwiseClone();
+    /// <summary>
+    /// Everyone waiting for this episode: each user who asked, and for an automatic request the
+    /// owners of the incomplete recording. The timer it schedules or adopts gets them all as owners.
+    /// None means nobody in particular, so any airing may be picked.
+    /// </summary>
+    public List<Guid> OwnerUserIds { get; set; } = new();
+
+    internal CompleteShowingRequest Copy()
+    {
+        var copy = (CompleteShowingRequest)MemberwiseClone();
+        copy.OwnerUserIds = new List<Guid>(OwnerUserIds);
+        return copy;
+    }
 
     public DateTime OpenedAt { get; set; }
 
@@ -359,13 +375,26 @@ public sealed class ScheduledTimer
     /// <summary>Whether a user made or cancelled the timer by hand; null when the server doesn't say.</summary>
     public bool? IsManual { get; set; }
 
-    /// <summary>The API id, which some cancellation events use instead of the service's timer id.</summary>
+    /// <summary>
+    /// The id the Live TV API and clients know the timer by. Jellyfin: an MD5 the server derives
+    /// from the service's id (TimerInfoDto.Id). Emby: the same as TimerId. Set by GetTimersAsync;
+    /// null on timers built from a TimerCreated event, which can't cheaply derive it.
+    /// </summary>
     public string? ApiId { get; set; }
 
-    /// <summary>The service's own timer id.</summary>
+    /// <summary>
+    /// The service's own timer id (Jellyfin: TimerInfoDto.ExternalId; Emby: TimerInfoDto.Id). On a
+    /// timer from a TimerCreated event this is whatever id the event carried, see that event.
+    /// </summary>
     public string TimerId { get; set; } = string.Empty;
 
     public string? ProgramId { get; set; }
+
+    /// <summary>
+    /// The series rule that made this timer, as the Live TV API knows it (equal to SeriesRule.Id).
+    /// Null for one-off timers, and on timers built from a TimerCreated event.
+    /// </summary>
+    public string? SeriesTimerId { get; set; }
 
     public string? ChannelName { get; set; }
 
@@ -511,11 +540,32 @@ public sealed class SuggestedShowing
     };
 }
 
-public enum ScheduleResult
+public enum ScheduleOutcome
 {
     Created,
     AlreadyScheduled,
     Failed,
+}
+
+/// <summary>
+/// What scheduling a program did. For a created timer, TimerId is the service's own id (the kind
+/// ScheduledTimer.TimerId and GetActiveRecordingPath use) and ApiId is the id the Live TV API and
+/// clients know the timer by (ScheduledTimer.ApiId). On Emby the two are the same value. Either is
+/// null when the lookup after creation found nothing; the timer exists regardless. A failure may
+/// carry the server's reason in Error (an Emby Premiere refusal, say), for the client to show.
+/// </summary>
+public readonly record struct ScheduleResult(ScheduleOutcome Outcome, string? TimerId = null, string? ApiId = null, string? Error = null)
+{
+    public static ScheduleResult Created => new(ScheduleOutcome.Created);
+
+    public static ScheduleResult AlreadyScheduled => new(ScheduleOutcome.AlreadyScheduled);
+
+    public static ScheduleResult Failed => new(ScheduleOutcome.Failed);
+
+    /// <summary>A failure with the server's reason, when it gave one.</summary>
+    public static ScheduleResult FailedWith(string? error) => new(ScheduleOutcome.Failed, Error: string.IsNullOrWhiteSpace(error) ? null : error);
+
+    public static ScheduleResult CreatedWith(string? timerId, string? apiId) => new(ScheduleOutcome.Created, timerId, apiId);
 }
 
 /// <summary>Server-wide settings for the feature.</summary>

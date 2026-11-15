@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Reflection;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Model.Dto;
 
 namespace Moonfin.Server.Helpers;
 
@@ -37,6 +38,30 @@ internal static class UserReflection
 
         var userManager = UserManager(services);
         return userManager == null ? null : GetUserById.Invoke(userManager, [userId]);
+    }
+
+    /// <summary>Whether this server's user manager can be asked for a user by id, so a null from <see cref="ResolveUser"/> means there is no such user.</summary>
+    public static bool CanResolveUsers(IServiceProvider services) =>
+        GetUserById != null && UserManager(services) != null;
+
+    private static readonly MethodInfo? GetUserDtoMethod = UserManagerType?
+        .GetMethods()
+        .Where(m => m.Name == "GetUserDto" && typeof(UserDto).IsAssignableFrom(m.ReturnType))
+        .OrderBy(m => m.GetParameters().Length)
+        .FirstOrDefault();
+
+    /// <summary>A user as the DTO, which kept its shape across versions, or null when it can't be built.</summary>
+    public static UserDto? ToDto(IServiceProvider services, object user)
+    {
+        var userManager = UserManager(services);
+        if (userManager == null || GetUserDtoMethod == null)
+        {
+            return null;
+        }
+
+        var args = new object?[GetUserDtoMethod.GetParameters().Length];
+        args[0] = user;
+        return GetUserDtoMethod.Invoke(userManager, args) as UserDto;
     }
 
     public static object? UserManager(IServiceProvider services) =>

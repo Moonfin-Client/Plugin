@@ -34,6 +34,10 @@ public sealed class IncompleteRecordingService : IDisposable
     private readonly Func<DateTime> _utcNow;
     private readonly string _storePath;
     private readonly Func<IncompleteRecordingSettings> _settings;
+
+    // The recording owners feature, when the host has one. Called while holding _lock, which is
+    // the only allowed order: it never calls back into this service.
+    private readonly IRecordingOwners? _owners;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     // Copies this service deleted, so their removal isn't logged as happening outside Moonfin.
@@ -81,7 +85,8 @@ public sealed class IncompleteRecordingService : IDisposable
         IStateFile stateFile,
         Func<DateTime> utcNow,
         string storePath,
-        Func<IncompleteRecordingSettings> settings)
+        Func<IncompleteRecordingSettings> settings,
+        IRecordingOwners? owners = null)
     {
         _host = host;
         _logger = logger;
@@ -89,6 +94,7 @@ public sealed class IncompleteRecordingService : IDisposable
         _utcNow = utcNow;
         _storePath = storePath;
         _settings = settings;
+        _owners = owners;
         _processStart = Now;
     }
 
@@ -225,6 +231,7 @@ public sealed class IncompleteRecordingService : IDisposable
             changed |= await RetryUntagsAsync(data, cancellationToken).ConfigureAwait(false);
             changed |= MarkStoppedRecordings(data);
             changed |= await JudgeClosedAsync(data, now, cancellationToken).ConfigureAwait(false);
+            changed |= GatherRecordingOwners(data);
             changed |= ApplySettings(data);
 
             // Without a current list of timers a search can't tell which showings already have
@@ -510,12 +517,23 @@ public sealed class IncompleteRecordingService : IDisposable
             }
 
             request.Explicit = true;
+            AddOwner(request, userId);
             if (_timersStale || _timersLoadedAt == null)
             {
                 await ReloadTimersAsync(cancellationToken).ConfigureAwait(false);
             }
 
             await SearchAsync(data, now, false, cancellationToken).ConfigureAwait(false);
+
+            // Joining a request whose showing is already booked makes the caller an owner of its
+            // timer too. Only the caller: the rest were added when the timer was scheduled or
+            // adopted, and any who left it since stay off.
+            if (request.State == CompleteShowingState.Scheduled && request.ScheduledProgramId != null)
+            {
+                ShareOwners(request, LiveTimerIdFor(request.ScheduledProgramId), new[] { userId });
+            }
+
+            PruneDeletedOwners(request);
             Save(data);
             ScheduleNextRun(data, Now);
             var response = request.Copy();
@@ -621,7 +639,9 @@ public sealed class IncompleteRecordingService : IDisposable
                 && LiveTimerFor(bookedId) != null && VisibleProgram(bookedId, userId) is { } booked)
             {
                 request!.Explicit = true;
+                AddOwner(request, userId);
                 SetScheduled(request, booked);
+                ShareOwners(request, LiveTimerIdFor(bookedId), new[] { userId });
                 Save(data);
                 ScheduleNextRun(data, Now);
                 _logger.Info("A user confirmed the showing of {Recording} already booked at {Start} on {Channel}", name, booked.StartDate, booked.ChannelName);
@@ -659,18 +679,26 @@ public sealed class IncompleteRecordingService : IDisposable
             var previousExplicit = request?.Explicit ?? false;
             if (source.Key != null)
             {
-                request ??= new CompleteShowingRequest { Episode = source.Key, OpenedAt = Now, RequestedByUserId = userId };
+                request ??= new CompleteShowingRequest
+                {
+                    Episode = source.Key,
+                    OpenedAt = Now,
+                    RequestedByUserId = userId,
+                    OwnerUserIds = { userId },
+                };
                 if (createdRequest) data.Requests.Add(request);
                 request.Explicit = true;
                 request.PendingProgramId = candidate.Id;
                 Save(data);
             }
 
-            if (LiveTimerFor(candidate.Id) == null)
+            var timerId = LiveTimerIdFor(candidate.Id);
+            if (timerId == null)
             {
                 var result = await _host.ScheduleProgramAsync(candidate.Id, cancellationToken).ConfigureAwait(false);
                 _timersStale = true;
-                if (result == ScheduleResult.Failed)
+                timerId = result.TimerId ?? result.ApiId;
+                if (result.Outcome == ScheduleOutcome.Failed)
                 {
                     if (request != null)
                     {
@@ -692,13 +720,16 @@ public sealed class IncompleteRecordingService : IDisposable
 
             if (request != null)
             {
+                AddOwner(request, userId);
                 SetScheduled(request, candidate);
+                ShareOwners(request, timerId);
                 Save(data);
                 ScheduleNextRun(data, Now);
                 _logger.Info("Recording the confirmed showing of {Recording} at {Start} on {Channel}", name, candidate.StartDate, candidate.ChannelName);
             }
             else
             {
+                ShareOwners(new[] { userId }, timerId);
                 _logger.Info(
                     "Recording the confirmed showing of {Recording} at {Start} on {Channel}, a possible future airing that isn't followed for recovery or deletion",
                     name, candidate.StartDate, candidate.ChannelName);
@@ -716,6 +747,152 @@ public sealed class IncompleteRecordingService : IDisposable
 
     private GuideProgram? VisibleProgram(string programId, Guid userId) =>
         _host.GetProgram(programId) is { } program && CanSeeProgram(program, userId) ? program : null;
+
+    private static bool AddOwner(CompleteShowingRequest request, Guid userId)
+    {
+        if (userId == Guid.Empty || request.OwnerUserIds.Contains(userId))
+        {
+            return false;
+        }
+
+        request.OwnerUserIds.Add(userId);
+        return true;
+    }
+
+    private string? LiveTimerIdFor(string programId) =>
+        LiveTimerFor(programId) is { } timer ? (string.IsNullOrEmpty(timer.ApiId) ? timer.TimerId : timer.ApiId) : null;
+
+    // The timer a request newly scheduled or adopted belongs to everyone waiting for it, so the
+    // recording does too. A timer that already had them gets only the owners just added, so
+    // anyone who left it isn't put back.
+    private void ShareOwners(CompleteShowingRequest request, string? timerId, IReadOnlyCollection<Guid>? added = null)
+    {
+        PruneDeletedOwners(request);
+        ShareOwners((added ?? request.OwnerUserIds).Where(id => request.OwnerUserIds.Contains(id)).ToList(), timerId);
+    }
+
+    // Deleted users are dropped from a request's owners when it next hands them out. Only a user
+    // the server definitely doesn't have: a lookup that fails or can't tell keeps the owner.
+    private bool PruneDeletedOwners(CompleteShowingRequest request) =>
+        request.OwnerUserIds.RemoveAll(UserIsGone) > 0;
+
+    private bool UserIsGone(Guid userId)
+    {
+        try
+        {
+            return _host.UserExists(userId) == false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warn(ex, "Could not check whether user {UserId} still exists; keeping them as an owner", userId);
+            return false;
+        }
+    }
+
+    private void ShareOwners(IReadOnlyCollection<Guid> owners, string? timerId)
+    {
+        if (_owners == null || string.IsNullOrEmpty(timerId) || owners.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _owners.AddTimerOwners(timerId!, owners);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warn(ex, "Could not add the owners waiting for a later showing to timer {TimerId}", timerId);
+        }
+    }
+
+    private IReadOnlyList<Guid> OwnersOfItems(IEnumerable<Guid> itemIds)
+    {
+        if (_owners == null)
+        {
+            return Array.Empty<Guid>();
+        }
+
+        try
+        {
+            return _owners.OwnersOfItems(itemIds);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warn(ex, "Could not look up who owns an incomplete recording");
+            return Array.Empty<Guid>();
+        }
+    }
+
+    // Owners of an incomplete recording are often known only once its library items arrive, after
+    // the request it opened, so each pass gathers them into its open request and onto the timer
+    // already scheduled for it.
+    private bool GatherRecordingOwners(IncompleteRecordingStoreData data)
+    {
+        if (_owners == null)
+        {
+            return false;
+        }
+
+        var changed = false;
+        foreach (var request in data.Requests.Where(r => CompleteShowingState.IsOpen(r.State)))
+        {
+            var itemIds = data.Records.Where(r => r.RequestId == request.Id).SelectMany(r => r.ItemIds).ToList();
+            if (itemIds.Count == 0)
+            {
+                continue;
+            }
+
+            var added = OwnersOfItems(itemIds).Where(owner => AddOwner(request, owner)).ToList();
+            if (added.Count == 0)
+            {
+                continue;
+            }
+
+            changed = true;
+            if (request.State == CompleteShowingState.Scheduled && request.ScheduledProgramId != null)
+            {
+                ShareOwners(request, LiveTimerIdFor(request.ScheduledProgramId), added);
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// The request's owners other than the given user, as the client shows them ("Jordan is also
+    /// waiting for this"). Disabled and deleted users are left out, and nobody is listed while the
+    /// recording owners feature is off.
+    /// </summary>
+    public IReadOnlyList<OwnerInfo> OtherOwners(CompleteShowingRequest request, Guid userId, bool ownersEnabled)
+    {
+        var result = new List<OwnerInfo>();
+        if (!ownersEnabled)
+        {
+            return result;
+        }
+
+        foreach (var owner in request.OwnerUserIds.Where(id => id != userId).Distinct())
+        {
+            ServerUser? user;
+            try
+            {
+                user = _host.GetUser(owner);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.Warn(ex, "Could not read user {UserId}, so they are left out of the other owners shown", owner);
+                continue;
+            }
+
+            if (user is { IsDisabled: false })
+            {
+                result.Add(new OwnerInfo(user.Id, user.Name, user.PrimaryImageTag));
+            }
+        }
+
+        return result;
+    }
 
     private string CancellationVersion(IncompleteRecordingStoreData data, string programId)
     {
@@ -1257,7 +1434,7 @@ public sealed class IncompleteRecordingService : IDisposable
 
         if (snapshot.Episode != null)
         {
-            record.RequestId = LinkRequest(data, snapshot, now)?.Id;
+            record.RequestId = LinkRequest(data, snapshot, record, now)?.Id;
         }
         else
         {
@@ -1279,7 +1456,7 @@ public sealed class IncompleteRecordingService : IDisposable
         }
     }
 
-    private CompleteShowingRequest? LinkRequest(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, DateTime now)
+    private CompleteShowingRequest? LinkRequest(IncompleteRecordingStoreData data, RecordingSnapshot snapshot, IncompleteRecord record, DateTime now)
     {
         var episode = snapshot.Episode!;
         var scheduled = data.Requests.FirstOrDefault(r => r.State == CompleteShowingState.Scheduled
@@ -1319,6 +1496,7 @@ public sealed class IncompleteRecordingService : IDisposable
         }
 
         var request = new CompleteShowingRequest { Episode = episode, OpenedAt = now };
+        request.OwnerUserIds.AddRange(OwnersOfItems(record.ItemIds));
         data.Requests.Add(request);
         _searchNow.Add(request.Id);
         _logger.Info("Looking for a later showing of {Recording}", Describe(episode));
@@ -1440,6 +1618,7 @@ public sealed class IncompleteRecordingService : IDisposable
                 if (moved != null)
                 {
                     SetScheduled(request, moved);
+                    ShareOwners(request, LiveTimerIdFor(moved.Id));
                     _logger.Info(
                         "Following {Recording} to {Start} on {Channel}: the series rule moved its recording there",
                         Describe(request.Episode), moved.StartDate, moved.ChannelName);
@@ -1533,6 +1712,7 @@ public sealed class IncompleteRecordingService : IDisposable
 
         var changed = false;
         var askedServer = false;
+        var unresolvedOwners = new List<CompleteShowingRequest>();
         foreach (var request in data.Requests.Where(r => r.State == CompleteShowingState.Waiting).ToList())
         {
             if (!searchAll && !_searchNow.Contains(request.Id) && request.PendingProgramId == null)
@@ -1601,14 +1781,16 @@ public sealed class IncompleteRecordingService : IDisposable
 
             // A showing that already has a timer, whoever made it, is adopted and followed like
             // one the plugin scheduled, and uses an attempt the same way.
-            if (LiveTimerFor(showing.Id) == null)
+            var timerId = LiveTimerIdFor(showing.Id);
+            if (timerId == null)
             {
                 request.PendingProgramId = showing.Id;
                 Save(data);
 
                 var result = await _host.ScheduleProgramAsync(showing.Id, cancellationToken).ConfigureAwait(false);
                 askedServer = true;
-                if (result == ScheduleResult.Failed)
+                timerId = result.TimerId ?? result.ApiId;
+                if (result.Outcome == ScheduleOutcome.Failed)
                 {
                     changed = true;
                     if (retrying != showing.Id)
@@ -1625,6 +1807,15 @@ public sealed class IncompleteRecordingService : IDisposable
 
             SetScheduled(request, showing);
             changed = true;
+            if (timerId != null)
+            {
+                ShareOwners(request, timerId);
+            }
+            else
+            {
+                // Already scheduled on the server but not in the cache yet: found after the reload below.
+                unresolvedOwners.Add(request);
+            }
 
             _logger.Info(
                 "Following a later showing of {Recording} at {Start} on {Channel}",
@@ -1638,6 +1829,11 @@ public sealed class IncompleteRecordingService : IDisposable
         if (askedServer)
         {
             await ReloadTimersAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var request in unresolvedOwners.Where(r => r.ScheduledProgramId != null))
+        {
+            ShareOwners(request, LiveTimerIdFor(request.ScheduledProgramId!));
         }
 
         return changed;
@@ -1789,6 +1985,17 @@ public sealed class IncompleteRecordingService : IDisposable
 
         _data = _stateFile.Read(_storePath, json => JsonSerializer.Deserialize<IncompleteRecordingStoreData>(json, JsonOptions))
             ?? new IncompleteRecordingStoreData();
+
+        // Files written before requests had owners name only the user who asked.
+        foreach (var request in _data.Requests)
+        {
+            request.OwnerUserIds ??= new();
+            if (request.OwnerUserIds.Count == 0 && request.RequestedByUserId is { } requestedBy)
+            {
+                request.OwnerUserIds.Add(requestedBy);
+            }
+        }
+
         RefreshTracked(_data);
         return _data;
     }

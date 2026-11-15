@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -58,6 +59,8 @@ namespace Emby.Plugins.Moonfin.Services
             _libraryManager.ItemAdded += OnItemAdded;
             _libraryManager.ItemUpdated += OnItemUpdated;
             _libraryManager.ItemRemoved += OnItemRemoved;
+            _userManager.UserUpdated += OnUserUpdated;
+            _userManager.UserDeleted += OnUserDeleted;
         }
 
         public event EventHandler? ScheduleChanged;
@@ -74,6 +77,10 @@ namespace Emby.Plugins.Moonfin.Services
 
         public event EventHandler<Guid>? ItemRemoved;
 
+        public event EventHandler<ServerUser>? UserUpdated;
+
+        public event EventHandler<Guid>? UserDeleted;
+
         public void Dispose()
         {
             _liveTvManager.TimerCreated -= OnTimerCreated;
@@ -86,6 +93,8 @@ namespace Emby.Plugins.Moonfin.Services
             _libraryManager.ItemAdded -= OnItemAdded;
             _libraryManager.ItemUpdated -= OnItemUpdated;
             _libraryManager.ItemRemoved -= OnItemRemoved;
+            _userManager.UserUpdated -= OnUserUpdated;
+            _userManager.UserDeleted -= OnUserDeleted;
         }
 
         public Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
@@ -103,6 +112,7 @@ namespace Emby.Plugins.Moonfin.Services
                     PrePaddingSeconds = t.PrePaddingSeconds,
                     PostPaddingSeconds = t.PostPaddingSeconds,
                     Status = t.Status.ToString(),
+                    SeriesTimerId = string.IsNullOrEmpty(t.SeriesTimerId) ? null : t.SeriesTimerId,
                 })
                 .ToList();
             return Task.FromResult(timers);
@@ -220,6 +230,100 @@ namespace Emby.Plugins.Moonfin.Services
                 .ToList();
         }
 
+        public Task<IReadOnlyList<SeriesRule>> GetSeriesTimersAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<SeriesRule>>(ListSeriesRules());
+        }
+
+        private List<SeriesRule> ListSeriesRules() =>
+            _liveTvManager.GetSeriesTimers(new SeriesTimerQuery()).Items
+                .Where(t => !string.IsNullOrEmpty(t.Id))
+                .Select(t => new SeriesRule(t.Id, string.IsNullOrEmpty(t.SeriesId) ? null : t.SeriesId, t.Name))
+                .ToList();
+
+        public async Task<SeriesRuleCreation> CreateSeriesTimerAsync(string programId, IReadOnlyDictionary<string, JsonElement>? overrides, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var before = new HashSet<string>(ListSeriesRules().Select(r => r.Id), StringComparer.OrdinalIgnoreCase);
+                var defaults = _liveTvManager.GetNewTimerDefaults(programId, cancellationToken);
+                ApplyOverrides(defaults, overrides);
+
+                var created = await _liveTvManager.CreateSeriesTimer(ToSeriesTimerInfo(defaults), cancellationToken).ConfigureAwait(false);
+
+                // The API id of the new rule is the one that wasn't there before. The id the
+                // service returned is the fallback when the list can't tell.
+                var added = ListSeriesRules().Where(r => !before.Contains(r.Id)).ToList();
+                var rule = added.Count == 1
+                    ? added[0]
+                    : added.FirstOrDefault(r => r.SeriesId != null && r.SeriesId == defaults.SeriesId)
+                        ?? added.FirstOrDefault(r => r.Name == defaults.Name);
+                return new SeriesRuleCreation(rule?.Id ?? (string.IsNullOrEmpty(created?.Id) ? null : created!.Id));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                // The reason reaches the client, which opens its Premiere dialog on a Premiere refusal.
+                _logger.Warn("{0}", "Could not create a series rule for program " + programId + ": " + ex.Message);
+                return SeriesRuleCreation.Failed(ex.Message);
+            }
+        }
+
+        // The client's settings map names the rule's properties directly (RecordNewOnly, KeepUpTo, ...).
+        private void ApplyOverrides(SeriesTimerInfoDto rule, IReadOnlyDictionary<string, JsonElement>? overrides)
+        {
+            if (overrides == null)
+            {
+                return;
+            }
+
+            foreach (var pair in overrides)
+            {
+                var property = typeof(SeriesTimerInfoDto).GetProperty(pair.Key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (property == null || !property.CanWrite || property.Name is "Id" or "ServerId" or "ProgramId")
+                {
+                    continue;
+                }
+
+                try
+                {
+                    property.SetValue(rule, JsonSerializer.Deserialize(pair.Value.GetRawText(), property.PropertyType));
+                }
+                catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+                {
+                    _logger.Warn("{0}", "Ignored series rule setting " + pair.Key + ": " + ex.Message);
+                }
+            }
+        }
+
+        // Emby creates a series timer from its own SeriesTimerInfo, while the defaults come as a DTO.
+        private static SeriesTimerInfo ToSeriesTimerInfo(SeriesTimerInfoDto dto) => new SeriesTimerInfo
+        {
+            Id = dto.Id,
+            ChannelId = dto.ChannelId,
+            ChannelIds = dto.ChannelIds,
+            ParentFolderId = long.TryParse(dto.ParentFolderId, NumberStyles.None, CultureInfo.InvariantCulture, out var folder) ? folder : 0,
+            ProgramId = dto.ProgramId,
+            Name = dto.Name,
+            Overview = dto.Overview,
+            StartDate = dto.StartDate,
+            EndDate = dto.EndDate,
+            RecordAnyTime = dto.RecordAnyTime,
+            KeepUpTo = dto.KeepUpTo,
+            KeepUntil = dto.KeepUntil,
+            SkipEpisodesInLibrary = dto.SkipEpisodesInLibrary,
+            MatchExistingItemsWithAnyLibrary = dto.MatchExistingItemsWithAnyLibrary,
+            RecordNewOnly = dto.RecordNewOnly,
+            Days = dto.Days,
+            Priority = dto.Priority,
+            PrePaddingSeconds = dto.PrePaddingSeconds,
+            PostPaddingSeconds = dto.PostPaddingSeconds,
+            IsPrePaddingRequired = dto.IsPrePaddingRequired,
+            IsPostPaddingRequired = dto.IsPostPaddingRequired,
+            SeriesId = dto.SeriesId,
+            MaxRecordingSeconds = dto.MaxRecordingSeconds,
+            Keywords = dto.Keywords,
+        };
+
         public Task<ScheduleResult> ScheduleProgramAsync(string programId, CancellationToken cancellationToken)
         {
             try
@@ -234,7 +338,8 @@ namespace Emby.Plugins.Moonfin.Services
                 }
 
                 _liveTvManager.CreateTimer(timer);
-                return Task.FromResult(ScheduleResult.Created);
+                var timerId = FindTimerId(programId);
+                return Task.FromResult(ScheduleResult.CreatedWith(timerId, timerId));
             }
             catch (ArgumentException)
             {
@@ -242,8 +347,25 @@ namespace Emby.Plugins.Moonfin.Services
             }
             catch (Exception ex)
             {
+                // The reason reaches the client, which opens its Premiere dialog on a Premiere refusal.
                 _logger.Warn("{0}", "Could not schedule program " + programId + ": " + ex.Message);
-                return Task.FromResult(ScheduleResult.Failed);
+                return Task.FromResult(ScheduleResult.FailedWith(ex.Message));
+            }
+        }
+
+        // The timer just created, by its program. Null when the lookup fails; the recording is scheduled regardless.
+        private string? FindTimerId(string programId)
+        {
+            try
+            {
+                return _liveTvManager.GetTimers(new TimerQuery()).Items
+                    .FirstOrDefault(t => string.Equals(t.ProgramId, programId, StringComparison.OrdinalIgnoreCase)
+                        && t.Status != RecordingStatus.Cancelled && !string.IsNullOrEmpty(t.Id))?.Id;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("{0}", "Could not look up the timer for program " + programId + ": " + ex.Message);
+                return null;
             }
         }
 
@@ -358,6 +480,74 @@ namespace Emby.Plugins.Moonfin.Services
 
             _libraryManager.DeleteItem(item, new DeleteOptions { DeleteFileLocation = true });
             return true;
+        }
+
+        public ServerUser? GetUser(Guid userId)
+        {
+            try
+            {
+                var user = _userManager.GetUserById(userId);
+                return user == null ? null : ToServerUser(user);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("{0}", "Could not read user " + userId + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        public bool? UserExists(Guid userId)
+        {
+            try
+            {
+                return _userManager.GetUserById(userId) != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("{0}", "Could not check whether user " + userId + " exists: " + ex.Message);
+                return null;
+            }
+        }
+
+        public IReadOnlyList<ServerUser> GetUsers() =>
+            _userManager.Users.Where(u => u != null).Select(ToServerUser).ToList();
+
+        // The image tag comes from the user's DTO; a DTO that can't be built costs only the image.
+        private ServerUser ToServerUser(User user)
+        {
+            string? imageTag = null;
+            try
+            {
+                imageTag = _userManager.GetUserDto(user).PrimaryImageTag;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("{0}", "Could not read the image of user " + user.Id + ": " + ex.Message);
+            }
+
+            return new ServerUser(user.Id, user.Name ?? string.Empty, imageTag, user.Policy?.IsDisabled == true);
+        }
+
+        // Emby has no recording folder list to place an item under, and its recordings listing
+        // without a user may miss items, so it can't tell; owners then treat every item as one.
+        public bool? IsLiveTvRecording(Guid itemId) => null;
+
+        public IReadOnlyList<LibraryItem> FindItemsWithTagPrefix(string prefix)
+        {
+            // Tags only match whole values in a query, so the recordings are listed and filtered here.
+            var recordings = _liveTvManager.GetRecordings(new InternalItemsQuery { Recursive = true }, CancellationToken.None).Items;
+            var result = new List<LibraryItem>();
+            foreach (var recording in recordings)
+            {
+                if (Guid.TryParse(recording.Guid, out var id)
+                    && _libraryManager.GetItemById(id) is { } item
+                    && (item.Tags ?? Array.Empty<string>()).Any(t => t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                {
+                    result.Add(ToLibraryItem(item));
+                }
+            }
+
+            return result;
         }
 
         private static string? SeriesIdOf(LiveTvProgram? program) =>
@@ -487,6 +677,22 @@ namespace Emby.Plugins.Moonfin.Services
             if (e.Item is { IsVirtualItem: false } && e.Item is not Folder)
             {
                 ItemUpdated?.Invoke(this, ToLibraryItem(e.Item));
+            }
+        }
+
+        private void OnUserUpdated(object? sender, GenericEventArgs<User> e)
+        {
+            if (e.Argument != null)
+            {
+                UserUpdated?.Invoke(this, ToServerUser(e.Argument));
+            }
+        }
+
+        private void OnUserDeleted(object? sender, GenericEventArgs<User> e)
+        {
+            if (e.Argument != null)
+            {
+                UserDeleted?.Invoke(this, e.Argument.Id);
             }
         }
 
