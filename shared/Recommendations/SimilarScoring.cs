@@ -23,7 +23,8 @@ public sealed class SimilarItemFacts
     {
         Name = name;
         Genres = genres;
-        Tags = tags;
+        // Owner tags ("Recorded by Jordan") say who recorded an item, not what it is like.
+        Tags = tags == null ? null : Moonfin.LiveTv.RecordingOwnershipService.WithoutOwnerTags(tags);
         Studios = studios;
         ProductionYear = productionYear;
         CommunityRating = communityRating;
