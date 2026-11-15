@@ -4307,6 +4307,17 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMergeLibrariesByType">Merge Movie and TV Show Libraries</label>
+                                <select id="DefaultMergeLibrariesByType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">
+                                    With multi-server libraries on, shows one Movies library and one TV Shows library for every server. A title that several servers hold is listed once.
+                                </div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultShowBookDiscoverTab">Show Book Library Discovery</label>
                                 <select id="DefaultShowBookDiscoverTab" is="emby-select">
                                     <option value="">Not set (user decides)</option>

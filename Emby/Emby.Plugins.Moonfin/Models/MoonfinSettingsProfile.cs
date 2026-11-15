@@ -55,6 +55,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("continueWatchingDefaultAction")] public string? ContinueWatchingDefaultAction { get; set; }
         [JsonPropertyName("nextUpMaxDays")] public int? NextUpMaxDays { get; set; }
         [JsonPropertyName("enableMultiServerLibraries")] public bool? EnableMultiServerLibraries { get; set; }
+        [JsonPropertyName("mergeLibrariesByType")] public bool? MergeLibrariesByType { get; set; }
         [JsonPropertyName("enableFolderView")] public bool? EnableFolderView { get; set; }
         [JsonPropertyName("useDetailedSubHeadings")] public bool? UseDetailedSubHeadings { get; set; }
         [JsonPropertyName("confirmExit")] public bool? ConfirmExit { get; set; }
