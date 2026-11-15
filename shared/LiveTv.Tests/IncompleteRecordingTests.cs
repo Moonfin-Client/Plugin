@@ -77,7 +77,87 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     public event EventHandler<LibraryItem>? ItemAdded;
     public event EventHandler<LibraryItem>? ItemUpdated;
     public event EventHandler<Guid>? ItemRemoved;
+    public event EventHandler<ServerUser>? UserUpdated;
+    public event EventHandler<Guid>? UserDeleted;
 #pragma warning restore CS0067
+
+    public List<SeriesRule> SeriesRules { get; } = new();
+
+    public List<ServerUser> Users { get; } = new();
+
+    public void RaiseUserUpdated(ServerUser user) => UserUpdated?.Invoke(this, user);
+
+    public void RaiseUserDeleted(Guid userId) => UserDeleted?.Invoke(this, userId);
+
+    public void RaiseTimerCreated(ScheduledTimer timer) => TimerCreated?.Invoke(this, timer);
+
+    /// <summary>Raises a cancel without touching the timer or its file, as the server does before it stops the recording.</summary>
+    public void RaiseTimerCancelled(string timerId) => TimerCancelled?.Invoke(this, timerId);
+
+    /// <summary>Every series rule creation, with the settings it was given.</summary>
+    public List<(string ProgramId, IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides)> SeriesCreations { get; } = new();
+
+    /// <summary>Every tag write, in order.</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<(Guid ItemId, string Tag, bool Present)> TagWrites { get; } = new();
+
+    /// <summary>Library items no user may see.</summary>
+    public HashSet<Guid> HiddenItems { get; } = new();
+
+    private int _timerReads;
+
+    /// <summary>How many times the timers were listed.</summary>
+    public int TimerReads => Volatile.Read(ref _timerReads);
+
+    public Task<IReadOnlyList<SeriesRule>> GetSeriesTimersAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SeriesRule>>(SeriesRules.ToList());
+
+    /// <summary>When set, series rule creation fails with this reason, as a server refusal does.</summary>
+    public string? SeriesCreationError { get; set; }
+
+    public Task<SeriesRuleCreation> CreateSeriesTimerAsync(string programId, IReadOnlyDictionary<string, System.Text.Json.JsonElement>? overrides, CancellationToken cancellationToken)
+    {
+        if (SeriesCreationError != null) return Task.FromResult(SeriesRuleCreation.Failed(SeriesCreationError));
+        SeriesCreations.Add((programId, overrides));
+        var rule = new SeriesRule("rule-" + (SeriesRules.Count + 1), null, programId);
+        SeriesRules.Add(rule);
+        return Task.FromResult(new SeriesRuleCreation(rule.Id));
+    }
+
+    /// <summary>Library items that are not Live TV recordings; every other existing item is one.</summary>
+    public HashSet<Guid> NotRecordings { get; } = new();
+
+    /// <summary>The host can't tell which items are recordings, as on Emby.</summary>
+    public bool RecordingKindUnknown { get; set; }
+
+    public bool? IsLiveTvRecording(Guid itemId) =>
+        RecordingKindUnknown ? null : Items.Any(i => i.Id == itemId) && !NotRecordings.Contains(itemId);
+
+    /// <summary>User lookups answer "can't tell": GetUser null, UserExists null.</summary>
+    public bool UserLookupUnknown { get; set; }
+
+    /// <summary>User lookups and the user list throw, as a reflection call into a changed server can.</summary>
+    public bool UserLookupThrows { get; set; }
+
+    public ServerUser? GetUser(Guid userId)
+    {
+        if (UserLookupThrows) throw new System.Reflection.TargetInvocationException(new InvalidOperationException("GetUserDto changed"));
+        return UserLookupUnknown ? null : Users.FirstOrDefault(u => u.Id == userId);
+    }
+
+    public bool? UserExists(Guid userId)
+    {
+        if (UserLookupThrows) throw new System.Reflection.TargetInvocationException(new InvalidOperationException("GetUserById changed"));
+        return UserLookupUnknown ? null : Users.Any(u => u.Id == userId);
+    }
+
+    public IReadOnlyList<ServerUser> GetUsers()
+    {
+        if (UserLookupThrows) throw new System.Reflection.TargetInvocationException(new InvalidOperationException("GetUserDto changed"));
+        return Users.ToList();
+    }
+
+    public IReadOnlyList<LibraryItem> FindItemsWithTagPrefix(string prefix) =>
+        Items.Where(i => i.Tags.Any(t => t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToList();
 
     public List<ScheduledTimer> Timers { get; } = new();
 
@@ -117,6 +197,9 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public bool SchedulingFails { get; set; }
 
+    /// <summary>When set, scheduling fails with this reason, as the host reports a server refusal.</summary>
+    public string? SchedulingError { get; set; }
+
     public TaskCompletionSource? TimerReadGate { get; set; }
 
     public int ProgramLookups { get; set; }
@@ -125,6 +208,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public async Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _timerReads);
         if (TimerReadGate != null) await TimerReadGate.Task.WaitAsync(cancellationToken);
         if (TimerBackendTimesOut) throw new TaskCanceledException("DVR backend timed out");
         if (TimersUnavailable) throw new InvalidOperationException("Live TV is not ready");
@@ -157,6 +241,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public Task<ScheduleResult> ScheduleProgramAsync(string programId, CancellationToken cancellationToken)
     {
+        if (SchedulingError != null) return Task.FromResult(ScheduleResult.FailedWith(SchedulingError));
         if (SchedulingFails) return Task.FromResult(ScheduleResult.Failed);
         Scheduled.Add(programId);
         var program = Programs.First(p => p.Id == programId);
@@ -174,7 +259,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         if (!Timers.Contains(timer)) Timers.Add(timer);
         TimerCreated?.Invoke(this, timer);
         TimerScheduled?.Invoke(timer);
-        return Task.FromResult(ScheduleResult.Created);
+        return Task.FromResult(ScheduleResult.CreatedWith(timer.TimerId, timer.ApiId));
     }
 
     public LibraryItem? FindItemByPath(string path) => Items.FirstOrDefault(i => i.Path == path);
@@ -183,9 +268,9 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public IReadOnlyList<string> FindRenamedSiblings(string path) => RenamedSiblingLookup?.Invoke(path) ?? Array.Empty<string>();
 
-    public bool IsVisibleTo(Guid itemId, Guid userId) => !HiddenPrograms.Contains(itemId.ToString("N"));
+    public bool IsVisibleTo(Guid itemId, Guid userId) => !HiddenPrograms.Contains(itemId.ToString("N")) && !HiddenItems.Contains(itemId);
 
-    public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.ToHashSet();
+    public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.Where(id => !HiddenItems.Contains(id)).ToHashSet();
 
     public IReadOnlyList<string>? GetTags(Guid itemId) => Items.FirstOrDefault(i => i.Id == itemId)?.Tags;
 
@@ -199,6 +284,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public Task<bool> SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken)
     {
+        TagWrites.Enqueue((itemId, tag, present));
         if (TagWritesFail)
         {
             throw new IOException("The item could not be saved");

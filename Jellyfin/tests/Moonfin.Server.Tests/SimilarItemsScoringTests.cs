@@ -97,6 +97,23 @@ public class SimilarItemsScoringTests
     }
 
     [Fact]
+    public async Task OwnerTags_AreIgnoredAsSimilaritySeeds()
+    {
+        var seed = MakeMovie("Seed", genres: ["Drama"], tags: ["Recorded by Jordan"], year: 2000);
+        var sameOwner = MakeMovie("Same owner", genres: ["Drama"], tags: ["Recorded by Jordan"], year: 2000);
+        sameOwner.PremiereDate = new DateTime(1999, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var other = MakeMovie("Other", genres: ["Drama"], year: 2000);
+        other.PremiereDate = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var (service, queries) = Build([sameOwner, other]);
+        var results = await Run(service, seed);
+
+        // No candidate query by the owner tag, and sharing it earns nothing: the newer one wins the tie.
+        Assert.DoesNotContain(queries, q => q.Tags.Length > 0);
+        Assert.Equal(["Other", "Same owner"], results.Select(r => r.Name));
+    }
+
+    [Fact]
     public async Task CloserProductionYearsRankHigher()
     {
         var seed = MakeMovie("Seed", genres: ["Drama"], year: 2010);

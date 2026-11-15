@@ -19,6 +19,12 @@ internal sealed class RecordingHostTestContext : IDisposable
 
     public User User { get; } = new("viewer", "auth", "reset");
 
+    /// <summary>The configured recording paths, which IRecordingsManager hands out without item ids.</summary>
+    public List<string> RecordingLocations { get; } = new();
+
+    /// <summary>Library folders by path, for FindByPath.</summary>
+    public Dictionary<string, BaseItem> FoldersByPath { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public ILiveTvManager LiveTv { get; }
 
     public JellyfinLiveTvRecordingHost Host { get; }
@@ -29,6 +35,7 @@ internal sealed class RecordingHostTestContext : IDisposable
         var library = RecordingHostProxy.Create<ILibraryManager>((method, args) =>
         {
             if (method.Name == "GetItemById") return Items.GetValueOrDefault((Guid)args![0]!);
+            if (method.Name == "FindByPath") return FoldersByPath.GetValueOrDefault((string)args![0]!);
             if (method.Name == "GetItemsResult")
             {
                 LastQuery = (InternalItemsQuery)args![0]!;
@@ -41,11 +48,18 @@ internal sealed class RecordingHostTestContext : IDisposable
         var services = RecordingHostProxy.Create<IServiceProvider>((_, args) =>
             (Type)args![0]! == typeof(IUserManager) ? users : null);
         Host = new JellyfinLiveTvRecordingHost(
-            LiveTv, RecordingHostProxy.Create<IRecordingsManager>(), library,
+            LiveTv, RecordingHostProxy.Create<IRecordingsManager>(RecordingsHandler), library,
             RecordingHostProxy.Create<ITaskManager>(), services, new NoOpLogger<JellyfinLiveTvRecordingHost>());
     }
 
     public void Dispose() => Host.Dispose();
+
+    // As Jellyfin's RecordingsManager.GetRecordingFolders: one folder info per configured path,
+    // with Locations and Name set and ItemId never set.
+    private object? RecordingsHandler(MethodInfo method, object?[]? args) =>
+        method.Name == "GetRecordingFolders"
+            ? RecordingLocations.Select(l => new MediaBrowser.Model.Entities.VirtualFolderInfo { Locations = [l], Name = "Recordings" }).ToList()
+            : throw new NotSupportedException(method.Name);
 }
 
 public class RecordingHostProxy : DispatchProxy
@@ -248,5 +262,74 @@ public sealed class LiveTvRecordingHostTests : IDisposable
     private sealed class AccessCheckedProgram : LiveTvProgram
     {
         public override bool IsVisibleStandalone(User user) => true;
+    }
+
+    // Final fix wave, fix round 1 (N1): the recording folders carry no item ids.
+
+    [Fact]
+    public void AnItemUnderARecordingLocationIsARecordingAndOneElsewhereIsNot()
+    {
+        using var context = new RecordingHostTestContext();
+        context.RecordingLocations.Add("/config/data/livetv/recordings");
+        context.RecordingLocations.Add("/media/recorded shows/");
+        var folder = new Folder { Id = Guid.NewGuid(), Path = "/config/data/livetv/recordings" };
+        context.FoldersByPath[folder.Path] = folder;
+        var finished = AddVideo(context, "/config/data/livetv/recordings/Bonanza/Season 1/Bonanza S01E01.ts");
+        var show = AddVideo(context, "/media/Recorded Shows/Bonanza/S01E02.ts");
+        var movie = AddVideo(context, "/media/movies/Film (1990)/Film.mkv");
+        var lookalike = AddVideo(context, "/config/data/livetv/recordings-old/a.ts");
+
+        Assert.True(context.Host.IsLiveTvRecording(finished.Id));
+        Assert.True(context.Host.IsLiveTvRecording(show.Id));
+        Assert.False(context.Host.IsLiveTvRecording(movie.Id));
+        Assert.False(context.Host.IsLiveTvRecording(lookalike.Id));
+        Assert.False(context.Host.IsLiveTvRecording(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void WithNoRecordingFolderInTheLibraryAnItemElsewhereIsUnknown()
+    {
+        using var context = new RecordingHostTestContext();
+        context.RecordingLocations.Add("/config/data/livetv/recordings");
+        var recording = AddVideo(context, "/config/data/livetv/recordings/a.ts");
+        var movie = AddVideo(context, "/media/movies/Film.mkv");
+
+        Assert.True(context.Host.IsLiveTvRecording(recording.Id));
+        Assert.Null(context.Host.IsLiveTvRecording(movie.Id));
+    }
+
+    [Fact]
+    public void TagRebuildListsTheRecordingFoldersFoundByPath()
+    {
+        using var context = new RecordingHostTestContext();
+        context.RecordingLocations.Add("/config/data/livetv/recordings");
+        var folder = new Folder { Id = Guid.NewGuid(), Path = "/config/data/livetv/recordings" };
+        context.FoldersByPath[folder.Path] = folder;
+        var tagged = AddVideo(context, "/config/data/livetv/recordings/a.ts");
+        tagged.Tags = new[] { "Recorded by Alex" };
+
+        var found = context.Host.FindItemsWithTagPrefix(RecordingOwnershipService.TagPrefix);
+
+        Assert.Equal(new[] { tagged.Id }, found.Select(i => i.Id));
+        Assert.Equal(new[] { folder.Id }, context.LastQuery!.AncestorIds);
+    }
+
+    [Theory]
+    [InlineData(@"D:\Recordings\Show\a.ts", @"D:\Recordings", true)]
+    [InlineData(@"D:\Recordings\Show\a.ts", @"d:\recordings\", true)]
+    [InlineData("/rec/a.ts", "/rec/", true)]
+    [InlineData("/rec", "/rec", false)]
+    [InlineData("/recordings/a.ts", "/rec", false)]
+    [InlineData("/rec/a.ts", "/", false)]
+    public void IsUnderLocationNeedsAWholeFolderName(string path, string location, bool expected)
+    {
+        Assert.Equal(expected, JellyfinLiveTvRecordingHost.IsUnderLocation(path, location));
+    }
+
+    private static Video AddVideo(RecordingHostTestContext context, string path)
+    {
+        var video = new Video { Id = Guid.NewGuid(), Path = path };
+        context.Items.Add(video.Id, video);
+        return video;
     }
 }
