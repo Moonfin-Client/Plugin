@@ -209,8 +209,11 @@ public class AccessWindowController : ControllerBase
         return null;
     }
 
+    // Jellyfin compares the hour of the local day, which runs from 0 up to 24, with the stored hours as
+    // they are, so an end past 24 lasts to midnight and no later and a start below 0 is midnight. The
+    // boundaries are clamped to the day to match; IsAllowed keeps the stored hours.
     private static long HourTicks(double hours) =>
-        (long)Math.Ceiling(Math.Clamp(hours, 0, 48) * TimeSpan.TicksPerHour);
+        (long)Math.Ceiling(Math.Clamp(hours, 0, 24) * TimeSpan.TicksPerHour);
 
     /// <summary>
     /// The instants at which the server's wall clock reads <paramref name="local"/>: none in an

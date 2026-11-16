@@ -120,6 +120,25 @@ public sealed class AccessWindowTests
     }
 
     [Fact]
+    public void AnEndPastMidnight_ClosesAtMidnight()
+    {
+        // Jellyfin stores hours as given; Monday 08:00-25:00 ends when Monday does
+        var window = AccessWindowController.Evaluate([Entry("Monday", 8, 25)], At(2026, 11, 16, 19), Utc);
+
+        Assert.True(window.Allowed);
+        Assert.Equal(5 * 3600, window.SecondsUntilClose);
+    }
+
+    [Fact]
+    public void AStartBeforeMidnight_OpensAtMidnight()
+    {
+        var window = AccessWindowController.Evaluate([Entry("Tuesday", -2, 6)], At(2026, 11, 16, 19), Utc);
+
+        Assert.False(window.Allowed);
+        Assert.Equal(5 * 3600, window.SecondsUntilOpen);
+    }
+
+    [Fact]
     public void FallBack_CountsTheRepeatedHour()
     {
         var newYork = Named("America/New_York");
@@ -164,6 +183,7 @@ public sealed class AccessWindowTests
         [Entry("Saturday", 1.5, 3), Entry("Sunday", 1.5, 3), Entry("Weekend", 2, 2.5)],
         [Entry("Sunday", 0, 24), Entry("Wednesday", 2, 3)],
         [Entry("Everyday", 0, 24)],
+        [Entry("Monday", 8, 25), Entry("Friday", -1, 3)],
     ];
 
     /// <summary>
@@ -228,6 +248,86 @@ public sealed class AccessWindowTests
         }
 
         return null;
+    }
+
+    // Jellyfin 10.10's own check of one entry, User.IsParentalScheduleAllowed(AccessSchedule, DateTime),
+    // on its own types. It reads date.ToLocalTime(), which leaves a DateTime of kind Local as it is,
+    // so it can be handed exact wall-clock times without touching this process's time zone. 10.11
+    // moved the same check to UserEntityExtensions.
+    private static readonly MethodInfo JellyfinEntryCheck = typeof(Jellyfin.Data.Entities.User)
+        .GetMethods(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)
+        .Single(m => m.Name == "IsParentalScheduleAllowed" && m.GetParameters().Length == 2);
+
+    // The user-level rule around it: allowed with no entries, or when any entry allows
+    private static bool JellyfinAllows(IReadOnlyList<ScheduleEntry> entries, DateTime wallClock)
+    {
+        var local = DateTime.SpecifyKind(wallClock, DateTimeKind.Local);
+        return entries.Count == 0 || entries.Any(e => (bool)JellyfinEntryCheck.Invoke(null, [JellyfinSchedule(e), local])!);
+    }
+
+    private static Jellyfin.Data.Entities.AccessSchedule JellyfinSchedule(ScheduleEntry entry) =>
+        new(Enum.Parse<Jellyfin.Data.Enums.DynamicDayOfWeek>(entry.Day), entry.StartHour, entry.EndHour, Guid.Empty);
+
+    private static readonly ScheduleEntry[][] JellyfinCases = Schedules.Concat(
+    [
+        [Entry("Sunday", 0, 0)],
+        [Entry("Saturday", 23.5, 24), Entry("Weekend", 12, 12.5)],
+        [Entry("Wednesday", 22, 6)],
+        [Entry("Thursday", 6.25, 18.75), Entry("Tuesday", 0, 24)],
+        [],
+    ]).ToArray();
+
+    public static IEnumerable<object[]> JellyfinSchedules() =>
+        Enumerable.Range(0, JellyfinCases.Length).Select(i => new object[] { i });
+
+    /// <summary>
+    /// IsAllowed agrees with Jellyfin's own check on every day of a week: every 7 minutes, and a
+    /// second either side of each entry's start and end.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(JellyfinSchedules))]
+    public void IsAllowed_AgreesWithJellyfin(int schedule)
+    {
+        var entries = JellyfinCases[schedule];
+        var monday = new DateTime(2026, 11, 16);
+        var moments = new List<DateTime>();
+        for (var minute = 0; minute < 7 * 24 * 60; minute += 7)
+        {
+            moments.Add(monday.AddMinutes(minute));
+        }
+
+        for (var day = 0; day < 7; day++)
+        {
+            foreach (var entry in entries)
+            {
+                foreach (var hour in new[] { entry.StartHour, entry.EndHour })
+                {
+                    if (hour is < 0 or > 24)
+                    {
+                        continue;
+                    }
+
+                    var at = monday.AddDays(day).AddTicks((long)(hour * TimeSpan.TicksPerHour));
+                    moments.AddRange([at.AddSeconds(-1), at, at.AddSeconds(1)]);
+                }
+            }
+        }
+
+        foreach (var moment in moments)
+        {
+            var ours = AccessWindowController.IsAllowed(entries, new DateTimeOffset(moment, TimeSpan.Zero), Utc);
+            Assert.True(JellyfinAllows(entries, moment) == ours, $"{moment:ddd HH:mm:ss}: Jellyfin and IsAllowed differ ({string.Join(", ", entries)})");
+        }
+    }
+
+    [Fact]
+    public void ReadSchedule_ReadsJellyfinsUser()
+    {
+        var user = new Jellyfin.Data.Entities.User("child", "auth", "reset");
+        user.AccessSchedules.Add(new Jellyfin.Data.Entities.AccessSchedule(Jellyfin.Data.Enums.DynamicDayOfWeek.Weekday, 8, 20.5, Guid.Empty));
+        user.AccessSchedules.Add(new Jellyfin.Data.Entities.AccessSchedule(Jellyfin.Data.Enums.DynamicDayOfWeek.Sunday, 0, 24, Guid.Empty));
+
+        Assert.Equal([Entry("Weekday", 8, 20.5), Entry("Sunday", 0, 24)], AccessWindowController.ReadSchedule(user));
     }
 
     private enum FakeDay
