@@ -302,20 +302,7 @@ public class CustomRowFetchService
                     {
                         var detailsJson = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                         using var doc = JsonDocument.Parse(detailsJson);
-                        var detailsRoot = doc.RootElement;
-                        
-                        if (string.IsNullOrEmpty(rowItem.PosterUrl) &&
-                            detailsRoot.TryGetProperty("poster_path", out var pProp) &&
-                            pProp.ValueKind == JsonValueKind.String)
-                        {
-                            rowItem.PosterUrl = pProp.GetString();
-                        }
-                        if (string.IsNullOrEmpty(rowItem.BackdropUrl) &&
-                            detailsRoot.TryGetProperty("backdrop_path", out var bProp) &&
-                            bProp.ValueKind == JsonValueKind.String)
-                        {
-                            rowItem.BackdropUrl = bProp.GetString();
-                        }
+                        ApplyMdbListTmdbDetails(rowItem, doc.RootElement);
                     }
                 }
                 catch (Exception ex)
@@ -331,6 +318,27 @@ public class CustomRowFetchService
         }
 
         return items;
+    }
+
+    /// <summary>
+    /// MDBList sends no overview, so it comes from these details, which are in the row's language.
+    /// An overview TMDB hasn't translated stays empty and gets filled in the server's language later.
+    /// </summary>
+    internal static void ApplyMdbListTmdbDetails(CustomRowItem item, JsonElement details)
+    {
+        TmdbThumbService.ApplyDetails(item, TmdbTitleDetails.Parse(details, string.Empty));
+        if (string.IsNullOrEmpty(item.PosterUrl) &&
+            details.TryGetProperty("poster_path", out var pProp) &&
+            pProp.ValueKind == JsonValueKind.String)
+        {
+            item.PosterUrl = pProp.GetString();
+        }
+        if (string.IsNullOrEmpty(item.BackdropUrl) &&
+            details.TryGetProperty("backdrop_path", out var bProp) &&
+            bProp.ValueKind == JsonValueKind.String)
+        {
+            item.BackdropUrl = bProp.GetString();
+        }
     }
 
     /// <summary>
