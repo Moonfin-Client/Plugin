@@ -368,6 +368,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("showMediaDetailsOnLibraryPage")] public bool? ShowMediaDetailsOnLibraryPage { get; set; }
         [JsonPropertyName("libraryCardTitles")] public bool? LibraryCardTitles { get; set; }
         [JsonPropertyName("hideBackdropsInLibraries")] public bool? HideBackdropsInLibraries { get; set; }
+        [JsonPropertyName("hideLibraryWatchProgress")] public bool? HideLibraryWatchProgress { get; set; }
+        [JsonPropertyName("hideLibraryUnwatchedCount")] public bool? HideLibraryUnwatchedCount { get; set; }
         [JsonPropertyName("playlistsRowSortBy")] public string? PlaylistsRowSortBy { get; set; }
         [JsonPropertyName("playlistsRowSortOrder")] public string? PlaylistsRowSortOrder { get; set; }
         [JsonPropertyName("audioRowsSortBy")] public string? AudioRowsSortBy { get; set; }

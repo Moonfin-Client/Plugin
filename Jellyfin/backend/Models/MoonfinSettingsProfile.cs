@@ -1062,6 +1062,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("hideBackdropsInLibraries")]
     public bool? HideBackdropsInLibraries { get; set; }
 
+    [JsonPropertyName("hideLibraryWatchProgress")]
+    public bool? HideLibraryWatchProgress { get; set; }
+
+    [JsonPropertyName("hideLibraryUnwatchedCount")]
+    public bool? HideLibraryUnwatchedCount { get; set; }
+
     [JsonPropertyName("playlistsRowSortBy")]
     public string? PlaylistsRowSortBy { get; set; }
 

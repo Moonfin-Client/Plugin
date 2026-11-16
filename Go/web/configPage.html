@@ -4231,6 +4231,22 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideLibraryWatchProgress">Hide Watch Progress in Libraries</label>
+                                <select id="DefaultHideLibraryWatchProgress" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideLibraryUnwatchedCount">Hide Unwatched Counts in Libraries</label>
+                                <select id="DefaultHideLibraryUnwatchedCount" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultLibraryPosterSize">Library Card Size</label>
                                 <select id="DefaultLibraryPosterSize" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -11553,6 +11569,8 @@
                     setNullableBoolSelect('#DefaultLibraryCardTitles', defaults.libraryCardTitles);
                     setNullableBoolSelect('#DefaultUseDetailedSubHeadings', defaults.useDetailedSubHeadings);
                     setNullableBoolSelect('#DefaultHideBackdropsInLibraries', defaults.hideBackdropsInLibraries);
+                    setNullableBoolSelect('#DefaultHideLibraryWatchProgress', defaults.hideLibraryWatchProgress);
+                    setNullableBoolSelect('#DefaultHideLibraryUnwatchedCount', defaults.hideLibraryUnwatchedCount);
 
                     setNullableBoolSelect('#DefaultShowShuffleButton', defaults.showShuffleButton);
                     setNullableBoolSelect('#DefaultShowGenresButton', defaults.showGenresButton);
@@ -12611,6 +12629,8 @@
                     ds.libraryCardTitles = getNullableBoolSelect('#DefaultLibraryCardTitles');
                     ds.useDetailedSubHeadings = getNullableBoolSelect('#DefaultUseDetailedSubHeadings');
                     ds.hideBackdropsInLibraries = getNullableBoolSelect('#DefaultHideBackdropsInLibraries');
+                    ds.hideLibraryWatchProgress = getNullableBoolSelect('#DefaultHideLibraryWatchProgress');
+                    ds.hideLibraryUnwatchedCount = getNullableBoolSelect('#DefaultHideLibraryUnwatchedCount');
 
                     ds.showShuffleButton = getNullableBoolSelect('#DefaultShowShuffleButton');
                     ds.showGenresButton = getNullableBoolSelect('#DefaultShowGenresButton');
