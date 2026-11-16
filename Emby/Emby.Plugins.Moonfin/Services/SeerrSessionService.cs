@@ -644,7 +644,7 @@ namespace Emby.Plugins.Moonfin.Services
             var (server, error) = await ResolveArrServerAsync(service, isSonarr).ConfigureAwait(false);
             if (server == null) return QueueError(error!);
 
-            return ToProxyResponse(await ArrQueue.ReadAsync(ArrSender(service, server), isSonarr, titleId, isAdmin).ConfigureAwait(false));
+            return ToProxyResponse(await ArrQueue.ReadAsync(ArrSender(service, server), isSonarr, titleId, isAdmin, message => _logger.Debug(message)).ConfigureAwait(false));
         }
 
         /// <summary>Drops a stuck download, blocklists its release and lets the arr grab another.</summary>

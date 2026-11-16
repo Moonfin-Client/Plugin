@@ -317,3 +317,149 @@ func TestArrQueueRemovalOddAnswers(t *testing.T) {
 		t.Errorf("an entry the arr already dropped = %d", code)
 	}
 }
+
+func TestArrQueueUnreleasedMovieCarriesItsReleaseDateAndLastSearch(t *testing.T) {
+	s, arr := newQueueServer(t, nil)
+	arr.on("GET /api/v3/movie?tmdbId=550", `[{"id":3,"monitored":true,"hasFile":false,"isAvailable":false,"status":"inCinemas","inCinemas":"2026-11-01T00:00:00Z",
+		"releaseDate":"2027-01-15T00:00:00Z","lastSearchTime":"2026-11-12T08:00:00Z","path":"/movies/Some Movie (2026)"}]`).
+		on("GET /api/v3/queue/details?movieId=3", "[]")
+
+	_, body := call(t, s, userMain, "GET", "/Moonfin/Seerr/Radarr/Queue", "", map[string]any{"tmdbId": "550"})
+	if body["isAvailable"] != false || body["releaseDate"] != "2027-01-15T00:00:00Z" || body["lastSearchTime"] != "2026-11-12T08:00:00Z" {
+		t.Fatalf("movie = %v", body)
+	}
+	for _, k := range []string{"status", "inCinemas", "path", "seasons", "searching"} {
+		if _, ok := body[k]; ok {
+			t.Errorf("%s must stay out: %v", k, body)
+		}
+	}
+}
+
+func TestArrQueueSeriesCarriesEachSeasonsCounts(t *testing.T) {
+	s, arr := newQueueServer(t, nil)
+	arr.on("GET /api/v3/series?tvdbId=280619", `[{"id":1,"monitored":true,"status":"continuing","nextAiring":"2026-11-20T02:00:00Z","seasons":[
+		{"seasonNumber":1,"monitored":true,"statistics":{"episodeFileCount":10,"episodeCount":10,"totalEpisodeCount":10,"previousAiring":"2025-05-01T02:00:00Z","sizeOnDisk":1}},
+		{"seasonNumber":2,"monitored":true,"statistics":{"episodeFileCount":2,"episodeCount":3,"totalEpisodeCount":8,"nextAiring":"2026-11-20T02:00:00Z"}},
+		{"monitored":true}]}]`).
+		on("GET /api/v3/queue/details?seriesId=1&includeEpisode=true", "[]")
+
+	_, body := call(t, s, userMain, "GET", "/Moonfin/Seerr/Sonarr/Queue", "", map[string]any{"tvdbId": "280619"})
+	for _, k := range []string{"status", "nextAiring"} {
+		if _, ok := body[k]; ok {
+			t.Errorf("%s must stay out: %v", k, body)
+		}
+	}
+	seasons := body["seasons"].([]any)
+	if len(seasons) != 2 {
+		t.Fatalf("seasons = %v", seasons)
+	}
+	first, second := seasons[0].(map[string]any), seasons[1].(map[string]any)
+	if first["episodeFileCount"] != 10.0 || first["previousAiring"] != nil || first["sizeOnDisk"] != nil {
+		t.Errorf("season 1 = %v", first)
+	}
+	if second["seasonNumber"] != 2.0 || second["monitored"] != true || second["episodeCount"] != 3.0 || second["totalEpisodeCount"] != nil || second["nextAiring"] != "2026-11-20T02:00:00Z" {
+		t.Errorf("season 2 = %v", second)
+	}
+}
+
+func TestArrQueueReportsASearchInProgress(t *testing.T) {
+	cases := []struct {
+		sonarr   bool
+		commands string
+		want     any
+	}{
+		{false, `[{"name":"MoviesSearch","status":"started","body":{"movieIds":[9,3]}}]`, true},
+		{false, `[{"name":"MoviesSearch","status":"queued","body":{"movieIds":[3]}}]`, true},
+		{false, `[{"name":"MoviesSearch","status":"completed","body":{"movieIds":[3]}}]`, false},
+		{false, `[{"name":"MoviesSearch","status":"failed","body":{"movieIds":[3]}}]`, false},
+		{false, `[{"name":"MoviesSearch","status":"started","body":{"movieIds":[9]}}]`, false},
+		{false, `[{"name":"MissingMoviesSearch","status":"started","body":{}}]`, false},
+		{false, `[]`, false},
+		{false, `["odd",{"name":"MoviesSearch","status":"started","body":{"movieIds":[3]}}]`, true},
+		{false, `not json`, nil},
+		{true, `[{"name":"SeriesSearch","status":"started","body":{"seriesId":1}}]`, true},
+		{true, `[{"name":"SeasonSearch","status":"queued","body":{"seriesId":1,"seasonNumber":2}}]`, true},
+		{true, `[{"name":"MissingEpisodeSearch","status":"started","body":{"seriesId":1,"seriesIds":[]}}]`, true},
+		{true, `[{"name":"MissingEpisodeSearch","status":"queued","body":{"seriesIds":[4,1]}}]`, true},
+		{true, `[{"name":"MissingEpisodeSearch","status":"started","body":{"seriesIds":[]}}]`, false},
+		{true, `[{"name":"EpisodeSearch","status":"started","body":{"episodeIds":[58]}}]`, false},
+		{true, `[{"name":"SeriesSearch","status":"started","body":{"seriesId":4}}]`, false},
+	}
+	for _, c := range cases {
+		s, arr := newQueueServer(t, nil)
+		arr.on("GET /api/v3/movie?tmdbId=550", `[{"id":3,"monitored":true,"hasFile":false,"isAvailable":true}]`).
+			on("GET /api/v3/queue/details?movieId=3", "[]").
+			on("GET /api/v3/series?tvdbId=280619", `[{"id":1,"monitored":true}]`).
+			on("GET /api/v3/queue/details?seriesId=1&includeEpisode=true", "[]").
+			on("GET /api/v3/command", c.commands)
+		path, query := "/Moonfin/Seerr/Radarr/Queue", map[string]any{"tmdbId": "550"}
+		if c.sonarr {
+			path, query = "/Moonfin/Seerr/Sonarr/Queue", map[string]any{"tvdbId": "280619"}
+		}
+		code, body := call(t, s, userMain, "GET", path, "", query)
+		if code != 200 || body["searching"] != c.want {
+			t.Errorf("%s: %d searching = %v, want %v", c.commands, code, body["searching"], c.want)
+		}
+	}
+}
+
+func TestArrQueueACommandListThatFailsKeepsTheQueue(t *testing.T) {
+	s, arr := newQueueServer(t, nil)
+	arr.on("GET /api/v3/movie?tmdbId=550", `[{"id":3,"monitored":true,"hasFile":false,"isAvailable":true}]`).
+		on("GET /api/v3/queue/details?movieId=3", "[]").
+		onStatus("GET /api/v3/command", "[]", http.StatusInternalServerError)
+
+	code, body := call(t, s, userMain, "GET", "/Moonfin/Seerr/Radarr/Queue", "", map[string]any{"tmdbId": "550"})
+	if _, ok := body["searching"]; code != 200 || ok || body["items"] == nil {
+		t.Fatalf("queue = %d %v", code, body)
+	}
+}
+
+func TestArrQueueDoesntAskAboutSearchesWhenTheAnswerIsKnown(t *testing.T) {
+	for name, setup := range map[string]func(*queueArr){
+		"queued": func(a *queueArr) {
+			a.on("GET /api/v3/movie?tmdbId=550", `[{"id":3,"monitored":true,"hasFile":false,"isAvailable":true}]`).
+				on("GET /api/v3/queue/details?movieId=3", "["+blockedMovie+"]")
+		},
+		"on disk": func(a *queueArr) {
+			a.on("GET /api/v3/movie?tmdbId=550", `[{"id":3,"monitored":true,"hasFile":true,"isAvailable":true}]`).
+				on("GET /api/v3/queue/details?movieId=3", "[]")
+		},
+		"not in the arr": func(a *queueArr) { a.on("GET /api/v3/movie?tmdbId=550", `[]`) },
+	} {
+		s, arr := newQueueServer(t, nil)
+		setup(arr)
+		_, body := call(t, s, userMain, "GET", "/Moonfin/Seerr/Radarr/Queue", "", map[string]any{"tmdbId": "550"})
+		if _, ok := body["searching"]; ok || slices.Contains(arr.seen(), "GET /api/v3/command") {
+			t.Errorf("%s: asked about searches: %v %v", name, body, arr.seen())
+		}
+	}
+}
+
+func TestArrQueueAnOddNewFieldOnlyLeavesItselfOut(t *testing.T) {
+	s, arr := newQueueServer(t, nil)
+	arr.on("GET /api/v3/series?tvdbId=280619", `[{"id":1,"monitored":true,"seasons":[
+		"odd",
+		{"seasonNumber":"two"},
+		{"seasonNumber":1,"monitored":"yes","statistics":{"episodeCount":"many","episodeFileCount":2,"nextAiring":5}}]}]`).
+		on("GET /api/v3/queue/details?seriesId=1&includeEpisode=true", "[]")
+	code, body := call(t, s, userMain, "GET", "/Moonfin/Seerr/Sonarr/Queue", "", map[string]any{"tvdbId": "280619"})
+	if code != 200 {
+		t.Fatalf("queue = %d %v", code, body)
+	}
+	seasons := body["seasons"].([]any)
+	if len(seasons) != 1 {
+		t.Fatalf("seasons = %v", seasons)
+	}
+	season := seasons[0].(map[string]any)
+	if season["seasonNumber"] != 1.0 || season["episodeFileCount"] != 2.0 || len(season) != 2 {
+		t.Errorf("season = %v", season)
+	}
+
+	arr.on("GET /api/v3/movie?tmdbId=550", `[{"id":3,"monitored":true,"hasFile":false,"isAvailable":false,"releaseDate":7,"lastSearchTime":"2026-11-12T08:00:00Z"}]`).
+		on("GET /api/v3/queue/details?movieId=3", "[]")
+	code, body = call(t, s, userMain, "GET", "/Moonfin/Seerr/Radarr/Queue", "", map[string]any{"tmdbId": "550"})
+	if _, ok := body["releaseDate"]; code != 200 || ok || body["lastSearchTime"] != "2026-11-12T08:00:00Z" {
+		t.Errorf("movie = %d %v", code, body)
+	}
+}
