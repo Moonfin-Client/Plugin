@@ -36,7 +36,7 @@ public class AccessWindowController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
     public ActionResult<AccessWindowResponse> GetAccessWindow()
     {
         // Jellyfin doesn't hold administrators to a schedule
@@ -55,7 +55,8 @@ public class AccessWindowController : ControllerBase
         var entries = user == null ? null : ReadSchedule(user);
         if (entries == null)
         {
-            return Problem("The user's access schedule couldn't be read on this server version.");
+            // Not Implemented, like a plugin without the endpoint, so clients judge it themselves
+            return Problem("The user's access schedule couldn't be read on this server version.", statusCode: StatusCodes.Status501NotImplemented);
         }
 
         return Ok(Evaluate(entries, DateTimeOffset.UtcNow, TimeZoneInfo.Local));
