@@ -118,8 +118,12 @@ public class MoonfinController : ControllerBase
     /// Ping endpoint to check if Moonfin plugin is installed.
     /// </summary>
     /// <returns>Plugin status information including admin defaults.</returns>
+    /// <remarks>
+    /// Skips the access-schedule check so a client outside its user's hours can still find out
+    /// the plugin is there and whether it can ask for the access window.
+    /// </remarks>
     [HttpGet("Ping")]
-    [Authorize]
+    [Authorize(Policy = "IgnoreParentalControl")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<MoonfinPingResponse> Ping([FromQuery] string? profile = null)
     {
@@ -144,6 +148,7 @@ public class MoonfinController : ControllerBase
             DiscoverChartsSupported = true,
             MessagesSupported = true,
             PinSupported = true,
+            AccessWindowSupported = true,
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             ExtendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
@@ -1871,6 +1876,13 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("pinSupported")]
     public bool? PinSupported { get; set; }
+
+    /// <summary>
+    /// True when this plugin answers Moonfin/AccessWindow, which judges the user's access schedule
+    /// on the server's clock. Older plugins leave it out, so the app judges it on the device clock.
+    /// </summary>
+    [JsonPropertyName("accessWindowSupported")]
+    public bool? AccessWindowSupported { get; set; }
 
     /// <summary>
     /// True when the admin turned on smart search, so clients can call /Moonfin/SmartSearch.
