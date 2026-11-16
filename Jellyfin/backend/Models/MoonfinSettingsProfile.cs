@@ -187,6 +187,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("enableMultiServerLibraries")]
     public bool? EnableMultiServerLibraries { get; set; }
 
+    [JsonPropertyName("mergeLibrariesByType")]
+    public bool? MergeLibrariesByType { get; set; }
+
     [JsonPropertyName("enableFolderView")]
     public bool? EnableFolderView { get; set; }
 
