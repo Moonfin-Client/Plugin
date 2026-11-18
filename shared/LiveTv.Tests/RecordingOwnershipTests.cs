@@ -1944,12 +1944,26 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task ClaimSeries_RuleWithNoTimersAtAll_ClaimsNothing()
+    public async Task ClaimSeries_RuleWithNoTimersAndNothingToJudgeBy_ClaimsNothing()
     {
         _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza"));
         var service = NewService();
 
         Assert.Null(await service.ClaimAsync(OwnedKind.Series, "rule-a", Alex, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ClaimSeries_RuleWithNoTimers_JudgedByItsChannel()
+    {
+        var visible = Guid.NewGuid();
+        var hidden = Guid.NewGuid();
+        _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza", null, visible.ToString("N")));
+        _host.SeriesRules.Add(new SeriesRule("rule-b", null, "Rawhide", null, hidden.ToString("N")));
+        _host.HiddenItems.Add(hidden);
+        var service = NewService();
+
+        Assert.NotNull(await service.ClaimAsync(OwnedKind.Series, "rule-a", Alex, CancellationToken.None));
+        Assert.Null(await service.ClaimAsync(OwnedKind.Series, "rule-b", Alex, CancellationToken.None));
     }
 
     [Fact]

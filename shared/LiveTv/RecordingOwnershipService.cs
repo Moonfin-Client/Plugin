@@ -1486,14 +1486,20 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         return changed;
     }
 
-    // Whether the caller can see at least one program the rule is recording.
+    // Whether the caller can see at least one program the rule is recording. A rule with nothing
+    // scheduled (between seasons, say) is judged by the program it was made from or its channel.
     private bool CanSeeRule(SeriesRule rule, IReadOnlyList<ScheduledTimer> timers, Guid userId)
     {
+        bool Visible(string? programId) =>
+            !string.IsNullOrEmpty(programId)
+            && _host.GetProgram(programId!) is { } program
+            && _host.IsVisibleTo(program.ItemId, userId);
+
         return timers.Any(t => t.Status != StatusCancelled
-            && string.Equals(t.SeriesTimerId, rule.Id, StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrEmpty(t.ProgramId)
-            && _host.GetProgram(t.ProgramId!) is { } program
-            && _host.IsVisibleTo(program.ItemId, userId));
+                && string.Equals(t.SeriesTimerId, rule.Id, StringComparison.OrdinalIgnoreCase)
+                && Visible(t.ProgramId))
+            || Visible(rule.ProgramId)
+            || (Guid.TryParse(rule.ChannelId, out var channelId) && _host.IsVisibleTo(channelId, userId));
     }
 
     // The rule that already records a program's series: the one with a timer for this very
