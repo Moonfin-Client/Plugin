@@ -2196,12 +2196,20 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         // A later attach pass, run by another owned timer's cancel while the listing is still
         // unavailable, doesn't give the file to the old timer either.
+        // The listing recovers, showing Jordan's timer finished, and a sync runs; then another
+        // owned timer's cancel runs an attach pass while the listing is unavailable again.
+        _host.StopRecording(TimerOf("p1"));
         AddProgram("p9", Start.AddHours(5));
         _host.TimersUnavailable = false;
         await service.RecordProgramAsync("p9", Alex, CancellationToken.None);
+        _host.StartRecording(TimerOf("p9"), "/rec/p9.ts", 1, 9);
+        await service.SyncAsync(CancellationToken.None);
+        var alexs = _host.AddItem("/rec/p9.ts");
         _host.TimersUnavailable = true;
-        await service.OnTimerCancelledAsync("t-p9", CancellationToken.None);
+        await service.OnTimerCancelledAsync("t-p9", "/rec/p9.ts", CancellationToken.None);
 
+        // The pass ran: the cancelled timer's own recording is Alex's.
+        Assert.Equal(new[] { Alex }, ReadStore().Items[alexs.Id]);
         Assert.False(ReadStore().Items.ContainsKey(item.Id));
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
