@@ -702,14 +702,20 @@ public sealed class RecordingOwnershipTests : IDisposable
     private async Task<LibraryItem> JordanRecordedByTimer(RecordingOwnershipService service)
     {
         AddProgram("p0", Start.AddDays(-2));
+        var now = _clock.UtcNow;
+        _clock.UtcNow = Start.AddDays(-2).AddMinutes(-5);
         await service.RecordProgramAsync("p0", Jordan, CancellationToken.None);
         var first = TimerOf("p0");
+
+        // Recorded during its window, as a server does.
+        _clock.UtcNow = Start.AddDays(-2).AddMinutes(5);
         _host.StartRecording(first, "/rec/bonanza.ts", 1, 5);
         await service.SyncAsync(CancellationToken.None);
         var old = _host.AddItem("/rec/bonanza.ts");
-        _host.LastWrite[old.Path!] = _clock.UtcNow.AddHours(-2);
+        _host.LastWrite[old.Path!] = _clock.UtcNow;
         await service.OnItemAddedAsync(old, CancellationToken.None);
         _host.StopRecording(first);
+        _clock.UtcNow = now;
         Assert.Equal(new[] { Jordan }, ReadStore().Items[old.Id]);
         return old;
     }
@@ -1992,7 +1998,28 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         _host.UserLookupThrows = false;
         Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[tagged.Id]);
+        Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[tagged.Id]);
+    }
+
+    [Fact]
+    public async Task RebuildFails_RecordMadeMeanwhile_KeepsItsOwnerOnceRebuilt()
+    {
+        var tagged = _host.AddItem("/rec/a.ts");
+        tagged.Tags = new[] { "Recorded by Jordan" };
+        AddProgram("p1", Start);
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(StorePath, "{ not json");
+        File.WriteAllText(StorePath + ".bak", "also not json");
+        _host.UserLookupThrows = true;
+        var service = NewService();
+
+        var outcome = await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
+        Assert.Equal("api-p1", outcome!.Id);
+
+        _host.UserLookupThrows = false;
+        Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Alex, CancellationToken.None)).TimerIds);
+        Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
+        Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p1"]);
     }
 
     [Fact]
@@ -2053,6 +2080,103 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         Assert.Equal(new[] { later.Id }, _host.Scheduled);
         Assert.Equal(new[] { "api-" + later.Id }, (await owners.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
+    }
+
+    [Fact]
+    public async Task RecordSeries_RuleNamedLikeTheSeriesButRecordingAnotherSeriesId_GetsItsOwnRule()
+    {
+        AddProgram("p1", Start);
+        var other = AddProgram("p2", Start.AddHours(1));
+        other.SeriesId = "SH999";
+        // As on Jellyfin: the rule carries the series' name but no series id.
+        _host.SeriesRules.Add(new SeriesRule("rule-x", null, "Bonanza"));
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-x", TimerId = "t-x", ProgramId = "p1", SeriesTimerId = "rule-x", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
+        var service = NewService();
+
+        var outcome = await service.RecordSeriesAsync("p2", Alex, null, CancellationToken.None);
+
+        Assert.NotNull(outcome);
+        Assert.False(outcome!.Joined);
+        Assert.NotEqual("rule-x", outcome.Id);
+        Assert.Equal(2, _host.SeriesRules.Count);
+    }
+
+    // A recording of Jordan's timer, removed, while the timer list can no longer be read and
+    // still shows the timer recording. Returns the item and when its file was written.
+    private async Task<(LibraryItem Item, RecordingOwnershipService Service)> RemovedWhileListingIsStale()
+    {
+        AddProgram("p1", Start);
+        _host.Clock = () => _clock.UtcNow;
+        var service = NewService();
+        await service.RecordProgramAsync("p1", Jordan, CancellationToken.None);
+        _clock.UtcNow = Start.AddMinutes(5);
+        _host.StartRecording(TimerOf("p1"), "/rec/bonanza.ts", 1, 1);
+        _host.Write();
+        await service.SyncAsync(CancellationToken.None);
+        var item = _host.AddItem("/rec/bonanza.ts");
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+
+        _host.TimersUnavailable = true;
+        _clock.UtcNow = Start.AddHours(3);
+        _host.Items.Remove(item);
+        await service.OnItemRemovedAsync(item.Id, CancellationToken.None);
+        return (item, service);
+    }
+
+    [Fact]
+    public async Task StaleListing_NewerFileOnTheTimersPath_DoesNotTakeItsOwners()
+    {
+        var (old, service) = await RemovedWhileListingIsStale();
+
+        // Something nobody owns records to the same file after the removal.
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        _host.LastWrite[old.Path!] = _clock.UtcNow;
+        var item = Rerun(old);
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+
+        Assert.False(ReadStore().Items.ContainsKey(item.Id));
+        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
+    }
+
+    [Fact]
+    public async Task StaleListing_UnchangedFileComesBack_KeepsItsOwners()
+    {
+        var (old, service) = await RemovedWhileListingIsStale();
+
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        var item = Rerun(old);
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+    }
+
+    [Fact]
+    public async Task UnnumberedSuggestion_TimerListedLate_OwnerStillReachesIt()
+    {
+        var source = AddProgram(Guid.NewGuid().ToString("N"), Start, "Stephen King: A Necessary Evil", null, null);
+        source.Overview = "Interviews explore the author's work.";
+        var future = AddProgram(Guid.NewGuid().ToString("N"), Start.AddDays(1), source.SeriesName!, null, null);
+        future.Overview = source.Overview;
+        _clock.UtcNow = Start.AddMinutes(5);
+        _host.ScheduleReturnsNoIds = true;
+        _host.ScheduledTimersHidden = true;
+        var owners = NewService();
+        var incomplete = NewIncompleteService(new IncompleteRecordingSettings(), owners);
+        var options = await incomplete.GetCompleteShowingOptionsAsync(source.Id, Jordan);
+        Assert.False(options.CanSearch);
+
+        Assert.True(await incomplete.ScheduleSuggestedShowingAsync(source.Id, options.Showing!, Jordan, CancellationToken.None));
+        Assert.Single(ReadIncompleteStore().PendingTimerOwners);
+
+        // The next pass that lists the timers again finds it.
+        _host.RevealScheduledTimers();
+        _clock.Advance(IncompleteRecordingRules.SafetyNetInterval);
+        await incomplete.RunAsync(CancellationToken.None);
+        await owners.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "api-" + future.Id }, (await owners.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
+        Assert.Empty(ReadIncompleteStore().PendingTimerOwners);
     }
 
     private OwnershipStoreData ReadStoreOrEmpty() =>

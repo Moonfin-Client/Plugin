@@ -200,6 +200,18 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     /// <summary>Scheduling succeeds but the answer names no timer, so it must be found in a listing.</summary>
     public bool ScheduleReturnsNoIds { get; set; }
 
+    /// <summary>New timers are left out of listings until <see cref="RevealScheduledTimers"/>, as a server slow to list them.</summary>
+    public bool ScheduledTimersHidden { get; set; }
+
+    public List<ScheduledTimer> HiddenTimers { get; } = new();
+
+    public void RevealScheduledTimers()
+    {
+        ScheduledTimersHidden = false;
+        Timers.AddRange(HiddenTimers);
+        HiddenTimers.Clear();
+    }
+
     public void RaiseItemAdded(LibraryItem item) => ItemAdded?.Invoke(this, item);
 
     public void RaiseItemRemoved(Guid itemId) => ItemRemoved?.Invoke(this, itemId);
@@ -263,7 +275,8 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         };
         timer.Status = "New";
         timer.IsManual = true;
-        if (!Timers.Contains(timer)) Timers.Add(timer);
+        if (ScheduledTimersHidden) HiddenTimers.Add(timer);
+        else if (!Timers.Contains(timer)) Timers.Add(timer);
         TimerCreated?.Invoke(this, timer);
         TimerScheduled?.Invoke(timer);
         return Task.FromResult(ScheduleReturnsNoIds ? ScheduleResult.Created : ScheduleResult.CreatedWith(timer.TimerId, timer.ApiId));

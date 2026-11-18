@@ -100,6 +100,9 @@ public sealed class IncompleteRecordingService : IDisposable
 
     private DateTime Now => _utcNow();
 
+    // How long owners wait for a scheduled showing's timer to be listed before they're dropped.
+    private static readonly TimeSpan PendingOwnersRetention = TimeSpan.FromDays(2);
+
     public void Dispose() => _lock.Dispose();
 
     /// <summary>The schedule changed, so the cache reloads on the next run.</summary>
@@ -736,7 +739,13 @@ public sealed class IncompleteRecordingService : IDisposable
             }
             else
             {
-                ShareOwners(new[] { userId }, timerId);
+                if (!ShareOwners(new[] { userId }, timerId) && _owners != null && timerId == null)
+                {
+                    // No request to hold the owner: the store keeps it until the timer is listed.
+                    data.PendingTimerOwners.Add(new PendingTimerOwners { ProgramId = candidate.Id, Owners = { userId }, Since = Now });
+                    Save(data);
+                }
+
                 _logger.Info(
                     "Recording the confirmed showing of {Recording} at {Start} on {Channel}, a possible future airing that isn't followed for recovery or deletion",
                     name, candidate.StartDate, candidate.ChannelName);
@@ -865,6 +874,21 @@ public sealed class IncompleteRecordingService : IDisposable
         }
 
         var changed = false;
+        foreach (var pending in data.PendingTimerOwners.ToList())
+        {
+            if (LiveTimerIdFor(pending.ProgramId) is { } listed && ShareOwners(pending.Owners, listed))
+            {
+                data.PendingTimerOwners.Remove(pending);
+                changed = true;
+            }
+            else if (Now - pending.Since > PendingOwnersRetention)
+            {
+                _logger.Warn(null, "Gave up adding the owners of program {ProgramId} to its timer; the server never listed one", pending.ProgramId);
+                data.PendingTimerOwners.Remove(pending);
+                changed = true;
+            }
+        }
+
         foreach (var request in data.Requests.Where(r => CompleteShowingState.IsOpen(r.State)))
         {
             // Owners handed over before the server listed the timer go on as soon as it does.

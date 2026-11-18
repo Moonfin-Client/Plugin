@@ -1352,9 +1352,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     // the timer's window (plus post-processing) ended; or, when the listing no longer has the
     // timer, after the recording at that path was removed, or else after a sync first found the
     // timer done without its recording (plus post-processing). Unknown times never count as stale.
+    // A timer listed as live but past its window is judged by its window, so a listing that
+    // couldn't be refreshed doesn't hand a finished timer's owners to a newer file.
     private bool IsStaleMatch(OwnershipStoreData data, string timerId, DateTime? writtenAt, RemovedItem? removed)
     {
-        if (writtenAt is not { } written || IsLive(timerId))
+        if (writtenAt is not { } written || IsLiveNow(timerId))
         {
             return false;
         }
@@ -1517,11 +1519,27 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             return bySeriesId.Id;
         }
 
-        // A rule known to be for another series isn't this one, whatever it is called.
+        // A rule known to be for another series isn't this one, whatever it is called: by its own
+        // series id (Emby), or by the series id of a program it records (Jellyfin rules have none).
         return string.IsNullOrEmpty(program.SeriesName)
             ? null
             : rules.FirstOrDefault(r => string.Equals(r.Name, program.SeriesName, StringComparison.OrdinalIgnoreCase)
-                && !DifferentIds(r.SeriesId, program.SeriesId))?.Id;
+                && !DifferentIds(r.SeriesId, program.SeriesId)
+                && !ruled.Any(t => string.Equals(t.SeriesTimerId, r.Id, StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrEmpty(t.ProgramId)
+                    && ProgramOf(t.ProgramId!) is { } recorded
+                    && DifferentIds(recorded.SeriesId, program.SeriesId)))?.Id;
+
+        GuideProgram? ProgramOf(string programId)
+        {
+            if (!programs.TryGetValue(programId, out var known))
+            {
+                known = _host.GetProgram(programId);
+                programs[programId] = known;
+            }
+
+            return known;
+        }
     }
 
     // Whether two programs are of one series: by id when both have one, else by name. Two series
@@ -1735,13 +1753,21 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Users or the library not ready yet (a startup): this call goes on with no owners,
-            // nothing is saved, and the next call rebuilds again.
+            // Users or the library not ready yet (a startup): calls go on with a stand-in that
+            // holds what they change, nothing is saved over the files the rebuild needs, and the
+            // next call rebuilds again, keeping what the stand-in gathered.
             _logger.Warn(ex, "Could not rebuild recording owners from their tags yet; trying again on the next request");
-            return _unbuilt = new OwnershipStoreData();
+            return _unbuilt ??= new OwnershipStoreData();
         }
 
-        if (unusable || fresh.Items.Count > 0)
+        var merged = _unbuilt != null;
+        if (merged)
+        {
+            MergeInto(fresh, _unbuilt!);
+            _unbuilt = null;
+        }
+
+        if (unusable || merged || fresh.Items.Count > 0)
         {
             // The unusable copies are set aside before anything overwrites them, so a read that
             // failed only for the moment can't lose the owners for good.
@@ -1873,6 +1899,57 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
 
         return copy;
+    }
+
+    // Adds what calls changed while a rebuild couldn't run to the rebuilt store. Owners are only
+    // ever added; a recording that left the library meanwhile goes to the removed list.
+    private static void MergeInto(OwnershipStoreData rebuilt, OwnershipStoreData changes)
+    {
+        foreach (var entry in changes.Timers)
+        {
+            AddOwners(rebuilt.Timers, entry.Key, entry.Value);
+        }
+
+        foreach (var entry in changes.SeriesTimers)
+        {
+            AddOwners(rebuilt.SeriesTimers, entry.Key, entry.Value);
+        }
+
+        foreach (var entry in changes.Items)
+        {
+            AddOwners(rebuilt.Items, entry.Key, entry.Value);
+        }
+
+        foreach (var entry in changes.Removed)
+        {
+            if (rebuilt.Items.TryGetValue(entry.Key, out var tagged))
+            {
+                rebuilt.Items.Remove(entry.Key);
+                entry.Value.Owners = entry.Value.Owners.Union(tagged).ToList();
+            }
+
+            rebuilt.Removed[entry.Key] = entry.Value;
+        }
+
+        foreach (var entry in changes.TimerPaths)
+        {
+            rebuilt.TimerPaths[entry.Key] = entry.Value;
+        }
+
+        foreach (var entry in changes.TimerServiceIds)
+        {
+            rebuilt.TimerServiceIds[entry.Key] = entry.Value;
+        }
+
+        foreach (var entry in changes.TimersMissingSince)
+        {
+            rebuilt.TimersMissingSince[entry.Key] = entry.Value;
+        }
+
+        foreach (var entry in changes.SeriesTimersMissingSince)
+        {
+            rebuilt.SeriesTimersMissingSince[entry.Key] = entry.Value;
+        }
     }
 
     // Rebuilds the recordings' owners from their "Recorded by name" tags. Timer and rule owners

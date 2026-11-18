@@ -374,9 +374,25 @@ public sealed class IncompleteRecordingStoreData
 
     /// <summary>Complete copies whose incomplete tag couldn't be removed yet. Each run tries again.</summary>
     public List<Guid> PendingUntags { get; set; } = new();
+
+    /// <summary>
+    /// Owners of confirmed showings scheduled without a complete-showing request, kept until the
+    /// server lists the showing's timer so they can be added to it.
+    /// </summary>
+    public List<PendingTimerOwners> PendingTimerOwners { get; set; } = new();
 }
 
 /// <summary>A timer as the schedule cache holds it.</summary>
+/// <summary>Owners waiting for the timer of a scheduled program to be listed.</summary>
+public sealed class PendingTimerOwners
+{
+    public string ProgramId { get; set; } = string.Empty;
+
+    public List<Guid> Owners { get; set; } = new();
+
+    public DateTime Since { get; set; }
+}
+
 public sealed class ScheduledTimer
 {
     /// <summary>Whether a user made or cancelled the timer by hand; null when the server doesn't say.</summary>

@@ -246,22 +246,29 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     private void OnTimerCancelled(object? sender, string timerId)
     {
         var path = ActivePathOf(timerId);
-        Handle(() => _service.OnTimerCancelledAsync(timerId, path, _stopping));
+        Handle(() => _service.OnTimerCancelledAsync(timerId, path, CancellationToken.None));
     }
 
-    private void OnItemAdded(object? sender, LibraryItem item) => Handle(() => _service.OnItemAddedAsync(item, _stopping));
+    private void OnItemAdded(object? sender, LibraryItem item) => Handle(() => _service.OnItemAddedAsync(item, CancellationToken.None));
 
-    private void OnItemRemoved(object? sender, Guid itemId) => Handle(() => _service.OnItemRemovedAsync(itemId, _stopping));
+    private void OnItemRemoved(object? sender, Guid itemId) => Handle(() => _service.OnItemRemovedAsync(itemId, CancellationToken.None));
 
-    private void OnUserUpdated(object? sender, ServerUser user) => Handle(() => _service.OnUserUpdatedAsync(user, _stopping));
+    private void OnUserUpdated(object? sender, ServerUser user) => Handle(() => _service.OnUserUpdatedAsync(user, CancellationToken.None));
 
-    private void OnUserDeleted(object? sender, Guid userId) => Handle(() => _service.OnUserDeletedAsync(userId, _stopping));
+    private void OnUserDeleted(object? sender, Guid userId) => Handle(() => _service.OnUserDeletedAsync(userId, CancellationToken.None));
 
     // The service raises some of these events while holding its lock, so none is handled on the
     // raising thread. They run one at a time in the order they arrived: a recording that leaves
-    // the library and comes straight back must be removed before it is added again.
+    // the library and comes straight back must be removed before it is added again. Stopping
+    // takes no new events but doesn't cancel those already taken, so a shutdown that waits on
+    // Idle applies them all (a removal is never left without the re-add that followed it).
     private void Handle(Func<Task> work)
     {
+        if (_stopping.IsCancellationRequested)
+        {
+            return;
+        }
+
         lock (_queueLock)
         {
             _queue = _queue.ContinueWith(_ => RunEventAsync(work), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
@@ -274,9 +281,9 @@ public sealed class RecordingOwnershipWatcher : IDisposable
         {
             await work().ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        catch (ObjectDisposedException) when (_stopping.IsCancellationRequested)
         {
-            // Server shutting down.
+            // Shut down before this event's turn came.
         }
         catch (Exception ex)
         {
