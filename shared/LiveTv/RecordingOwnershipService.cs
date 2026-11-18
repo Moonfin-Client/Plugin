@@ -1438,7 +1438,8 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
             // A finished timer's path now holding a file written long after it ended is a rerun
             // someone else recorded there.
-            if (IsStaleMatch(data, entry.Key, FileWrittenAt(item.Id), data.Removed.TryGetValue(item.Id, out var tombstone) ? tombstone : null))
+            if (!IsLive(entry.Key)
+                && IsStaleMatch(data, entry.Key, FileWrittenAt(item.Id), data.Removed.TryGetValue(item.Id, out var tombstone) ? tombstone : null))
             {
                 continue;
             }
