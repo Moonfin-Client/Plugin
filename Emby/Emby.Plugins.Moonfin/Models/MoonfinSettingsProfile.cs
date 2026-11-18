@@ -76,6 +76,9 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaBarSourceType")] public string? MediaBarSourceType { get; set; }
         [JsonPropertyName("mediaBarNewReleaseBanner")] public bool? MediaBarNewReleaseBanner { get; set; }
         [JsonPropertyName("mediaBarNewReleaseDays")] public int? MediaBarNewReleaseDays { get; set; }
+        [JsonPropertyName("mediaBarNewReleaseKinds")] public string? MediaBarNewReleaseKinds { get; set; }
+        [JsonPropertyName("mediaBarNewMovieDays")] public int? MediaBarNewMovieDays { get; set; }
+        [JsonPropertyName("mediaBarNewMovieDetail")] public bool? MediaBarNewMovieDetail { get; set; }
         [JsonPropertyName("mediaBarCollectionIds")] public List<string>? MediaBarCollectionIds { get; set; }
         [JsonPropertyName("mediaBarLibraryIds")] public List<string>? MediaBarLibraryIds { get; set; }
         [JsonPropertyName("mediaBarExcludedGenres")] public List<string>? MediaBarExcludedGenres { get; set; }

@@ -254,6 +254,20 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mediaBarNewReleaseDays")]
     public int? MediaBarNewReleaseDays { get; set; }
 
+    /// <summary>
+    /// Which labels the bar shows, comma separated: newSeries, newSeason, newEpisodes, newMovie.
+    /// </summary>
+    [JsonPropertyName("mediaBarNewReleaseKinds")]
+    public string? MediaBarNewReleaseKinds { get; set; }
+
+    /// <summary>How many days after its release a movie stays new.</summary>
+    [JsonPropertyName("mediaBarNewMovieDays")]
+    public int? MediaBarNewMovieDays { get; set; }
+
+    /// <summary>Whether the new movie label shows the movie's tagline under it.</summary>
+    [JsonPropertyName("mediaBarNewMovieDetail")]
+    public bool? MediaBarNewMovieDetail { get; set; }
+
     [JsonPropertyName("mediaBarCollectionIds")]
     public List<string>? MediaBarCollectionIds { get; set; }
 
