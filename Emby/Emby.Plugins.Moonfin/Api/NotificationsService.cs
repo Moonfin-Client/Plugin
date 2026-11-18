@@ -27,6 +27,8 @@ namespace Emby.Plugins.Moonfin.Api
         private NotificationStore Store => Plugin.Instance?.NotificationStore
             ?? throw new InvalidOperationException("NotificationStore not initialized");
 
+        private MoonfinSettingsService? Settings => Plugin.Instance?.SettingsService;
+
         public NotificationsService(IApplicationHost appHost)
         {
             _authContext = appHost.Resolve<IAuthorizationContext>();
@@ -86,6 +88,42 @@ namespace Emby.Plugins.Moonfin.Api
 
             Store.UnregisterDevice(userId.Value, body.Token, body.DeviceId);
             return Json(new { success = true });
+        }
+
+        public object Post(TestNotificationRequest request)
+        {
+            var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
+            if (userId == null) return Json(401, new { error = "User not authenticated" });
+
+            var config = Plugin.Instance?.Configuration;
+            var pushEnabled = config?.PushEnabled == true;
+            var devices = Store.GetUserDevices(userId.Value);
+
+            var title = "Moonfin Push Test";
+            var body = "Notifications are working properly!";
+            var route = "/settings/seerr";
+
+            var json = JsonSerializer.Serialize(new
+            {
+                type = "seerrNotification",
+                title,
+                body,
+                route
+            });
+
+            Settings?.NotifyUser(userId.Value, json);
+
+            if (pushEnabled && devices.Count > 0 && Plugin.Instance?.PushDelivery != null)
+            {
+                Plugin.Instance.PushDelivery.QueueToUser(userId.Value, title, body, route);
+            }
+
+            return Json(new
+            {
+                success = true,
+                pushEnabled,
+                devicesCount = devices.Count
+            });
         }
 
         // Admin-only (see route DTO). Returns everything an admin needs to paste Moonfin's

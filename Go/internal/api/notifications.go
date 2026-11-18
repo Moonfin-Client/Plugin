@@ -59,6 +59,7 @@ func (s *Server) notificationRoutes() {
 	}
 	s.mux.HandleFunc("POST /Moonfin/Notifications/Register", s.user(s.handleRegisterDevice))
 	s.mux.HandleFunc("DELETE /Moonfin/Notifications/Register", s.user(s.handleUnregisterDevice))
+	s.mux.HandleFunc("POST /Moonfin/Notifications/Test", s.user(s.handleTestNotification))
 }
 
 // serveStream holds the settings stream open the way the Jellyfin plugin
@@ -164,6 +165,28 @@ func (s *Server) handleUnregisterDevice(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, M{"success": true})
+}
+
+func (s *Server) handleTestNotification(w http.ResponseWriter, r *http.Request) {
+	caller := callerOf(r)
+	title := "Moonfin Push Test"
+	body := "Notifications are working properly!"
+	route := "/settings/seerr"
+
+	s.notifyUser(caller.UserID, M{
+		"type":  "seerrNotification",
+		"title": title,
+		"body":  body,
+		"route": route,
+	})
+
+	allDevices, _ := s.loadDevices(r.Context())
+	count := len(allDevices[strconv.Itoa(caller.UserID)])
+	writeJSON(w, http.StatusOK, M{
+		"success":      true,
+		"pushEnabled":  false,
+		"devicesCount": count,
+	})
 }
 
 func sameDevice(d pushDevice, token, deviceID string) bool {
