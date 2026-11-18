@@ -384,6 +384,14 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     // caller joins the timer instead; one whose timer has stopped first takes the
                     // owners it was waiting to be handed, so the claim is added to them, not lost.
                     var recordedBy = FindEntryForItem(data, itemId);
+                    if (recordedBy == null)
+                    {
+                        // A recording that started since the last sync isn't noted yet; a fresh
+                        // listing notes it, so the claim goes to its timer and survives the next sync.
+                        await RefreshTimersAsync(ct).ConfigureAwait(false);
+                        recordedBy = FindEntryForItem(data, itemId);
+                    }
+
                     if (recordedBy != null && !data.TimerPathsUntil.ContainsKey(recordedBy))
                     {
                         AddOwners(data.Timers, recordedBy, new[] { userId });

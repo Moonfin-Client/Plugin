@@ -863,6 +863,20 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
+    public async Task ClaimItemWhileRecording_BeforeAnySyncNotedIt_SurvivesNextSync()
+    {
+        var service = NewService();
+        var item = _host.AddItem("/rec/a.ts");
+        UnownedTimerRecording(item.Path!);
+
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Sam, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Sam }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Sam" }, TagsOf(item));
+    }
+
+    [Fact]
     public async Task ClaimItemWhileRecording_ByUnownedTimer_TimerBecomesTheClaimersAndSurvivesNextSync()
     {
         var service = NewService();
