@@ -346,6 +346,9 @@ public sealed class RecordingOwnershipTests : IDisposable
         _host.SeriesRules.Add(new SeriesRule("rule-b", null, "Bonanza"));
         var timer = new ScheduledTimer { ApiId = "api-1", TimerId = "t-1", ProgramId = "p1", SeriesTimerId = "rule-a", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" };
         _host.Timers.Add(timer);
+        // A rule can only be claimed by someone who can see what it records, so rule-b needs a timer.
+        AddProgram("p2", Start.AddDays(1));
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-2", TimerId = "t-2", ProgramId = "p2", SeriesTimerId = "rule-b", StartDate = Start.AddDays(1), EndDate = Start.AddDays(1).AddMinutes(20), Status = "New" });
         var service = NewService();
         await service.ClaimAsync(OwnedKind.Series, "rule-a", Jordan, CancellationToken.None);
         await service.ClaimAsync(OwnedKind.Series, "rule-b", Alex, CancellationToken.None);
@@ -1923,6 +1926,30 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         Assert.Null(claimed);
         Assert.Equal(new[] { Jordan }, ReadStore().Timers["api-p1"]);
+    }
+
+    [Fact]
+    public async Task ClaimSeries_NothingTheRuleRecordsIsVisibleToCaller_ClaimsNothing()
+    {
+        var program = AddProgram("p1", Start);
+        _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza"));
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-1", TimerId = "t-1", ProgramId = "p1", SeriesTimerId = "rule-a", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
+        _host.HiddenItems.Add(program.ItemId);
+        var service = NewService();
+
+        var claimed = await service.ClaimAsync(OwnedKind.Series, "rule-a", Alex, CancellationToken.None);
+
+        Assert.Null(claimed);
+        Assert.Empty((await service.GetMineAsync(Alex, CancellationToken.None)).SeriesTimerIds);
+    }
+
+    [Fact]
+    public async Task ClaimSeries_RuleWithNoTimersAtAll_ClaimsNothing()
+    {
+        _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza"));
+        var service = NewService();
+
+        Assert.Null(await service.ClaimAsync(OwnedKind.Series, "rule-a", Alex, CancellationToken.None));
     }
 
     [Fact]

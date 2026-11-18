@@ -348,13 +348,16 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 {
                     var rules = await _host.GetSeriesTimersAsync(ct).ConfigureAwait(false);
                     var rule = rules.FirstOrDefault(r => string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase));
-                    if (rule == null)
+                    var ruleTimers = rule == null ? null : await RefreshTimersAsync(ct).ConfigureAwait(false);
+                    // Like a timer claim, a rule is only open to a caller who can see something it
+                    // records, so a claim can't join or reveal the owners of a rule they can't see.
+                    if (rule == null || !CanSeeRule(rule, ruleTimers!, userId))
                     {
                         return null;
                     }
 
                     AddOwners(data.SeriesTimers, rule.Id, new[] { userId });
-                    ApplySeriesOwners(data, await RefreshTimersAsync(ct).ConfigureAwait(false));
+                    ApplySeriesOwners(data, ruleTimers!);
                     Save(data);
                     await AttachToStartedRecordingsAsync(data, ct).ConfigureAwait(false);
                     _logger.Info("User {UserId} claimed series rule {RuleId}", userId, rule.Id);
@@ -1481,6 +1484,16 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
 
         return changed;
+    }
+
+    // Whether the caller can see at least one program the rule is recording.
+    private bool CanSeeRule(SeriesRule rule, IReadOnlyList<ScheduledTimer> timers, Guid userId)
+    {
+        return timers.Any(t => t.Status != StatusCancelled
+            && string.Equals(t.SeriesTimerId, rule.Id, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrEmpty(t.ProgramId)
+            && _host.GetProgram(t.ProgramId!) is { } program
+            && _host.IsVisibleTo(program.ItemId, userId));
     }
 
     // The rule that already records a program's series: the one with a timer for this very
