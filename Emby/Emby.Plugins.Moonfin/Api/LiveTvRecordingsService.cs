@@ -248,7 +248,7 @@ namespace Emby.Plugins.Moonfin.Api
             if (service == null) return NotReady();
             var user = AuthHelpers.GetCurrentUser(Request, _authContext);
             if (user == null) return NoUser();
-            if (user.Policy?.EnableLiveTvAccess != true) return NotAllowed();
+            if (user.Policy?.EnableLiveTvManagement != true) return NotAllowed();
             if (!OwnersEnabled()) return OwnersNotFound();
 
             var body = await MoonfinJson.ReadBodyAsync<ClaimOwnerBody>(request.RequestStream).ConfigureAwait(false);

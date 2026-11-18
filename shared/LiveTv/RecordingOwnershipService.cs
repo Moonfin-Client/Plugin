@@ -363,8 +363,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
                 case OwnedKind.Item:
                 {
-                    // Only a Live TV recording can be claimed; a server that can't tell allows it.
-                    if (!Guid.TryParse(id, out var itemId) || _host.GetTags(itemId) == null || IsRecording(itemId) == false)
+                    // Only a Live TV recording can be claimed. A server that can't tell is refused
+                    // too, so the claim never lets a caller stamp an ordinary library item.
+                    if (!Guid.TryParse(id, out var itemId) || _host.GetTags(itemId) == null || IsRecording(itemId, userId) != true)
                     {
                         return null;
                     }
@@ -1576,11 +1577,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     }
 
     // A host that throws can't tell, which is never taken as "not a recording".
-    private bool? IsRecording(Guid itemId)
+    private bool? IsRecording(Guid itemId, Guid userId)
     {
         try
         {
-            return _host.IsLiveTvRecording(itemId);
+            return _host.IsLiveTvRecording(itemId, userId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -1596,7 +1597,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         var recordings = new List<Guid>();
         foreach (var itemId in itemIds.Distinct())
         {
-            switch (IsRecording(itemId))
+            switch (IsRecording(itemId, callerId))
             {
                 case null:
                     return null;

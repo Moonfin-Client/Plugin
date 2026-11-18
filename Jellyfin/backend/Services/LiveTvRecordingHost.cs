@@ -617,7 +617,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
 
     // A finished recording's DTO type is Episode, Movie or Video, so only its place under the
     // recording locations tells it apart from any other library item.
-    public bool? IsLiveTvRecording(Guid itemId)
+    public bool? IsLiveTvRecording(Guid itemId, Guid userId)
     {
         try
         {

@@ -110,7 +110,7 @@ public class RecordingOwnersController : ControllerBase
 
     /// <summary>Adds the caller to the owners of an existing timer, series rule or recording.</summary>
     [HttpPost("Claim")]
-    [Authorize(Policy = LiveTvAccess)]
+    [Authorize(Policy = LiveTvManagement)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ClaimResponse>> Claim([FromBody] ClaimBody body, CancellationToken cancellationToken)

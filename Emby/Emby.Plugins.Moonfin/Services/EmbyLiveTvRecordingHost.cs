@@ -528,9 +528,28 @@ namespace Emby.Plugins.Moonfin.Services
             return new ServerUser(user.Id, user.Name ?? string.Empty, imageTag, user.Policy?.IsDisabled == true);
         }
 
-        // Emby has no recording folder list to place an item under, and its recordings listing
-        // without a user may miss items, so it can't tell; owners then treat every item as one.
-        public bool? IsLiveTvRecording(Guid itemId) => null;
+        // Emby has no recording folder list to place an item under, so the recordings the asking
+        // user can see are listed for just this item: found means it is one. Listed without a user
+        // the query may miss items, hence the user.
+        public bool? IsLiveTvRecording(Guid itemId, Guid userId)
+        {
+            try
+            {
+                var user = _userManager.GetUserById(userId);
+                if (user == null || _libraryManager.GetItemById(itemId) is not { } item)
+                {
+                    return false;
+                }
+
+                var found = _liveTvManager.GetRecordings(new InternalItemsQuery(user) { Recursive = true, ItemIds = new[] { item.InternalId } }, CancellationToken.None).Items;
+                return found.Any(r => Guid.TryParse(r.Guid, out var id) && id == itemId);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.Warn("{0}", "Could not check whether item " + itemId + " is a Live TV recording: " + ex.Message);
+                return null;
+            }
+        }
 
         public IReadOnlyList<LibraryItem> FindItemsWithTagPrefix(string prefix)
         {

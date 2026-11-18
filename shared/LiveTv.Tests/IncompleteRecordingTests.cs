@@ -129,7 +129,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     /// <summary>The host can't tell which items are recordings, as on Emby.</summary>
     public bool RecordingKindUnknown { get; set; }
 
-    public bool? IsLiveTvRecording(Guid itemId) =>
+    public bool? IsLiveTvRecording(Guid itemId, Guid userId) =>
         RecordingKindUnknown ? null : Items.Any(i => i.Id == itemId) && !NotRecordings.Contains(itemId);
 
     /// <summary>User lookups answer "can't tell": GetUser null, UserExists null.</summary>

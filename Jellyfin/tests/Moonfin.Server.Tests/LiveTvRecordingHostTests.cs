@@ -279,11 +279,11 @@ public sealed class LiveTvRecordingHostTests : IDisposable
         var movie = AddVideo(context, "/media/movies/Film (1990)/Film.mkv");
         var lookalike = AddVideo(context, "/config/data/livetv/recordings-old/a.ts");
 
-        Assert.True(context.Host.IsLiveTvRecording(finished.Id));
-        Assert.True(context.Host.IsLiveTvRecording(show.Id));
-        Assert.False(context.Host.IsLiveTvRecording(movie.Id));
-        Assert.False(context.Host.IsLiveTvRecording(lookalike.Id));
-        Assert.False(context.Host.IsLiveTvRecording(Guid.NewGuid()));
+        Assert.True(context.Host.IsLiveTvRecording(finished.Id, Guid.NewGuid()));
+        Assert.True(context.Host.IsLiveTvRecording(show.Id, Guid.NewGuid()));
+        Assert.False(context.Host.IsLiveTvRecording(movie.Id, Guid.NewGuid()));
+        Assert.False(context.Host.IsLiveTvRecording(lookalike.Id, Guid.NewGuid()));
+        Assert.False(context.Host.IsLiveTvRecording(Guid.NewGuid(), Guid.NewGuid()));
     }
 
     [Fact]
@@ -294,8 +294,8 @@ public sealed class LiveTvRecordingHostTests : IDisposable
         var recording = AddVideo(context, "/config/data/livetv/recordings/a.ts");
         var movie = AddVideo(context, "/media/movies/Film.mkv");
 
-        Assert.True(context.Host.IsLiveTvRecording(recording.Id));
-        Assert.Null(context.Host.IsLiveTvRecording(movie.Id));
+        Assert.True(context.Host.IsLiveTvRecording(recording.Id, Guid.NewGuid()));
+        Assert.Null(context.Host.IsLiveTvRecording(movie.Id, Guid.NewGuid()));
     }
 
     [Fact]

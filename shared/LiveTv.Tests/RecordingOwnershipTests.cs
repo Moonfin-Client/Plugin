@@ -1838,7 +1838,7 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task ClaimItem_HostCantTellRecordings_StillClaims()
+    public async Task ClaimItem_HostCantTellRecordings_IsRefusedAndStampsNothing()
     {
         var item = _host.AddItem("/rec/a.ts");
         _host.RecordingKindUnknown = true;
@@ -1846,7 +1846,9 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         var owners = await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
 
-        Assert.Equal(new[] { Jordan }, owners!.Select(o => o.UserId));
+        Assert.Null(owners);
+        Assert.Empty(_host.TagWrites);
+        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
 
     [Fact]
