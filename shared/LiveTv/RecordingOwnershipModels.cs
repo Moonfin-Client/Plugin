@@ -10,8 +10,9 @@ namespace Moonfin.LiveTv;
 /// (SeriesTimerInfoDto.Id) and matches ScheduledTimer.SeriesTimerId. SeriesId is the guide's
 /// series id on Emby and always null on Jellyfin, whose public DTO doesn't carry it, so callers
 /// must not rely on it. ProgramId is the guide program the rule was made from, ChannelId the
-/// channel it records on (null when unknown) and RecordAnyChannel whether it ignores channels;
-/// Jellyfin fills these in so a rule without a series id can still be told apart by more than name.
+/// channel's library Guid ("N", null when unknown) and RecordAnyChannel whether it ignores channels
+/// (Jellyfin only). They let a rule be told apart by more than name, and let a rule with nothing
+/// scheduled be checked against what a caller can see.
 /// </summary>
 public sealed record SeriesRule(
     string Id,

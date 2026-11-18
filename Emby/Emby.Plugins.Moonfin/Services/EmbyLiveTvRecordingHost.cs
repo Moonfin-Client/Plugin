@@ -238,8 +238,22 @@ namespace Emby.Plugins.Moonfin.Services
         private List<SeriesRule> ListSeriesRules() =>
             _liveTvManager.GetSeriesTimers(new SeriesTimerQuery()).Items
                 .Where(t => !string.IsNullOrEmpty(t.Id))
-                .Select(t => new SeriesRule(t.Id, string.IsNullOrEmpty(t.SeriesId) ? null : t.SeriesId, t.Name))
+                .Select(t => new SeriesRule(
+                    t.Id,
+                    string.IsNullOrEmpty(t.SeriesId) ? null : t.SeriesId,
+                    t.Name,
+                    string.IsNullOrEmpty(t.ProgramId) ? null : t.ProgramId,
+                    ChannelGuidOf(t.ChannelId)))
                 .ToList();
+
+        // Rules and programs carry the channel as its library Guid ("N"), as on Jellyfin, so a rule
+        // with nothing scheduled can be judged by its channel. The DTO holds Emby's numeric id.
+        private string? ChannelGuidOf(string? channelId) =>
+            long.TryParse(channelId, NumberStyles.None, CultureInfo.InvariantCulture, out var id)
+            && id > 0
+            && _libraryManager.GetItemById(id) is LiveTvChannel channel
+                ? channel.Id.ToString("N")
+                : null;
 
         public async Task<SeriesRuleCreation> CreateSeriesTimerAsync(string programId, IReadOnlyDictionary<string, JsonElement>? overrides, CancellationToken cancellationToken)
         {
@@ -614,6 +628,7 @@ namespace Emby.Plugins.Moonfin.Services
                 Episode = program.IndexNumber,
                 StartDate = program.StartDate.UtcDateTime,
                 EndDate = (program.EndDate ?? program.StartDate).UtcDateTime,
+                ChannelId = channel?.Id.ToString("N"),
                 ChannelName = channel?.Name,
                 ChannelNumber = channel?.Number,
                 IsHD = channel?.IsHD ?? false,
