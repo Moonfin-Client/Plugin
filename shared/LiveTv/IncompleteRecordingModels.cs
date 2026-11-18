@@ -382,7 +382,6 @@ public sealed class IncompleteRecordingStoreData
     public List<PendingTimerOwners> PendingTimerOwners { get; set; } = new();
 }
 
-/// <summary>A timer as the schedule cache holds it.</summary>
 /// <summary>Owners waiting for the timer of a scheduled program to be listed.</summary>
 public sealed class PendingTimerOwners
 {
@@ -393,6 +392,7 @@ public sealed class PendingTimerOwners
     public DateTime Since { get; set; }
 }
 
+/// <summary>A timer as the schedule cache holds it.</summary>
 public sealed class ScheduledTimer
 {
     /// <summary>Whether a user made or cancelled the timer by hand; null when the server doesn't say.</summary>
