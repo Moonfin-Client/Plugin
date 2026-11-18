@@ -739,6 +739,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             if (timerId != null && IsStaleMatch(data, timerId, writtenAt, removed))
             {
                 _logger.Info("Recording {ItemId} was written at {WrittenAt}, after finished timer {TimerId} that recorded its path; that timer's owners don't apply", item.Id, writtenAt, timerId);
+
+                // The path is someone else's file now, so nothing later attaches it to that timer.
+                data.TimerPaths.Remove(timerId);
                 timerId = null;
             }
 
@@ -1435,8 +1438,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
             // A finished timer's path now holding a file written long after it ended is a rerun
             // someone else recorded there.
-            if (!IsLive(entry.Key)
-                && IsStaleMatch(data, entry.Key, FileWrittenAt(item.Id), data.Removed.TryGetValue(item.Id, out var tombstone) ? tombstone : null))
+            if (IsStaleMatch(data, entry.Key, FileWrittenAt(item.Id), data.Removed.TryGetValue(item.Id, out var tombstone) ? tombstone : null))
             {
                 continue;
             }

@@ -2193,6 +2193,17 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         Assert.False(ReadStore().Items.ContainsKey(item.Id));
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
+
+        // A later attach pass, run by another owned timer's cancel while the listing is still
+        // unavailable, doesn't give the file to the old timer either.
+        AddProgram("p9", Start.AddHours(5));
+        _host.TimersUnavailable = false;
+        await service.RecordProgramAsync("p9", Alex, CancellationToken.None);
+        _host.TimersUnavailable = true;
+        await service.OnTimerCancelledAsync("t-p9", CancellationToken.None);
+
+        Assert.False(ReadStore().Items.ContainsKey(item.Id));
+        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
 
     [Fact]
