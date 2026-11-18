@@ -288,7 +288,11 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public IReadOnlyList<string> FindRenamedSiblings(string path) => RenamedSiblingLookup?.Invoke(path) ?? Array.Empty<string>();
 
-    public bool IsVisibleTo(Guid itemId, Guid userId) => !HiddenPrograms.Contains(itemId.ToString("N")) && !HiddenItems.Contains(itemId);
+    /// <summary>Accounts missing from Users see nothing, as a deleted user on a real server.</summary>
+    public bool UnlistedUsersSeeNothing { get; set; }
+
+    public bool IsVisibleTo(Guid itemId, Guid userId) =>
+        !(UnlistedUsersSeeNothing && Users.All(u => u.Id != userId)) && !HiddenPrograms.Contains(itemId.ToString("N")) && !HiddenItems.Contains(itemId);
 
     public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.Where(id => !HiddenItems.Contains(id)).ToHashSet();
 
@@ -1102,6 +1106,29 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Equal(CompleteShowingState.Waiting, failed.Request!.State);
         Assert.Null(failed.Request.ScheduledStart);
         Assert.Null(failed.Request.ScheduledChannelName);
+    }
+
+    [Fact]
+    public async Task ADeletedRequesterDoesNotStallTheSearchForTheirCoOwners()
+    {
+        var other = Guid.NewGuid();
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        _clock.UtcNow = Start.AddMinutes(25);
+        _host.Users.Add(new ServerUser(User, "Requester", null, false));
+        _host.Users.Add(new ServerUser(other, "Other", null, false));
+        var service = NewService();
+        await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        await service.RequestCompleteShowingAsync(source.Id, other, CancellationToken.None);
+        // The requester is deleted; only the co-owner is left, and the server shows a deleted user nothing.
+        _host.Users.RemoveAll(u => u.Id == User);
+        _host.UnlistedUsersSeeNothing = true;
+        var later = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+
+        service.MarkGuideRefreshed();
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { later.Id }, _host.Scheduled);
+        Assert.Equal(CompleteShowingState.Scheduled, ReadStore().Requests.Single().State);
     }
 
     [Fact]

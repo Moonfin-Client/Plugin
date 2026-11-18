@@ -812,6 +812,32 @@ public sealed class IncompleteRecordingService : IDisposable
     private bool PruneDeletedOwners(CompleteShowingRequest request) =>
         request.OwnerUserIds.RemoveAll(UserIsGone) > 0;
 
+    // Whose guide a showing search is judged against: the user who asked while they still exist,
+    // else the first co-owner who does, since a deleted account sees nothing and would stall the
+    // request for everyone else. With no one left it stays the requester, as before.
+    private Guid? VisibilityUserFor(CompleteShowingRequest request)
+    {
+        if (request.RequestedByUserId is not { } requester)
+        {
+            return null;
+        }
+
+        if (!UserIsGone(requester))
+        {
+            return requester;
+        }
+
+        foreach (var owner in request.OwnerUserIds)
+        {
+            if (owner != requester && !UserIsGone(owner))
+            {
+                return owner;
+            }
+        }
+
+        return requester;
+    }
+
     private bool UserIsGone(Guid userId)
     {
         try
@@ -1798,7 +1824,7 @@ public sealed class IncompleteRecordingService : IDisposable
             {
                 var pending = _host.GetProgram(request.PendingProgramId);
                 if (pending != null && (!IsCancelledProgram(pending.Id) || request.Explicit) && (pending.Key is { } pendingKey && request.Episode.Matches(pendingKey))
-                    && (request.RequestedByUserId == null || CanSeeProgram(pending, request.RequestedByUserId.Value))
+                    && (VisibilityUserFor(request) is not { } viewer || CanSeeProgram(pending, viewer))
                     && (LiveTimerFor(pending.Id) != null || pending.StartDate > now))
                 {
                     showing = pending;
@@ -1826,9 +1852,10 @@ public sealed class IncompleteRecordingService : IDisposable
             {
                 // An airing a series rule already records is followed rather than doubled, and one
                 // the user cancelled is never picked, since scheduling it would quietly undo that.
+                var viewer = VisibilityUserFor(request);
                 var airings = FindAiringsSafe(request.Episode, now)
                     .Where(p => !IsCancelledProgram(p.Id)
-                        && (request.RequestedByUserId == null || CanSeeProgram(p, request.RequestedByUserId.Value)))
+                        && (viewer == null || CanSeeProgram(p, viewer.Value)))
                     .ToList();
                 showing = IncompleteRecordingRules.ChooseShowing(request.Episode, airings.Where(p => LiveTimerFor(p.Id) != null), now)
                     ?? IncompleteRecordingRules.ChooseShowing(request.Episode, airings, now);
