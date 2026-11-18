@@ -453,12 +453,16 @@ public class CustomRowFetchService
         return url;
     }
 
-    internal static string BuildTmdbListUrl(string listId, string? language)
+    internal static string BuildTmdbListUrl(string listId, string? language, int page = 1)
     {
         var url = $"https://api.themoviedb.org/3/list/{Uri.EscapeDataString(listId)}";
         if (!string.IsNullOrWhiteSpace(language))
         {
             url += $"?language={Uri.EscapeDataString(language)}";
+        }
+        if (page > 1)
+        {
+            url += (url.Contains('?') ? "&" : "?") + $"page={page}";
         }
         return url;
     }
@@ -533,20 +537,28 @@ public class CustomRowFetchService
         }
         else
         {
-            var url = BuildTmdbListUrl(listId, language);
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            TmdbRequestHelper.ApplyAuth(req, tmdbKey);
-            using var response = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            // TMDB sends a list 20 titles a page.
+            int rank = 1;
+            for (var page = 1; items.Count < MdbListMaxItems; page++)
             {
-                throw new Exception($"TMDB List API returned status {(int)response.StatusCode}");
-            }
+                var url = BuildTmdbListUrl(listId, language, page);
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                TmdbRequestHelper.ApplyAuth(req, tmdbKey);
+                using var response = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new Exception($"TMDB List API returned status {(int)response.StatusCode}");
+                }
 
-            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("items", out var itemsProp) && itemsProp.ValueKind == JsonValueKind.Array)
-            {
-                int rank = 1;
+                var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("items", out var itemsProp)
+                    || itemsProp.ValueKind != JsonValueKind.Array
+                    || itemsProp.GetArrayLength() == 0)
+                {
+                    break;
+                }
+
                 foreach (var item in itemsProp.EnumerateArray())
                 {
                     var itemId = item.TryGetProperty("id", out var iId) ? iId.GetInt64().ToString() : string.Empty;
@@ -581,6 +593,20 @@ public class CustomRowFetchService
                         BackdropUrl = backdropPath
                     });
                 }
+
+                var totalPages = doc.RootElement.TryGetProperty("total_pages", out var pagesProp)
+                    && pagesProp.ValueKind == JsonValueKind.Number
+                    ? pagesProp.GetInt32()
+                    : 1;
+                if (page >= totalPages)
+                {
+                    break;
+                }
+            }
+
+            if (items.Count > MdbListMaxItems)
+            {
+                items.RemoveRange(MdbListMaxItems, items.Count - MdbListMaxItems);
             }
         }
 

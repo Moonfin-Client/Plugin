@@ -353,14 +353,27 @@ func (s *Server) tmdbList(ctx context.Context, key, typ, id, lang string) ([]row
 	if typ == "movie_collection" {
 		path = "collection/" + id
 	}
-	var body struct {
-		Items []M `json:"items"`
-		Parts []M `json:"parts"`
+	// TMDB sends a list 20 titles a page and a collection whole.
+	var items []M
+	for page := 1; len(items) < mdbUserMax; page++ {
+		q := langQuery(lang)
+		if typ != "movie_collection" {
+			q.Set("page", strconv.Itoa(page))
+		}
+		var body struct {
+			Items      []M `json:"items"`
+			Parts      []M `json:"parts"`
+			TotalPages int `json:"total_pages"`
+		}
+		if msg := s.tmdb(ctx, key, path, q, &body); msg != "" {
+			return nil, errors.New(msg)
+		}
+		items = append(append(items, body.Items...), body.Parts...)
+		if page >= body.TotalPages || len(body.Items) == 0 {
+			break
+		}
 	}
-	if msg := s.tmdb(ctx, key, path, langQuery(lang), &body); msg != "" {
-		return nil, errors.New(msg)
-	}
-	return tmdbRowItems(append(body.Items, body.Parts...), "movie"), nil
+	return tmdbRowItems(items[:min(len(items), mdbUserMax)], "movie"), nil
 }
 
 // tmdbChart reads a chart by its TMDB path, such as movie/popular or

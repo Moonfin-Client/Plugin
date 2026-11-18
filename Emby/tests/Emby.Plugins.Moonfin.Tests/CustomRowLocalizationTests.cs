@@ -57,6 +57,8 @@ public class CustomRowLocalizationTests
         var listWithLang = CustomRowService.BuildTmdbListUrl("123", "de");
         Assert.Equal("https://api.themoviedb.org/3/list/123", listNoLang);
         Assert.Equal("https://api.themoviedb.org/3/list/123?language=de", listWithLang);
+        Assert.Equal("https://api.themoviedb.org/3/list/123?page=2", CustomRowService.BuildTmdbListUrl("123", null, 2));
+        Assert.Equal("https://api.themoviedb.org/3/list/123?language=de&page=2", CustomRowService.BuildTmdbListUrl("123", "de", 2));
 
         var chartNoLang = CustomRowService.BuildTmdbChartUrl("movie/popular", null);
         var chartWithLang = CustomRowService.BuildTmdbChartUrl("movie/popular", "es-ES");
