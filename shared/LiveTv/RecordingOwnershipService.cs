@@ -113,6 +113,10 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     // A save that failed (storage away for a moment); the next sync writes the store again.
     private bool _unsaved;
 
+    // Whether the store's items have been checked against the library since this start or since
+    // the feature was last off; removals while it was off were never seen.
+    private bool _reconciled;
+
     // The stand-in a call gets while a rebuild from tags couldn't run. It is never saved, so it
     // can't take the place of the owners the rebuild will find.
     private OwnershipStoreData? _unbuilt;
@@ -529,6 +533,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     {
         if (!Enabled)
         {
+            _reconciled = false;
             return;
         }
 
@@ -551,8 +556,14 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 changed |= Track(data, timer);
             }
 
-            // A store left behind while the feature was off may own items the library has lost.
-            changed |= ReconcileItems(data, now);
+            // A store left behind while the feature was off (or the plugin wasn't running) may own
+            // items the library has lost. Checked once, not on every pass: removals while it runs
+            // arrive as events.
+            if (!_reconciled)
+            {
+                changed |= ReconcileItems(data, now);
+                _reconciled = true;
+            }
 
             // Jellyfin adds a recording's item when the recording starts, usually before the file
             // is noted here, so the item's ItemAdded found no entry for it. Give it its timer's

@@ -687,9 +687,16 @@ public sealed class RecordingOwnershipTests : IDisposable
         var service = NewService();
         var item = _host.AddItem("/rec/a.ts");
         await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
 
-        // The removal event never arrived (the feature was off).
+        // The removal event is ignored while the feature is off; the first sync after it is
+        // turned back on finds the item gone.
+        _enabled = false;
+        await service.SyncAsync(CancellationToken.None);
         _host.Items.Remove(item);
+        await service.OnItemRemovedAsync(item.Id, CancellationToken.None);
+        Assert.True(ReadStore().Items.ContainsKey(item.Id));
+        _enabled = true;
         _clock.Advance(TimeSpan.FromMinutes(5));
         await service.SyncAsync(CancellationToken.None);
 
