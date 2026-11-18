@@ -409,7 +409,12 @@ func TestTheTestNotificationReachesStreamAndPhones(t *testing.T) {
 		t.Fatalf("test = %d %v", code, got)
 	}
 	var event map[string]any
-	_ = json.Unmarshal(<-events, &event)
+	select {
+	case raw := <-events:
+		_ = json.Unmarshal(raw, &event)
+	default:
+		t.Fatal("nothing reached the settings stream")
+	}
 	if event["type"] != "seerrNotification" || event["route"] != "" {
 		t.Fatalf("event = %v", event)
 	}
