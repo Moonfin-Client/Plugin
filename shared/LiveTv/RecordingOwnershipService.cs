@@ -66,6 +66,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     private const string StatusCancelled = "Cancelled";
     private const string StatusCompleted = "Completed";
     private const string StatusInProgress = "InProgress";
+    private const string StatusError = "Error";
 
     // Matches AtomicFile.BackupPath in both servers' IStateFile implementations.
     private const string BackupSuffix = ".bak";
@@ -1547,7 +1548,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
     // Whether the caller can see at least one program the rule is recording. A rule with nothing
     // scheduled (between seasons, say) is judged by the program it was made from or its channel.
-    // The channel never overrides programs the caller can't see (a parental rating, say).
+    // The channel never overrides programs the caller can't see (a parental rating, say). Only
+    // timers still to record count: a finished or failed one's program may have left the guide, so
+    // it can't be checked and mustn't decide the claim.
     private bool CanSeeRule(SeriesRule rule, IReadOnlyList<ScheduledTimer> timers, Guid userId)
     {
         bool Visible(string? programId) =>
@@ -1556,7 +1559,8 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             && _host.IsVisibleTo(program.ItemId, userId);
 
         var scheduled = timers
-            .Where(t => t.Status != StatusCancelled && string.Equals(t.SeriesTimerId, rule.Id, StringComparison.OrdinalIgnoreCase))
+            .Where(t => t.Status is not (StatusCancelled or StatusCompleted or StatusError)
+                && string.Equals(t.SeriesTimerId, rule.Id, StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (scheduled.Count > 0)
         {

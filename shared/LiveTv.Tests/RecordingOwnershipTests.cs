@@ -1989,6 +1989,34 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Null(await service.ClaimAsync(OwnedKind.Series, "rule-a", Alex, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("Completed")]
+    [InlineData("Error")]
+    public async Task ClaimSeries_OnlyFinishedTimersWhoseProgramLeftTheGuide_JudgedByItsChannel(string status)
+    {
+        var channel = Guid.NewGuid();
+        _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza", null, channel.ToString("N")));
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-old", TimerId = "t-old", ProgramId = "gone", SeriesTimerId = "rule-a", StartDate = Start.AddDays(-1), EndDate = Start.AddDays(-1).AddMinutes(20), Status = status });
+        var service = NewService();
+
+        Assert.NotNull(await service.ClaimAsync(OwnedKind.Series, "rule-a", Alex, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ClaimSeries_FinishedTimerVisibleButPendingProgramHidden_ClaimsNothing()
+    {
+        var past = AddProgram("p0", Start.AddDays(-1));
+        var next = AddProgram("p1", Start);
+        var channel = Guid.NewGuid();
+        _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza", null, channel.ToString("N")));
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-0", TimerId = "t-0", ProgramId = "p0", SeriesTimerId = "rule-a", StartDate = past.StartDate, EndDate = past.StartDate.AddMinutes(20), Status = "Completed" });
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-1", TimerId = "t-1", ProgramId = "p1", SeriesTimerId = "rule-a", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
+        _host.HiddenItems.Add(next.ItemId);
+        var service = NewService();
+
+        Assert.Null(await service.ClaimAsync(OwnedKind.Series, "rule-a", Alex, CancellationToken.None));
+    }
+
     [Fact]
     public async Task ClaimSeries_RuleWithNoTimersAndNothingToJudgeBy_ClaimsNothing()
     {
