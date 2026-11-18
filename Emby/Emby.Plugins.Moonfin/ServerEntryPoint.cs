@@ -29,6 +29,7 @@ namespace Emby.Plugins.Moonfin
         private Services.EmbyLiveTvRecordingHost? _recordingHost;
         private IncompleteRecordingWatcher? _recordingWatcher;
         private RecordingOwnershipWatcher? _ownershipWatcher;
+        private Task? _ownershipRun;
         private CancellationTokenSource? _recordingStop;
 
         public ServerEntryPoint(ILogManager logManager, ILibraryManager libraryManager, IUserManager userManager, IUserDataManager userDataManager, ISessionManager sessionManager, IServerApplicationHost appHost, ILiveTvManager liveTvManager, ITaskManager taskManager)
@@ -167,7 +168,7 @@ namespace Emby.Plugins.Moonfin
 
             _ownershipWatcher = new RecordingOwnershipWatcher(_recordingHost, owners, log);
             var ownershipWatcher = _ownershipWatcher;
-            _ = Task.Run(() => ownershipWatcher.RunAsync(token));
+            _ownershipRun = Task.Run(() => ownershipWatcher.RunAsync(token));
         }
 
         public void Dispose()
@@ -184,6 +185,15 @@ namespace Emby.Plugins.Moonfin
             PluginServices.HiddenLibraries = null;
 
             _recordingStop?.Cancel();
+
+            // The owners watcher and the events it already took finish before the service and its
+            // lock are disposed under them.
+            if (_ownershipWatcher != null)
+            {
+                try { Task.WhenAll(_ownershipRun ?? Task.CompletedTask, _ownershipWatcher.Idle).Wait(TimeSpan.FromSeconds(5)); }
+                catch (AggregateException) { /* Already logged by the watcher, or cancelled by the stop. */ }
+            }
+
             _recordingHost?.Dispose();
             _recordingWatcher?.Dispose();
             _ownershipWatcher?.Dispose();

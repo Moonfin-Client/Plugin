@@ -320,10 +320,17 @@ public sealed class CompleteShowingRequest
     /// </summary>
     public List<Guid> OwnerUserIds { get; set; } = new();
 
+    /// <summary>
+    /// Owners still to be added to the scheduled showing's timer, because the server hadn't listed
+    /// the timer yet when they were handed over. Each pass tries again until the timer appears.
+    /// </summary>
+    public List<Guid> PendingTimerOwnerIds { get; set; } = new();
+
     internal CompleteShowingRequest Copy()
     {
         var copy = (CompleteShowingRequest)MemberwiseClone();
         copy.OwnerUserIds = new List<Guid>(OwnerUserIds);
+        copy.PendingTimerOwnerIds = new List<Guid>(PendingTimerOwnerIds);
         return copy;
     }
 

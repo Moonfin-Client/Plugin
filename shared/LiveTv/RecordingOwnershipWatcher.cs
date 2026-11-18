@@ -30,6 +30,8 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     private readonly TimeSpan _createdFollowUp;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly SemaphoreSlim _wake = new(0, 1);
+    private readonly object _queueLock = new();
+    private Task _queue = Task.CompletedTask;
 
     // Every listed timer id, API or service kind, to its service id, from the host's last listing
     // while something was recording. Read on the raising thread of a cancel, so it is never behind
@@ -256,23 +258,41 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     private void OnUserDeleted(object? sender, Guid userId) => Handle(() => _service.OnUserDeletedAsync(userId, _stopping));
 
     // The service raises some of these events while holding its lock, so none is handled on the
-    // raising thread.
+    // raising thread. They run one at a time in the order they arrived: a recording that leaves
+    // the library and comes straight back must be removed before it is added again.
     private void Handle(Func<Task> work)
     {
-        _ = Task.Run(async () =>
+        lock (_queueLock)
         {
-            try
+            _queue = _queue.ContinueWith(_ => RunEventAsync(work), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+        }
+    }
+
+    private async Task RunEventAsync(Func<Task> work)
+    {
+        try
+        {
+            await work().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        {
+            // Server shutting down.
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn(ex, "Recording owners event failed");
+        }
+    }
+
+    /// <summary>Completes once every event received so far has been handled.</summary>
+    public Task Idle
+    {
+        get
+        {
+            lock (_queueLock)
             {
-                await work().ConfigureAwait(false);
+                return _queue;
             }
-            catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
-            {
-                // Server shutting down.
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn(ex, "Recording owners event failed");
-            }
-        });
+        }
     }
 }

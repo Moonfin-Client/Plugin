@@ -716,6 +716,13 @@ public sealed class IncompleteRecordingService : IDisposable
                     _logger.Warn(null, "Could not schedule the confirmed showing of {Recording} at {Start} on {Channel}", name, candidate.StartDate, candidate.ChannelName);
                     return false;
                 }
+
+                if (timerId == null)
+                {
+                    // Scheduled, but the server's answer named no timer: find it in a fresh listing.
+                    await ReloadTimersAsync(cancellationToken).ConfigureAwait(false);
+                    timerId = LiveTimerIdFor(candidate.Id);
+                }
             }
 
             if (request != null)
@@ -765,10 +772,31 @@ public sealed class IncompleteRecordingService : IDisposable
     // The timer a request newly scheduled or adopted belongs to everyone waiting for it, so the
     // recording does too. A timer that already had them gets only the owners just added, so
     // anyone who left it isn't put back.
+    // A timer the server hasn't listed yet keeps them pending on the request until it appears.
     private void ShareOwners(CompleteShowingRequest request, string? timerId, IReadOnlyCollection<Guid>? added = null)
     {
         PruneDeletedOwners(request);
-        ShareOwners((added ?? request.OwnerUserIds).Where(id => request.OwnerUserIds.Contains(id)).ToList(), timerId);
+        var owners = (added ?? request.OwnerUserIds).Where(id => request.OwnerUserIds.Contains(id)).ToList();
+        if (_owners == null || owners.Count == 0)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(timerId))
+        {
+            foreach (var owner in owners.Where(o => !request.PendingTimerOwnerIds.Contains(o)))
+            {
+                request.PendingTimerOwnerIds.Add(owner);
+            }
+
+            _logger.Info("The timer for {Recording} isn't listed yet; its owners are added once it is", Describe(request.Episode));
+            return;
+        }
+
+        if (ShareOwners(owners, timerId))
+        {
+            request.PendingTimerOwnerIds.RemoveAll(owners.Contains);
+        }
     }
 
     // Deleted users are dropped from a request's owners when it next hands them out. Only a user
@@ -789,20 +817,22 @@ public sealed class IncompleteRecordingService : IDisposable
         }
     }
 
-    private void ShareOwners(IReadOnlyCollection<Guid> owners, string? timerId)
+    private bool ShareOwners(IReadOnlyCollection<Guid> owners, string? timerId)
     {
         if (_owners == null || string.IsNullOrEmpty(timerId) || owners.Count == 0)
         {
-            return;
+            return false;
         }
 
         try
         {
             _owners.AddTimerOwners(timerId!, owners);
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.Warn(ex, "Could not add the owners waiting for a later showing to timer {TimerId}", timerId);
+            return false;
         }
     }
 
@@ -837,6 +867,20 @@ public sealed class IncompleteRecordingService : IDisposable
         var changed = false;
         foreach (var request in data.Requests.Where(r => CompleteShowingState.IsOpen(r.State)))
         {
+            // Owners handed over before the server listed the timer go on as soon as it does.
+            if (request.PendingTimerOwnerIds.Count > 0
+                && request.State == CompleteShowingState.Scheduled
+                && request.ScheduledProgramId != null
+                && LiveTimerIdFor(request.ScheduledProgramId) is { } pendingTimer)
+            {
+                var before = request.PendingTimerOwnerIds.Count;
+                ShareOwners(request, pendingTimer, request.PendingTimerOwnerIds.ToList());
+
+                // Anyone who left the request meanwhile isn't added, and needn't wait any longer.
+                request.PendingTimerOwnerIds.RemoveAll(id => !request.OwnerUserIds.Contains(id));
+                changed |= request.PendingTimerOwnerIds.Count != before;
+            }
+
             var itemIds = data.Records.Where(r => r.RequestId == request.Id).SelectMany(r => r.ItemIds).ToList();
             if (itemIds.Count == 0)
             {

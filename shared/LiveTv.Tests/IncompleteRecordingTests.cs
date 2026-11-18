@@ -197,6 +197,13 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public bool SchedulingFails { get; set; }
 
+    /// <summary>Scheduling succeeds but the answer names no timer, so it must be found in a listing.</summary>
+    public bool ScheduleReturnsNoIds { get; set; }
+
+    public void RaiseItemAdded(LibraryItem item) => ItemAdded?.Invoke(this, item);
+
+    public void RaiseItemRemoved(Guid itemId) => ItemRemoved?.Invoke(this, itemId);
+
     /// <summary>When set, scheduling fails with this reason, as the host reports a server refusal.</summary>
     public string? SchedulingError { get; set; }
 
@@ -259,7 +266,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         if (!Timers.Contains(timer)) Timers.Add(timer);
         TimerCreated?.Invoke(this, timer);
         TimerScheduled?.Invoke(timer);
-        return Task.FromResult(ScheduleResult.CreatedWith(timer.TimerId, timer.ApiId));
+        return Task.FromResult(ScheduleReturnsNoIds ? ScheduleResult.Created : ScheduleResult.CreatedWith(timer.TimerId, timer.ApiId));
     }
 
     public LibraryItem? FindItemByPath(string path) => Items.FirstOrDefault(i => i.Path == path);

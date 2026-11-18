@@ -60,6 +60,20 @@ public sealed class RecordingOwnershipHostedService : BackgroundService
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) => _watcher.RunAsync(stoppingToken);
+
+    /// <summary>Stops the watcher, then lets the events already received finish before the service is disposed.</summary>
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _watcher.Idle.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The host stopped waiting.
+        }
+    }
 }
 
 /// <summary>Sends the feature's log lines to Jellyfin's logger, keeping their structure.</summary>

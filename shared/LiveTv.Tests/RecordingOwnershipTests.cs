@@ -51,8 +51,16 @@ internal sealed class CountingStateFile : IStateFile
         return null;
     }
 
+    /// <summary>Every write fails as storage that went away does.</summary>
+    public bool FailWrites { get; set; }
+
     public void Write(string path, string contents)
     {
+        if (FailWrites)
+        {
+            throw new IOException("storage unavailable");
+        }
+
         Interlocked.Increment(ref _writes);
         lock (_gate)
         {
@@ -1891,6 +1899,160 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(new[] { Jordan }, ReadStore().Timers["api-p1"]);
         Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
         Assert.Contains(_log.Entries, e => e.Kind == LogKind.Warn && e.Message.Contains("list the server's users"));
+    }
+
+    // PR review fixes
+
+    [Fact]
+    public async Task ClaimTimer_ProgramHiddenFromCaller_ClaimsNothingAndShowsNoOwners()
+    {
+        var program = AddProgram("p1", Start);
+        var service = NewService();
+        await service.RecordProgramAsync("p1", Jordan, CancellationToken.None);
+        _host.HiddenItems.Add(program.ItemId);
+
+        var claimed = await service.ClaimAsync(OwnedKind.Timer, "api-p1", Alex, CancellationToken.None);
+
+        Assert.Null(claimed);
+        Assert.Equal(new[] { Jordan }, ReadStore().Timers["api-p1"]);
+    }
+
+    [Fact]
+    public async Task RecordProgram_OnlyACompletedTimerForIt_SchedulesInsteadOfJoining()
+    {
+        AddProgram("p1", Start);
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-done", TimerId = "t-done", ProgramId = "p1", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "Completed" });
+        var service = NewService();
+
+        var outcome = await service.RecordProgramAsync("p1", Jordan, CancellationToken.None);
+
+        Assert.NotNull(outcome);
+        Assert.False(outcome!.Joined);
+        Assert.Equal(new[] { "p1" }, _host.Scheduled);
+    }
+
+    [Fact]
+    public async Task RecordSeries_SameNameDifferentSeriesId_GetsItsOwnRule()
+    {
+        AddProgram("p1", Start);
+        var other = AddProgram("p2", Start.AddHours(1));
+        other.SeriesId = "SH999";
+        var service = NewService();
+        var first = await service.RecordSeriesAsync("p1", Jordan, null, CancellationToken.None);
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-s1", TimerId = "t-s1", ProgramId = "p1", SeriesTimerId = first!.Id, StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
+
+        var second = await service.RecordSeriesAsync("p2", Alex, null, CancellationToken.None);
+
+        Assert.NotNull(second);
+        Assert.False(second!.Joined);
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(2, _host.SeriesRules.Count);
+        Assert.Equal(new[] { Jordan }, ReadStore().SeriesTimers[first.Id]);
+    }
+
+    [Fact]
+    public async Task StoreAndBackupBothMissing_RecordingsWithOwnerTags_RebuildsFromTags()
+    {
+        var tagged = _host.AddItem("/rec/a.ts");
+        tagged.Tags = new[] { "Recorded by Jordan" };
+        var service = NewService();
+
+        var mine = await service.GetMineAsync(Jordan, CancellationToken.None);
+
+        Assert.Equal(new[] { tagged.Id }, mine.ItemIds);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[tagged.Id]);
+        Assert.Contains(_log.Entries, e => e.Kind == LogKind.Warn && e.Message.Contains("are missing"));
+    }
+
+    [Fact]
+    public async Task FirstStart_NoOwnerTags_SavesNothing()
+    {
+        var service = NewService();
+
+        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
+        Assert.Equal(0, _stateFile.Writes);
+    }
+
+    [Fact]
+    public async Task RebuildFails_NothingSavedOverTheFiles_NextCallRebuilds()
+    {
+        var tagged = _host.AddItem("/rec/a.ts");
+        tagged.Tags = new[] { "Recorded by Jordan" };
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(StorePath, "{ not json");
+        File.WriteAllText(StorePath + ".bak", "also not json");
+        _host.UserLookupThrows = true;
+        var service = NewService();
+
+        // A claim made while the rebuild can't run isn't saved over the files the rebuild needs.
+        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
+        await service.ClaimAsync(OwnedKind.Item, tagged.Id.ToString(), Alex, CancellationToken.None);
+        Assert.Equal(0, _stateFile.Writes);
+        Assert.Equal("{ not json", File.ReadAllText(StorePath));
+
+        _host.UserLookupThrows = false;
+        Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[tagged.Id]);
+    }
+
+    [Fact]
+    public async Task SaveFails_NextSyncWritesTheClaim()
+    {
+        var item = _host.AddItem("/rec/a.ts");
+        var service = NewService();
+        await service.SyncAsync(CancellationToken.None);
+        _stateFile.FailWrites = true;
+
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+        _stateFile.FailWrites = false;
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+    }
+
+    [Fact]
+    public async Task RemovedAndReAdded_EventsHandledInArrivalOrder_RecordingsKeepOwners()
+    {
+        var service = NewService();
+        var items = Enumerable.Range(0, 20).Select(i => _host.AddItem($"/rec/{i}.ts")).ToList();
+        foreach (var item in items)
+        {
+            await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+        }
+
+        await using (var watcher = await StartWatcher(service))
+        {
+            // Storage blinks: each recording leaves the library and comes straight back.
+            foreach (var item in items)
+            {
+                _host.RaiseItemRemoved(item.Id);
+                _host.RaiseItemAdded(item);
+            }
+
+            await Bounded(watcher.Watcher.Idle.ContinueWith(_ => true), "the queued events");
+        }
+
+        var saved = ReadStore();
+        Assert.All(items, item => Assert.Equal(new[] { Jordan }, saved.Items[item.Id]));
+        Assert.Empty(saved.Removed);
+    }
+
+    [Fact]
+    public async Task SuggestedShowing_ScheduleNamesNoTimer_OwnersStillReachTheTimer()
+    {
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        var later = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+        _clock.UtcNow = Start.AddMinutes(5);
+        _host.ScheduleReturnsNoIds = true;
+        var owners = NewService();
+        var incomplete = NewIncompleteService(new IncompleteRecordingSettings(), owners);
+        var options = await incomplete.GetCompleteShowingOptionsAsync(source.Id, Jordan);
+
+        Assert.True(await incomplete.ScheduleSuggestedShowingAsync(source.Id, options.Showing!, Jordan, CancellationToken.None));
+        await owners.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { later.Id }, _host.Scheduled);
+        Assert.Equal(new[] { "api-" + later.Id }, (await owners.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
     }
 
     private OwnershipStoreData ReadStoreOrEmpty() =>

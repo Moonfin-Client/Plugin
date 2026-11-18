@@ -106,6 +106,13 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
     // Set when the store came from a newer plugin, which must find it as it left it.
     private bool _readOnly;
+
+    // A save that failed (storage away for a moment); the next sync writes the store again.
+    private bool _unsaved;
+
+    // The stand-in a call gets while a rebuild from tags couldn't run. It is never saved, so it
+    // can't take the place of the owners the rebuild will find.
+    private OwnershipStoreData? _unbuilt;
     private volatile bool _recordingInProgress;
     private long _nextTimerStartTicks;
 
@@ -317,7 +324,13 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 case OwnedKind.Timer:
                 {
                     var timer = await FindTimerAsync(id, ct).ConfigureAwait(false);
-                    if (timer == null || timer.Status == StatusCancelled)
+                    // Lookup only answers for a timer whose program the caller can see, so a claim
+                    // neither adds them to nor shows them the owners of one they can't.
+                    if (timer == null
+                        || timer.Status == StatusCancelled
+                        || timer.ProgramId == null
+                        || _host.GetProgram(timer.ProgramId) is not { } program
+                        || !_host.IsVisibleTo(program.ItemId, userId))
                     {
                         return null;
                     }
@@ -608,7 +621,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 }
             }
 
-            if (changed)
+            if (changed || _unsaved)
             {
                 Save(data);
             }
@@ -695,7 +708,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             var data = Load();
             var hasTombstone = data.Removed.TryGetValue(item.Id, out var removed);
             var timerId = FindTimerForPath(data, item.Path);
-            var writtenAt = hasTombstone || (timerId != null && !IsLive(timerId)) ? FileWrittenAt(item.Id) : null;
+            var writtenAt = hasTombstone || (timerId != null && !IsLiveNow(timerId)) ? FileWrittenAt(item.Id) : null;
 
             // The server derives an item's id from its path, so a rerun recorded to the file of a
             // deleted recording comes back as that recording. Jellyfin adds the item as the
@@ -704,7 +717,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             // be older than the removal is the old recording coming back, which no listing can
             // change, so a storage outage's many returning items list nothing.
             var returned = hasTombstone && writtenAt is { } written && written <= removed!.RemovedAt + FileClockTolerance;
-            if (hasTombstone && !returned && !string.IsNullOrEmpty(item.Path) && (timerId == null || !IsLive(timerId)))
+            if (hasTombstone && !returned && !string.IsNullOrEmpty(item.Path) && (timerId == null || !IsLiveNow(timerId)))
             {
                 try
                 {
@@ -1007,7 +1020,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         string.IsNullOrEmpty(timer.ApiId) ? timer.TimerId : timer.ApiId!;
 
     private static ScheduledTimer? FindLiveTimerForProgram(IReadOnlyList<ScheduledTimer> timers, string programId) =>
-        timers.FirstOrDefault(t => t.Status != StatusCancelled && string.Equals(t.ProgramId, programId, StringComparison.OrdinalIgnoreCase));
+        timers.FirstOrDefault(t => t.Status != StatusCancelled && t.Status != StatusCompleted && string.Equals(t.ProgramId, programId, StringComparison.OrdinalIgnoreCase));
 
     private static bool AddOwners<TKey>(Dictionary<TKey, List<Guid>> map, TKey key, IEnumerable<Guid> owners)
         where TKey : notnull
@@ -1364,6 +1377,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     private bool IsLive(string timerId) =>
         _timers.TryGetValue(timerId, out var timer) && timer.Status != StatusCancelled && timer.Status != StatusCompleted;
 
+    // As IsLive, but only while the timer's window is still open: past it, the listing may simply
+    // predate the timer finishing, so it is listed again before its owners go to a file.
+    private bool IsLiveNow(string timerId) =>
+        IsLive(timerId) && ToUtc(_timers[timerId].WindowEnd) > _utcNow();
+
     // Whether a timer other than this one is still recording the same file, so this one's
     // recording at that path was replaced.
     private bool PathTakenOver(OwnershipStoreData data, string timerId, string path) =>
@@ -1482,9 +1500,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 programs[t.ProgramId!] = other;
             }
 
-            return other != null
-                && ((!string.IsNullOrEmpty(program.SeriesId) && string.Equals(other.SeriesId, program.SeriesId, StringComparison.OrdinalIgnoreCase))
-                    || (!string.IsNullOrEmpty(program.SeriesName) && string.Equals(other.SeriesName, program.SeriesName, StringComparison.OrdinalIgnoreCase)));
+            return other != null && SameSeries(other, program);
         });
         var busiest = sameSeries
             .GroupBy(t => t.SeriesTimerId!, StringComparer.OrdinalIgnoreCase)
@@ -1501,10 +1517,22 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             return bySeriesId.Id;
         }
 
+        // A rule known to be for another series isn't this one, whatever it is called.
         return string.IsNullOrEmpty(program.SeriesName)
             ? null
-            : rules.FirstOrDefault(r => string.Equals(r.Name, program.SeriesName, StringComparison.OrdinalIgnoreCase))?.Id;
+            : rules.FirstOrDefault(r => string.Equals(r.Name, program.SeriesName, StringComparison.OrdinalIgnoreCase)
+                && !DifferentIds(r.SeriesId, program.SeriesId))?.Id;
     }
+
+    // Whether two programs are of one series: by id when both have one, else by name. Two series
+    // can share a name, so a name never overrides ids that differ.
+    private static bool SameSeries(GuideProgram a, GuideProgram b) =>
+        !string.IsNullOrEmpty(a.SeriesId) && !string.IsNullOrEmpty(b.SeriesId)
+            ? string.Equals(a.SeriesId, b.SeriesId, StringComparison.OrdinalIgnoreCase)
+            : !string.IsNullOrEmpty(b.SeriesName) && string.Equals(a.SeriesName, b.SeriesName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool DifferentIds(string? a, string? b) =>
+        !string.IsNullOrEmpty(a) && !string.IsNullOrEmpty(b) && !string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     // Owners as clients show them. Deleted and disabled users are left out.
     private IReadOnlyList<OwnerInfo> ToOwnerInfos<TKey>(Dictionary<TKey, List<Guid>> map, TKey key)
@@ -1683,31 +1711,45 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             return _data;
         }
 
-        _data = new OwnershipStoreData();
+        var fresh = new OwnershipStoreData();
 
         // Should the read have failed for another reason, a newer file is still never rebuilt over.
         var newest = Math.Max(PeekFileVersion(_storePath) ?? 0, PeekFileVersion(_storePath + BackupSuffix) ?? 0);
         if (newest > CurrentVersion)
         {
-            _data.Version = newest;
+            fresh.Version = newest;
             _readOnly = true;
             _logger.Warn(null, "The recording owners file {Path} could not be read but is version {Version}, newer than this plugin's {Current}; recording owners are unavailable until the plugin is upgraded, and the file is left untouched", _storePath, newest, CurrentVersion);
-            return _data;
+            return _data = fresh;
         }
 
-        // Read returns null both when there is no file yet and when the file and its backup are
-        // both unusable. Only the second loses data, so only then are the recordings' owners
-        // rebuilt from their tags.
-        if (File.Exists(_storePath) || File.Exists(_storePath + BackupSuffix))
+        // Read returns null when there is no file yet, when the file and its backup are both
+        // unusable, and when both were deleted. Recordings tagged with owners mean the store was
+        // lost, so their owners are rebuilt from the tags; a first start finds none. The store is
+        // only kept once the rebuild has finished, so a lookup that fails for the moment is tried
+        // again on the next call rather than leaving an empty store to be saved over the tags.
+        var unusable = File.Exists(_storePath) || File.Exists(_storePath + BackupSuffix);
+        try
+        {
+            Rebuild(fresh, unusable);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Users or the library not ready yet (a startup): this call goes on with no owners,
+            // nothing is saved, and the next call rebuilds again.
+            _logger.Warn(ex, "Could not rebuild recording owners from their tags yet; trying again on the next request");
+            return _unbuilt = new OwnershipStoreData();
+        }
+
+        if (unusable || fresh.Items.Count > 0)
         {
             // The unusable copies are set aside before anything overwrites them, so a read that
             // failed only for the moment can't lose the owners for good.
-            _preserveUnusable = true;
-            Rebuild(_data);
-            Save(_data);
+            _preserveUnusable = unusable;
+            Save(fresh);
         }
 
-        return _data;
+        return _data = fresh;
     }
 
     // Parses the store. A file newer than this build that it can't parse becomes an empty
@@ -1835,11 +1877,18 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
     // Rebuilds the recordings' owners from their "Recorded by name" tags. Timer and rule owners
     // have no backup and are lost.
-    private void Rebuild(OwnershipStoreData data)
+    private void Rebuild(OwnershipStoreData data, bool unusable)
     {
+        var tagged = _host.FindItemsWithTagPrefix(TagPrefix);
+        if (tagged.Count == 0 && !unusable)
+        {
+            // A first start: nothing to rebuild, so the users needn't be listed.
+            return;
+        }
+
         var users = _host.GetUsers();
         var unmatched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in _host.FindItemsWithTagPrefix(TagPrefix))
+        foreach (var item in tagged)
         {
             foreach (var tag in item.Tags.Where(t => t.StartsWith(TagPrefix, StringComparison.OrdinalIgnoreCase)))
             {
@@ -1861,12 +1910,19 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             _logger.Warn(null, "Rebuilding recording owners: no single user is named {Name}, so recordings tagged for them stay without that owner", name);
         }
 
-        _logger.Warn(null, "The recording owners file {Path} and its backup were unusable; rebuilt the owners of {Count} recording(s) from their tags. Timer and series rule owners are lost", _storePath, data.Items.Count);
+        if (unusable)
+        {
+            _logger.Warn(null, "The recording owners file {Path} and its backup were unusable; rebuilt the owners of {Count} recording(s) from their tags. Timer and series rule owners are lost", _storePath, data.Items.Count);
+        }
+        else if (data.Items.Count > 0)
+        {
+            _logger.Warn(null, "The recording owners file {Path} and its backup are missing, but recordings carry owner tags; rebuilt the owners of {Count} recording(s) from them. Timer and series rule owners are lost", _storePath, data.Items.Count);
+        }
     }
 
     private void Save(OwnershipStoreData data)
     {
-        if (_readOnly)
+        if (_readOnly || ReferenceEquals(data, _unbuilt))
         {
             return;
         }
@@ -1885,10 +1941,12 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_storePath)!);
             _stateFile.Write(_storePath, JsonSerializer.Serialize(data, JsonOptions));
+            _unsaved = false;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.Error(ex, "Could not save recording owners to {Path}; changes since the last save are lost on restart", _storePath);
+            _unsaved = true;
+            _logger.Error(ex, "Could not save recording owners to {Path}; the next sync tries again, and changes since the last save are lost if the server restarts first", _storePath);
         }
     }
 }
