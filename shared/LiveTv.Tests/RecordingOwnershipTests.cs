@@ -624,7 +624,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         // Alex's timer writes the file, but the listing doesn't show it in progress yet.
         _clock.Advance(TimeSpan.FromHours(3));
-        AddProgram("p1", Start, episode: 5);
+        AddProgram("p1", _clock.UtcNow, episode: 5);
         await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
         _host.Files[old.Path!] = 1_000_000;
         _host.LastWrite[old.Path!] = _clock.UtcNow;
@@ -2300,6 +2300,42 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Alex, CancellationToken.None)).TimerIds);
         Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
         Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p1"]);
+    }
+
+    [Fact]
+    public async Task StaleListing_RerunInLibraryBeforeItsAddEvent_AttachPassDoesNotGiveOldOwners()
+    {
+        AddProgram("p1", Start);
+        AddProgram("p9", Start.AddHours(5));
+        _host.Clock = () => _clock.UtcNow;
+        var service = NewService();
+        await service.RecordProgramAsync("p1", Jordan, CancellationToken.None);
+        await service.RecordProgramAsync("p9", Alex, CancellationToken.None);
+        _clock.UtcNow = Start.AddMinutes(5);
+        _host.StartRecording(TimerOf("p1"), "/rec/bonanza.ts", 1, 1);
+        _host.StartRecording(TimerOf("p9"), "/rec/p9.ts", 1, 9);
+        _host.Write();
+        await service.SyncAsync(CancellationToken.None);
+        var old = _host.AddItem("/rec/bonanza.ts");
+        await service.OnItemAddedAsync(old, CancellationToken.None);
+
+        // The listing goes away with Jordan's timer still cached as recording; the recording is
+        // deleted after its window, and a rerun nobody owns lands on the same file.
+        _host.TimersUnavailable = true;
+        _clock.UtcNow = Start.AddMinutes(25);
+        _host.Items.Remove(old);
+        await service.OnItemRemovedAsync(old.Id, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        _host.LastWrite[old.Path!] = _clock.UtcNow;
+        var rerun = Rerun(old);
+
+        // Another owned timer's cancel runs the attach pass before the rerun's add event.
+        var alexs = _host.AddItem("/rec/p9.ts");
+        await service.OnTimerCancelledAsync("t-p9", "/rec/p9.ts", CancellationToken.None);
+
+        Assert.Equal(new[] { Alex }, ReadStore().Items[alexs.Id]);
+        Assert.False(ReadStore().Items.ContainsKey(rerun.Id));
+        Assert.DoesNotContain("Recorded by Jordan", TagsOf(rerun));
     }
 
     private OwnershipStoreData ReadStoreOrEmpty() =>
