@@ -18,7 +18,19 @@ namespace Moonfin.LiveTv;
 /// "Recorded by name" tag per owner, a readable backup the store can be rebuilt from when the file
 /// and its backup are both lost. Owners are only ever added by a timer moving between series rules;
 /// nothing is forgotten because it is missing at the moment, only on the server's cancel and removal
-/// events or once it is gone and its recording has been attached.
+/// events or once it is gone and its recording has been handed over.
+///
+/// Which owners a recording file carries follows one rule: while a timer is recording to a path, that
+/// timer's owners (none, for a timer nobody owns through Moonfin) replace the owners of the library
+/// item at that path. The server derives an item's id from its path, so a rerun recorded to a deleted
+/// recording's file comes back as the same item, and nothing can un-claim an owner, so the recording
+/// timer is the only authority on who owns the new file. Each sync notes the file every in-progress
+/// timer is writing. When a timer stops, its note is kept for <see cref="PostRecordingAllowance"/>
+/// so an item that only reaches the library afterwards still gets its owners, and the first time
+/// the item is found the owners are applied once more and the note dropped, so a claim made on the
+/// finished recording is never undone. An item that appears at a path no timer is recording to gets
+/// back the owners it had when it left the library, if that was within the retention (a storage
+/// outage), and otherwise keeps whatever the store has.
 /// </summary>
 public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 {
@@ -45,20 +57,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     public static readonly TimeSpan RemovedRetention = TimeSpan.FromDays(7);
 
     /// <summary>
-    /// How much later than its removal a returning file may have been written and still count as
-    /// the same recording, for clock drift between the server and the storage holding the file.
-    /// </summary>
-    public static readonly TimeSpan FileClockTolerance = TimeSpan.FromMinutes(1);
-
-    /// <summary>
-    /// How long after a finished timer's window its file may still be written (a post-processing
-    /// remux, say) and still be that timer's recording. A file written later at the same path is a
-    /// new recording, a rerun, that the finished timer must not claim.
+    /// How long after a timer stops recording (or after its window ends, if later) the file it wrote
+    /// is still handed the timer's owners when the item for it first turns up in the library: the
+    /// item may only be added once the recording is done, or after a post-processing step.
     /// </summary>
     public static readonly TimeSpan PostRecordingAllowance = TimeSpan.FromHours(1);
-
-    // At or before this a file time means none: .NET reports 1601-01-01 for a file it can't stat.
-    private static readonly DateTime UnknownFileTime = new(1601, 1, 2, 0, 0, 0, DateTimeKind.Utc);
 
     private const string StatusCancelled = "Cancelled";
     private const string StatusCompleted = "Completed";
@@ -94,9 +97,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     // only helps when an owned timer has become unmapped since.
     private readonly HashSet<string> _unmappedAtLastListing = new(StringComparer.OrdinalIgnoreCase);
 
-    // The library item each owned timer's recording became, as seen by this process, so removing
-    // that item can forget the finished timer instead of leaving it to claim the path's next file.
-    private readonly Dictionary<string, Guid> _timerItems = new(StringComparer.OrdinalIgnoreCase);
+    // The service's own id of each timer noted recording, by API id, so a timer that has dropped
+    // out of a listing can still be asked whether it is writing a file.
+    private readonly Dictionary<string, string> _recordingServiceIds = new(StringComparer.OrdinalIgnoreCase);
 
     private OwnershipStoreData? _data;
 
@@ -197,7 +200,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 AddOwners(data.Timers, joinedId, new[] { userId });
                 Track(data, existing);
                 Save(data);
-                await AttachToStartedRecordingsAsync(data, ct).ConfigureAwait(false);
+                await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
                 _logger.Info("User {UserId} joined the recording of program {ProgramId} (timer {TimerId})", userId, programId, joinedId);
                 return new OwnershipAttempt(new OwnershipOutcome(joinedId, ToOwnerInfos(data.Timers, joinedId), true));
             }
@@ -236,7 +239,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             }
 
             Save(data);
-            await AttachToStartedRecordingsAsync(data, ct).ConfigureAwait(false);
+            await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
             _logger.Info("User {UserId} {Action} program {ProgramId} (timer {TimerId})", userId, joined ? "joined the recording of" : "scheduled", programId, timerId);
             return new OwnershipAttempt(new OwnershipOutcome(timerId, ToOwnerInfos(data.Timers, timerId), joined));
         }
@@ -294,7 +297,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             AddOwners(data.SeriesTimers, ruleId, new[] { userId });
             ApplySeriesOwners(data, timers);
             Save(data);
-            await AttachToStartedRecordingsAsync(data, ct).ConfigureAwait(false);
+            await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
             _logger.Info("User {UserId} {Action} series rule {RuleId} from program {ProgramId}", userId, joined ? "joined" : "created", ruleId, programId);
             return new OwnershipAttempt(new OwnershipOutcome(ruleId, ToOwnerInfos(data.SeriesTimers, ruleId), joined));
         }
@@ -339,7 +342,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     AddOwners(data.Timers, timerId, new[] { userId });
                     Track(data, timer);
                     Save(data);
-                    await AttachToStartedRecordingsAsync(data, ct).ConfigureAwait(false);
+                    await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
                     _logger.Info("User {UserId} claimed timer {TimerId}", userId, timerId);
                     return ToOwnerInfos(data.Timers, timerId);
                 }
@@ -359,7 +362,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     AddOwners(data.SeriesTimers, rule.Id, new[] { userId });
                     ApplySeriesOwners(data, ruleTimers!);
                     Save(data);
-                    await AttachToStartedRecordingsAsync(data, ct).ConfigureAwait(false);
+                    await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
                     _logger.Info("User {UserId} claimed series rule {RuleId}", userId, rule.Id);
                     return ToOwnerInfos(data.SeriesTimers, rule.Id);
                 }
@@ -371,6 +374,25 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     if (!Guid.TryParse(id, out var itemId) || _host.GetTags(itemId) == null || IsRecording(itemId, userId) != true)
                     {
                         return null;
+                    }
+
+                    // A recording still being written takes its timer's owners at every sync, so the
+                    // caller joins the timer instead; one whose timer has stopped first takes the
+                    // owners it was waiting to be handed, so the claim is added to them, not lost.
+                    var recordedBy = FindEntryForItem(data, itemId);
+                    if (recordedBy != null && !data.TimerPathsUntil.ContainsKey(recordedBy))
+                    {
+                        AddOwners(data.Timers, recordedBy, new[] { userId });
+                        await ApplyTimerOwnersAsync(data, itemId, recordedBy, ct).ConfigureAwait(false);
+                        Save(data);
+                        _logger.Info("User {UserId} claimed recording {ItemId}, which timer {TimerId} is still recording; they own the timer now", userId, itemId, recordedBy);
+                        return ToOwnerInfos(data.Items, itemId);
+                    }
+
+                    if (recordedBy != null)
+                    {
+                        await ApplyTimerOwnersAsync(data, itemId, recordedBy, ct).ConfigureAwait(false);
+                        FinishEntry(data, recordedBy);
                     }
 
                     AddOwners(data.Items, itemId, new[] { userId });
@@ -499,8 +521,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
     /// <summary>
     /// Brings the store in line with the server: copies series owners onto their timers, notes the
-    /// file each owned timer is writing, forgets timers and rules the server is done with, and
-    /// purges old tombstones.
+    /// file each in-progress timer is writing and gives it the timer's owners, hands finished
+    /// recordings their timer's owners once, turns owned items the library no longer has into
+    /// tombstones, forgets timers and rules the server is done with, and purges old tombstones.
     /// </summary>
     public async Task SyncAsync(CancellationToken ct)
     {
@@ -528,46 +551,21 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 changed |= Track(data, timer);
             }
 
-            // Jellyfin adds a recording's item when the recording starts, usually before the file
-            // is captured here, so the item's ItemAdded found no owners. Attach them now, before a
-            // finished timer is forgotten below.
-            changed |= await AttachToStartedRecordingsAsync(data, ct).ConfigureAwait(false);
+            // A store left behind while the feature was off may own items the library has lost.
+            changed |= ReconcileItems(data, now);
 
-            // A timer is forgotten once the server is done with it and its recording has reached
-            // the library; until then the item may still arrive and need the owners. A done timer
-            // whose recording isn't in the library (deleted, or never scanned in) is forgotten
-            // after the retention, counted in TimersMissingSince from the first sync that found it
-            // so; kept, it would claim whatever is recorded to its path next. One without a
-            // recorded file is forgotten only after the server has left it out for the whole
-            // retention, since a listing can miss timers while a Live TV service is failing.
+            // Jellyfin adds a recording's item when the recording starts, usually before the file
+            // is noted here, so the item's ItemAdded found no entry for it. Give it its timer's
+            // owners now, and hand over the recordings that have finished.
+            changed |= await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
+
+            // A timer with a recorded file is forgotten along with that file's entry, once its item
+            // has taken the owners or the entry lapses. One without a recorded file is forgotten
+            // only after the server has left it out for the whole retention, since a listing can
+            // miss timers while a Live TV service is failing.
             foreach (var key in data.Timers.Keys.ToList())
             {
-                var listed = _timers.TryGetValue(key, out var timer);
-                if (data.TimerPaths.TryGetValue(key, out var path))
-                {
-                    var done = !listed || timer!.Status == StatusCancelled || timer.Status == StatusCompleted;
-                    if (!done)
-                    {
-                        changed |= data.TimersMissingSince.Remove(key);
-                    }
-                    else if (_host.FindItemByPath(path) != null)
-                    {
-                        data.Timers.Remove(key);
-                        changed = true;
-                    }
-                    else if (!data.TimersMissingSince.TryGetValue(key, out var doneSince))
-                    {
-                        data.TimersMissingSince[key] = now;
-                        changed = true;
-                    }
-                    else if (doneSince <= cutoff)
-                    {
-                        data.Timers.Remove(key);
-                        _logger.Info("Forgot finished timer {TimerId}, whose recording hasn't been in the library since {Since}", key, doneSince);
-                        changed = true;
-                    }
-                }
-                else if (listed)
+                if (data.TimerPaths.ContainsKey(key) || _timers.ContainsKey(key))
                 {
                     changed |= data.TimersMissingSince.Remove(key);
                 }
@@ -605,10 +603,6 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             }
 
             changed |= PruneSideTables(data);
-            foreach (var key in _timerItems.Keys.Where(k => !data.Timers.ContainsKey(k)).ToList())
-            {
-                _timerItems.Remove(key);
-            }
 
             foreach (var entry in data.Removed.Where(e => e.Value.RemovedAt < cutoff).ToList())
             {
@@ -638,10 +632,12 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
     /// <summary>
     /// A timer was cancelled, which is for everyone, so its owners are forgotten. A recording that
-    /// was stopped partway still reaches the library, so a timer whose file is known keeps its
-    /// owners until that item arrives. The server raises the cancel while the recording is still
-    /// running, so the watcher reads the file then and passes it as <paramref name="activePath"/>;
-    /// an item already in the library for it takes the owners at once.
+    /// was stopped partway still reaches the library, so a timer that was writing a file (noted at
+    /// an earlier sync, or passed as <paramref name="activePath"/>, which the watcher reads because
+    /// the server raises the cancel while the recording is still running) has that file kept for
+    /// <see cref="PostRecordingAllowance"/>: an item already in the library for it takes the timer's
+    /// owners at once, and one that arrives later takes them then. This holds for a timer nobody
+    /// owns too, whose recording then ends up with no owners.
     /// </summary>
     public async Task OnTimerCancelledAsync(string timerId, string? activePath, CancellationToken ct)
     {
@@ -660,29 +656,42 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             }
 
             var key = Resolve(timerId);
-            if (!data.Timers.ContainsKey(key))
+            var until = _utcNow() + PostRecordingAllowance;
+            if (!string.IsNullOrEmpty(activePath))
             {
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(activePath)
-                && !(data.TimerPaths.TryGetValue(key, out var known) && string.Equals(known, activePath, StringComparison.OrdinalIgnoreCase)))
-            {
+                // The sync may already hold this recording under the timer's API id.
+                key = data.TimerPaths
+                    .Where(e => string.Equals(e.Value, activePath, StringComparison.OrdinalIgnoreCase) && !data.TimerPathsUntil.ContainsKey(e.Key))
+                    .Select(e => e.Key)
+                    .FirstOrDefault() ?? key;
                 data.TimerPaths[key] = activePath!;
+                data.TimerPathsUntil[key] = until;
                 Save(data);
-                _logger.Info("Cancelled timer {TimerId} was recording {Path}; keeping its owners for that recording", key, activePath);
+                _logger.Info("Cancelled timer {TimerId} was recording {Path}; its owners go to that recording", key, activePath);
             }
-
-            if (data.TimerPaths.ContainsKey(key))
+            else if (data.TimerPaths.ContainsKey(key))
             {
-                await AttachToStartedRecordingsAsync(data, ct).ConfigureAwait(false);
+                if (!data.TimerPathsUntil.ContainsKey(key))
+                {
+                    data.TimerPathsUntil[key] = until;
+                    Save(data);
+                }
+            }
+            else
+            {
+                if (!data.Timers.ContainsKey(key))
+                {
+                    return;
+                }
+
+                data.Timers.Remove(key);
+                PruneSideTables(data);
+                Save(data);
+                _logger.Info("Forgot the owners of cancelled timer {TimerId}", key);
                 return;
             }
 
-            data.Timers.Remove(key);
-            PruneSideTables(data);
-            Save(data);
-            _logger.Info("Forgot the owners of cancelled timer {TimerId}", key);
+            await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -694,9 +703,10 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     public Task OnTimerCancelledAsync(string timerId, CancellationToken ct) => OnTimerCancelledAsync(timerId, null, ct);
 
     /// <summary>
-    /// A library item arrived. A recording written by an owned timer takes that timer's owners;
-    /// otherwise a recording that left the library within the retention gets its owners back,
-    /// unless its file was written after it left (a new recording on the same path). Each owner's
+    /// A library item arrived. If a timer is recording to its path (or recorded to it and hasn't
+    /// handed it over yet) the item takes that timer's owners, replacing any it had. Otherwise a
+    /// recording that left the library within the retention gets its owners back (a storage outage
+    /// or rescan), and anything else keeps the owners the store already holds for it. Each owner's
     /// tag is stamped on it.
     /// </summary>
     public async Task OnItemAddedAsync(LibraryItem item, CancellationToken ct)
@@ -710,99 +720,43 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         try
         {
             var data = Load();
-            var hasTombstone = data.Removed.TryGetValue(item.Id, out var removed);
-            var timerId = FindTimerForPath(data, item.Path);
-            var writtenAt = hasTombstone || (timerId != null && !IsLiveNow(timerId)) ? FileWrittenAt(item.Id) : null;
-
-            // The server derives an item's id from its path, so a rerun recorded to the file of a
-            // deleted recording comes back as that recording. Jellyfin adds the item as the
-            // recording starts, usually before a sync has seen its file, so the timers are listed
-            // again before the old owners, or a finished timer's, are taken back. A file known to
-            // be older than the removal is the old recording coming back, which no listing can
-            // change, so a storage outage's many returning items list nothing.
-            var returned = hasTombstone && writtenAt is { } written && written <= removed!.RemovedAt + FileClockTolerance;
-            if (hasTombstone && !returned && !string.IsNullOrEmpty(item.Path) && (timerId == null || !IsLiveNow(timerId)))
+            var key = FindEntryForPath(data, item.Path);
+            if (key != null)
             {
-                try
+                var changed = await ApplyTimerOwnersAsync(data, item.Id, key, ct).ConfigureAwait(false);
+                if (data.TimerPathsUntil.ContainsKey(key))
                 {
-                    foreach (var timer in await RefreshTimersAsync(ct).ConfigureAwait(false))
-                    {
-                        Track(data, timer);
-                    }
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-                {
-                    // Live TV may not be ready yet (a startup scan); decide from the last listing.
-                    _logger.Warn(ex, "Could not list the timers while recording {ItemId} came back; deciding its owners from the last listing", item.Id);
+                    FinishEntry(data, key);
+                    Save(data);
                 }
 
-                timerId = FindTimerForPath(data, item.Path);
-            }
-
-            // A finished timer whose window ended well before this file was written didn't record it.
-            if (timerId != null && IsStaleMatch(data, timerId, writtenAt, removed))
-            {
-                _logger.Info("Recording {ItemId} was written at {WrittenAt}, after finished timer {TimerId} that recorded its path; that timer's owners don't apply", item.Id, writtenAt, timerId);
-
-                // The path is someone else's file now, so nothing later attaches it to that timer.
-                data.TimerPaths.Remove(timerId);
-                timerId = null;
-            }
-
-            List<Guid> owners;
-            if (timerId != null)
-            {
-                _timerItems[timerId] = item.Id;
-                owners = data.Timers[timerId].ToList();
-                _logger.Info("Recording {ItemId} from timer {TimerId} took its {Count} owner(s)", item.Id, timerId, owners.Count);
-                if (hasTombstone)
+                if (changed)
                 {
-                    // A new recording on the old one's file: the old owners must not come back with it.
-                    data.Removed.Remove(item.Id);
-                    _logger.Info("Discarded the owners kept for removed recording {ItemId}, since timer {TimerId} recorded it again", item.Id, timerId);
+                    _logger.Info("Recording {ItemId} from timer {TimerId} took its owners", item.Id, key);
                 }
-            }
-            else if (hasTombstone && writtenAt is { } newer && newer > removed!.RemovedAt + FileClockTolerance)
-            {
-                // A file written after its recording left the library is a new recording on the
-                // old one's path (a rerun by a timer nobody owns, or one not yet seen recording),
-                // not the old file coming back, so the old owners stay gone.
-                data.Removed.Remove(item.Id);
-                Save(data);
-                _logger.Info(
-                    "Recording {ItemId} came back with a file written at {WrittenAt}, after it left the library at {RemovedAt}; it is a new recording, so the owners kept for the old one were discarded",
-                    item.Id,
-                    newer,
-                    removed!.RemovedAt);
+
                 return;
             }
-            else if (hasTombstone && removed!.RemovedAt >= _utcNow() - RemovedRetention)
+
+            if (!data.Removed.TryGetValue(item.Id, out var removed))
             {
-                owners = removed.Owners;
-                data.Removed.Remove(item.Id);
-                _logger.Info("Recording {ItemId} came back to the library; restored its {Count} owner(s)", item.Id, owners.Count);
+                return;
             }
-            else if (hasTombstone)
+
+            data.Removed.Remove(item.Id);
+            if (removed.RemovedAt < _utcNow() - RemovedRetention)
             {
-                data.Removed.Remove(item.Id);
                 Save(data);
                 _logger.Info("Recording {ItemId} came back to the library after its owners were kept for {Days} days; it has no owners", item.Id, RemovedRetention.TotalDays);
                 return;
             }
-            else
-            {
-                return;
-            }
 
-            if (owners.Count == 0)
-            {
-                Save(data);
-                return;
-            }
-
-            AddOwners(data.Items, item.Id, owners);
+            // A rerun that is given a wrong tombstone here is put right by the next sync, while
+            // its timer is recording.
+            AddOwners(data.Items, item.Id, removed.Owners);
             Save(data);
-            await StampTagsAsync(item.Id, owners, ct).ConfigureAwait(false);
+            _logger.Info("Recording {ItemId} came back to the library; restored its {Count} owner(s)", item.Id, removed.Owners.Count);
+            await StampTagsAsync(item.Id, removed.Owners, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -829,22 +783,6 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
             data.Items.Remove(itemId);
             data.Removed[itemId] = new RemovedItem { Owners = owners, RemovedAt = _utcNow() };
-
-            // A finished timer whose recording this was is done with: its owners now live in the
-            // tombstone, and kept, it would claim whatever is recorded to its path next.
-            foreach (var entry in _timerItems.Where(e => e.Value == itemId).ToList())
-            {
-                _timerItems.Remove(entry.Key);
-                if (data.Timers.ContainsKey(entry.Key)
-                    && !IsLive(entry.Key)
-                    && (!data.TimerPaths.TryGetValue(entry.Key, out var path) || _host.FindItemByPath(path) == null))
-                {
-                    data.Timers.Remove(entry.Key);
-                    _logger.Info("Forgot finished timer {TimerId} along with its removed recording {ItemId}", entry.Key, itemId);
-                }
-            }
-
-            PruneSideTables(data);
             Save(data);
             _logger.Info("Recording {ItemId} left the library; keeping its owners for {Days} days in case it comes back", itemId, RemovedRetention.TotalDays);
         }
@@ -1145,6 +1083,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
 
         _recordingInProgress = timers.Any(t => t.Status == StatusInProgress);
+        if (UpdateRecordingMap(Load(), timers))
+        {
+            _unsaved = true;
+        }
+
         var recentCutoff = _utcNow().AddMinutes(-10);
         var starts = timers
             .Where(t => t.Status != StatusCancelled && t.WindowStart.ToUniversalTime() >= recentCutoff)
@@ -1187,18 +1130,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         return _timers.TryGetValue(Resolve(id), out var timer) ? timer : null;
     }
 
-    // Notes what an owned timer's later events and its recording need: its service id and the
-    // file it is writing.
+    // Notes what an owned timer's later events need: its service id.
     private bool Track(OwnershipStoreData data, ScheduledTimer timer)
     {
         var key = ApiIdOf(timer);
-        if (!data.Timers.ContainsKey(key))
-        {
-            return false;
-        }
-
-        var changed = !string.IsNullOrEmpty(timer.TimerId) && RememberServiceId(data, key, timer.TimerId);
-        return CaptureActivePath(data, timer) | changed;
+        return data.Timers.ContainsKey(key) && !string.IsNullOrEmpty(timer.TimerId) && RememberServiceId(data, key, timer.TimerId);
     }
 
     private bool RememberServiceId(OwnershipStoreData data, string apiId, string serviceId)
@@ -1233,9 +1169,14 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             if (data.TimerPaths.TryGetValue(key, out var path))
             {
                 data.TimerPaths.Remove(key);
+                var hasUntil = data.TimerPathsUntil.Remove(key, out var until);
                 if (!data.TimerPaths.ContainsKey(apiId))
                 {
                     data.TimerPaths[apiId] = path;
+                    if (hasUntil)
+                    {
+                        data.TimerPathsUntil[apiId] = until;
+                    }
                 }
             }
 
@@ -1248,13 +1189,15 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         return changed;
     }
 
-    // Drops what is kept beside a timer or rule whose owners are gone.
+    // Drops what is kept beside a timer or rule whose owners are gone. A timer's note of its file
+    // is not one of these: it is kept for timers nobody owns too, and goes when the recording's
+    // item has taken the owners or its allowance lapses.
     private static bool PruneSideTables(OwnershipStoreData data)
     {
         var changed = false;
-        foreach (var key in data.TimerPaths.Keys.Where(k => !data.Timers.ContainsKey(k)).ToList())
+        foreach (var key in data.TimerPathsUntil.Keys.Where(k => !data.TimerPaths.ContainsKey(k)).ToList())
         {
-            changed |= data.TimerPaths.Remove(key);
+            changed |= data.TimerPathsUntil.Remove(key);
         }
 
         foreach (var key in data.TimerServiceIds.Keys.Where(k => !data.Timers.ContainsKey(k)).ToList())
@@ -1275,153 +1218,224 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         return changed;
     }
 
-    // Records the file an owned timer is writing, so the finished item can find its owners.
-    private bool CaptureActivePath(OwnershipStoreData data, ScheduledTimer timer)
+    // Keeps the note of which timer is writing which file up to date from a listing. A timer that
+    // is recording now (in progress with its window still open), owned or not, has its file noted.
+    // A noted timer that no longer is has the note kept for the post-recording allowance, counted
+    // from the end of its window if that is later than now. A timer the listing no longer has is
+    // only taken as stopped when the server also says it writes nothing, since a listing can fail
+    // while a recording carries on.
+    private bool UpdateRecordingMap(OwnershipStoreData data, IReadOnlyList<ScheduledTimer> timers)
     {
-        if (timer.Status != StatusInProgress || string.IsNullOrEmpty(timer.TimerId))
+        var now = _utcNow();
+        var changed = false;
+        var recording = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var timer in timers)
         {
-            return false;
+            var key = ApiIdOf(timer);
+            if (string.IsNullOrEmpty(key) || !IsRecordingNow(timer, now))
+            {
+                continue;
+            }
+
+            recording.Add(key);
+            var path = string.IsNullOrEmpty(timer.TimerId) ? null : _host.GetActiveRecordingPath(timer.TimerId);
+            if (!string.IsNullOrEmpty(path))
+            {
+                _recordingServiceIds[key] = timer.TimerId;
+                changed |= NoteRecording(data, key, path!);
+            }
         }
 
-        var key = ApiIdOf(timer);
-        if (!data.Timers.ContainsKey(key))
+        foreach (var entry in data.TimerPaths.ToList())
         {
-            return false;
+            if (recording.Contains(entry.Key) || data.TimerPathsUntil.ContainsKey(entry.Key))
+            {
+                continue;
+            }
+
+            DateTime stoppedAt;
+            if (_timers.TryGetValue(entry.Key, out var listed))
+            {
+                var windowEnd = ToUtc(listed.WindowEnd);
+                stoppedAt = windowEnd > now ? windowEnd : now;
+            }
+            else if (!string.IsNullOrEmpty(ActivePathOf(entry.Key)))
+            {
+                continue;
+            }
+            else
+            {
+                stoppedAt = now;
+            }
+
+            data.TimerPathsUntil[entry.Key] = stoppedAt + PostRecordingAllowance;
+            changed = true;
         }
 
-        var path = _host.GetActiveRecordingPath(timer.TimerId);
-        if (string.IsNullOrEmpty(path)
-            || (data.TimerPaths.TryGetValue(key, out var known) && string.Equals(known, path, StringComparison.OrdinalIgnoreCase)))
-        {
-            return false;
-        }
-
-        data.TimerPaths[key] = path!;
-        return true;
+        return changed;
     }
 
-    // The owned timer, with owners, that recorded the file at this path; null when there is none.
-    // A finished timer can outlive its recording when the item is deleted before a sync forgets
-    // the timer, so a timer still recording that path is preferred over it.
-    private string? FindTimerForPath(OwnershipStoreData data, string? path)
+    // What the server says an unlisted, noted timer is writing right now; null when nothing.
+    private string? ActivePathOf(string key)
+    {
+        var serviceId = _recordingServiceIds.TryGetValue(key, out var known)
+            ? known
+            : _data != null && _data.TimerServiceIds.TryGetValue(key, out var stored) ? stored : key;
+        return _host.GetActiveRecordingPath(serviceId);
+    }
+
+    // Notes that a timer is recording to a path. Another timer's stopped note for the same path
+    // is dropped, since the file is this timer's now. True when the notes changed.
+    private bool NoteRecording(OwnershipStoreData data, string key, string path)
+    {
+        var changed = false;
+        foreach (var other in data.TimerPaths.ToList())
+        {
+            if (!string.Equals(other.Key, key, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(other.Value, path, StringComparison.OrdinalIgnoreCase)
+                && data.TimerPathsUntil.ContainsKey(other.Key))
+            {
+                FinishEntry(data, other.Key);
+                changed = true;
+            }
+        }
+
+        if (!data.TimerPaths.TryGetValue(key, out var known) || !string.Equals(known, path, StringComparison.OrdinalIgnoreCase))
+        {
+            data.TimerPaths[key] = path;
+            data.TimerPathsUntil.Remove(key);
+            return true;
+        }
+
+        return data.TimerPathsUntil.Remove(key) | changed;
+    }
+
+    // Drops a timer's note of its file, and with it the timer's owners: it has stopped, and its
+    // item has them or never will.
+    private void FinishEntry(OwnershipStoreData data, string key)
+    {
+        data.TimerPaths.Remove(key);
+        data.TimerPathsUntil.Remove(key);
+        _recordingServiceIds.Remove(key);
+        if (data.Timers.Remove(key))
+        {
+            data.TimersMissingSince.Remove(key);
+            data.TimerServiceIds.Remove(key);
+            _logger.Info("Forgot the owners of timer {TimerId}, whose recording has been handed over or never arrived", key);
+        }
+    }
+
+    // The timer noted as writing the file at a path, or null. One still recording wins over one
+    // that stopped; a stopped timer's note whose allowance has lapsed no longer counts.
+    private string? FindEntryForPath(OwnershipStoreData data, string? path)
     {
         if (string.IsNullOrEmpty(path))
         {
             return null;
         }
 
-        string? finished = null;
+        var now = _utcNow();
+        string? stopped = null;
         foreach (var entry in data.TimerPaths)
         {
-            if (string.Equals(entry.Value, path, StringComparison.OrdinalIgnoreCase)
-                && data.Timers.ContainsKey(entry.Key))
+            if (!string.Equals(entry.Value, path, StringComparison.OrdinalIgnoreCase))
             {
-                if (IsLive(entry.Key))
-                {
-                    return entry.Key;
-                }
+                continue;
+            }
 
-                finished ??= entry.Key;
+            if (!data.TimerPathsUntil.TryGetValue(entry.Key, out var until))
+            {
+                return entry.Key;
+            }
+
+            if (until > now)
+            {
+                stopped ??= entry.Key;
             }
         }
 
-        return finished;
+        return stopped;
     }
 
-    // When an item's file was last written, in UTC; null when that can't be read. The last-write
-    // time is used, not the creation time: Linux file systems often have no creation time (.NET
-    // then reports the older of the change and write times), and Windows can hand a file
-    // re-created at a deleted file's path the old one's creation time. A rerun keeps writing its
-    // file after the old recording's removal and its timer's end; a file that went away with its
-    // storage and came back was last written before both. Limits: a restore or post-processing
-    // that rewrites the file makes it look new (its owners are then dropped, which fails safe),
-    // and storage whose clock runs behind the server's by more than the gap between a deletion
-    // and the rerun makes a rerun look old.
-    private DateTime? FileWrittenAt(Guid itemId)
+    // The timer noted as writing an item's file, whose note hasn't lapsed; null when none.
+    private string? FindEntryForItem(OwnershipStoreData data, Guid itemId)
     {
-        DateTime? writtenAt;
-        try
+        foreach (var entry in data.TimerPaths)
         {
-            writtenAt = _host.GetFileWrittenAt(itemId);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.Warn(ex, "Could not read when the file of recording {ItemId} was written", itemId);
-            return null;
+            if (FindEntryForPath(data, entry.Value) == entry.Key && _host.FindItemByPath(entry.Value)?.Id == itemId)
+            {
+                return entry.Key;
+            }
         }
 
-        return writtenAt is { } written && written > UnknownFileTime ? ToUtc(written) : null;
+        return null;
     }
 
-    private static DateTime ToUtc(DateTime time) => time.Kind == DateTimeKind.Local ? time.ToUniversalTime() : time;
-
-    // Whether a path match with a finished timer is only a coincidence: the file was written after
-    // the timer's window (plus post-processing) ended; or, when the listing no longer has the
-    // timer, after the recording at that path was removed, or else after a sync first found the
-    // timer done without its recording (plus post-processing). Unknown times never count as stale.
-    // A timer listed as live but past its window is judged by its window, so a listing that
-    // couldn't be refreshed doesn't hand a finished timer's owners to a newer file.
-    private bool IsStaleMatch(OwnershipStoreData data, string timerId, DateTime? writtenAt, RemovedItem? removed)
+    // Makes an item's owners exactly the owners of the timer recording it (none for a timer nobody
+    // owns), removing the tombstone it may have, saving before the tags are written, and stamping
+    // the tag of each owner gained and removing that of each lost. Does nothing, and saves nothing,
+    // when the owners already match. True when anything changed.
+    private async Task<bool> ApplyTimerOwnersAsync(OwnershipStoreData data, Guid itemId, string timerKey, CancellationToken ct)
     {
-        if (writtenAt is not { } written || IsLiveNow(timerId))
+        var target = data.Timers.TryGetValue(timerKey, out var timerOwners) ? timerOwners.ToList() : new List<Guid>();
+        var current = data.Items.TryGetValue(itemId, out var itemOwners) ? itemOwners.ToList() : new List<Guid>();
+        var gained = target.Where(o => !current.Contains(o)).ToList();
+        var lost = current.Where(o => !target.Contains(o)).ToList();
+        var tombstoned = data.Removed.Remove(itemId);
+        if (gained.Count == 0 && lost.Count == 0 && !tombstoned)
         {
             return false;
         }
 
-        if (_timers.TryGetValue(timerId, out var timer))
+        if (target.Count == 0)
         {
-            // A recording removed after its timer's window had ended was finished; a file written
-            // after that removal is a new one, even within the post-processing allowance.
-            if (removed != null && ToUtc(timer.WindowEnd) <= removed.RemovedAt && written > removed.RemovedAt + FileClockTolerance)
+            data.Items.Remove(itemId);
+        }
+        else
+        {
+            data.Items[itemId] = target;
+        }
+
+        Save(data);
+        if (gained.Count > 0 || lost.Count > 0)
+        {
+            _logger.Info("Recording {ItemId} from timer {TimerId}: {Gained} owner(s) gained, {Lost} lost", itemId, timerKey, gained.Count, lost.Count);
+        }
+
+        foreach (var owner in lost)
+        {
+            var name = NameOf(owner);
+            if (!string.IsNullOrEmpty(name) && !SharesName(target, owner, name!))
             {
-                return true;
+                await SetTagAsync(itemId, TagPrefix + name, false, ct).ConfigureAwait(false);
             }
-
-            return written > ToUtc(timer.WindowEnd) + PostRecordingAllowance + FileClockTolerance;
         }
 
-        if (removed != null)
-        {
-            return written > removed.RemovedAt + FileClockTolerance;
-        }
-
-        return data.TimersMissingSince.TryGetValue(timerId, out var doneSince)
-            && written > doneSince + PostRecordingAllowance + FileClockTolerance;
+        await StampTagsAsync(itemId, gained, ct).ConfigureAwait(false);
+        return true;
     }
 
-    // Whether the last listing has the timer and the server isn't done with it.
-    private bool IsLive(string timerId) =>
-        _timers.TryGetValue(timerId, out var timer) && timer.Status != StatusCancelled && timer.Status != StatusCompleted;
-
-    // As IsLive, but only while the timer's window is still open: past it, the listing may simply
-    // predate the timer finishing, so it is listed again before its owners go to a file.
-    private bool IsLiveNow(string timerId) =>
-        IsLive(timerId) && ToUtc(_timers[timerId].WindowEnd) > _utcNow();
-
-    // Whether a timer other than this one is still recording the same file, so this one's
-    // recording at that path was replaced.
-    private bool PathTakenOver(OwnershipStoreData data, string timerId, string path) =>
-        !IsLive(timerId)
-        && data.TimerPaths.Any(e => !string.Equals(e.Key, timerId, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(e.Value, path, StringComparison.OrdinalIgnoreCase)
-            && data.Timers.ContainsKey(e.Key)
-            && IsLive(e.Key));
-
-    // Gives each recording already in the library the owners of the owned timer writing it,
-    // stamping a tag for each owner it gains. The item can exist before its file is captured
-    // (Jellyfin adds it when the recording starts), and owners can join a recording in progress,
-    // so this runs whenever files may have been captured or owners added. Saves before stamping
-    // each item's tags, so a tag write that fails or raises events can't lose the owners. True
-    // when an item gained an owner.
-    private async Task<bool> AttachToStartedRecordingsAsync(OwnershipStoreData data, CancellationToken ct)
+    // Walks the noted files: a timer still recording gives its owners to the item at its path,
+    // every pass; one that has stopped gives them once, when its item is first found, and is then
+    // forgotten; one whose allowance has lapsed is forgotten without. Saves before each item's tag
+    // writes. True when anything changed.
+    private async Task<bool> ApplyRecordingsAsync(OwnershipStoreData data, CancellationToken ct)
     {
+        var now = _utcNow();
         var changed = false;
+        var finished = false;
         foreach (var entry in data.TimerPaths.ToList())
         {
-            if (!data.Timers.TryGetValue(entry.Key, out var timerOwners)
-                || timerOwners.Count == 0
-                || PathTakenOver(data, entry.Key, entry.Value))
+            if (!data.TimerPaths.ContainsKey(entry.Key))
             {
+                continue;
+            }
+
+            var stopped = data.TimerPathsUntil.TryGetValue(entry.Key, out var until);
+            if (stopped && until <= now)
+            {
+                FinishEntry(data, entry.Key);
+                changed = finished = true;
                 continue;
             }
 
@@ -1431,40 +1445,66 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 continue;
             }
 
-            var gained = data.Items.TryGetValue(item.Id, out var itemOwners)
-                ? timerOwners.Where(o => !itemOwners.Contains(o)).ToList()
-                : timerOwners.ToList();
-            if (gained.Count == 0)
+            changed |= await ApplyTimerOwnersAsync(data, item.Id, entry.Key, ct).ConfigureAwait(false);
+            if (stopped)
             {
-                _timerItems[entry.Key] = item.Id;
-                continue;
+                FinishEntry(data, entry.Key);
+                changed = finished = true;
             }
+        }
 
-            // A finished timer's path now holding a file written long after it ended is a rerun
-            // someone else recorded there.
-            if (!IsLiveNow(entry.Key)
-                && IsStaleMatch(data, entry.Key, FileWrittenAt(item.Id), data.Removed.TryGetValue(item.Id, out var tombstone) ? tombstone : null))
-            {
-                continue;
-            }
-
-            _timerItems[entry.Key] = item.Id;
-
-            AddOwners(data.Items, item.Id, gained);
-            changed = true;
-            _logger.Info("Recording {ItemId} from timer {TimerId} took {Count} owner(s)", item.Id, entry.Key, gained.Count);
-            if (data.Removed.Remove(item.Id))
-            {
-                // A new recording on a removed one's file; a later re-add must not bring the old owners back.
-                _logger.Info("Discarded the owners kept for removed recording {ItemId}, since timer {TimerId} recorded it again", item.Id, entry.Key);
-            }
-
+        if (finished)
+        {
             Save(data);
-            await StampTagsAsync(item.Id, gained, ct).ConfigureAwait(false);
         }
 
         return changed;
     }
+
+    // Owned recordings the library definitely no longer has become tombstones, as when the server
+    // reports their removal. An item the host can't be asked about is left alone.
+    private bool ReconcileItems(OwnershipStoreData data, DateTime now)
+    {
+        var changed = false;
+        foreach (var entry in data.Items.ToList())
+        {
+            if (!IsGone(entry.Key))
+            {
+                continue;
+            }
+
+            data.Items.Remove(entry.Key);
+            data.Removed[entry.Key] = new RemovedItem { Owners = entry.Value, RemovedAt = now };
+            changed = true;
+            _logger.Info("Recording {ItemId} is no longer in the library; keeping its owners for {Days} days in case it comes back", entry.Key, RemovedRetention.TotalDays);
+        }
+
+        return changed;
+    }
+
+    // GetTags is null only when the library has no such item; a lookup that throws can't tell.
+    private bool IsGone(Guid itemId)
+    {
+        try
+        {
+            return _host.GetTags(itemId) == null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warn(ex, "Could not check whether recording {ItemId} is still in the library", itemId);
+            return false;
+        }
+    }
+
+    private string? NameOf(Guid userId) =>
+        TryGetUser(userId)?.Name ?? (_userNames.TryGetValue(userId, out var known) ? known : null);
+
+    private static DateTime ToUtc(DateTime time) => time.Kind == DateTimeKind.Local ? time.ToUniversalTime() : time;
+
+    // Whether a timer is writing its file now: in progress with its window still open. Past its
+    // window a timer counts as stopped, whatever an older listing says.
+    private static bool IsRecordingNow(ScheduledTimer timer, DateTime now) =>
+        timer.Status == StatusInProgress && ToUtc(timer.WindowEnd) > now;
 
     // A timer under a rule gets the rule's owners. Owners are never taken away when the server
     // moves a timer to another rule, so a newer duplicate rule can't strip anyone's showings.
@@ -1932,6 +1972,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         SeriesTimers = Copy(read.SeriesTimers, StringComparer.OrdinalIgnoreCase),
         Items = Copy(read.Items, EqualityComparer<Guid>.Default),
         TimerPaths = CopyStrings(read.TimerPaths),
+        TimerPathsUntil = new Dictionary<string, DateTime>(read.TimerPathsUntil ?? new Dictionary<string, DateTime>(), StringComparer.OrdinalIgnoreCase),
         Removed = (read.Removed ?? new Dictionary<Guid, RemovedItem>())
             .Where(e => e.Value?.Owners is { Count: > 0 })
             .ToDictionary(e => e.Key, e => e.Value),
@@ -1997,6 +2038,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         foreach (var entry in changes.TimerPaths)
         {
             rebuilt.TimerPaths[entry.Key] = entry.Value;
+        }
+
+        foreach (var entry in changes.TimerPathsUntil)
+        {
+            rebuilt.TimerPathsUntil[entry.Key] = entry.Value;
         }
 
         foreach (var entry in changes.TimerServiceIds)

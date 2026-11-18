@@ -473,7 +473,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         var old = await DeletedJordanRecording(service);
 
         _clock.Advance(TimeSpan.FromDays(2));
-        AddProgram("p1", Start, episode: 5);
+        AddProgram("p1", _clock.UtcNow, episode: 5);
         await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
         _host.StartRecording(TimerOf("p1"), old.Path!, 1, 5);
         await service.SyncAsync(CancellationToken.None);
@@ -488,31 +488,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.DoesNotContain("Recorded by Jordan", TagsOf(item));
         Assert.False(saved.Removed.ContainsKey(item.Id));
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-    }
-
-    [Fact]
-    public async Task ItemReAdded_ByRerunBeforePathCaptured_TakesTimerOwnersNotTombstone()
-    {
-        var service = NewService();
-        var old = await DeletedJordanRecording(service);
-
-        AddProgram("p1", Start, episode: 5);
-        await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
-
-        // Jellyfin adds the item as the recording starts, before any sync has seen the file.
-        _host.StartRecording(TimerOf("p1"), old.Path!, 1, 5);
-        var item = Rerun(old);
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-
-        var saved = ReadStore();
-        Assert.Equal(new[] { Alex }, saved.Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
-        Assert.False(saved.Removed.ContainsKey(item.Id));
-
-        // The sync that captures the file adds no one else.
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
     }
 
     [Fact]
@@ -554,7 +529,7 @@ public sealed class RecordingOwnershipTests : IDisposable
     public async Task Rerun_FinishedTimerOfDeletedRecordingOnSamePath_DoesNotOwnIt()
     {
         // Jordan's recording finishes and is deleted before a sync forgets its timer.
-        AddProgram("p0", Start.AddDays(-2));
+        AddProgram("p0", _clock.UtcNow);
         var service = NewService();
         await service.RecordProgramAsync("p0", Jordan, CancellationToken.None);
         var first = TimerOf("p0");
@@ -572,7 +547,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(old.Path, ReadStore().TimerPaths["api-p0"]);
 
         // Alex records the rerun to the same file.
-        AddProgram("p1", Start, episode: 5);
+        AddProgram("p1", _clock.UtcNow, episode: 5);
         await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
         _host.StartRecording(TimerOf("p1"), old.Path!, 1, 5);
         var item = Rerun(old);
@@ -586,385 +561,32 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.False(saved.Timers.ContainsKey("api-p0"));
     }
 
-    // Compat fix: a file written after its recording left the library is a new recording.
+    // The recording timer's owners replace the owners of the item it writes.
 
-    [Fact]
-    public async Task Rerun_ByUnownedTimer_FileWrittenAfterRemoval_OldOwnersNotRestored()
+    // A timer nobody owns through Moonfin (an official client, say) recording to a path now.
+    private ScheduledTimer UnownedTimerRecording(string path, string id = "x")
     {
-        var service = NewService();
-        var old = await DeletedJordanRecording(service);
-        var removedAt = ReadStore().Removed[old.Id].RemovedAt;
-
-        // A timer nobody owns through Moonfin (an official client, say) records the rerun to the same file.
-        _clock.Advance(TimeSpan.FromDays(2));
-        AddProgram("p1", Start, episode: 5);
-        _host.Timers.Add(new ScheduledTimer { ApiId = "api-x", TimerId = "t-x", ProgramId = "p1", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
-        _host.StartRecording(TimerOf("p1"), old.Path!, 1, 5);
-        _host.Write();
-        Assert.True(_host.LastWrite[old.Path!] > removedAt + RecordingOwnershipService.FileClockTolerance);
-        var item = Rerun(old);
-        var tagWrites = _host.TagWrites.Count;
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-
-        var saved = ReadStore();
-        Assert.False(saved.Items.ContainsKey(item.Id));
-        Assert.False(saved.Removed.ContainsKey(item.Id));
-        Assert.Empty(TagsOf(item));
-        Assert.Equal(tagWrites, _host.TagWrites.Count);
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Contains(_log.Entries, e => e.Message.Contains("it is a new recording"));
-
-        // Nothing brings Jordan back later either.
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-    }
-
-    [Fact]
-    public async Task Rerun_ItemAddedBeforeTimerSeenRecording_FileWrittenAfterRemoval_OnlyNewOwners()
-    {
-        var service = NewService();
-        var old = await DeletedJordanRecording(service);
-
-        // Alex's timer writes the file, but the listing doesn't show it in progress yet.
-        _clock.Advance(TimeSpan.FromHours(3));
-        AddProgram("p1", _clock.UtcNow, episode: 5);
-        await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
-        _host.Files[old.Path!] = 1_000_000;
-        _host.LastWrite[old.Path!] = _clock.UtcNow;
-        var item = Rerun(old);
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-
-        Assert.False(ReadStore().Items.ContainsKey(item.Id));
-        Assert.False(ReadStore().Removed.ContainsKey(item.Id));
-
-        // The next sync sees it recording and attaches Alex alone.
-        _host.StartRecording(TimerOf("p1"), old.Path!, 1, 5);
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
-    }
-
-    [Fact]
-    public async Task ReturnedFile_WrittenBeforeRemoval_RestoresOwners()
-    {
-        var service = NewService();
-        var old = _host.AddItem("/rec/bonanza.ts");
-        _host.Files[old.Path!] = 5_000_000;
-        _host.LastWrite[old.Path!] = _clock.UtcNow.AddHours(-2);
-        await service.ClaimAsync(OwnedKind.Item, old.Id.ToString(), Jordan, CancellationToken.None);
-
-        // The storage drops out, the scan removes the item, and the same file comes back a day later.
-        _host.Items.Remove(old);
-        await service.OnItemRemovedAsync(old.Id, CancellationToken.None);
-        _clock.Advance(TimeSpan.FromDays(1));
-        var back = Rerun(old);
-        await service.OnItemAddedAsync(back, CancellationToken.None);
-
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[back.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(back));
-        Assert.Empty(ReadStore().Removed);
-    }
-
-    [Fact]
-    public async Task ReturnedFile_WrittenWithinClockTolerance_RestoresOwners()
-    {
-        var service = NewService();
-        var old = await DeletedJordanRecording(service);
-        var removedAt = ReadStore().Removed[old.Id].RemovedAt;
-
-        // The storage's clock runs a little ahead of the server's.
-        _host.Files[old.Path!] = 5_000_000;
-        _host.LastWrite[old.Path!] = removedAt + TimeSpan.FromSeconds(30);
-        _clock.Advance(TimeSpan.FromDays(1));
-        var back = Rerun(old);
-        await service.OnItemAddedAsync(back, CancellationToken.None);
-
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[back.Id]);
-    }
-
-    [Fact]
-    public async Task FileWrittenPastTolerance_NotRestored()
-    {
-        var service = NewService();
-        var old = await DeletedJordanRecording(service);
-        var removedAt = ReadStore().Removed[old.Id].RemovedAt;
-
-        _host.Files[old.Path!] = 5_000_000;
-        _host.LastWrite[old.Path!] = removedAt + RecordingOwnershipService.FileClockTolerance + TimeSpan.FromSeconds(1);
-        _clock.Advance(TimeSpan.FromDays(1));
-        var back = Rerun(old);
-        await service.OnItemAddedAsync(back, CancellationToken.None);
-
-        Assert.False(ReadStore().Items.ContainsKey(back.Id));
-        Assert.Empty(ReadStore().Removed);
-    }
-
-    // Fix round 1, Important 1: a finished owned timer left on the path of a deleted recording.
-
-    // Jordan's timer records /rec/bonanza.ts two days before Start and its item is added; returns the item.
-    private async Task<LibraryItem> JordanRecordedByTimer(RecordingOwnershipService service)
-    {
-        AddProgram("p0", Start.AddDays(-2));
-        var now = _clock.UtcNow;
-        _clock.UtcNow = Start.AddDays(-2).AddMinutes(-5);
-        await service.RecordProgramAsync("p0", Jordan, CancellationToken.None);
-        var first = TimerOf("p0");
-
-        // Recorded during its window, as a server does.
-        _clock.UtcNow = Start.AddDays(-2).AddMinutes(5);
-        _host.StartRecording(first, "/rec/bonanza.ts", 1, 5);
-        await service.SyncAsync(CancellationToken.None);
-        var old = _host.AddItem("/rec/bonanza.ts");
-        _host.LastWrite[old.Path!] = _clock.UtcNow;
-        await service.OnItemAddedAsync(old, CancellationToken.None);
-        _host.StopRecording(first);
-        _clock.UtcNow = now;
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[old.Id]);
-        return old;
-    }
-
-    // A rerun on the same file, recorded by a timer nobody owns through Moonfin.
-    private LibraryItem UnownedRerun(LibraryItem old)
-    {
-        AddProgram("p1", Start, episode: 5);
-        _host.Timers.Add(new ScheduledTimer { ApiId = "api-x", TimerId = "t-x", ProgramId = "p1", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
-        _host.StartRecording(TimerOf("p1"), old.Path!, 1, 5);
-        _host.Write();
-        return Rerun(old);
-    }
-
-    [Fact]
-    public async Task ItemRemoved_ForgetsFinishedTimerThatRecordedIt()
-    {
-        var service = NewService();
-        var old = await JordanRecordedByTimer(service);
-
-        _host.Items.Remove(old);
-        await service.OnItemRemovedAsync(old.Id, CancellationToken.None);
-
-        var saved = ReadStore();
-        Assert.False(saved.Timers.ContainsKey("api-p0"));
-        Assert.False(saved.TimerPaths.ContainsKey("api-p0"));
-        Assert.Equal(new[] { Jordan }, saved.Removed[old.Id].Owners);
-    }
-
-    [Fact]
-    public async Task ItemRemoved_KeepsCancelledTimerWaitingForItsOwnRecording()
-    {
-        // A timer cancelled mid-recording keeps its owners for its item; removing another item must not forget it.
-        var service = NewService();
-        var other = await JordanRecordedByTimer(service);
-        AddProgram("p2", Start, episode: 6);
-        await service.RecordProgramAsync("p2", Alex, CancellationToken.None);
-        _host.StartRecording(TimerOf("p2"), "/rec/other.ts", 1, 6);
-        await service.SyncAsync(CancellationToken.None);
-        _host.LastWrite["/rec/other.ts"] = _clock.UtcNow;
-        _host.CancelTimer(TimerOf("p2"));
-        await service.OnTimerCancelledAsync("t-p2", "/rec/other.ts", CancellationToken.None);
-
-        _host.Items.Remove(other);
-        await service.OnItemRemovedAsync(other.Id, CancellationToken.None);
-        Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p2"]);
-
-        // The cancelled timer is unlisted now, and syncs stamp it done without its item; the item
-        // still arrives three days later, its file last written at the cancel.
-        await service.SyncAsync(CancellationToken.None);
-        Assert.True(ReadStore().TimersMissingSince.ContainsKey("api-p2"));
-        _clock.Advance(TimeSpan.FromDays(3));
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p2"]);
-
-        var item = _host.AddItem("/rec/other.ts");
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-        Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
-    }
-
-    // Fix round 2: a done timer whose recording isn't in the library.
-
-    // Jordan's timer records the path and finishes; no item for it is ever in the library.
-    private async Task<ScheduledTimer> JordanTimerDoneWithoutItem(RecordingOwnershipService service, string path = "/rec/bonanza.ts")
-    {
-        AddProgram("p0", Start.AddDays(-2));
-        await service.RecordProgramAsync("p0", Jordan, CancellationToken.None);
-        var timer = TimerOf("p0");
+        var program = AddProgram("p-" + id, _clock.UtcNow, episode: 5);
+        var timer = new ScheduledTimer { ApiId = "api-" + id, TimerId = "t-" + id, ProgramId = program.Id, StartDate = _clock.UtcNow, EndDate = _clock.UtcNow.AddMinutes(20), Status = "New" };
+        _host.Timers.Add(timer);
         _host.StartRecording(timer, path, 1, 5);
-        await service.SyncAsync(CancellationToken.None);
-        _host.LastWrite[path] = _clock.UtcNow;
-        _host.StopRecording(timer);
-        Assert.Equal(path, ReadStore().TimerPaths["api-p0"]);
         return timer;
     }
 
-    [Fact]
-    public async Task DoneTimerWhoseItemNeverArrives_ForgottenAfterRetention()
+    // A timer a user owns through Moonfin, recording to a path now.
+    private async Task<ScheduledTimer> OwnedTimerRecording(RecordingOwnershipService service, string programId, Guid owner, string path)
     {
-        var service = NewService();
-        await JordanTimerDoneWithoutItem(service);
-
-        await service.SyncAsync(CancellationToken.None);
-        Assert.True(ReadStore().Timers.ContainsKey("api-p0"));
-
-        _clock.Advance(TimeSpan.FromDays(8));
-        await service.SyncAsync(CancellationToken.None);
-
-        var saved = ReadStore();
-        Assert.False(saved.Timers.ContainsKey("api-p0"));
-        Assert.False(saved.TimerPaths.ContainsKey("api-p0"));
-        Assert.False(saved.TimersMissingSince.ContainsKey("api-p0"));
+        AddProgram(programId, _clock.UtcNow);
+        await service.RecordProgramAsync(programId, owner, CancellationToken.None);
+        var timer = TimerOf(programId);
+        _host.StartRecording(timer, path, 1, 1);
+        return timer;
     }
 
-    [Fact]
-    public async Task DoneTimerWithoutItem_UnlistedNoTombstone_UnownedRerunNotClaimed()
-    {
-        var service = NewService();
-        var timer = await JordanTimerDoneWithoutItem(service);
-
-        // The server drops the finished one-off from its listing; a sync stamps it done without its item.
-        _host.Timers.Remove(timer);
-        await service.SyncAsync(CancellationToken.None);
-        Assert.True(ReadStore().TimersMissingSince.ContainsKey("api-p0"));
-
-        // Two days on, a timer nobody owns records a rerun to the same file.
-        _clock.Advance(TimeSpan.FromDays(2));
-        AddProgram("p1", Start, episode: 5);
-        _host.Timers.Add(new ScheduledTimer { ApiId = "api-x", TimerId = "t-x", ProgramId = "p1", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
-        _host.StartRecording(TimerOf("p1"), "/rec/bonanza.ts", 1, 5);
-        _host.Write();
-        var item = _host.AddItem("/rec/bonanza.ts");
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Empty(TagsOf(item));
-    }
-
-    [Fact]
-    public async Task DeletedWhileRecording_TimerForgottenAfterRetention()
-    {
-        AddProgram("p0", Start.AddDays(-2));
-        var service = NewService();
-        await service.RecordProgramAsync("p0", Jordan, CancellationToken.None);
-        var timer = TimerOf("p0");
-        _host.StartRecording(timer, "/rec/bonanza.ts", 1, 5);
-        await service.SyncAsync(CancellationToken.None);
-        var item = _host.AddItem("/rec/bonanza.ts");
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-
-        // Deleted while still recording: the live timer is kept, then finishes with no item.
-        _host.Items.Remove(item);
-        await service.OnItemRemovedAsync(item.Id, CancellationToken.None);
-        Assert.True(ReadStore().Timers.ContainsKey("api-p0"));
-        _host.StopRecording(timer);
-        await service.SyncAsync(CancellationToken.None);
-
-        _clock.Advance(TimeSpan.FromDays(8));
-        await service.SyncAsync(CancellationToken.None);
-
-        Assert.False(ReadStore().Timers.ContainsKey("api-p0"));
-        Assert.Empty(ReadStore().Removed);
-    }
-
-    // Fix round 2, Minor 1: the post-recording allowance boundary.
-
-    private async Task<(LibraryItem Item, RecordingOwnershipService Service)> FinishedTimerFileWrittenAt(TimeSpan afterAllowance)
-    {
-        AddProgram("p0", Start.AddDays(-2));
-        var service = NewService();
-        await service.RecordProgramAsync("p0", Jordan, CancellationToken.None);
-        var timer = TimerOf("p0");
-        _host.StartRecording(timer, "/rec/bonanza.ts", 1, 5);
-        await service.SyncAsync(CancellationToken.None);
-        _host.StopRecording(timer);
-
-        // The item reaches the library only now, while the listing still has the finished timer.
-        _host.LastWrite["/rec/bonanza.ts"] = timer.WindowEnd + RecordingOwnershipService.PostRecordingAllowance + RecordingOwnershipService.FileClockTolerance + afterAllowance;
-        var item = _host.AddItem("/rec/bonanza.ts");
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-        return (item, service);
-    }
-
-    [Fact]
-    public async Task FinishedTimer_FileWrittenPastAllowance_NotClaimed()
-    {
-        var (item, service) = await FinishedTimerFileWrittenAt(TimeSpan.FromSeconds(1));
-
-        Assert.False(ReadStore().Items.ContainsKey(item.Id));
-        await service.SyncAsync(CancellationToken.None);
-        Assert.False(ReadStore().Items.ContainsKey(item.Id));
-    }
-
-    [Fact]
-    public async Task FinishedTimer_FileWrittenWithinAllowance_Claimed()
-    {
-        var (item, _) = await FinishedTimerFileWrittenAt(TimeSpan.FromSeconds(-1));
-
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
-    }
-
-    [Fact]
-    public async Task Rerun_ByUnownedTimer_WithStaleFinishedOwnedTimer_DoesNotGiveOldOwner()
-    {
-        var service = NewService();
-        var old = await JordanRecordedByTimer(service);
-
-        // A restart in between, so the removal can't forget the timer: it stays on the path.
-        service = NewService();
-        _host.Items.Remove(old);
-        await service.OnItemRemovedAsync(old.Id, CancellationToken.None);
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Equal(old.Path, ReadStore().TimerPaths["api-p0"]);
-
-        _clock.Advance(TimeSpan.FromDays(2));
-        var item = UnownedRerun(old);
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-
-        Assert.False(ReadStore().Items.ContainsKey(item.Id));
-        Assert.Empty(ReadStore().Removed);
-        Assert.Empty(TagsOf(item));
-
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Empty(TagsOf(item));
-    }
-
-    [Fact]
-    public async Task Rerun_ByUnownedTimer_WithStaleFinishedOwnedTimer_AfterTombstoneExpired_DoesNotGiveOldOwner()
-    {
-        var service = NewService();
-        var old = await JordanRecordedByTimer(service);
-        service = NewService();
-        _host.Items.Remove(old);
-        await service.OnItemRemovedAsync(old.Id, CancellationToken.None);
-
-        // Eight days on, the tombstone is gone but the timer still sits on the path.
-        _clock.Advance(TimeSpan.FromDays(8));
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Empty(ReadStore().Removed);
-        Assert.Equal(old.Path, ReadStore().TimerPaths["api-p0"]);
-
-        var item = UnownedRerun(old);
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-        await service.SyncAsync(CancellationToken.None);
-
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Empty(TagsOf(item));
-    }
-
-    // Fix round 1, Important 2: the listing for a returning item.
-
-    // Jordan claims a recording whose file was written before now, then the item leaves.
-    private async Task<LibraryItem> ClaimedThenRemoved(RecordingOwnershipService service, string path, bool knownTime = true)
+    // Jordan claims a recording, then the item leaves.
+    private async Task<LibraryItem> ClaimedThenRemoved(RecordingOwnershipService service, string path)
     {
         var item = _host.AddItem(path);
-        if (knownTime)
-        {
-            _host.Files[path] = 5_000_000;
-            _host.LastWrite[path] = _clock.UtcNow.AddHours(-2);
-        }
-
         await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
         _host.Items.Remove(item);
         await service.OnItemRemovedAsync(item.Id, CancellationToken.None);
@@ -972,28 +594,158 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
+    public async Task Rerun_ByUnownedTimer_OnTombstonedPath_EndsWithNoOwners()
+    {
+        var service = NewService();
+        var old = await DeletedJordanRecording(service);
+        _clock.Advance(TimeSpan.FromDays(2));
+        UnownedTimerRecording(old.Path!);
+
+        // The item comes back before a sync has seen the timer record, so it is restored its old owners.
+        var item = Rerun(old);
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+
+        // The sync that sees it recording puts that right.
+        await service.SyncAsync(CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.False(saved.Items.ContainsKey(item.Id));
+        Assert.Empty(saved.Removed);
+        Assert.Empty(TagsOf(item));
+        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
+        Assert.Equal(old.Path, saved.TimerPaths["api-x"]);
+    }
+
+    [Fact]
+    public async Task Rerun_ByUnownedTimer_SyncFindsItemFirst_DropsTombstoneAndOwners()
+    {
+        var service = NewService();
+        var old = await DeletedJordanRecording(service);
+        UnownedTimerRecording(old.Path!);
+
+        var item = Rerun(old);
+        await service.SyncAsync(CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.Empty(saved.Items);
+        Assert.Empty(saved.Removed);
+        Assert.Empty(TagsOf(item));
+    }
+
+    [Fact]
+    public async Task Rerun_ByOwnedTimer_ItemAddedBeforePathNoted_SyncReplacesTheTombstonedOwners()
+    {
+        var service = NewService();
+        var old = await DeletedJordanRecording(service);
+        await OwnedTimerRecording(service, "p1", Alex, old.Path!);
+
+        var item = Rerun(old);
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
+        Assert.Empty(ReadStore().Removed);
+    }
+
+    // The recording was deleted and its path recorded again while the feature was off, so the
+    // removal was never heard: the new item has the same id and the owners are still in the store.
+
+    [Fact]
+    public async Task StaleItemOwners_SwitchWasOff_UnownedRerunClearsThem()
+    {
+        var service = NewService();
+        var item = _host.AddItem("/rec/bonanza.ts");
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+
+        UnownedTimerRecording(item.Path!);
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Empty(ReadStore().Items);
+        Assert.Empty(TagsOf(item));
+    }
+
+    [Fact]
+    public async Task StaleItemOwners_SwitchWasOff_OwnedRerunReplacesNotMerges()
+    {
+        var service = NewService();
+        var item = _host.AddItem("/rec/bonanza.ts");
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+
+        await OwnedTimerRecording(service, "p1", Alex, item.Path!);
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
+    }
+
+    [Fact]
+    public async Task MissingItem_OnSync_BecomesTombstone()
+    {
+        var service = NewService();
+        var item = _host.AddItem("/rec/a.ts");
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+
+        // The removal event never arrived (the feature was off).
+        _host.Items.Remove(item);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        await service.SyncAsync(CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.Empty(saved.Items);
+        Assert.Equal(new[] { Jordan }, saved.Removed[item.Id].Owners);
+        Assert.Equal(_clock.UtcNow, saved.Removed[item.Id].RemovedAt);
+
+        // It comes back within the retention with its owners.
+        var back = Rerun(item);
+        await service.OnItemAddedAsync(back, CancellationToken.None);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[back.Id]);
+    }
+
+    [Fact]
+    public async Task ReturnedFile_NoTimerRecordingIt_RestoresOwners()
+    {
+        var service = NewService();
+        var old = await ClaimedThenRemoved(service, "/rec/a.ts");
+
+        // The storage drops out, the scan removes the item, and the same file comes back a day later.
+        _clock.Advance(TimeSpan.FromDays(1));
+        var back = Rerun(old);
+        await service.OnItemAddedAsync(back, CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[back.Id]);
+        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(back));
+        Assert.Empty(ReadStore().Removed);
+
+        // Nothing is recording to the path, so syncs leave it be.
+        await service.SyncAsync(CancellationToken.None);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[back.Id]);
+    }
+
+    [Fact]
     public async Task ReturnedFile_TimersUnavailable_StillRestoresOwners()
     {
         var service = NewService();
-        var known = await ClaimedThenRemoved(service, "/rec/a.ts");
-        var unknown = await ClaimedThenRemoved(service, "/rec/b.ts", knownTime: false);
+        var first = await ClaimedThenRemoved(service, "/rec/a.ts");
+        var second = await ClaimedThenRemoved(service, "/rec/b.ts");
 
         // The startup scan re-adds them before Live TV is ready.
         _host.TimersUnavailable = true;
         _clock.Advance(TimeSpan.FromHours(1));
-        var knownBack = Rerun(known);
-        var unknownBack = Rerun(unknown);
-        await service.OnItemAddedAsync(knownBack, CancellationToken.None);
-        await service.OnItemAddedAsync(unknownBack, CancellationToken.None);
+        var firstBack = Rerun(first);
+        var secondBack = Rerun(second);
+        await service.OnItemAddedAsync(firstBack, CancellationToken.None);
+        await service.OnItemAddedAsync(secondBack, CancellationToken.None);
 
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[knownBack.Id]);
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[unknownBack.Id]);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[firstBack.Id]);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[secondBack.Id]);
         Assert.Empty(ReadStore().Removed);
-        Assert.Contains(_log.Entries, e => e.Kind == LogKind.Warn && e.Message.Contains("Could not list the timers"));
     }
 
     [Fact]
-    public async Task ManyReturnedFiles_ListTimersAtMostOnce()
+    public async Task ManyReturnedFiles_ListNoTimers()
     {
         var service = NewService();
         var removed = new List<LibraryItem>();
@@ -1014,20 +766,280 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task ReAdded_FileTimeUnknown_KeepsTombstoneBehaviour()
+    public async Task CancelledMidway_ItemArrivesWithinAllowance_TakesOwners()
     {
         var service = NewService();
-        var old = await DeletedJordanRecording(service);
+        var timer = await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+        Assert.Equal("/rec/a.ts", ReadStore().TimerPaths["api-p1"]);
 
-        // No file the host can read a time from: an unowned rerun and a returned file look the same.
-        _clock.Advance(TimeSpan.FromDays(2));
-        Assert.Null(_host.GetFileWrittenAt(old.Id));
-        var back = Rerun(old);
-        Assert.Null(_host.GetFileWrittenAt(back.Id));
+        // The cancel is raised while the recording runs; the item reaches the library later.
+        await service.OnTimerCancelledAsync(timer.TimerId, "/rec/a.ts", CancellationToken.None);
+        Assert.Equal(new[] { Jordan }, ReadStore().Timers["api-p1"]);
+        _clock.Advance(RecordingOwnershipService.PostRecordingAllowance - TimeSpan.FromMinutes(1));
+        var item = _host.AddItem("/rec/a.ts");
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.Equal(new[] { Jordan }, saved.Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Empty(saved.Timers);
+        Assert.Empty(saved.TimerPaths);
+        Assert.Empty(saved.TimerPathsUntil);
+    }
+
+    [Fact]
+    public async Task CancelledMidway_ItemArrivesAfterAllowance_NoOwners()
+    {
+        var service = NewService();
+        var timer = await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+        await service.OnTimerCancelledAsync(timer.TimerId, "/rec/a.ts", CancellationToken.None);
+
+        _clock.Advance(RecordingOwnershipService.PostRecordingAllowance + TimeSpan.FromMinutes(1));
+        var item = _host.AddItem("/rec/a.ts");
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.False(saved.Items.ContainsKey(item.Id));
+        Assert.Empty(TagsOf(item));
+        Assert.Empty(saved.Timers);
+        Assert.Empty(saved.TimerPaths);
+    }
+
+    [Fact]
+    public async Task CancelledUnownedTimer_ItemInLibrary_LosesItsOwners()
+    {
+        var service = NewService();
+        var item = _host.AddItem("/rec/a.ts");
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+        var timer = UnownedTimerRecording(item.Path!);
+
+        await service.OnTimerCancelledAsync(timer.TimerId, item.Path, CancellationToken.None);
+
+        Assert.Empty(ReadStore().Items);
+        Assert.Empty(TagsOf(item));
+        Assert.Empty(ReadStore().TimerPaths);
+    }
+
+    [Fact]
+    public async Task JoinWhileRecording_ItemGainsOwner()
+    {
+        var service = NewService();
+        await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        var item = _host.AddItem("/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+
+        await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Jordan", "Recorded by Alex" }, TagsOf(item));
+    }
+
+    [Fact]
+    public async Task ClaimItemWhileRecording_AddsToTimer_SurvivesNextSync()
+    {
+        var service = NewService();
+        await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        var item = _host.AddItem("/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+
+        var owners = await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Alex, CancellationToken.None);
+        Assert.Equal(new[] { Jordan, Alex }, owners!.Select(o => o.UserId));
+        Assert.Equal(new[] { Jordan, Alex }, ReadStore().Timers["api-p1"]);
+
+        await service.SyncAsync(CancellationToken.None);
+        Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Jordan", "Recorded by Alex" }, TagsOf(item));
+    }
+
+    [Fact]
+    public async Task ClaimItemWhileRecording_ByUnownedTimer_TimerBecomesTheClaimersAndSurvivesNextSync()
+    {
+        var service = NewService();
+        var item = _host.AddItem("/rec/a.ts");
+        UnownedTimerRecording(item.Path!);
+        await service.SyncAsync(CancellationToken.None);
+
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Sam, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Sam }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { Sam }, ReadStore().Timers["api-x"]);
+    }
+
+    [Fact]
+    public async Task ClaimAfterRecordingEnded_NotUndoneBySync()
+    {
+        var service = NewService();
+        var timer = await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        var item = _host.AddItem("/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+
+        _host.StopRecording(timer);
+        await service.SyncAsync(CancellationToken.None);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+        Assert.Empty(ReadStore().TimerPaths);
+
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Alex, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Jordan", "Recorded by Alex" }, TagsOf(item));
+    }
+
+    [Fact]
+    public async Task FinishedTimer_ItemWithinAllowance_TakesOwnersOnce()
+    {
+        var service = NewService();
+        var timer = await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+        _host.StopRecording(timer);
+        _host.Timers.Remove(timer);
+        await service.SyncAsync(CancellationToken.None);
+        Assert.True(ReadStore().TimerPathsUntil.ContainsKey("api-p1"));
+
+        _clock.Advance(RecordingOwnershipService.PostRecordingAllowance - TimeSpan.FromMinutes(1));
+        var item = _host.AddItem("/rec/a.ts");
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Empty(ReadStore().Timers);
+        Assert.Empty(ReadStore().TimerPaths);
+    }
+
+    [Fact]
+    public async Task FinishedTimer_ItemPastAllowance_NotClaimedAndTimerForgotten()
+    {
+        var service = NewService();
+        var timer = await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+        _host.StopRecording(timer);
+        _host.Timers.Remove(timer);
+        await service.SyncAsync(CancellationToken.None);
+
+        _clock.Advance(RecordingOwnershipService.PostRecordingAllowance + TimeSpan.FromMinutes(1));
+        var item = _host.AddItem("/rec/a.ts");
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.False(saved.Items.ContainsKey(item.Id));
+        Assert.Empty(saved.Timers);
+        Assert.Empty(saved.TimerPaths);
+        Assert.Empty(saved.TimerPathsUntil);
+    }
+
+    [Fact]
+    public async Task DeletedWhileRecording_TimerForgottenOnceItsNoteLapses()
+    {
+        var service = NewService();
+        var timer = await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        var item = _host.AddItem("/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+
+        // Deleted while still recording: the timer is kept, then finishes with no item.
+        _host.Items.Remove(item);
+        await service.OnItemRemovedAsync(item.Id, CancellationToken.None);
+        Assert.True(ReadStore().Timers.ContainsKey("api-p1"));
+        _host.StopRecording(timer);
+        await service.SyncAsync(CancellationToken.None);
+        Assert.True(ReadStore().Timers.ContainsKey("api-p1"));
+
+        // The allowance runs from the end of the timer's window.
+        _clock.Advance(TimeSpan.FromHours(3));
+        await service.SyncAsync(CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.Empty(saved.Timers);
+        Assert.Empty(saved.TimerPaths);
+        Assert.Equal(new[] { Jordan }, saved.Removed[item.Id].Owners);
+    }
+
+    [Fact]
+    public async Task UnownedTimerRecordingTheSamePath_SupersedesAStoppedOwnedTimersNote()
+    {
+        var service = NewService();
+        var timer = await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        var item = _host.AddItem("/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+
+        // The recording is deleted, its timer stops, and something else records the path again.
+        _host.Items.Remove(item);
+        await service.OnItemRemovedAsync(item.Id, CancellationToken.None);
+        _host.StopRecording(timer);
+        await service.SyncAsync(CancellationToken.None);
+        Assert.True(ReadStore().TimerPathsUntil.ContainsKey("api-p1"));
+        UnownedTimerRecording("/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+
+        var back = Rerun(item);
         await service.OnItemAddedAsync(back, CancellationToken.None);
 
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[back.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(back));
+        var saved = ReadStore();
+        Assert.Empty(saved.Items);
+        Assert.Empty(saved.Removed);
+        Assert.False(saved.Timers.ContainsKey("api-p1"));
+        Assert.Empty(TagsOf(back));
+    }
+
+    [Fact]
+    public async Task OldStore_TimerPathsWithoutExpiry_Loads()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(
+            StorePath,
+            "{\"Version\":1,\"Timers\":{\"api-p1\":[\"" + Jordan + "\"]},\"TimerPaths\":{\"api-p1\":\"/rec/a.ts\"}}");
+        var service = NewService();
+
+        // The timer isn't listed, so the first sync gives its file one allowance from now.
+        await service.SyncAsync(CancellationToken.None);
+        var saved = ReadStore();
+        Assert.Equal("/rec/a.ts", saved.TimerPaths["api-p1"]);
+        Assert.Equal(_clock.UtcNow + RecordingOwnershipService.PostRecordingAllowance, saved.TimerPathsUntil["api-p1"]);
+        Assert.Equal(new[] { Jordan }, saved.Timers["api-p1"]);
+
+        var item = _host.AddItem("/rec/a.ts");
+        await service.OnItemAddedAsync(item, CancellationToken.None);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+        Assert.Empty(ReadStore().TimerPaths);
+    }
+
+    [Fact]
+    public async Task OldStore_TimerPathsWithoutExpiry_LapsAfterOneAllowance()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(
+            StorePath,
+            "{\"Version\":1,\"Timers\":{\"api-p1\":[\"" + Jordan + "\"]},\"TimerPaths\":{\"api-p1\":\"/rec/a.ts\"}}");
+        var service = NewService();
+        await service.SyncAsync(CancellationToken.None);
+
+        _clock.Advance(RecordingOwnershipService.PostRecordingAllowance + TimeSpan.FromMinutes(1));
+        await service.SyncAsync(CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.Empty(saved.Timers);
+        Assert.Empty(saved.TimerPaths);
+        Assert.Empty(saved.TimerPathsUntil);
+    }
+
+    [Fact]
+    public async Task StoreWithRecordingNotes_KeepsVersionAndWritesPaths()
+    {
+        var service = NewService();
+        await OwnedTimerRecording(service, "p1", Jordan, "/rec/a.ts");
+        UnownedTimerRecording("/rec/b.ts");
+        await service.SyncAsync(CancellationToken.None);
+
+        var json = JsonNode.Parse(_stateFile.LastWritten(StorePath)!)!.AsObject();
+        Assert.Equal(1, json["Version"]!.GetValue<int>());
+        Assert.Equal("/rec/a.ts", json["TimerPaths"]!["api-p1"]!.GetValue<string>());
     }
 
     // Compat fix I2: the store's Version is honoured.
@@ -1559,7 +1571,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
     // 3
     [Fact]
-    public async Task CancelWithActivePath_ItemExists_AttachesAndKeepsUntilSyncForgetsTimer()
+    public async Task CancelWithActivePath_ItemExists_TakesOwnersAndTimerIsForgotten()
     {
         AddProgram("p1", Start);
         var service = NewService();
@@ -1580,8 +1592,10 @@ public sealed class RecordingOwnershipTests : IDisposable
             await Bounded(service.GetMineAsync(Jordan, CancellationToken.None), "a call after the cancel");
             var saved = ReadStore();
             Assert.Equal(new[] { Jordan }, saved.Items[item.Id]);
-            Assert.Equal(new[] { Jordan }, saved.Timers["api-p1"]);
-            Assert.Equal("/rec/a.ts", saved.TimerPaths["api-p1"]);
+
+            // The item took the owners once and the timer, cancelled, is done with.
+            Assert.Empty(saved.Timers);
+            Assert.Empty(saved.TimerPaths);
         }
 
         _host.Timers.Remove(timer);
@@ -1589,8 +1603,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         var after = ReadStore();
-        Assert.Empty(after.Timers);
-        Assert.Empty(after.TimerPaths);
         Assert.Equal(new[] { Jordan }, after.Items[item.Id]);
         Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
     }
@@ -2144,56 +2156,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(2, _host.SeriesRules.Count);
     }
 
-    // A recording of Jordan's timer, removed, while the timer list can no longer be read and
-    // still shows the timer recording. Returns the item and when its file was written.
-    private async Task<(LibraryItem Item, RecordingOwnershipService Service)> RemovedWhileListingIsStale(TimeSpan? removedAfterStart = null)
-    {
-        AddProgram("p1", Start);
-        _host.Clock = () => _clock.UtcNow;
-        var service = NewService();
-        await service.RecordProgramAsync("p1", Jordan, CancellationToken.None);
-        _clock.UtcNow = Start.AddMinutes(5);
-        _host.StartRecording(TimerOf("p1"), "/rec/bonanza.ts", 1, 1);
-        _host.Write();
-        await service.SyncAsync(CancellationToken.None);
-        var item = _host.AddItem("/rec/bonanza.ts");
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-
-        _host.TimersUnavailable = true;
-        _clock.UtcNow = Start + (removedAfterStart ?? TimeSpan.FromHours(3));
-        _host.Items.Remove(item);
-        await service.OnItemRemovedAsync(item.Id, CancellationToken.None);
-        return (item, service);
-    }
-
-    [Fact]
-    public async Task StaleListing_NewerFileOnTheTimersPath_DoesNotTakeItsOwners()
-    {
-        var (old, service) = await RemovedWhileListingIsStale();
-
-        // Something nobody owns records to the same file after the removal.
-        _clock.Advance(TimeSpan.FromMinutes(10));
-        _host.LastWrite[old.Path!] = _clock.UtcNow;
-        var item = Rerun(old);
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-
-        Assert.False(ReadStore().Items.ContainsKey(item.Id));
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-    }
-
-    [Fact]
-    public async Task StaleListing_UnchangedFileComesBack_KeepsItsOwners()
-    {
-        var (old, service) = await RemovedWhileListingIsStale();
-
-        _clock.Advance(TimeSpan.FromMinutes(10));
-        var item = Rerun(old);
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-    }
-
     [Fact]
     public async Task UnnumberedSuggestion_TimerListedLate_OwnerStillReachesIt()
     {
@@ -2220,41 +2182,6 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         Assert.Equal(new[] { "api-" + future.Id }, (await owners.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
         Assert.Empty(ReadIncompleteStore().PendingTimerOwners);
-    }
-
-    [Fact]
-    public async Task StaleListing_NewerFileWithinThePostRecordingAllowance_DoesNotTakeItsOwners()
-    {
-        // Removed five minutes after the 20-minute window, rerecorded ten minutes later: well
-        // inside the hour allowed for post-processing.
-        var (old, service) = await RemovedWhileListingIsStale(TimeSpan.FromMinutes(25));
-
-        _clock.Advance(TimeSpan.FromMinutes(10));
-        _host.LastWrite[old.Path!] = _clock.UtcNow;
-        var item = Rerun(old);
-        await service.OnItemAddedAsync(item, CancellationToken.None);
-
-        Assert.False(ReadStore().Items.ContainsKey(item.Id));
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-
-        // A later attach pass, run by another owned timer's cancel while the listing is still
-        // unavailable, doesn't give the file to the old timer either.
-        // The listing recovers, showing Jordan's timer finished, and a sync runs; then another
-        // owned timer's cancel runs an attach pass while the listing is unavailable again.
-        _host.StopRecording(TimerOf("p1"));
-        AddProgram("p9", Start.AddHours(5));
-        _host.TimersUnavailable = false;
-        await service.RecordProgramAsync("p9", Alex, CancellationToken.None);
-        _host.StartRecording(TimerOf("p9"), "/rec/p9.ts", 1, 9);
-        await service.SyncAsync(CancellationToken.None);
-        var alexs = _host.AddItem("/rec/p9.ts");
-        _host.TimersUnavailable = true;
-        await service.OnTimerCancelledAsync("t-p9", "/rec/p9.ts", CancellationToken.None);
-
-        // The pass ran: the cancelled timer's own recording is Alex's.
-        Assert.Equal(new[] { Alex }, ReadStore().Items[alexs.Id]);
-        Assert.False(ReadStore().Items.ContainsKey(item.Id));
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
 
     [Fact]
@@ -2392,42 +2319,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Alex, CancellationToken.None)).TimerIds);
         Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
         Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p1"]);
-    }
-
-    [Fact]
-    public async Task StaleListing_RerunInLibraryBeforeItsAddEvent_AttachPassDoesNotGiveOldOwners()
-    {
-        AddProgram("p1", Start);
-        AddProgram("p9", Start.AddHours(5));
-        _host.Clock = () => _clock.UtcNow;
-        var service = NewService();
-        await service.RecordProgramAsync("p1", Jordan, CancellationToken.None);
-        await service.RecordProgramAsync("p9", Alex, CancellationToken.None);
-        _clock.UtcNow = Start.AddMinutes(5);
-        _host.StartRecording(TimerOf("p1"), "/rec/bonanza.ts", 1, 1);
-        _host.StartRecording(TimerOf("p9"), "/rec/p9.ts", 1, 9);
-        _host.Write();
-        await service.SyncAsync(CancellationToken.None);
-        var old = _host.AddItem("/rec/bonanza.ts");
-        await service.OnItemAddedAsync(old, CancellationToken.None);
-
-        // The listing goes away with Jordan's timer still cached as recording; the recording is
-        // deleted after its window, and a rerun nobody owns lands on the same file.
-        _host.TimersUnavailable = true;
-        _clock.UtcNow = Start.AddMinutes(25);
-        _host.Items.Remove(old);
-        await service.OnItemRemovedAsync(old.Id, CancellationToken.None);
-        _clock.Advance(TimeSpan.FromMinutes(10));
-        _host.LastWrite[old.Path!] = _clock.UtcNow;
-        var rerun = Rerun(old);
-
-        // Another owned timer's cancel runs the attach pass before the rerun's add event.
-        var alexs = _host.AddItem("/rec/p9.ts");
-        await service.OnTimerCancelledAsync("t-p9", "/rec/p9.ts", CancellationToken.None);
-
-        Assert.Equal(new[] { Alex }, ReadStore().Items[alexs.Id]);
-        Assert.False(ReadStore().Items.ContainsKey(rerun.Id));
-        Assert.DoesNotContain("Recorded by Jordan", TagsOf(rerun));
     }
 
     private OwnershipStoreData ReadStoreOrEmpty() =>

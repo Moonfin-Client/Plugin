@@ -43,8 +43,18 @@ public sealed class OwnershipStoreData
 
     public Dictionary<Guid, List<Guid>> Items { get; set; } = new();
 
-    /// <summary>The file each owned timer wrote, by timer API id, so the finished item can find its owners.</summary>
+    /// <summary>
+    /// The file each timer was seen recording, by timer API id, owned or not, so the item written to
+    /// that path can take the timer's owners. An entry is kept until its recording's item has taken
+    /// them or its <see cref="TimerPathsUntil"/> time passes.
+    /// </summary>
     public Dictionary<string, string> TimerPaths { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// When the <see cref="TimerPaths"/> entry of a timer that has stopped recording lapses. An entry
+    /// with no time here is still recording (or, from an older plugin, not known to have stopped).
+    /// </summary>
+    public Dictionary<string, DateTime> TimerPathsUntil { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Owners of recordings removed from the library, kept for a while in case they come back.</summary>
     public Dictionary<Guid, RemovedItem> Removed { get; set; } = new();
