@@ -21,6 +21,7 @@ RUN --mount=type=secret,id=relay_key CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGET
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS smartsearch
 WORKDIR /src
 COPY shared/SmartSearch shared/SmartSearch
+COPY shared/LiveTv/RecordingOwnerTags.cs shared/LiveTv/RecordingOwnerTags.cs
 COPY Go/smartsearch Go/smartsearch
 ARG TARGETARCH
 RUN dotnet publish Go/smartsearch -c Release -r linux-$(echo "$TARGETARCH" | sed 's/amd64/x64/') -o /out/smartsearch

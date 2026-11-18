@@ -3,6 +3,7 @@
 !Go/
 !Jellyfin/frontend/
 !shared/SmartSearch/
+!shared/LiveTv/RecordingOwnerTags.cs
 !shared/PosterBadges/flags/
 !shared/WatchParty/invite.html
 !shared/WatchParty/preview.png
