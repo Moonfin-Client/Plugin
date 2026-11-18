@@ -130,7 +130,7 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// Sends an immediate test notification to the caller via in-app SSE and background push.
+    /// Sends the caller a test notification, in-app and as a push.
     /// </summary>
     [HttpPost("Test")]
     [Authorize]
@@ -144,13 +144,12 @@ public class NotificationsController : ControllerBase
             return Unauthorized(new { error = "User not authenticated" });
         }
 
-        var config = MoonfinPlugin.Instance?.Configuration;
-        var pushEnabled = config?.PushEnabled == true;
+        var pushEnabled = MoonfinPlugin.Instance?.Configuration?.PushEnabled == true;
         var devices = _store.GetUserDevices(userId.Value);
 
         var title = "Moonfin Push Test";
         var body = "Notifications are working properly!";
-        var route = "/settings/seerr";
+        var route = "";
 
         var json = JsonSerializer.Serialize(new
         {
@@ -161,11 +160,7 @@ public class NotificationsController : ControllerBase
         });
 
         _settingsService.NotifyUser(userId.Value, json);
-
-        if (pushEnabled && devices.Count > 0)
-        {
-            _pushDelivery.QueueToUser(userId.Value, title, body, route);
-        }
+        _pushDelivery.QueueToUser(userId.Value, title, body, route);
 
         return Ok(new
         {

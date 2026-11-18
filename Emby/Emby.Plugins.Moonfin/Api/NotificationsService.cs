@@ -27,8 +27,6 @@ namespace Emby.Plugins.Moonfin.Api
         private NotificationStore Store => Plugin.Instance?.NotificationStore
             ?? throw new InvalidOperationException("NotificationStore not initialized");
 
-        private MoonfinSettingsService? Settings => Plugin.Instance?.SettingsService;
-
         public NotificationsService(IApplicationHost appHost)
         {
             _authContext = appHost.Resolve<IAuthorizationContext>();
@@ -95,13 +93,12 @@ namespace Emby.Plugins.Moonfin.Api
             var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
             if (userId == null) return Json(401, new { error = "User not authenticated" });
 
-            var config = Plugin.Instance?.Configuration;
-            var pushEnabled = config?.PushEnabled == true;
+            var pushEnabled = Plugin.Instance?.Configuration?.PushEnabled == true;
             var devices = Store.GetUserDevices(userId.Value);
 
             var title = "Moonfin Push Test";
             var body = "Notifications are working properly!";
-            var route = "/settings/seerr";
+            var route = "";
 
             var json = JsonSerializer.Serialize(new
             {
@@ -111,12 +108,8 @@ namespace Emby.Plugins.Moonfin.Api
                 route
             });
 
-            Settings?.NotifyUser(userId.Value, json);
-
-            if (pushEnabled && devices.Count > 0 && Plugin.Instance?.PushDelivery != null)
-            {
-                Plugin.Instance.PushDelivery.QueueToUser(userId.Value, title, body, route);
-            }
+            Plugin.Instance?.SettingsService?.NotifyUser(userId.Value, json);
+            Plugin.Instance?.PushDelivery?.QueueToUser(userId.Value, title, body, route);
 
             return Json(new
             {

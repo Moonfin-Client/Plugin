@@ -170,8 +170,7 @@ func (s *Server) handleUnregisterDevice(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleTestNotification(w http.ResponseWriter, r *http.Request) {
 	caller := callerOf(r)
 	ctx := r.Context()
-	cfg := s.config(ctx)
-	pushEnabled := s.pushKey(cfg) != ""
+	pushEnabled := s.pushKey(s.config(ctx)) != ""
 
 	allDevices, err := s.loadDevices(ctx)
 	if err != nil {
@@ -182,7 +181,7 @@ func (s *Server) handleTestNotification(w http.ResponseWriter, r *http.Request) 
 	devices := allDevices[strconv.Itoa(caller.UserID)]
 	title := "Moonfin Push Test"
 	body := "Notifications are working properly!"
-	route := "/settings/seerr"
+	route := ""
 
 	s.notifyUser(caller.UserID, M{
 		"type":  "seerrNotification",
@@ -191,9 +190,7 @@ func (s *Server) handleTestNotification(w http.ResponseWriter, r *http.Request) 
 		"route": route,
 	})
 
-	if pushEnabled && len(devices) > 0 {
-		go s.pushToUser(context.Background(), caller.UserID, title, body, route)
-	}
+	go s.pushToUser(context.Background(), caller.UserID, title, body, route)
 
 	writeJSON(w, http.StatusOK, M{
 		"success":      true,

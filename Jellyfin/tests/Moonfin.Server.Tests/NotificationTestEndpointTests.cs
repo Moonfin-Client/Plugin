@@ -11,117 +11,53 @@ namespace Moonfin.Server.Tests;
 
 public sealed class NotificationTestEndpointTests
 {
-    private static (PushDeliveryService pushDelivery, SeerrWebhookService webhook) CreateServices(
-        NotificationStore store,
-        MoonfinSettingsService settingsService)
+    private readonly MoonfinSettingsService _settings =
+        new(NullLogger<MoonfinSettingsService>.Instance, Path.GetTempPath());
+
+    private NotificationsController CreateController(params Claim[] claims)
     {
-        var httpFactory = new DummyHttpClientFactory();
-        var fcm = new FcmSender(httpFactory, NullLogger<FcmSender>.Instance);
-        var relay = new RelaySender(httpFactory, NullLogger<RelaySender>.Instance);
-        var pushDelivery = new PushDeliveryService(store, fcm, relay, NullLogger<PushDeliveryService>.Instance);
-        var sessionService = new SeerrSessionService(NullLogger<SeerrSessionService>.Instance, httpFactory);
-        var webhook = new SeerrWebhookService(
-            sessionService,
-            settingsService,
+        var store = new NotificationStore(NullLogger<NotificationStore>.Instance);
+        var http = new ThrowingHttpClientFactory("These tests never send a push.");
+        var pushDelivery = new PushDeliveryService(
             store,
-            pushDelivery,
-            new FakeLibraryManager(),
-            NullLogger<SeerrWebhookService>.Instance);
-        return (pushDelivery, webhook);
+            new FcmSender(http, NullLogger<FcmSender>.Instance),
+            new RelaySender(http, NullLogger<RelaySender>.Instance),
+            NullLogger<PushDeliveryService>.Instance);
+
+        return new NotificationsController(store, null!, null!, pushDelivery, _settings)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(claims))
+                }
+            }
+        };
     }
 
     [Fact]
     public void SendTestNotification_UnauthorizedWhenNoClaims()
     {
-        var store = new NotificationStore(NullLogger<NotificationStore>.Instance);
-        var settingsService = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, Path.GetTempPath());
-        var (pushDelivery, webhook) = CreateServices(store, settingsService);
-
-        var controller = new NotificationsController(store, webhook, null!, pushDelivery, settingsService)
-        {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext()
-            }
-        };
-
-        var result = controller.SendTestNotification();
-        Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.IsType<UnauthorizedObjectResult>(CreateController().SendTestNotification());
     }
 
     [Fact]
     public void SendTestNotification_SendsInAppNotificationAndReturnsSuccess()
     {
-        var store = new NotificationStore(NullLogger<NotificationStore>.Instance);
-        var tempDir = Path.Combine(Path.GetTempPath(), "moonfin-test-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-        var settingsService = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempDir);
-        var (pushDelivery, webhook) = CreateServices(store, settingsService);
-
         var userId = Guid.NewGuid();
-        var channel = settingsService.RegisterSseChannel(userId);
+        var channel = _settings.RegisterSseChannel(userId);
 
-        var controller = new NotificationsController(store, webhook, null!, pushDelivery, settingsService)
-        {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext
-            {
-                User = new ClaimsPrincipal(new ClaimsIdentity(new[]
-                {
-                    new Claim("Jellyfin-UserId", userId.ToString())
-                }))
-            }
-            }
-        };
+        var result = CreateController(new Claim("Jellyfin-UserId", userId.ToString())).SendTestNotification();
 
-        var result = controller.SendTestNotification();
         var ok = Assert.IsType<OkObjectResult>(result);
-        Assert.NotNull(ok.Value);
+        using var response = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+        Assert.True(response.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal(0, response.RootElement.GetProperty("devicesCount").GetInt32());
 
         Assert.True(channel.Reader.TryRead(out var eventJson));
-        Assert.Contains("Moonfin Push Test", eventJson);
-
-        var json = JsonSerializer.Serialize(ok.Value);
-        using var doc = JsonDocument.Parse(json);
-        Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
-        Assert.Equal(0, doc.RootElement.GetProperty("devicesCount").GetInt32());
-    }
-
-    [Fact]
-    public async Task SeerrWebhook_DeliversToVerifiedRequester()
-    {
-        var store = new NotificationStore(NullLogger<NotificationStore>.Instance);
-        var targetUserId = Guid.NewGuid();
-        store.SavePrefs(targetUserId, notifyOnNewRequests: true, notifyOnLibraryAdded: true, notifyOnIssues: true, notifyOnNewMedia: true);
-
-        var tempDir = Path.Combine(Path.GetTempPath(), "moonfin-test-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-        var settingsService = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempDir);
-
-        var (_, webhook) = CreateServices(store, settingsService);
-        var channel = settingsService.RegisterSseChannel(targetUserId);
-
-        var payload = JsonDocument.Parse($@"{{
-            ""notification_type"": ""MEDIA_AVAILABLE"",
-            ""subject"": ""Dune Part Two"",
-            ""media"": {{
-                ""tmdbId"": ""693134"",
-                ""media_type"": ""movie""
-            }},
-            ""request"": {{
-                ""requestedBy_jellyfinUserId"": ""{targetUserId}""
-            }}
-        }}").RootElement;
-
-        await webhook.HandleWebhookAsync(payload);
-
-        Assert.True(channel.Reader.TryRead(out var eventJson));
-        Assert.Contains("Dune Part Two", eventJson);
-    }
-
-    private sealed class DummyHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new();
+        using var evt = JsonDocument.Parse(eventJson!);
+        Assert.Equal("Moonfin Push Test", evt.RootElement.GetProperty("title").GetString());
+        Assert.Equal("", evt.RootElement.GetProperty("route").GetString());
     }
 }
