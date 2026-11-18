@@ -1963,6 +1963,19 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
+    public async Task ClaimSeries_ChannelVisibleButScheduledProgramHidden_ClaimsNothing()
+    {
+        var program = AddProgram("p1", Start);
+        var channel = Guid.NewGuid();
+        _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza", null, channel.ToString("N")));
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-1", TimerId = "t-1", ProgramId = "p1", SeriesTimerId = "rule-a", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
+        _host.HiddenItems.Add(program.ItemId);
+        var service = NewService();
+
+        Assert.Null(await service.ClaimAsync(OwnedKind.Series, "rule-a", Alex, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ClaimSeries_RuleWithNoTimersAndNothingToJudgeBy_ClaimsNothing()
     {
         _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza"));
