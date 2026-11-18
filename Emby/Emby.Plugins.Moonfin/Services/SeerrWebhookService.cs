@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
-using MediaBrowser.Model.Querying;
 
 namespace Emby.Plugins.Moonfin.Services
 {
@@ -500,21 +499,13 @@ namespace Emby.Plugins.Moonfin.Services
                     return parsed;
             }
 
-            // Fallback: map the requester's username against a stored session or server user directory.
+            // Fallback: map the requester's username against a stored session.
             if (hasRequest)
             {
                 var username = GetString(request, "requestedBy_username");
                 var byUsername = MapSeerrUsername(username, sessions);
                 if (byUsername != null)
                     return byUsername;
-
-                if (!string.IsNullOrWhiteSpace(username) && PluginServices.UserManager != null)
-                {
-                    var user = PluginServices.UserManager.GetUserList(new UserQuery())
-                        ?.FirstOrDefault(u => string.Equals(u.Name, username, StringComparison.OrdinalIgnoreCase));
-                    if (user != null)
-                        return user.Id;
-                }
             }
 
             // Last resort: the numeric Seerr user id (not emitted by default).
@@ -533,19 +524,11 @@ namespace Emby.Plugins.Moonfin.Services
             }
 
             // Availability and decision events set notifyuser rather than a full request block,
-            // so map that username against a stored session or server user directory as a last resort.
-            var notifyUsername = GetString(payload, "notifyuser_username");
-            var byNotifyUsername = MapSeerrUsername(notifyUsername, sessions);
+            // so map that username against a stored session as a last resort.
+            var byNotifyUsername = MapSeerrUsername(
+                GetString(payload, "notifyuser_username"), sessions);
             if (byNotifyUsername != null)
                 return byNotifyUsername;
-
-            if (!string.IsNullOrWhiteSpace(notifyUsername) && PluginServices.UserManager != null)
-            {
-                var user = PluginServices.UserManager.GetUserList(new UserQuery())
-                    ?.FirstOrDefault(u => string.Equals(u.Name, notifyUsername, StringComparison.OrdinalIgnoreCase));
-                if (user != null)
-                    return user.Id;
-            }
 
             return null;
         }

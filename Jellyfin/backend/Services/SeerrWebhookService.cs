@@ -27,7 +27,6 @@ public class SeerrWebhookService
     private readonly PushDeliveryService _pushDelivery;
     private readonly ILibraryManager _libraryManager;
     private readonly ILogger<SeerrWebhookService> _logger;
-    private readonly IUserDirectory? _userDirectory;
 
     private readonly ConcurrentDictionary<string, long> _recent = new();
     private static readonly long DebounceWindowMs = 60_000;
@@ -38,8 +37,7 @@ public class SeerrWebhookService
         NotificationStore store,
         PushDeliveryService pushDelivery,
         ILibraryManager libraryManager,
-        ILogger<SeerrWebhookService> logger,
-        IUserDirectory? userDirectory = null)
+        ILogger<SeerrWebhookService> logger)
     {
         _sessionService = sessionService;
         _settingsService = settingsService;
@@ -47,7 +45,6 @@ public class SeerrWebhookService
         _pushDelivery = pushDelivery;
         _libraryManager = libraryManager;
         _logger = logger;
-        _userDirectory = userDirectory;
     }
 
     public async Task HandleWebhookAsync(JsonElement payload)
@@ -535,7 +532,7 @@ public class SeerrWebhookService
             }
         }
 
-        // Fallback: map the requester's username against a stored session or server user directory.
+        // Fallback: map the requester's username against a stored session.
         if (hasRequest)
         {
             var username = GetString(request, "requestedBy_username");
@@ -543,15 +540,6 @@ public class SeerrWebhookService
             if (byUsername != null)
             {
                 return byUsername;
-            }
-
-            if (_userDirectory != null && !string.IsNullOrWhiteSpace(username))
-            {
-                var user = _userDirectory.Users().FirstOrDefault(u => string.Equals(u.Name, username, StringComparison.OrdinalIgnoreCase));
-                if (user != null)
-                {
-                    return user.Id;
-                }
             }
         }
 
@@ -575,21 +563,12 @@ public class SeerrWebhookService
         }
 
         // Availability and decision events set notifyuser rather than a full request block,
-        // so map that username against a stored session or server user directory as a last resort.
-        var notifyUsername = GetString(payload, "notifyuser_username");
-        var byNotifyUsername = _sessionService.GetJellyfinUserForSeerrUsername(notifyUsername);
+        // so map that username against a stored session as a last resort.
+        var byNotifyUsername = _sessionService.GetJellyfinUserForSeerrUsername(
+            GetString(payload, "notifyuser_username"));
         if (byNotifyUsername != null)
         {
             return byNotifyUsername;
-        }
-
-        if (_userDirectory != null && !string.IsNullOrWhiteSpace(notifyUsername))
-        {
-            var user = _userDirectory.Users().FirstOrDefault(u => string.Equals(u.Name, notifyUsername, StringComparison.OrdinalIgnoreCase));
-            if (user != null)
-            {
-                return user.Id;
-            }
         }
 
         return null;

@@ -11,15 +11,9 @@ namespace Moonfin.Server.Tests;
 
 public sealed class NotificationTestEndpointTests
 {
-    private sealed class TestUserDirectory(IReadOnlyList<DirectoryUser> users) : IUserDirectory
-    {
-        public IReadOnlyList<DirectoryUser> Users() => users;
-    }
-
     private static (PushDeliveryService pushDelivery, SeerrWebhookService webhook) CreateServices(
         NotificationStore store,
-        MoonfinSettingsService settingsService,
-        IUserDirectory? userDirectory = null)
+        MoonfinSettingsService settingsService)
     {
         var httpFactory = new DummyHttpClientFactory();
         var fcm = new FcmSender(httpFactory, NullLogger<FcmSender>.Instance);
@@ -32,8 +26,7 @@ public sealed class NotificationTestEndpointTests
             store,
             pushDelivery,
             new FakeLibraryManager(),
-            NullLogger<SeerrWebhookService>.Instance,
-            userDirectory);
+            NullLogger<SeerrWebhookService>.Instance);
         return (pushDelivery, webhook);
     }
 
@@ -60,63 +53,71 @@ public sealed class NotificationTestEndpointTests
     public void SendTestNotification_SendsInAppNotificationAndReturnsSuccess()
     {
         var store = new NotificationStore(NullLogger<NotificationStore>.Instance);
-        var settingsService = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, Path.GetTempPath());
+        var tempDir = Path.Combine(Path.GetTempPath(), "moonfin-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var settingsService = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempDir);
         var (pushDelivery, webhook) = CreateServices(store, settingsService);
 
         var userId = Guid.NewGuid();
+        var channel = settingsService.RegisterSseChannel(userId);
+
         var controller = new NotificationsController(store, webhook, null!, pushDelivery, settingsService)
         {
             ControllerContext = new ControllerContext
             {
                 HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(new[]
                 {
-                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
-                    {
-                        new Claim("Jellyfin-UserId", userId.ToString())
-                    }))
-                }
+                    new Claim("Jellyfin-UserId", userId.ToString())
+                }))
+            }
             }
         };
 
         var result = controller.SendTestNotification();
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.NotNull(ok.Value);
+
+        Assert.True(channel.Reader.TryRead(out var eventJson));
+        Assert.Contains("Moonfin Push Test", eventJson);
+
+        var json = JsonSerializer.Serialize(ok.Value);
+        using var doc = JsonDocument.Parse(json);
+        Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal(0, doc.RootElement.GetProperty("devicesCount").GetInt32());
     }
 
     [Fact]
-    public async Task SeerrWebhook_FallsBackToUserDirectoryWhenSessionMissing()
+    public async Task SeerrWebhook_DeliversToVerifiedRequester()
     {
         var store = new NotificationStore(NullLogger<NotificationStore>.Instance);
         var targetUserId = Guid.NewGuid();
-        var userDirectory = new TestUserDirectory(new[]
-        {
-            new DirectoryUser(targetUserId, "alex_test", null, false)
-        });
-
-        // Ensure user has library-added notifications enabled in store
         store.SavePrefs(targetUserId, notifyOnNewRequests: true, notifyOnLibraryAdded: true, notifyOnIssues: true, notifyOnNewMedia: true);
 
         var tempDir = Path.Combine(Path.GetTempPath(), "moonfin-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         var settingsService = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, tempDir);
 
-        var (_, webhook) = CreateServices(store, settingsService, userDirectory);
+        var (_, webhook) = CreateServices(store, settingsService);
+        var channel = settingsService.RegisterSseChannel(targetUserId);
 
-        var payload = JsonDocument.Parse(@"{
+        var payload = JsonDocument.Parse($@"{{
             ""notification_type"": ""MEDIA_AVAILABLE"",
             ""subject"": ""Dune Part Two"",
-            ""media"": {
+            ""media"": {{
                 ""tmdbId"": ""693134"",
                 ""media_type"": ""movie""
-            },
-            ""notifyuser_username"": ""alex_test""
-        }").RootElement;
+            }},
+            ""request"": {{
+                ""requestedBy_jellyfinUserId"": ""{targetUserId}""
+            }}
+        }}").RootElement;
 
         await webhook.HandleWebhookAsync(payload);
 
-        // Verify that target user preferences were accessed (confirming targetUserId was successfully resolved)
-        var prefs = store.GetPrefs(targetUserId);
-        Assert.True(prefs.NotifyOnLibraryAdded);
+        Assert.True(channel.Reader.TryRead(out var eventJson));
+        Assert.Contains("Dune Part Two", eventJson);
     }
 
     private sealed class DummyHttpClientFactory : IHttpClientFactory
