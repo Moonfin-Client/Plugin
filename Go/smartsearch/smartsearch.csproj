@@ -13,6 +13,8 @@
 
   <ItemGroup>
     <Compile Include="../../shared/SmartSearch/*.cs" Link="SmartSearch/%(Filename)%(Extension)" />
+    <!-- Smart search leaves the Live TV owner tags out of its keywords. -->
+    <Compile Include="../../shared/LiveTv/RecordingOwnerTags.cs" Link="LiveTv/RecordingOwnerTags.cs" />
   </ItemGroup>
 
 </Project>

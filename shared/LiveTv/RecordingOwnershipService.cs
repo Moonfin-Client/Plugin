@@ -33,18 +33,13 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     public const int CurrentVersion = 1;
 
     /// <summary>The fixed, non-localized start of each owner tag, so a rebuild can parse it.</summary>
-    public const string TagPrefix = "Recorded by ";
+    public const string TagPrefix = RecordingOwnerTags.Prefix;
 
     /// <summary>Whether a tag is one of the owner tags this feature stamps on recordings.</summary>
-    public static bool IsOwnerTag(string? tag) =>
-        tag != null && tag.StartsWith(TagPrefix, StringComparison.OrdinalIgnoreCase);
+    public static bool IsOwnerTag(string? tag) => RecordingOwnerTags.IsOwnerTag(tag);
 
-    /// <summary>
-    /// An item's tags without the owner tags. Those say who recorded it, not what it is, so
-    /// similar-items scoring and smart search leave them out.
-    /// </summary>
-    public static IReadOnlyList<string> WithoutOwnerTags(IEnumerable<string>? tags) =>
-        tags == null ? Array.Empty<string>() : tags.Where(t => !IsOwnerTag(t)).ToList();
+    /// <summary>An item's tags without the owner tags (see <see cref="RecordingOwnerTags.Without"/>).</summary>
+    public static IReadOnlyList<string> WithoutOwnerTags(IEnumerable<string>? tags) => RecordingOwnerTags.Without(tags);
 
     /// <summary>How long a removed recording's owners are kept in case the item comes back.</summary>
     public static readonly TimeSpan RemovedRetention = TimeSpan.FromDays(7);
