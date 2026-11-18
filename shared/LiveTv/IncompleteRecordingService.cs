@@ -739,9 +739,9 @@ public sealed class IncompleteRecordingService : IDisposable
             }
             else
             {
-                if (!ShareOwners(new[] { userId }, timerId) && _owners != null && timerId == null)
+                if (!ShareOwners(new[] { userId }, timerId) && _owners != null)
                 {
-                    // No request to hold the owner: the store keeps it until the timer is listed.
+                    // No request to hold the owner: the store keeps it until it can be handed over.
                     data.PendingTimerOwners.Add(new PendingTimerOwners { ProgramId = candidate.Id, Owners = { userId }, Since = Now });
                     Save(data);
                 }
@@ -791,21 +791,20 @@ public sealed class IncompleteRecordingService : IDisposable
             return;
         }
 
-        if (string.IsNullOrEmpty(timerId))
-        {
-            foreach (var owner in owners.Where(o => !request.PendingTimerOwnerIds.Contains(o)))
-            {
-                request.PendingTimerOwnerIds.Add(owner);
-            }
-
-            _logger.Info("The timer for {Recording} isn't listed yet; its owners are added once it is", Describe(request.Episode));
-            return;
-        }
-
         if (ShareOwners(owners, timerId))
         {
             request.PendingTimerOwnerIds.RemoveAll(owners.Contains);
+            return;
         }
+
+        // The timer isn't listed yet, or the hand-over failed: they wait on the request and each
+        // pass tries again.
+        foreach (var owner in owners.Where(o => !request.PendingTimerOwnerIds.Contains(o)))
+        {
+            request.PendingTimerOwnerIds.Add(owner);
+        }
+
+        _logger.Info("The owners of {Recording} couldn't be added to its timer yet; each pass tries again", Describe(request.Episode));
     }
 
     // Deleted users are dropped from a request's owners when it next hands them out. Only a user

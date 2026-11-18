@@ -264,13 +264,15 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     // Idle applies them all (a removal is never left without the re-add that followed it).
     private void Handle(Func<Task> work)
     {
-        if (_stopping.IsCancellationRequested)
-        {
-            return;
-        }
-
         lock (_queueLock)
         {
+            // Checked under the lock Idle reads, so an event is either queued before shutdown
+            // takes Idle or not taken at all.
+            if (_stopping.IsCancellationRequested)
+            {
+                return;
+            }
+
             _queue = _queue.ContinueWith(_ => RunEventAsync(work), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
         }
     }

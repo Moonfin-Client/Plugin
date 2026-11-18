@@ -1363,6 +1363,13 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
         if (_timers.TryGetValue(timerId, out var timer))
         {
+            // A recording removed after its timer's window had ended was finished; a file written
+            // after that removal is a new one, even within the post-processing allowance.
+            if (removed != null && ToUtc(timer.WindowEnd) <= removed.RemovedAt && written > removed.RemovedAt + FileClockTolerance)
+            {
+                return true;
+            }
+
             return written > ToUtc(timer.WindowEnd) + PostRecordingAllowance + FileClockTolerance;
         }
 
@@ -1489,22 +1496,32 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
 
         var programs = new Dictionary<string, GuideProgram?>(StringComparer.OrdinalIgnoreCase);
-        var sameSeries = ruled.Where(t =>
+        GuideProgram? ProgramOf(ScheduledTimer t)
         {
             if (string.IsNullOrEmpty(t.ProgramId))
             {
-                return false;
+                return null;
             }
 
-            if (!programs.TryGetValue(t.ProgramId!, out var other))
+            if (!programs.TryGetValue(t.ProgramId!, out var known))
             {
-                other = _host.GetProgram(t.ProgramId!);
-                programs[t.ProgramId!] = other;
+                known = _host.GetProgram(t.ProgramId!);
+                programs[t.ProgramId!] = known;
             }
 
-            return other != null && SameSeries(other, program);
-        });
-        var busiest = sameSeries
+            return known;
+        }
+
+        // A rule known to be for another series isn't this one, whatever it or its programs are
+        // called: by its own series id (Emby), or by the series id of any program it records
+        // (Jellyfin rules have none).
+        var otherSeries = new HashSet<string>(
+            rules.Where(r => DifferentIds(r.SeriesId, program.SeriesId)).Select(r => r.Id)
+                .Concat(ruled.Where(t => ProgramOf(t) is { } recorded && DifferentIds(recorded.SeriesId, program.SeriesId)).Select(t => t.SeriesTimerId!)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var busiest = ruled
+            .Where(t => !otherSeries.Contains(t.SeriesTimerId!) && ProgramOf(t) is { } other && SameSeries(other, program))
             .GroupBy(t => t.SeriesTimerId!, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(g => g.Count())
             .FirstOrDefault();
@@ -1519,27 +1536,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             return bySeriesId.Id;
         }
 
-        // A rule known to be for another series isn't this one, whatever it is called: by its own
-        // series id (Emby), or by the series id of a program it records (Jellyfin rules have none).
         return string.IsNullOrEmpty(program.SeriesName)
             ? null
-            : rules.FirstOrDefault(r => string.Equals(r.Name, program.SeriesName, StringComparison.OrdinalIgnoreCase)
-                && !DifferentIds(r.SeriesId, program.SeriesId)
-                && !ruled.Any(t => string.Equals(t.SeriesTimerId, r.Id, StringComparison.OrdinalIgnoreCase)
-                    && !string.IsNullOrEmpty(t.ProgramId)
-                    && ProgramOf(t.ProgramId!) is { } recorded
-                    && DifferentIds(recorded.SeriesId, program.SeriesId)))?.Id;
-
-        GuideProgram? ProgramOf(string programId)
-        {
-            if (!programs.TryGetValue(programId, out var known))
-            {
-                known = _host.GetProgram(programId);
-                programs[programId] = known;
-            }
-
-            return known;
-        }
+            : rules.FirstOrDefault(r => string.Equals(r.Name, program.SeriesName, StringComparison.OrdinalIgnoreCase) && !otherSeries.Contains(r.Id))?.Id;
     }
 
     // Whether two programs are of one series: by id when both have one, else by name. Two series
@@ -1713,6 +1712,18 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         if (read != null)
         {
             _data = Normalize(read);
+            if (_unbuilt != null)
+            {
+                // The file became readable again before a rebuild could run: what calls changed
+                // meanwhile is added to it (and, for a newer file, kept until restart).
+                MergeInto(_data, _unbuilt);
+                _unbuilt = null;
+                if (read.Version <= CurrentVersion)
+                {
+                    Save(_data);
+                }
+            }
+
             if (read.Version > CurrentVersion)
             {
                 _readOnly = true;
