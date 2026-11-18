@@ -497,6 +497,9 @@ public sealed class GuideProgram
 
     public string? ChannelName { get; set; }
 
+    /// <summary>The program's channel id, in the form series rules name it, when the server gives one.</summary>
+    public string? ChannelId { get; set; }
+
     public bool IsHD { get; set; }
 
     public string? ChannelNumber { get; set; }

@@ -9,9 +9,17 @@ namespace Moonfin.LiveTv;
 /// A series recording rule as the server holds it. Id is the Live TV API id clients see
 /// (SeriesTimerInfoDto.Id) and matches ScheduledTimer.SeriesTimerId. SeriesId is the guide's
 /// series id on Emby and always null on Jellyfin, whose public DTO doesn't carry it, so callers
-/// must not rely on it.
+/// must not rely on it. ProgramId is the guide program the rule was made from, ChannelId the
+/// channel it records on (null when unknown) and RecordAnyChannel whether it ignores channels;
+/// Jellyfin fills these in so a rule without a series id can still be told apart by more than name.
 /// </summary>
-public sealed record SeriesRule(string Id, string? SeriesId, string? Name);
+public sealed record SeriesRule(
+    string Id,
+    string? SeriesId,
+    string? Name,
+    string? ProgramId = null,
+    string? ChannelId = null,
+    bool RecordAnyChannel = false);
 
 /// <summary>A server account, with only what the recording owner features need.</summary>
 public sealed record ServerUser(Guid Id, string Name, string? PrimaryImageTag, bool IsDisabled);

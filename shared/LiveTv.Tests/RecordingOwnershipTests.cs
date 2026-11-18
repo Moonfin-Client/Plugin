@@ -2244,6 +2244,55 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
+    public async Task RecordSeries_SameNameRuleWithNoTimersOnAnotherChannel_GetsItsOwnRule()
+    {
+        var program = AddProgram("p1", Start);
+        program.ChannelId = "chan-1";
+        // As on Jellyfin: no series id and nothing recorded yet, only the name, one channel and
+        // the program it was made from (no longer in the guide).
+        _host.SeriesRules.Add(new SeriesRule("rule-x", null, "Bonanza", "gone", "chan-2"));
+        var service = NewService();
+
+        var outcome = await service.RecordSeriesAsync("p1", Alex, null, CancellationToken.None);
+
+        Assert.NotNull(outcome);
+        Assert.False(outcome!.Joined);
+        Assert.NotEqual("rule-x", outcome.Id);
+        Assert.Equal(2, _host.SeriesRules.Count);
+    }
+
+    [Fact]
+    public async Task RecordSeries_SameNameRuleWithNoTimersOnTheSameChannel_IsJoined()
+    {
+        var program = AddProgram("p1", Start);
+        program.ChannelId = "chan-1";
+        _host.SeriesRules.Add(new SeriesRule("rule-x", null, "Bonanza", "gone", "chan-1"));
+        var service = NewService();
+
+        var outcome = await service.RecordSeriesAsync("p1", Alex, null, CancellationToken.None);
+
+        Assert.NotNull(outcome);
+        Assert.True(outcome!.Joined);
+        Assert.Equal("rule-x", outcome.Id);
+    }
+
+    [Fact]
+    public async Task RecordSeries_SameNameRuleMadeFromAnotherSeriesOnAnyChannel_GetsItsOwnRule()
+    {
+        AddProgram("p1", Start);
+        var made = AddProgram("p0", Start.AddHours(-5));
+        made.SeriesId = "SH999";
+        _host.SeriesRules.Add(new SeriesRule("rule-x", null, "Bonanza", "p0", null, true));
+        var service = NewService();
+
+        var outcome = await service.RecordSeriesAsync("p1", Alex, null, CancellationToken.None);
+
+        Assert.NotNull(outcome);
+        Assert.False(outcome!.Joined);
+        Assert.Equal(2, _host.SeriesRules.Count);
+    }
+
+    [Fact]
     public async Task RecordSeries_RuleWithAnUnnumberedTimerAndAnotherSeriesTimer_GetsItsOwnRule()
     {
         AddProgram("p1", Start);

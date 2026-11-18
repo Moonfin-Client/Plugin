@@ -395,10 +395,17 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
     {
         var result = await _liveTvManager.GetSeriesTimers(new SeriesTimerQuery(), cancellationToken).ConfigureAwait(false);
 
-        // The public DTO carries no guide series id, so rules are identified by their API id alone.
+        // The public DTO carries no guide series id, so beyond the API id and name a rule is told
+        // apart by the program it was made from and the channel it records on.
         return result.Items
             .Where(t => !string.IsNullOrEmpty(t.Id))
-            .Select(t => new SeriesRule(t.Id, null, t.Name))
+            .Select(t => new SeriesRule(
+                t.Id,
+                null,
+                t.Name,
+                string.IsNullOrEmpty(t.ProgramId) ? null : t.ProgramId,
+                t.ChannelId == Guid.Empty ? null : t.ChannelId.ToString("N"),
+                t.RecordAnyChannel))
             .ToList();
     }
 
@@ -732,6 +739,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
             StartDate = program.StartDate,
             EndDate = program.EndDate ?? program.StartDate,
             ChannelName = channel?.Name,
+            ChannelId = program.ChannelId == Guid.Empty ? null : program.ChannelId.ToString("N"),
             ChannelNumber = (channel as LiveTvChannel)?.Number,
             IsHD = channel?.IsHD ?? false,
         };

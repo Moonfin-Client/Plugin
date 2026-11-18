@@ -1513,21 +1513,23 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
 
         var programs = new Dictionary<string, GuideProgram?>(StringComparer.OrdinalIgnoreCase);
-        GuideProgram? ProgramOf(ScheduledTimer t)
+        GuideProgram? ProgramById(string? programId)
         {
-            if (string.IsNullOrEmpty(t.ProgramId))
+            if (string.IsNullOrEmpty(programId))
             {
                 return null;
             }
 
-            if (!programs.TryGetValue(t.ProgramId!, out var known))
+            if (!programs.TryGetValue(programId!, out var known))
             {
-                known = _host.GetProgram(t.ProgramId!);
-                programs[t.ProgramId!] = known;
+                known = _host.GetProgram(programId!);
+                programs[programId!] = known;
             }
 
             return known;
         }
+
+        GuideProgram? ProgramOf(ScheduledTimer t) => ProgramById(t.ProgramId);
 
         // A rule known to be for another series isn't this one, whatever it or its programs are
         // called: by its own series id (Emby), or by the series id of any program it records
@@ -1553,9 +1555,36 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             return bySeriesId.Id;
         }
 
+        // Two series can share a name, so a name alone isn't enough: the rule must also be shown to
+        // be this series (its own program is of it) or to record where this program airs.
         return string.IsNullOrEmpty(program.SeriesName)
             ? null
-            : rules.FirstOrDefault(r => string.Equals(r.Name, program.SeriesName, StringComparison.OrdinalIgnoreCase) && !otherSeries.Contains(r.Id))?.Id;
+            : rules.FirstOrDefault(r => string.Equals(r.Name, program.SeriesName, StringComparison.OrdinalIgnoreCase)
+                && !otherSeries.Contains(r.Id)
+                && NameMatchIsCorroborated(r, program, ProgramById))?.Id;
+    }
+
+    // Whether a rule matched to a program by name is backed by something else. Its own program
+    // settles it when that still resolves (same series: yes, any other: no); otherwise the rule
+    // must record every channel or the program's channel.
+    private static bool NameMatchIsCorroborated(SeriesRule rule, GuideProgram program, Func<string?, GuideProgram?> lookup)
+    {
+        if (lookup(rule.ProgramId) is { } own)
+        {
+            if (DifferentIds(own.SeriesId, program.SeriesId))
+            {
+                return false;
+            }
+
+            if (SameSeries(own, program))
+            {
+                return true;
+            }
+        }
+
+        return rule.RecordAnyChannel
+            || (!string.IsNullOrEmpty(rule.ChannelId)
+                && string.Equals(rule.ChannelId, program.ChannelId, StringComparison.OrdinalIgnoreCase));
     }
 
     // Whether two programs are of one series: by id when both have one, else by name. Two series
