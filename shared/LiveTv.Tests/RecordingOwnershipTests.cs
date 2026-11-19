@@ -1594,18 +1594,56 @@ public sealed class RecordingOwnershipTests : IDisposable
     // back to retry it a minute later. The guard's waits complete at once here.
     private static Task NoWait(TimeSpan delay, CancellationToken ct) => Task.CompletedTask;
 
-    [Fact]
-    public async Task CancelledRecording_ServerPutsTimerBack_CancelledAgain()
+    // Holds the guard at its first wait, after it read the timers as the cancel arrived, so a test
+    // can then change them; every wait goes through once opened.
+    private sealed class GuardGate
+    {
+        private readonly TaskCompletionSource _open = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Reached => _reached.Task;
+
+        public Task Wait(TimeSpan delay, CancellationToken ct)
+        {
+            _reached.TrySetResult();
+            return _open.Task;
+        }
+
+        public void Open() => _open.TrySetResult();
+    }
+
+    // The cancel deletes a one-off timer or keeps a series rule's as Cancelled; the server then
+    // puts it back to retry, waiting to start a minute from now.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancelledRecording_ServerPutsTimerBack_CancelledAgain(bool seriesTimer)
     {
         var service = NewService();
         var timer = UnownedTimerRecording("/rec/a.ts");
-        await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: NoWait))
+        var gate = new GuardGate();
+        await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: gate.Wait))
         {
-            // Back as a retry: waiting again, to start a minute from now.
+            if (seriesTimer)
+            {
+                timer.Status = "Cancelled";
+            }
+            else
+            {
+                _host.Timers.Remove(timer);
+            }
+
+            _host.RaiseTimerCancelled(timer.TimerId);
+            await WaitFor(() => gate.Reached.IsCompleted, "the guard reading the timers");
+
             timer.Status = "New";
             timer.StartDate = DateTime.UtcNow.AddMinutes(1);
-            _host.RaiseTimerCancelled(timer.TimerId);
+            if (!seriesTimer)
+            {
+                _host.Timers.Add(timer);
+            }
 
+            gate.Open();
             var guards = watcher.Watcher.CancelGuardsDone;
             await WaitFor(() => guards.IsCompleted, "the cancel guard");
             Assert.Equal(new[] { "api-x" }, _host.CancelRequests);
@@ -1646,18 +1684,25 @@ public sealed class RecordingOwnershipTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task CancelledRecording_SeriesEpisodeRecordedAgainUnderSameTimer_LeftToRecord()
+    // A series rule's timer, cancelled and recorded again: same id, waiting, with the episode's own
+    // start. That start can still be ahead when the cancel came during the pre-padding.
+    [Theory]
+    [InlineData(-5)]
+    [InlineData(3)]
+    public async Task CancelledRecording_SeriesEpisodeRecordedAgainUnderSameTimer_LeftToRecord(int startInMinutes)
     {
         var service = NewService();
         var timer = UnownedTimerRecording("/rec/a.ts");
-        await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: NoWait))
+        timer.StartDate = DateTime.UtcNow.AddMinutes(startInMinutes);
+        var gate = new GuardGate();
+        await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: gate.Wait))
         {
-            // A series rule's timer, recorded again: same id, waiting, with the episode's own start.
-            timer.Status = "New";
-            timer.StartDate = DateTime.UtcNow.AddMinutes(-5);
+            timer.Status = "Cancelled";
             _host.RaiseTimerCancelled(timer.TimerId);
+            await WaitFor(() => gate.Reached.IsCompleted, "the guard reading the timers");
 
+            timer.Status = "New";
+            gate.Open();
             var guards = watcher.Watcher.CancelGuardsDone;
             await WaitFor(() => guards.IsCompleted, "the cancel guard");
             Assert.Empty(_host.CancelRequests);

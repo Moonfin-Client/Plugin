@@ -295,16 +295,31 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     }
 
     // Cancels the timer again whenever the server puts it back after the cancel. Matched by the
-    // timer's own id, and only when its start moved past the cancel: the server's retry starts a
-    // minute out, while recording the episode again (a series rule's timer is reused, same id)
-    // keeps the episode's own start, which was before the cancel since it was recording. When in
-    // doubt the timer is left to record.
+    // timer's own id, and only when its start changed: the server's retry starts it a minute out,
+    // while recording the episode again (a series rule's timer is reused, same id) keeps the
+    // episode's own start, padding included. A series rule's cancelled timer stays listed, so its
+    // start is read as the cancel arrives; any other timer is deleted, so whatever comes back under
+    // its id is the retry, which always starts after the cancel. When in doubt the timer is left
+    // to record.
     private async Task KeepCancelledAsync(string timerId)
     {
         var cancelledAt = DateTime.UtcNow;
         var recancels = 0;
         try
         {
+            DateTime? keptStart = null;
+            try
+            {
+                keptStart = Find(await _host.GetTimersAsync(_stopping).ConfigureAwait(false), timerId) is { } kept
+                    ? ToUtc(kept.StartDate)
+                    : null;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Without the start the check below falls back to "starts after the cancel".
+                _logger.Warn(ex, "Could not read cancelled timer {TimerId}", timerId);
+            }
+
             foreach (var wait in CancelChecks)
             {
                 await _delay(wait, _stopping).ConfigureAwait(false);
@@ -319,17 +334,27 @@ public sealed class RecordingOwnershipWatcher : IDisposable
                     continue;
                 }
 
-                var back = timers.FirstOrDefault(t => t.Status is not ("Cancelled" or "Completed")
-                    && ToUtc(t.StartDate) > cancelledAt
-                    && (string.Equals(t.TimerId, timerId, StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(t.ApiId, timerId, StringComparison.OrdinalIgnoreCase)));
-                if (back == null)
+                var back = Find(timers, timerId);
+                if (back == null || back.Status is "Cancelled" or "Completed")
+                {
+                    continue;
+                }
+
+                var start = ToUtc(back.StartDate);
+                var retried = keptStart is { } kept
+                    ? Math.Abs((start - kept).TotalSeconds) >= 1
+                    : start > cancelledAt;
+                if (!retried)
                 {
                     continue;
                 }
 
                 _logger.Warn(null, "The server put cancelled timer {TimerId} back to retry its recording; cancelling it again", timerId);
                 await _host.CancelTimerAsync(back.ApiId ?? back.TimerId, _stopping).ConfigureAwait(false);
+
+                // A series rule keeps the timer with the retry's start, so a later deliberate
+                // recording of it is judged against that.
+                keptStart = start;
                 if (++recancels >= MaxRecancels)
                 {
                     return;
@@ -345,6 +370,10 @@ public sealed class RecordingOwnershipWatcher : IDisposable
             _logger.Warn(ex, "Could not keep timer {TimerId} cancelled", timerId);
         }
     }
+
+    private static ScheduledTimer? Find(IReadOnlyList<ScheduledTimer> timers, string timerId) =>
+        timers.FirstOrDefault(t => string.Equals(t.TimerId, timerId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t.ApiId, timerId, StringComparison.OrdinalIgnoreCase));
 
     private static DateTime ToUtc(DateTime time) => time.Kind == DateTimeKind.Local ? time.ToUniversalTime() : time;
 
