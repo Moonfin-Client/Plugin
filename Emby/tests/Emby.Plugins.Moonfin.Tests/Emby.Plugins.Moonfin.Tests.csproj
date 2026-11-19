@@ -36,7 +36,7 @@
   <!-- The seasonal row's shared logic is compiled into both ports, so its tests run against each. -->
   <ItemGroup>
     <Compile Include="../../../shared/Calendar.Tests/*.cs" Link="Calendar/%(Filename)%(Extension)" />
-    <Compile Include="../../../shared/LiveTv.Tests/*.cs" Link="LiveTv/%(Filename)%(Extension)" />
+    <Compile Include="../../../shared/LiveTv.Tests/*.cs" Exclude="../../../shared/LiveTv.Tests/ChannelGroupTests.cs" Link="LiveTv/%(Filename)%(Extension)" />
     <Compile Include="../../../shared/MiniGames.Tests/*.cs" Link="MiniGames/%(Filename)%(Extension)" />
     <Compile Include="../../../shared/Pin.Tests/*.cs" Link="Pin/%(Filename)%(Extension)" />
     <Compile Include="../../../shared/Seasonal.Tests/*.cs" Link="Seasonal/%(Filename)%(Extension)" />
