@@ -97,6 +97,13 @@ namespace Emby.Plugins.Moonfin.Services
             _userManager.UserDeleted -= OnUserDeleted;
         }
 
+        // Emby's CancelTimer is synchronous.
+        public Task CancelTimerAsync(string apiId, CancellationToken cancellationToken)
+        {
+            _liveTvManager.CancelTimer(apiId);
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
         {
             IReadOnlyList<ScheduledTimer> timers = _liveTvManager.GetTimers(new TimerQuery()).Items

@@ -260,6 +260,8 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         _libraryManager.ItemRemoved -= OnItemRemoved;
     }
 
+    public Task CancelTimerAsync(string apiId, CancellationToken cancellationToken) => _liveTvManager.CancelTimer(apiId);
+
     public async Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
     {
         var result = await _liveTvManager.GetTimers(new TimerQuery(), cancellationToken).ConfigureAwait(false);

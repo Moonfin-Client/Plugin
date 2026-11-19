@@ -51,6 +51,9 @@ public interface ILiveTvRecordingHost
     /// </summary>
     Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken);
 
+    /// <summary>Cancels a timer by the id clients see (ScheduledTimer.ApiId).</summary>
+    Task CancelTimerAsync(string apiId, CancellationToken cancellationToken);
+
     /// <summary>The file a timer is writing right now, or null when it isn't recording.</summary>
     string? GetActiveRecordingPath(string timerId);
 

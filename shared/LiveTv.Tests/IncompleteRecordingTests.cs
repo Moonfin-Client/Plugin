@@ -235,7 +235,24 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         if (TimerReadGate != null) await TimerReadGate.Task.WaitAsync(cancellationToken);
         if (TimerBackendTimesOut) throw new TaskCanceledException("DVR backend timed out");
         if (TimersUnavailable) throw new InvalidOperationException("Live TV is not ready");
-        return Timers.ToList();
+        lock (Timers)
+        {
+            return Timers.ToList();
+        }
+    }
+
+    /// <summary>Ids passed to CancelTimerAsync, in order.</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> CancelRequests { get; } = new();
+
+    public Task CancelTimerAsync(string apiId, CancellationToken cancellationToken)
+    {
+        CancelRequests.Enqueue(apiId);
+        lock (Timers)
+        {
+            Timers.RemoveAll(t => string.Equals(t.ApiId ?? t.TimerId, apiId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return Task.CompletedTask;
     }
 
     public string? GetActiveRecordingPath(string timerId) => ActivePaths.GetValueOrDefault(timerId);

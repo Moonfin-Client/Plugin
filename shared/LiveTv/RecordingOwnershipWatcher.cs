@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,7 +12,8 @@ namespace Moonfin.LiveTv;
 /// minutes or when a schedule event wakes it, plus once more shortly after a timer is created. Every
 /// handler returns at once, because the service raises some of these events itself while holding its
 /// lock; the cancel handler only asks the host for the timer's file first, since the recording stops
-/// right after the event. Each server starts
+/// right after the event. It also keeps a cancelled recording cancelled when the server puts its
+/// timer back to retry it (see CancelChecks). Each server starts
 /// <see cref="RunAsync"/> once and stops it on shutdown.
 /// </summary>
 public sealed class RecordingOwnershipWatcher : IDisposable
@@ -23,6 +25,22 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     // A timer made for a program already airing starts recording seconds later; one extra sync
     // then captures its file while the recording is still young.
     private static readonly TimeSpan CreatedFollowUp = TimeSpan.FromSeconds(10);
+
+    // Jellyfin reads a cancel that had to kill ffmpeg (a stream that ignores the polite stop) as a
+    // failed recording, and puts the same timer back to retry a minute later; every cancel then kills
+    // it again. The timer comes back about ten seconds after the cancel and records again about a
+    // minute after that, so it is looked for over the next two minutes. A cancel that lands before
+    // the retry starts has nothing to kill, so it sticks.
+    private static readonly TimeSpan[] CancelChecks =
+    {
+        TimeSpan.FromSeconds(20),
+        TimeSpan.FromSeconds(20),
+        TimeSpan.FromSeconds(20),
+        TimeSpan.FromSeconds(30),
+        TimeSpan.FromSeconds(30),
+    };
+
+    private const int MaxRecancels = 3;
 
     private readonly ILiveTvRecordingHost _host;
     private readonly RecordingOwnershipService _service;
@@ -40,6 +58,9 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     private volatile IReadOnlyDictionary<string, string> _serviceIds = EmptyServiceIds;
     private int _serviceIdListings;
     private CancellationToken _stopping;
+
+    // Cancelled recordings being watched for the server putting their timer back, by cancelled id.
+    private readonly ConcurrentDictionary<string, Task> _cancelGuards = new(StringComparer.OrdinalIgnoreCase);
 
     public RecordingOwnershipWatcher(ILiveTvRecordingHost host, RecordingOwnershipService service, IRecordingLog log)
         : this(host, service, log, CreatedFollowUp)
@@ -76,6 +97,9 @@ public sealed class RecordingOwnershipWatcher : IDisposable
 
     // How many id listings have finished and been swapped in, for tests.
     internal int ServiceIdListings => Volatile.Read(ref _serviceIdListings);
+
+    // Completes once every cancel guard started so far has finished, for tests.
+    internal Task CancelGuardsDone => Task.WhenAll(_cancelGuards.Values);
 
     public async Task RunAsync(CancellationToken stoppingToken)
     {
@@ -247,6 +271,74 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     {
         var path = ActivePathOf(timerId);
         Handle(() => _service.OnTimerCancelledAsync(timerId, path, CancellationToken.None));
+
+        // Only a cancel that stopped a recording can be turned into a retry.
+        if (path != null && !_stopping.IsCancellationRequested)
+        {
+            var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (_cancelGuards.TryAdd(timerId, done.Task))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await KeepCancelledAsync(timerId).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        _cancelGuards.TryRemove(timerId, out _);
+                        done.TrySetResult(true);
+                    }
+                });
+            }
+        }
+    }
+
+    // Cancels the timer again whenever the server puts it back after the cancel. Matched by the
+    // timer's own id: a fresh recording of the same program, by anyone, gets a new timer.
+    private async Task KeepCancelledAsync(string timerId)
+    {
+        var recancels = 0;
+        try
+        {
+            foreach (var wait in CancelChecks)
+            {
+                await _delay(wait, _stopping).ConfigureAwait(false);
+                IReadOnlyList<ScheduledTimer> timers;
+                try
+                {
+                    timers = await _host.GetTimersAsync(_stopping).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.Warn(ex, "Could not check whether cancelled timer {TimerId} came back", timerId);
+                    continue;
+                }
+
+                var back = timers.FirstOrDefault(t => t.Status is not ("Cancelled" or "Completed")
+                    && (string.Equals(t.TimerId, timerId, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(t.ApiId, timerId, StringComparison.OrdinalIgnoreCase)));
+                if (back == null)
+                {
+                    continue;
+                }
+
+                _logger.Warn(null, "The server put cancelled timer {TimerId} back to retry its recording; cancelling it again", timerId);
+                await _host.CancelTimerAsync(back.ApiId ?? back.TimerId, _stopping).ConfigureAwait(false);
+                if (++recancels >= MaxRecancels)
+                {
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        {
+            // Server shutting down.
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn(ex, "Could not keep timer {TimerId} cancelled", timerId);
+        }
     }
 
     private void OnItemAdded(object? sender, LibraryItem item) => Handle(() => _service.OnItemAddedAsync(item, CancellationToken.None));

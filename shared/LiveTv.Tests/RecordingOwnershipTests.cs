@@ -1590,6 +1590,78 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
     }
 
+    // Jellyfin reads a cancel that had to kill ffmpeg as a failed recording and puts the same timer
+    // back to retry it a minute later. The guard's waits complete at once here.
+    private static Task NoWait(TimeSpan delay, CancellationToken ct) => Task.CompletedTask;
+
+    [Fact]
+    public async Task CancelledRecording_ServerPutsTimerBack_CancelledAgain()
+    {
+        var service = NewService();
+        var timer = UnownedTimerRecording("/rec/a.ts");
+        await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: NoWait))
+        {
+            timer.Status = "New";
+            _host.RaiseTimerCancelled(timer.TimerId);
+
+            var guards = watcher.Watcher.CancelGuardsDone;
+            await WaitFor(() => guards.IsCompleted, "the cancel guard");
+            Assert.Equal(new[] { "api-x" }, _host.CancelRequests);
+            Assert.DoesNotContain(timer, _host.Timers);
+        }
+    }
+
+    [Fact]
+    public async Task CancelledRecording_StaysCancelled_NothingCancelledAgain()
+    {
+        var service = NewService();
+        var timer = UnownedTimerRecording("/rec/a.ts");
+        await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: NoWait))
+        {
+            timer.Status = "Cancelled";
+            _host.RaiseTimerCancelled(timer.TimerId);
+
+            var guards = watcher.Watcher.CancelGuardsDone;
+            await WaitFor(() => guards.IsCompleted, "the cancel guard");
+            Assert.Empty(_host.CancelRequests);
+        }
+    }
+
+    [Fact]
+    public async Task CancelledRecording_SameProgramRecordedAgainByNewTimer_LeftAlone()
+    {
+        var service = NewService();
+        var timer = UnownedTimerRecording("/rec/a.ts");
+        await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: NoWait))
+        {
+            _host.Timers.Remove(timer);
+            _host.Timers.Add(new ScheduledTimer { ApiId = "api-again", TimerId = "t-again", ProgramId = timer.ProgramId, StartDate = timer.StartDate, EndDate = timer.EndDate, Status = "New" });
+            _host.RaiseTimerCancelled(timer.TimerId);
+
+            var guards = watcher.Watcher.CancelGuardsDone;
+            await WaitFor(() => guards.IsCompleted, "the cancel guard");
+            Assert.Empty(_host.CancelRequests);
+        }
+    }
+
+    [Fact]
+    public async Task CancelledTimerThatWasNotRecording_NotWatched()
+    {
+        AddProgram("p1", Start);
+        var service = NewService();
+        _host.Timers.Add(new ScheduledTimer { ApiId = "api-1", TimerId = "t-1", ProgramId = "p1", StartDate = Start, EndDate = Start.AddMinutes(20), Status = "New" });
+        await using (var watcher = await StartWatcher(service, followUpDelay: NoWait))
+        {
+            _host.RaiseTimerCancelled("t-1");
+
+            var guards = watcher.Watcher.CancelGuardsDone;
+            await WaitFor(() => guards.IsCompleted, "the cancel guard");
+            var idle = watcher.Watcher.Idle;
+            await WaitFor(() => idle.IsCompleted, "the cancel event");
+            Assert.Empty(_host.CancelRequests);
+        }
+    }
+
     // 3
     [Fact]
     public async Task CancelWithActivePath_ItemExists_TakesOwnersAndTimerIsForgotten()
