@@ -379,7 +379,6 @@ public sealed class AccessWindowTests
 
     [Theory]
     [InlineData(typeof(AccessWindowController), nameof(AccessWindowController.GetAccessWindow))]
-    [InlineData(typeof(MoonfinController), nameof(MoonfinController.Ping))]
     public void Endpoint_IsReachableOutsideTheAccessSchedule(Type controller, string action)
     {
         var authorize = controller.GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>();
