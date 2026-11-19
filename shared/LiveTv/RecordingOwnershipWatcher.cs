@@ -295,9 +295,13 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     }
 
     // Cancels the timer again whenever the server puts it back after the cancel. Matched by the
-    // timer's own id: a fresh recording of the same program, by anyone, gets a new timer.
+    // timer's own id, and only when its start moved past the cancel: the server's retry starts a
+    // minute out, while recording the episode again (a series rule's timer is reused, same id)
+    // keeps the episode's own start, which was before the cancel since it was recording. When in
+    // doubt the timer is left to record.
     private async Task KeepCancelledAsync(string timerId)
     {
+        var cancelledAt = DateTime.UtcNow;
         var recancels = 0;
         try
         {
@@ -316,6 +320,7 @@ public sealed class RecordingOwnershipWatcher : IDisposable
                 }
 
                 var back = timers.FirstOrDefault(t => t.Status is not ("Cancelled" or "Completed")
+                    && ToUtc(t.StartDate) > cancelledAt
                     && (string.Equals(t.TimerId, timerId, StringComparison.OrdinalIgnoreCase)
                         || string.Equals(t.ApiId, timerId, StringComparison.OrdinalIgnoreCase)));
                 if (back == null)
@@ -340,6 +345,8 @@ public sealed class RecordingOwnershipWatcher : IDisposable
             _logger.Warn(ex, "Could not keep timer {TimerId} cancelled", timerId);
         }
     }
+
+    private static DateTime ToUtc(DateTime time) => time.Kind == DateTimeKind.Local ? time.ToUniversalTime() : time;
 
     private void OnItemAdded(object? sender, LibraryItem item) => Handle(() => _service.OnItemAddedAsync(item, CancellationToken.None));
 

@@ -1601,7 +1601,9 @@ public sealed class RecordingOwnershipTests : IDisposable
         var timer = UnownedTimerRecording("/rec/a.ts");
         await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: NoWait))
         {
+            // Back as a retry: waiting again, to start a minute from now.
             timer.Status = "New";
+            timer.StartDate = DateTime.UtcNow.AddMinutes(1);
             _host.RaiseTimerCancelled(timer.TimerId);
 
             var guards = watcher.Watcher.CancelGuardsDone;
@@ -1636,6 +1638,24 @@ public sealed class RecordingOwnershipTests : IDisposable
         {
             _host.Timers.Remove(timer);
             _host.Timers.Add(new ScheduledTimer { ApiId = "api-again", TimerId = "t-again", ProgramId = timer.ProgramId, StartDate = timer.StartDate, EndDate = timer.EndDate, Status = "New" });
+            _host.RaiseTimerCancelled(timer.TimerId);
+
+            var guards = watcher.Watcher.CancelGuardsDone;
+            await WaitFor(() => guards.IsCompleted, "the cancel guard");
+            Assert.Empty(_host.CancelRequests);
+        }
+    }
+
+    [Fact]
+    public async Task CancelledRecording_SeriesEpisodeRecordedAgainUnderSameTimer_LeftToRecord()
+    {
+        var service = NewService();
+        var timer = UnownedTimerRecording("/rec/a.ts");
+        await using (var watcher = await StartWatcher(service, expectedReads: 2, followUpDelay: NoWait))
+        {
+            // A series rule's timer, recorded again: same id, waiting, with the episode's own start.
+            timer.Status = "New";
+            timer.StartDate = DateTime.UtcNow.AddMinutes(-5);
             _host.RaiseTimerCancelled(timer.TimerId);
 
             var guards = watcher.Watcher.CancelGuardsDone;
