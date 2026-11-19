@@ -2383,6 +2383,32 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p1"]);
     }
 
+    [Fact]
+    public async Task RebuildFails_FileReadableAgainDuringTheCall_KeepsBothTheFileAndTheCall()
+    {
+        var tagged = _host.AddItem("/rec/a.ts");
+        tagged.Tags = new[] { "Recorded by Jordan" };
+        AddProgram("p1", Start);
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(StorePath, "{ not json");
+        File.WriteAllText(StorePath + ".bak", "also not json");
+        _host.UserLookupThrows = true;
+        var service = NewService();
+
+        // The storage comes back while the call is listing timers, after it took the stand-in.
+        _host.OnNextTimerRead = () =>
+        {
+            File.WriteAllText(StorePath, JsonSerializer.Serialize(new OwnershipStoreData { Items = { [tagged.Id] = new List<Guid> { Jordan } } }));
+            _host.UserLookupThrows = false;
+        };
+        await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
+
+        Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Alex, CancellationToken.None)).TimerIds);
+        Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[tagged.Id]);
+        Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p1"]);
+    }
+
     private OwnershipStoreData ReadStoreOrEmpty() =>
         _stateFile.LastWritten(StorePath) is { } json ? JsonSerializer.Deserialize<OwnershipStoreData>(json)! : new OwnershipStoreData();
 }

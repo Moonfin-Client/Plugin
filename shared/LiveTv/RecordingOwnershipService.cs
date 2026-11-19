@@ -198,7 +198,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         try
         {
             var data = Load();
-            var existing = FindLiveTimerForProgram(await RefreshTimersAsync(ct).ConfigureAwait(false), programId);
+            var existing = FindLiveTimerForProgram(await RefreshTimersAsync(data, ct).ConfigureAwait(false), programId);
             if (existing != null)
             {
                 var joinedId = ApiIdOf(existing);
@@ -219,7 +219,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
             // A timer someone else made between the listing and the schedule call, or one the
             // server returned no ids for: either way the listing now has it.
-            var timers = await RefreshTimersAsync(ct).ConfigureAwait(false);
+            var timers = await RefreshTimersAsync(data, ct).ConfigureAwait(false);
             var timer = result.ApiId != null && _timers.TryGetValue(result.ApiId, out var byApi)
                 ? byApi
                 : result.TimerId != null && _apiIds.TryGetValue(result.TimerId, out var mapped) && _timers.TryGetValue(mapped, out var byService)
@@ -281,7 +281,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 return new OwnershipAttempt(null);
             }
 
-            var timers = await RefreshTimersAsync(ct).ConfigureAwait(false);
+            var timers = await RefreshTimersAsync(data, ct).ConfigureAwait(false);
             var rules = await _host.GetSeriesTimersAsync(ct).ConfigureAwait(false);
             var ruleId = FindRuleForSeries(program, timers, rules);
             var joined = ruleId != null;
@@ -296,7 +296,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 }
 
                 // The new rule's timers exist now; list them so its owners reach them right away.
-                timers = await RefreshTimersAsync(ct).ConfigureAwait(false);
+                timers = await RefreshTimersAsync(data, ct).ConfigureAwait(false);
             }
 
             AddOwners(data.SeriesTimers, ruleId, new[] { userId });
@@ -331,7 +331,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             {
                 case OwnedKind.Timer:
                 {
-                    var timer = await FindTimerAsync(id, ct).ConfigureAwait(false);
+                    var timer = await FindTimerAsync(data, id, ct).ConfigureAwait(false);
                     // Lookup only answers for a timer whose program the caller can see, so a claim
                     // neither adds them to nor shows them the owners of one they can't.
                     if (timer == null
@@ -356,7 +356,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 {
                     var rules = await _host.GetSeriesTimersAsync(ct).ConfigureAwait(false);
                     var rule = rules.FirstOrDefault(r => string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase));
-                    var ruleTimers = rule == null ? null : await RefreshTimersAsync(ct).ConfigureAwait(false);
+                    var ruleTimers = rule == null ? null : await RefreshTimersAsync(data, ct).ConfigureAwait(false);
                     // Like a timer claim, a rule is only open to a caller who can see something it
                     // records, so a claim can't join or reveal the owners of a rule they can't see.
                     if (rule == null || !CanSeeRule(rule, ruleTimers!, userId))
@@ -389,7 +389,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     {
                         // A recording that started since the last sync isn't noted yet; a fresh
                         // listing notes it, so the claim goes to its timer and survives the next sync.
-                        await RefreshTimersAsync(ct).ConfigureAwait(false);
+                        await RefreshTimersAsync(data, ct).ConfigureAwait(false);
                         recordedBy = FindEntryForItem(data, itemId);
                     }
 
@@ -470,7 +470,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 // A timer the last listing didn't have may be new; list once more before giving up on it.
                 if (ownedTimers.Any(id => !_apiIds.ContainsKey(id)))
                 {
-                    await RefreshTimersAsync(ct).ConfigureAwait(false);
+                    await RefreshTimersAsync(data, ct).ConfigureAwait(false);
                 }
 
                 foreach (var id in ownedTimers)
@@ -551,7 +551,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         {
             var data = Load();
             var changed = false;
-            var timers = await RefreshTimersAsync(ct).ConfigureAwait(false);
+            var timers = await RefreshTimersAsync(data, ct).ConfigureAwait(false);
             var rules = await _host.GetSeriesTimersAsync(ct).ConfigureAwait(false);
 
             var now = _utcNow();
@@ -672,7 +672,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             var data = Load();
             if (!_apiIds.ContainsKey(timerId) && NeedsListingToResolve(data, timerId))
             {
-                await RefreshTimersAsync(ct).ConfigureAwait(false);
+                await RefreshTimersAsync(data, ct).ConfigureAwait(false);
             }
 
             var key = Resolve(timerId);
@@ -1068,7 +1068,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     // Lists the timers. The id map is merged rather than replaced, so a timer that leaves the
     // listing (Jellyfin drops a cancelled one-off) still resolves from its service id; a mapping
     // is pruned only once its timer is neither listed nor owned.
-    private async Task<IReadOnlyList<ScheduledTimer>> RefreshTimersAsync(CancellationToken ct)
+    // Uses the caller's store throughout: loading again here could swap in a store that recovered
+    // meanwhile, leaving the caller to save its stand-in over it.
+    private async Task<IReadOnlyList<ScheduledTimer>> RefreshTimersAsync(OwnershipStoreData data, CancellationToken ct)
     {
         var timers = await _host.GetTimersAsync(ct).ConfigureAwait(false);
         _timers.Clear();
@@ -1090,20 +1092,17 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
         foreach (var entry in _apiIds.ToList())
         {
-            if (!_timers.ContainsKey(entry.Value) && _data?.Timers.ContainsKey(entry.Value) != true)
+            if (!_timers.ContainsKey(entry.Value) && !data.Timers.ContainsKey(entry.Value))
             {
                 _apiIds.Remove(entry.Key);
             }
         }
 
         _unmappedAtLastListing.Clear();
-        if (_data != null)
-        {
-            _unmappedAtLastListing.UnionWith(_data.Timers.Keys.Where(k => !IsMapped(_data, k)));
-        }
+        _unmappedAtLastListing.UnionWith(data.Timers.Keys.Where(k => !IsMapped(data, k)));
 
         _recordingInProgress = timers.Any(t => t.Status == StatusInProgress);
-        if (UpdateRecordingMap(Load(), timers))
+        if (UpdateRecordingMap(data, timers))
         {
             _unsaved = true;
         }
@@ -1140,11 +1139,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         data.TimerServiceIds.ContainsKey(key)
         || _apiIds.Values.Contains(key, StringComparer.OrdinalIgnoreCase);
 
-    private async Task<ScheduledTimer?> FindTimerAsync(string id, CancellationToken ct)
+    private async Task<ScheduledTimer?> FindTimerAsync(OwnershipStoreData data, string id, CancellationToken ct)
     {
         if (!_apiIds.ContainsKey(id) || !_timers.ContainsKey(Resolve(id)))
         {
-            await RefreshTimersAsync(ct).ConfigureAwait(false);
+            await RefreshTimersAsync(data, ct).ConfigureAwait(false);
         }
 
         return _timers.TryGetValue(Resolve(id), out var timer) ? timer : null;

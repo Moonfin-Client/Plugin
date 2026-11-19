@@ -225,9 +225,13 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public HashSet<string> HiddenPrograms { get; } = new();
 
+    /// <summary>Runs once, inside the next timer listing (storage coming back mid-call, say).</summary>
+    public Action? OnNextTimerRead;
+
     public async Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _timerReads);
+        Interlocked.Exchange(ref OnNextTimerRead, null)?.Invoke();
         if (TimerReadGate != null) await TimerReadGate.Task.WaitAsync(cancellationToken);
         if (TimerBackendTimesOut) throw new TaskCanceledException("DVR backend timed out");
         if (TimersUnavailable) throw new InvalidOperationException("Live TV is not ready");
