@@ -171,6 +171,68 @@ public sealed class AccessWindowTests
         Assert.Equal(3600, window.SecondsUntilOpen);
     }
 
+    [Fact]
+    public void FallBack_SplitsAPeriodEndingInTheRepeatedHour()
+    {
+        var newYork = Named("America/New_York");
+        if (newYork == null)
+        {
+            return;
+        }
+
+        // Sunday 2026-11-01 00:00-01:30: 04:00Z-05:30Z on EDT, then the clock goes back to 01:00 EST
+        // at 06:00Z and reads 01:00-01:30 again until 06:30Z
+        var periods = AccessWindowController.BuildPeriods([Entry("Sunday", 0, 1.5)], At(2026, 11, 1, 0), At(2026, 11, 2, 0), newYork);
+
+        Assert.Equal(
+            [new AccessPeriod(At(2026, 11, 1, 4), At(2026, 11, 1, 5, 30).AddTicks(1)), new AccessPeriod(At(2026, 11, 1, 6), At(2026, 11, 1, 6, 30).AddTicks(1))],
+            periods);
+    }
+
+    [Fact]
+    public void BuildPeriods_CoversTheRangeAskedFor()
+    {
+        // Two weeks from Monday 2026-11-16: ten weekdays, the last cut off at the range's end
+        var periods = AccessWindowController.BuildPeriods([Entry("Weekday", 8, 20)], At(2026, 11, 16, 0), At(2026, 11, 27, 12), Utc);
+
+        Assert.Equal(10, periods.Count);
+        Assert.Equal(new AccessPeriod(At(2026, 11, 16, 8), At(2026, 11, 16, 20).AddTicks(1)), periods[0]);
+        Assert.Equal(new AccessPeriod(At(2026, 11, 27, 8), At(2026, 11, 27, 12)), periods[^1]);
+    }
+
+    [Fact]
+    public void BuildPeriods_FindsBothChangesInAYear()
+    {
+        var newYork = Named("America/New_York");
+        if (newYork == null)
+        {
+            return;
+        }
+
+        // All of 2026, EST at both ends; Sundays 02:30-04:00 local
+        var periods = AccessWindowController.BuildPeriods([Entry("Sunday", 2.5, 4)], At(2026, 1, 1, 0), At(2027, 1, 1, 0), newYork);
+
+        Assert.Equal(52, periods.Count);
+        // EST: 07:30Z-09:00Z
+        Assert.Contains(new AccessPeriod(At(2026, 3, 1, 7, 30), At(2026, 3, 1, 9).AddTicks(1)), periods);
+        // Spring forward: 02:30 never comes, the clock jumps to 03:00 EDT at 07:00Z
+        Assert.Contains(new AccessPeriod(At(2026, 3, 8, 7), At(2026, 3, 8, 8).AddTicks(1)), periods);
+        // EDT: 06:30Z-08:00Z
+        Assert.Contains(new AccessPeriod(At(2026, 7, 5, 6, 30), At(2026, 7, 5, 8).AddTicks(1)), periods);
+        // Fall back at 06:00Z: 02:30-04:00 EST
+        Assert.Contains(new AccessPeriod(At(2026, 11, 1, 7, 30), At(2026, 11, 1, 9).AddTicks(1)), periods);
+    }
+
+    [Fact]
+    public void LookAhead_LeavesOutChangesBeyondIt()
+    {
+        // Friday 21:00, opens Monday 08:00: 59 hours on, past a two-day look-ahead
+        var window = AccessWindowController.Evaluate([Entry("Weekday", 8, 20)], At(2026, 11, 20, 21), Utc, TimeSpan.FromDays(2));
+
+        Assert.False(window.Allowed);
+        Assert.Null(window.SecondsUntilOpen);
+    }
+
     public static IEnumerable<object[]> Zones() =>
         new[] { "America/New_York", "Australia/Sydney", "Europe/London", "Asia/Kolkata", "Pacific/Chatham" }
             .Select(id => new object[] { id });
@@ -184,6 +246,7 @@ public sealed class AccessWindowTests
         [Entry("Sunday", 0, 24), Entry("Wednesday", 2, 3)],
         [Entry("Everyday", 0, 24)],
         [Entry("Monday", 8, 25), Entry("Friday", -1, 3)],
+        [Entry("Sunday", 0, 1.5)],
     ];
 
     /// <summary>
@@ -208,7 +271,7 @@ public sealed class AccessWindowTests
                 for (var now = weekStart; now < weekStart.AddDays(2); now = now.AddMinutes(97))
                 {
                     var window = AccessWindowController.Evaluate(entries, now, zone);
-                    var allowed = AccessWindowController.IsAllowed(entries, now, zone);
+                    var allowed = IsAllowed(entries, now, zone);
                     var expected = Scan(entries, now, zone, allowed);
 
                     Assert.Equal(allowed, window.Allowed);
@@ -219,12 +282,21 @@ public sealed class AccessWindowTests
         }
     }
 
+    // Jellyfin's rule (UserEntityExtensions.IsParentalScheduleAllowed) copied as written, in the
+    // server's zone; IsAllowed_AgreesWithJellyfin ties it to Jellyfin's own code
+    private static bool IsAllowed(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset instant, TimeZoneInfo zone)
+    {
+        var local = TimeZoneInfo.ConvertTime(instant, zone).DateTime;
+        var hour = local.TimeOfDay.TotalHours;
+        return entries.Count == 0 || entries.Any(e => e.Covers(local.DayOfWeek) && hour >= e.StartHour && hour <= e.EndHour);
+    }
+
     private static long? Scan(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset now, TimeZoneInfo zone, bool allowed)
     {
         for (var minute = 1; minute <= 8 * 24 * 60; minute++)
         {
             var probe = now.AddMinutes(minute);
-            if (AccessWindowController.IsAllowed(entries, probe, zone) == allowed)
+            if (IsAllowed(entries, probe, zone) == allowed)
             {
                 continue;
             }
@@ -234,7 +306,7 @@ public sealed class AccessWindowTests
             while (high.UtcTicks - low.UtcTicks > 1)
             {
                 var middle = low.AddTicks((high.UtcTicks - low.UtcTicks) / 2);
-                if (AccessWindowController.IsAllowed(entries, middle, zone) == allowed)
+                if (IsAllowed(entries, middle, zone) == allowed)
                 {
                     low = middle;
                 }
@@ -315,7 +387,7 @@ public sealed class AccessWindowTests
 
         foreach (var moment in moments)
         {
-            var ours = AccessWindowController.IsAllowed(entries, new DateTimeOffset(moment, TimeSpan.Zero), Utc);
+            var ours = IsAllowed(entries, new DateTimeOffset(moment, TimeSpan.Zero), Utc);
             Assert.True(JellyfinAllows(entries, moment) == ours, $"{moment:ddd HH:mm:ss}: Jellyfin and IsAllowed differ ({string.Join(", ", entries)})");
         }
     }

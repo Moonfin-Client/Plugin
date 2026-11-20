@@ -98,31 +98,37 @@ public class AccessWindowController : ControllerBase
         }
     }
 
-    // The schedule repeats every week, so a change that ever comes comes within this
-    private static readonly TimeSpan LookAhead = TimeSpan.FromDays(8);
+    // Long enough to find any change. The schedule repeats every week, so if nothing changes within a
+    // week, nothing ever will. The extra day covers a daylight saving change moving the next change
+    // up to an hour past a week away.
+    internal static readonly TimeSpan DefaultLookAhead = TimeSpan.FromDays(8);
 
     /// <summary>
-    /// The access window at <paramref name="now"/> for a server in <paramref name="zone"/>, judged
-    /// the way Jellyfin judges it: allowed when no entries, or when any entry's day matches the
-    /// server's local day and the local hour is between its start and end, both included. Adjacent
-    /// and overlapping entries run together, so the durations are to the real change, and the
-    /// server's daylight saving changes are counted.
+    /// The access window at <paramref name="now"/> for a server in <paramref name="zone"/>: allowed
+    /// when there are no entries or <paramref name="now"/> falls in one of the schedule's periods,
+    /// with the time until that period ends or the next one starts. The time is left out when it's
+    /// not within <paramref name="lookAhead"/>.
     /// </summary>
-    internal static AccessWindowResponse Evaluate(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset now, TimeZoneInfo zone)
+    internal static AccessWindowResponse Evaluate(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset now, TimeZoneInfo zone, TimeSpan? lookAhead = null)
     {
-        var start = now.ToUniversalTime();
-        var allowed = IsAllowed(entries, start, zone);
-        var response = new AccessWindowResponse { Allowed = allowed };
         if (entries.Count == 0)
         {
-            return response;
+            return new AccessWindowResponse { Allowed = true };
         }
 
-        var change = NextChange(entries, start, zone, allowed);
-        if (change is { } at)
+        now = now.ToUniversalTime();
+        var limit = now + (lookAhead ?? DefaultLookAhead);
+        var periods = BuildPeriods(entries, now, limit, zone);
+        var current = periods.Find(p => p.Start <= now && now < p.End);
+        var allowed = current != default;
+        var change = allowed ? current.End : periods.Find(p => p.Start > now).Start;
+
+        var response = new AccessWindowResponse { Allowed = allowed };
+        // A period cut off at the limit doesn't end there, and no next period means no opening
+        if (change > now && change < limit)
         {
             // Rounded up, so a timer set from it never fires before the change
-            var seconds = (long)Math.Ceiling((at - start).TotalSeconds);
+            var seconds = (long)Math.Ceiling((change - now).TotalSeconds);
             if (allowed)
             {
                 response.SecondsUntilClose = seconds;
@@ -136,143 +142,101 @@ public class AccessWindowController : ControllerBase
         return response;
     }
 
-    /// <summary>Jellyfin's own rule (UserEntityExtensions.IsParentalScheduleAllowed), on <paramref name="zone"/>.</summary>
-    internal static bool IsAllowed(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset instant, TimeZoneInfo zone)
+    /// <summary>
+    /// The schedule as UTC periods between <paramref name="from"/> and <paramref name="to"/> for a
+    /// server in <paramref name="zone"/>, sorted, and merged where they overlap or touch, judged the
+    /// way Jellyfin judges it (UserEntityExtensions.IsParentalScheduleAllowed): an entry lets the
+    /// user in on its days while the server's local hour is between its start and end, both
+    /// included. While the zone's UTC offset holds, the local time is UTC plus that offset, so each
+    /// entry's hours are shifted by the offset and cut to that stretch. That way an hour skipped by
+    /// daylight saving drops out and a repeated one counts twice.
+    /// </summary>
+    internal static List<AccessPeriod> BuildPeriods(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo zone)
     {
-        if (entries.Count == 0)
+        var periods = new List<AccessPeriod>();
+        foreach (var (start, end, offset) in OffsetStretches(from.ToUniversalTime(), to.ToUniversalTime(), zone))
         {
-            return true;
-        }
-
-        var local = TimeZoneInfo.ConvertTime(instant, zone).DateTime;
-        var hour = local.TimeOfDay.TotalHours;
-        foreach (var entry in entries)
-        {
-            if (entry.Covers(local.DayOfWeek) && hour >= entry.StartHour && hour <= entry.EndHour)
+            for (var day = (start + offset).Date; day <= (end + offset).Date; day = day.AddDays(1))
             {
-                return true;
+                foreach (var entry in entries.Where(e => e.Covers(day.DayOfWeek)))
+                {
+                    // Jellyfin compares the local hour of the day, 0 up to 24, with the hours as stored,
+                    // so an end past 24 lasts to midnight and a start below 0 is midnight
+                    var open = (long)Math.Ceiling(Math.Clamp(entry.StartHour, 0, 24) * TimeSpan.TicksPerHour);
+                    var close = (long)Math.Min(Math.Floor(entry.EndHour * TimeSpan.TicksPerHour) + 1, TimeSpan.TicksPerDay);
+                    var midnight = day.Ticks - offset.Ticks;
+                    var period = new AccessPeriod(
+                        Later(start, new DateTimeOffset(midnight + open, TimeSpan.Zero)),
+                        Earlier(end, new DateTimeOffset(midnight + close, TimeSpan.Zero)));
+                    if (period.Start < period.End)
+                    {
+                        periods.Add(period);
+                    }
+                }
             }
         }
 
-        return false;
+        periods.Sort((a, b) => a.Start.CompareTo(b.Start));
+        var merged = new List<AccessPeriod>();
+        foreach (var period in periods)
+        {
+            if (merged.Count > 0 && period.Start <= merged[^1].End)
+            {
+                merged[^1] = merged[^1] with { End = Later(merged[^1].End, period.End) };
+            }
+            else
+            {
+                merged.Add(period);
+            }
+        }
+
+        return merged;
     }
 
+    // Offset changes are further apart than this in today's rules: the closest are Morocco's around
+    // Ramadan, about five weeks apart. Half that leaves room for a rule changed at short notice.
+    private static readonly TimeSpan OffsetChangeSpacing = TimeSpan.FromDays(14);
+
     /// <summary>
-    /// The first instant after <paramref name="start"/> at which <see cref="IsAllowed"/> stops
-    /// being <paramref name="allowed"/>, or null when it doesn't within the look-ahead. The answer
-    /// can only change at an entry's start, just after an entry's end, or where the server's offset
-    /// changes, so only those instants are tried.
+    /// The stretches between the two instants over which the zone's UTC offset holds, split where it
+    /// changes, found to the tick. .NET has no call for the next change, but a piece shorter than
+    /// <see cref="OffsetChangeSpacing"/> holds one at most, so its ends show whether it does, and a
+    /// binary search finds it. The default look-ahead is one piece.
     /// </summary>
-    private static DateTimeOffset? NextChange(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset start, TimeZoneInfo zone, bool allowed)
+    private static IEnumerable<(DateTimeOffset Start, DateTimeOffset End, TimeSpan Offset)> OffsetStretches(DateTimeOffset from, DateTimeOffset to, TimeZoneInfo zone)
     {
-        var limit = start + LookAhead;
-        var candidates = new List<DateTimeOffset>();
-
-        var today = TimeZoneInfo.ConvertTime(start, zone).DateTime.Date;
-        for (var date = today.AddDays(-1); date <= today.Add(LookAhead).AddDays(1); date = date.AddDays(1))
+        var start = from;
+        var offset = zone.GetUtcOffset(from);
+        for (var piece = from; piece < to; piece += OffsetChangeSpacing)
         {
-            foreach (var entry in entries)
-            {
-                if (!entry.Covers(date.DayOfWeek))
-                {
-                    continue;
-                }
-
-                AddInstants(candidates, date.AddTicks(HourTicks(entry.StartHour)), zone);
-                AddInstants(candidates, date.AddTicks(HourTicks(entry.EndHour)), zone);
-            }
-        }
-
-        AddOffsetChanges(candidates, start, limit, zone);
-
-        candidates.Sort();
-        foreach (var candidate in candidates)
-        {
-            if (candidate < start || candidate > limit)
+            var low = piece;
+            var high = Earlier(piece + OffsetChangeSpacing, to);
+            if (zone.GetUtcOffset(high) == offset)
             {
                 continue;
             }
 
-            // An opening happens at the start itself; a closing a moment after the end
-            if (IsAllowed(entries, candidate, zone) != allowed)
+            while (high.UtcTicks - low.UtcTicks > 1)
             {
-                return candidate;
+                var middle = low.AddTicks((high.UtcTicks - low.UtcTicks) / 2);
+                (low, high) = zone.GetUtcOffset(middle) == offset ? (middle, high) : (low, middle);
             }
 
-            var after = candidate.AddTicks(1);
-            if (IsAllowed(entries, after, zone) != allowed)
-            {
-                return after;
-            }
+            yield return (start, high, offset);
+            start = high;
+            offset = zone.GetUtcOffset(high);
         }
 
-        return null;
+        yield return (start, to, offset);
     }
 
-    // Jellyfin compares the hour of the local day, which runs from 0 up to 24, with the stored hours as
-    // they are, so an end past 24 lasts to midnight and no later and a start below 0 is midnight. The
-    // boundaries are clamped to the day to match; IsAllowed keeps the stored hours.
-    private static long HourTicks(double hours) =>
-        (long)Math.Ceiling(Math.Clamp(hours, 0, 24) * TimeSpan.TicksPerHour);
+    private static DateTimeOffset Earlier(DateTimeOffset a, DateTimeOffset b) => a < b ? a : b;
 
-    /// <summary>
-    /// The instants at which the server's wall clock reads <paramref name="local"/>: none in an
-    /// hour skipped by daylight saving, two in an hour repeated by it.
-    /// </summary>
-    private static void AddInstants(List<DateTimeOffset> into, DateTime local, TimeZoneInfo zone)
-    {
-        var wall = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
-        var nominal = new DateTimeOffset(wall, TimeSpan.Zero);
-        var offsets = new HashSet<TimeSpan>
-        {
-            zone.GetUtcOffset(nominal.AddDays(-1)),
-            zone.GetUtcOffset(nominal),
-            zone.GetUtcOffset(nominal.AddDays(1)),
-        };
-
-        foreach (var offset in offsets)
-        {
-            var instant = new DateTimeOffset(wall.Ticks - offset.Ticks, TimeSpan.Zero);
-            if (TimeZoneInfo.ConvertTime(instant, zone).DateTime == wall)
-            {
-                into.Add(instant);
-            }
-        }
-    }
-
-    /// <summary>Every instant between the two at which the zone's offset changes, to the tick.</summary>
-    private static void AddOffsetChanges(List<DateTimeOffset> into, DateTimeOffset from, DateTimeOffset to, TimeZoneInfo zone)
-    {
-        var previous = from;
-        var offset = zone.GetUtcOffset(from);
-        for (var probe = from.AddHours(1); previous < to; probe = probe.AddHours(1))
-        {
-            var next = zone.GetUtcOffset(probe);
-            if (next != offset)
-            {
-                var low = previous;
-                var high = probe;
-                while (high.UtcTicks - low.UtcTicks > 1)
-                {
-                    var middle = low.AddTicks((high.UtcTicks - low.UtcTicks) / 2);
-                    if (zone.GetUtcOffset(middle) == offset)
-                    {
-                        low = middle;
-                    }
-                    else
-                    {
-                        high = middle;
-                    }
-                }
-
-                into.Add(high);
-                offset = next;
-            }
-
-            previous = probe;
-        }
-    }
+    private static DateTimeOffset Later(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
 }
+
+/// <summary>A time in which the schedule lets the user in, from Start up to but not including End.</summary>
+internal readonly record struct AccessPeriod(DateTimeOffset Start, DateTimeOffset End);
 
 /// <summary>One access schedule entry: a day name as Jellyfin's DynamicDayOfWeek writes it, and the hours.</summary>
 internal readonly record struct ScheduleEntry(string Day, double StartHour, double EndHour)
