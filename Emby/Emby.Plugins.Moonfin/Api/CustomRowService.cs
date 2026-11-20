@@ -405,94 +405,111 @@ namespace Emby.Plugins.Moonfin.Api
                 throw new ArgumentException("TMDB requires id parameter.");
 
             var isCollection = type == "movie_collection";
-            var url = isCollection
-                ? BuildTmdbCollectionUrl(listId!, language)
-                : BuildTmdbListUrl(listId!, language);
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            MoonfinHttp.ApplyTmdbAuth(request, apiKey!);
-
-            using var response = await client.SendAsync(request).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new Exception($"TMDB API returned status {(int)response.StatusCode}");
-
-            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using var document = JsonDocument.Parse(json);
-            var root = document.RootElement;
-
             var items = new List<CustomRowItem>();
             int rank = 1;
 
-            if (isCollection)
+            // TMDB sends a list 20 titles a page and a collection whole.
+            for (var page = 1; items.Count < MdbListMaxItems; page++)
             {
-                if (root.TryGetProperty("parts", out var partsProp) && partsProp.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var part in partsProp.EnumerateArray())
-                    {
-                        var partId = part.TryGetProperty("id", out var idProp) ? idProp.GetInt64().ToString() : null;
-                        var title = part.TryGetProperty("title", out var titleProp) ? titleProp.GetString() ?? "Unknown" : "Unknown";
-                        var dateStr = part.TryGetProperty("release_date", out var rdProp) ? rdProp.GetString() : null;
-                        int? year = ParseYear(dateStr);
+                var url = isCollection
+                    ? BuildTmdbCollectionUrl(listId!, language)
+                    : BuildTmdbListUrl(listId!, language, page);
 
-                        if (!string.IsNullOrEmpty(partId))
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                MoonfinHttp.ApplyTmdbAuth(request, apiKey!);
+
+                using var response = await client.SendAsync(request).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                    throw new Exception($"TMDB API returned status {(int)response.StatusCode}");
+
+                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+
+                if (isCollection)
+                {
+                    if (root.TryGetProperty("parts", out var partsProp) && partsProp.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var part in partsProp.EnumerateArray())
                         {
-                            var posterPath = part.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
-                            var backdropPath = part.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
-                            items.Add(new CustomRowItem
+                            var partId = part.TryGetProperty("id", out var idProp) ? idProp.GetInt64().ToString() : null;
+                            var title = part.TryGetProperty("title", out var titleProp) ? titleProp.GetString() ?? "Unknown" : "Unknown";
+                            var dateStr = part.TryGetProperty("release_date", out var rdProp) ? rdProp.GetString() : null;
+                            int? year = ParseYear(dateStr);
+
+                            if (!string.IsNullOrEmpty(partId))
                             {
-                                Id = long.TryParse(partId, out var lbTmdbId) ? lbTmdbId : (long?)null,
-                                Name = title,
-                                Type = "Movie",
-                                ProductionYear = year,
-                                Rank = rank++,
-                                ProviderIds = new CustomRowItemProviderIds { Tmdb = partId },
-                                PosterUrl = posterPath,
-                                BackdropUrl = backdropPath
-                            });
+                                var posterPath = part.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
+                                var backdropPath = part.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
+                                items.Add(new CustomRowItem
+                                {
+                                    Id = long.TryParse(partId, out var lbTmdbId) ? lbTmdbId : (long?)null,
+                                    Name = title,
+                                    Type = "Movie",
+                                    ProductionYear = year,
+                                    Rank = rank++,
+                                    ProviderIds = new CustomRowItemProviderIds { Tmdb = partId },
+                                    PosterUrl = posterPath,
+                                    BackdropUrl = backdropPath
+                                });
+                            }
                         }
                     }
+                    break;
                 }
-            }
-            else
-            {
-                if (root.TryGetProperty("items", out var itemsProp) && itemsProp.ValueKind == JsonValueKind.Array)
+
+                if (!root.TryGetProperty("items", out var itemsProp)
+                    || itemsProp.ValueKind != JsonValueKind.Array
+                    || itemsProp.GetArrayLength() == 0)
                 {
-                    foreach (var item in itemsProp.EnumerateArray())
+                    break;
+                }
+
+                foreach (var item in itemsProp.EnumerateArray())
+                {
+                    var itemId = item.TryGetProperty("id", out var idProp) ? idProp.GetInt64().ToString() : null;
+                    var title = item.TryGetProperty("title", out var titleProp) ? titleProp.GetString() : null;
+                    if (string.IsNullOrEmpty(title) && item.TryGetProperty("name", out var nameProp))
+                        title = nameProp.GetString();
+                    title = title ?? "Unknown";
+
+                    var dateStr = item.TryGetProperty("release_date", out var rdProp) ? rdProp.GetString() : null;
+                    if (string.IsNullOrEmpty(dateStr) && item.TryGetProperty("first_air_date", out var fadProp))
+                        dateStr = fadProp.GetString();
+
+                    int? year = ParseYear(dateStr);
+
+                    var mediaType = item.TryGetProperty("media_type", out var mtProp) ? mtProp.GetString() : null;
+                    var finalType = mediaType == "tv" ? "Series" : "Movie";
+
+                    if (!string.IsNullOrEmpty(itemId))
                     {
-                        var itemId = item.TryGetProperty("id", out var idProp) ? idProp.GetInt64().ToString() : null;
-                        var title = item.TryGetProperty("title", out var titleProp) ? titleProp.GetString() : null;
-                        if (string.IsNullOrEmpty(title) && item.TryGetProperty("name", out var nameProp))
-                            title = nameProp.GetString();
-                        title = title ?? "Unknown";
-
-                        var dateStr = item.TryGetProperty("release_date", out var rdProp) ? rdProp.GetString() : null;
-                        if (string.IsNullOrEmpty(dateStr) && item.TryGetProperty("first_air_date", out var fadProp))
-                            dateStr = fadProp.GetString();
-
-                        int? year = ParseYear(dateStr);
-
-                        var mediaType = item.TryGetProperty("media_type", out var mtProp) ? mtProp.GetString() : null;
-                        var finalType = mediaType == "tv" ? "Series" : "Movie";
-
-                        if (!string.IsNullOrEmpty(itemId))
+                        var posterPath = item.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
+                        var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
+                        items.Add(new CustomRowItem
                         {
-                            var posterPath = item.TryGetProperty("poster_path", out var pProp) ? pProp.GetString() : null;
-                            var backdropPath = item.TryGetProperty("backdrop_path", out var bProp) ? bProp.GetString() : null;
-                            items.Add(new CustomRowItem
-                            {
-                                Id = long.TryParse(itemId, out var lbTmdbId) ? lbTmdbId : (long?)null,
-                                Name = title,
-                                Type = finalType,
-                                ProductionYear = year,
-                                Rank = rank++,
-                                ProviderIds = new CustomRowItemProviderIds { Tmdb = itemId },
-                                PosterUrl = posterPath,
-                                BackdropUrl = backdropPath
-                            });
-                        }
+                            Id = long.TryParse(itemId, out var lbTmdbId) ? lbTmdbId : (long?)null,
+                            Name = title,
+                            Type = finalType,
+                            ProductionYear = year,
+                            Rank = rank++,
+                            ProviderIds = new CustomRowItemProviderIds { Tmdb = itemId },
+                            PosterUrl = posterPath,
+                            BackdropUrl = backdropPath
+                        });
                     }
                 }
+
+                var totalPages = root.TryGetProperty("total_pages", out var pagesProp)
+                    && pagesProp.ValueKind == JsonValueKind.Number
+                    ? pagesProp.GetInt32()
+                    : 1;
+                if (page >= totalPages)
+                    break;
             }
+
+            if (items.Count > MdbListMaxItems)
+                items.RemoveRange(MdbListMaxItems, items.Count - MdbListMaxItems);
 
             return items;
         }
@@ -890,12 +907,16 @@ namespace Emby.Plugins.Moonfin.Api
             return url;
         }
 
-        internal static string BuildTmdbListUrl(string listId, string? language)
+        internal static string BuildTmdbListUrl(string listId, string? language, int page = 1)
         {
             var url = $"https://api.themoviedb.org/3/list/{Uri.EscapeDataString(listId)}";
             if (!string.IsNullOrWhiteSpace(language))
             {
                 url += $"?language={Uri.EscapeDataString(language)}";
+            }
+            if (page > 1)
+            {
+                url += (url.Contains('?') ? "&" : "?") + $"page={page}";
             }
             return url;
         }

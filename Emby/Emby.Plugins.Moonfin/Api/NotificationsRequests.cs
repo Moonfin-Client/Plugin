@@ -28,6 +28,10 @@ namespace Emby.Plugins.Moonfin.Api
         public System.IO.Stream RequestStream { get; set; } = null!;
     }
 
+    [Route("/Moonfin/Notifications/Test", "POST")]
+    [Authenticated]
+    public class TestNotificationRequest : IReturn<object> { }
+
     [Route("/Moonfin/Notifications/WebhookInfo", "GET")]
     [Authenticated(Roles = "Admin")]
     public class GetWebhookInfoRequest : IReturn<object> { }

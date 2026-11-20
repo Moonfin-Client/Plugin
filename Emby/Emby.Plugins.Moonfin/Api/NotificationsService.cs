@@ -88,6 +88,37 @@ namespace Emby.Plugins.Moonfin.Api
             return Json(new { success = true });
         }
 
+        public object Post(TestNotificationRequest request)
+        {
+            var userId = AuthHelpers.GetCurrentUserId(Request, _authContext);
+            if (userId == null) return Json(401, new { error = "User not authenticated" });
+
+            var pushEnabled = Plugin.Instance?.Configuration?.PushEnabled == true;
+            var devices = Store.GetUserDevices(userId.Value);
+
+            var title = "Moonfin Push Test";
+            var body = "Notifications are working properly!";
+            var route = "";
+
+            var json = JsonSerializer.Serialize(new
+            {
+                type = "seerrNotification",
+                title,
+                body,
+                route
+            });
+
+            Plugin.Instance?.SettingsService?.NotifyUser(userId.Value, json);
+            Plugin.Instance?.PushDelivery?.QueueToUser(userId.Value, title, body, route);
+
+            return Json(new
+            {
+                success = true,
+                pushEnabled,
+                devicesCount = devices.Count
+            });
+        }
+
         // Admin-only (see route DTO). Returns everything an admin needs to paste Moonfin's
         // webhook into Seerr by hand when auto-provisioning can't run.
         public async Task<object> Get(GetWebhookInfoRequest request)

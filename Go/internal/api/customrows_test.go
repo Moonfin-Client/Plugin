@@ -57,6 +57,17 @@ func rowProviders(t *testing.T, hits *atomic.Int32) *httptest.Server {
 				{"iso_3166_1":"US","release_dates":[{"certification":"","type":1},{"certification":"NR","type":1},{"certification":"R","type":3}]}]}}`)
 		case r.URL.Path == "/3/tv/1399" && q.Get("append_to_response") == "content_ratings":
 			io.WriteString(w, `{"overview":"Seven noble families.","episode_run_time":[60],"poster_path":"/got.jpg","content_ratings":{"results":[{"iso_3166_1":"US","rating":"TV-MA"}]}}`)
+		case r.URL.Path == "/3/list/42":
+			// 25 titles, 20 a page.
+			page := 1
+			if p, err := strconv.Atoi(q.Get("page")); err == nil {
+				page = p
+			}
+			var films []string
+			for n := (page-1)*20 + 1; n <= min(page*20, 25); n++ {
+				films = append(films, `{"id":`+strconv.Itoa(1000+n)+`,"media_type":"movie","title":"Film `+strconv.Itoa(n)+`"}`)
+			}
+			io.WriteString(w, `{"page":`+strconv.Itoa(page)+`,"total_pages":2,"items":[`+strings.Join(films, ",")+`]}`)
 		case r.URL.Path == "/3/trending/all/week" && q.Get("language") == "fr-FR":
 			io.WriteString(w, `{"results":[{"id":603,"media_type":"movie","title":"Matrix","release_date":"1999-03-31","poster_path":"/m.jpg"},
 				{"id":17419,"media_type":"person","name":"Someone"},{"id":1399,"media_type":"tv","name":"Le Trône de fer","first_air_date":"2011-04-17"}]}`)
@@ -203,6 +214,15 @@ func TestTmdbChartSkipsPeopleAndAsksInTheAppsLanguage(t *testing.T) {
 	q["type"] = "../account"
 	if _, got := call(t, s, userMain, "GET", "/Moonfin/CustomRows/Items", "", q); got["success"] != false {
 		t.Fatalf("a path that isn't a chart must be refused: %v", got)
+	}
+}
+
+func TestTmdbListReadsEveryPage(t *testing.T) {
+	s, _, _ := rowServer(t)
+	withKeys(t, s, "", "tmdb-key")
+	items := rowItems(t, s, userMain, map[string]any{"source": "tmdb", "type": "user_list", "params": `{"id":"42"}`})
+	if len(items) != 25 || items[0]["name"] != "Film 1" || items[24]["name"] != "Film 25" {
+		t.Fatalf("got %d items, first %v, last %v", len(items), items[0]["name"], items[len(items)-1]["name"])
 	}
 }
 

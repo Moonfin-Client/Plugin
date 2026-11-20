@@ -23,15 +23,21 @@ public class NotificationsController : ControllerBase
     private readonly NotificationStore _store;
     private readonly SeerrWebhookService _webhookService;
     private readonly SeerrProvisioningService _provisioning;
+    private readonly PushDeliveryService _pushDelivery;
+    private readonly MoonfinSettingsService _settingsService;
 
     public NotificationsController(
         NotificationStore store,
         SeerrWebhookService webhookService,
-        SeerrProvisioningService provisioning)
+        SeerrProvisioningService provisioning,
+        PushDeliveryService pushDelivery,
+        MoonfinSettingsService settingsService)
     {
         _store = store;
         _webhookService = webhookService;
         _provisioning = provisioning;
+        _pushDelivery = pushDelivery;
+        _settingsService = settingsService;
     }
 
     /// <summary>
@@ -121,6 +127,47 @@ public class NotificationsController : ControllerBase
 
         _store.UnregisterDevice(userId.Value, request.Token, request.DeviceId);
         return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Sends the caller a test notification, in-app and as a push.
+    /// </summary>
+    [HttpPost("Test")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public IActionResult SendTestNotification()
+    {
+        var userId = this.GetUserIdFromClaims();
+        if (userId == null)
+        {
+            return Unauthorized(new { error = "User not authenticated" });
+        }
+
+        var pushEnabled = MoonfinPlugin.Instance?.Configuration?.PushEnabled == true;
+        var devices = _store.GetUserDevices(userId.Value);
+
+        var title = "Moonfin Push Test";
+        var body = "Notifications are working properly!";
+        var route = "";
+
+        var json = JsonSerializer.Serialize(new
+        {
+            type = "seerrNotification",
+            title,
+            body,
+            route
+        });
+
+        _settingsService.NotifyUser(userId.Value, json);
+        _pushDelivery.QueueToUser(userId.Value, title, body, route);
+
+        return Ok(new
+        {
+            success = true,
+            pushEnabled,
+            devicesCount = devices.Count
+        });
     }
 
     /// <summary>
