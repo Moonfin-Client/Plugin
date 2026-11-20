@@ -2888,6 +2888,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#WebEnableWebRtcScan').checked = config.WebEnableWebRtcScan !== false;
             view.querySelector('#EnableClientLogUpload').checked = config.EnableClientLogUpload !== false;
             view.querySelector('#LiveTvDetectIncompleteRecordings').checked = config.LiveTvDetectIncompleteRecordings !== false;
+            view.querySelector('#LiveTvRecordingOwners').checked = config.LiveTvRecordingOwners !== false;
             view.querySelector('#SmartSearchEnabled').checked = config.SmartSearchEnabled === true;
             view.querySelector('#SmartSearchModel').value = config.SmartSearchModel || 'english';
             view.querySelector('#WatchPartiesEnabled').checked = config.WatchPartiesEnabled !== false;
@@ -3305,6 +3306,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.WebEnableWebRtcScan = view.querySelector('#WebEnableWebRtcScan').checked;
             config.EnableClientLogUpload = view.querySelector('#EnableClientLogUpload').checked;
             config.LiveTvDetectIncompleteRecordings = view.querySelector('#LiveTvDetectIncompleteRecordings').checked;
+            config.LiveTvRecordingOwners = view.querySelector('#LiveTvRecordingOwners').checked;
             config.SmartSearchEnabled = view.querySelector('#SmartSearchEnabled').checked;
             config.SmartSearchModel = view.querySelector('#SmartSearchModel').value || 'english';
             config.WatchPartiesEnabled = view.querySelector('#WatchPartiesEnabled').checked;

@@ -28,6 +28,8 @@ namespace Emby.Plugins.Moonfin
         private Services.DefaultHiddenLibraries? _hiddenLibraries;
         private Services.EmbyLiveTvRecordingHost? _recordingHost;
         private IncompleteRecordingWatcher? _recordingWatcher;
+        private RecordingOwnershipWatcher? _ownershipWatcher;
+        private Task? _ownershipRun;
         private CancellationTokenSource? _recordingStop;
 
         public ServerEntryPoint(ILogManager logManager, ILibraryManager libraryManager, IUserManager userManager, IUserDataManager userDataManager, ISessionManager sessionManager, IServerApplicationHost appHost, ILiveTvManager liveTvManager, ITaskManager taskManager)
@@ -133,13 +135,29 @@ namespace Emby.Plugins.Moonfin
             var logger = _logManager.GetLogger("MoonfinLiveTvRecordings");
             _recordingHost = new Services.EmbyLiveTvRecordingHost(_liveTvManager, _libraryManager, _userManager, _taskManager, logger);
             var log = new Services.EmbyRecordingLog(logger);
+
+            // Built first so complete-showing requests can hand their owners to the timers they schedule.
+            var owners = new RecordingOwnershipService(
+                _recordingHost,
+                log,
+                new Services.EmbyStateFile(),
+                () => DateTime.UtcNow,
+                System.IO.Path.Combine(plugin.DataFolderPath, RecordingOwnershipService.StoreFileName),
+                () => Plugin.Instance?.Configuration?.LiveTvRecordingOwners ?? true);
+
+            // Published before anything runs, so the owners endpoints never answer 503 while Ping
+            // already reports the feature.
+            PluginServices.RecordingOwners = owners;
+            PluginServices.RecordingHost = _recordingHost;
+
             var service = new IncompleteRecordingService(
                 _recordingHost,
                 log,
                 new Services.EmbyStateFile(),
                 () => DateTime.UtcNow,
                 System.IO.Path.Combine(plugin.DataFolderPath, IncompleteRecordingService.StoreFileName),
-                Services.IncompleteRecordingConfig.Read);
+                Services.IncompleteRecordingConfig.Read,
+                owners);
             PluginServices.IncompleteRecordings = service;
 
             _recordingWatcher = new IncompleteRecordingWatcher(service, _recordingHost, log);
@@ -147,6 +165,10 @@ namespace Emby.Plugins.Moonfin
             var watcher = _recordingWatcher;
             var token = _recordingStop.Token;
             _ = Task.Run(() => watcher.RunAsync(token));
+
+            _ownershipWatcher = new RecordingOwnershipWatcher(_recordingHost, owners, log);
+            var ownershipWatcher = _ownershipWatcher;
+            _ownershipRun = Task.Run(() => ownershipWatcher.RunAsync(token));
         }
 
         public void Dispose()
@@ -163,8 +185,21 @@ namespace Emby.Plugins.Moonfin
             PluginServices.HiddenLibraries = null;
 
             _recordingStop?.Cancel();
+
+            // The owners watcher and the events it already took finish before the service and its
+            // lock are disposed under them.
+            if (_ownershipWatcher != null)
+            {
+                try { Task.WhenAll(_ownershipRun ?? Task.CompletedTask, _ownershipWatcher.Idle).Wait(TimeSpan.FromSeconds(5)); }
+                catch (AggregateException) { /* Already logged by the watcher, or cancelled by the stop. */ }
+            }
+
             _recordingHost?.Dispose();
             _recordingWatcher?.Dispose();
+            _ownershipWatcher?.Dispose();
+            PluginServices.RecordingOwners?.Dispose();
+            PluginServices.RecordingOwners = null;
+            PluginServices.RecordingHost = null;
             _recordingStop?.Dispose();
             PluginServices.IncompleteRecordings = null;
         }
@@ -178,6 +213,8 @@ namespace Emby.Plugins.Moonfin
         public static IUserDataManager? UserDataManager { get; set; }
         public static ISessionManager? SessionManager { get; set; }
         public static IncompleteRecordingService? IncompleteRecordings { get; set; }
+        public static RecordingOwnershipService? RecordingOwners { get; set; }
+        public static ILiveTvRecordingHost? RecordingHost { get; set; }
         public static Services.DefaultHiddenLibraries? HiddenLibraries { get; set; }
     }
 }

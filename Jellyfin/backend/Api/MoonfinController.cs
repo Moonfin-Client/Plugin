@@ -145,6 +145,7 @@ public class MoonfinController : ControllerBase
             MessagesSupported = true,
             PinSupported = true,
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
+            RecordingOwnersSupported = config?.LiveTvRecordingOwners ?? true,
             ExtendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
             RecommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
             SmartSearchEnabled = config?.SmartSearchEnabled ?? false,
@@ -1885,6 +1886,9 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("incompleteRecordingsSupported")]
     public bool? IncompleteRecordingsSupported { get; set; }
+
+    [JsonPropertyName("recordingOwnersSupported")]
+    public bool? RecordingOwnersSupported { get; set; }
 
     /// <summary>Movie recovery and user-confirmed current-guide suggestions.</summary>
     [JsonPropertyName("extendedCompleteShowingsSupported")]
