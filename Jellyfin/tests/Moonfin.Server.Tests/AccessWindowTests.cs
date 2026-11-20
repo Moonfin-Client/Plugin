@@ -256,7 +256,11 @@ public sealed class AccessWindowTests
     public void AbsurdHours_AreSkippedWithoutBreakingTheRest()
     {
         // Jellyfin stores the hours as given; these never let the user in, and mustn't stop the valid entry
-        var entries = new[] { Entry("Monday", 8, -100_000_000), Entry("Monday", 100_000_000, 200_000_000), Entry("Monday", double.NaN, 12), Entry("Monday", 9, 17) };
+        var entries = new[]
+        {
+            Entry("Monday", 8, -100_000_000), Entry("Monday", 100_000_000, 200_000_000),
+            Entry("Monday", double.NaN, 12), Entry("Monday", 8, double.NaN), Entry("Monday", 9, 17),
+        };
         var window = AccessWindowController.Evaluate(entries, At(2026, 11, 16, 12), Utc);
 
         Assert.True(window.Allowed);

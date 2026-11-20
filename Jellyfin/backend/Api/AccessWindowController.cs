@@ -163,6 +163,12 @@ public class AccessWindowController : ControllerBase
             {
                 foreach (var entry in entries.Where(e => e.Covers(day.DayOfWeek)))
                 {
+                    // Jellyfin's comparisons with a NaN hour are always false, so the entry never lets them in
+                    if (double.IsNaN(entry.StartHour) || double.IsNaN(entry.EndHour))
+                    {
+                        continue;
+                    }
+
                     // Jellyfin compares the local hour of the day, 0 up to 24, with the hours as stored,
                     // so an end past 24 lasts to midnight and a start below 0 is midnight
                     var open = FirstTick(entry.StartHour, hour => hour >= entry.StartHour);
@@ -247,8 +253,7 @@ public class AccessWindowController : ControllerBase
     /// </summary>
     private static long FirstTick(double hours, Func<double, bool> passes)
     {
-        var estimate = Math.Clamp(Math.Ceiling(hours * TimeSpan.TicksPerHour), 0, TimeSpan.TicksPerDay);
-        var tick = double.IsNaN(estimate) ? TimeSpan.TicksPerDay : (long)estimate;
+        var tick = (long)Math.Clamp(Math.Ceiling(hours * TimeSpan.TicksPerHour), 0, TimeSpan.TicksPerDay);
         while (tick > 0 && passes(TimeSpan.FromTicks(tick - 1).TotalHours))
         {
             tick--;
