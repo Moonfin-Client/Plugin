@@ -224,6 +224,53 @@ public sealed class AccessWindowTests
     }
 
     [Fact]
+    public void SpringForward_SkippedWindow_NamesTheOneAfter()
+    {
+        var newYork = Named("America/New_York");
+        if (newYork == null)
+        {
+            return;
+        }
+
+        // Sunday 02:30-02:45 never happens on 2026-03-08. Just after the 2026-03-01 window (02:46 EST,
+        // 07:46Z) the next opening is 2026-03-15 02:30 EDT (06:30Z), 13 days 22:44 on
+        var window = AccessWindowController.Evaluate([Entry("Sunday", 2.5, 2.75)], At(2026, 3, 1, 7, 46), newYork);
+
+        Assert.False(window.Allowed);
+        Assert.Equal(1205040, window.SecondsUntilOpen);
+    }
+
+    [Fact]
+    public void AFractionalEnd_ClosesAtJellyfinsTick()
+    {
+        // Jellyfin still lets the user in at 08:02:24 exactly for an end of 8.04, where the hours times
+        // the ticks in an hour rounds to just below that tick
+        var monday = At(2026, 11, 16, 0);
+        var periods = AccessWindowController.BuildPeriods([Entry("Monday", 8, 8.04)], monday, monday.AddDays(1), Utc);
+
+        Assert.Equal(new AccessPeriod(At(2026, 11, 16, 8), At(2026, 11, 16, 8, 2).AddSeconds(24).AddTicks(1)), Assert.Single(periods));
+        Assert.Equal(2, AccessWindowController.Evaluate([Entry("Monday", 8, 8.04)], At(2026, 11, 16, 8, 2).AddSeconds(23), Utc).SecondsUntilClose);
+    }
+
+    [Fact]
+    public void AbsurdHours_AreSkippedWithoutBreakingTheRest()
+    {
+        // Jellyfin stores the hours as given; these never let the user in, and mustn't stop the valid entry
+        var entries = new[] { Entry("Monday", 8, -100_000_000), Entry("Monday", 100_000_000, 200_000_000), Entry("Monday", double.NaN, 12), Entry("Monday", 9, 17) };
+        var window = AccessWindowController.Evaluate(entries, At(2026, 11, 16, 12), Utc);
+
+        Assert.True(window.Allowed);
+        // The end hour is included, so it closes a tick after 17:00, rounded up to the next second
+        Assert.Equal(5 * 3600 + 1, window.SecondsUntilClose);
+    }
+
+    [Fact]
+    public void LookAhead_MustBePositive()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => AccessWindowController.Evaluate([Entry("Weekday", 8, 20)], At(2026, 11, 16, 12), Utc, TimeSpan.Zero));
+    }
+
+    [Fact]
     public void LookAhead_LeavesOutChangesBeyondIt()
     {
         // Friday 21:00, opens Monday 08:00: 59 hours on, past a two-day look-ahead
@@ -293,7 +340,7 @@ public sealed class AccessWindowTests
 
     private static long? Scan(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset now, TimeZoneInfo zone, bool allowed)
     {
-        for (var minute = 1; minute <= 8 * 24 * 60; minute++)
+        for (var minute = 1; minute <= AccessWindowController.DefaultLookAhead.TotalMinutes; minute++)
         {
             var probe = now.AddMinutes(minute);
             if (IsAllowed(entries, probe, zone) == allowed)

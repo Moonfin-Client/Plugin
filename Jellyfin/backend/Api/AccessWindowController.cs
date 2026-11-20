@@ -98,16 +98,17 @@ public class AccessWindowController : ControllerBase
         }
     }
 
-    // Long enough to find any change. The schedule repeats every week, so if nothing changes within a
-    // week, nothing ever will. The extra day covers a daylight saving change moving the next change
-    // up to an hour past a week away.
-    internal static readonly TimeSpan DefaultLookAhead = TimeSpan.FromDays(8);
+    // Long enough to find any change. The schedule repeats every week, but a daylight saving change can
+    // skip one week's window entirely (Sunday 02:30-02:45 never happens on New York's spring-forward
+    // night), and no two such changes come in consecutive weeks. So the next change is at most two
+    // weeks and an hour away, and nothing changes ever if nothing changes in that time.
+    internal static readonly TimeSpan DefaultLookAhead = TimeSpan.FromDays(15);
 
     /// <summary>
     /// The access window at <paramref name="now"/> for a server in <paramref name="zone"/>: allowed
     /// when there are no entries or <paramref name="now"/> falls in one of the schedule's periods,
-    /// with the time until that period ends or the next one starts. The time is left out when it's
-    /// not within <paramref name="lookAhead"/>.
+    /// with the time until that period ends or the next one starts. The time is left out unless it
+    /// comes before the end of <paramref name="lookAhead"/>, which must be positive.
     /// </summary>
     internal static AccessWindowResponse Evaluate(IReadOnlyList<ScheduleEntry> entries, DateTimeOffset now, TimeZoneInfo zone, TimeSpan? lookAhead = null)
     {
@@ -116,8 +117,10 @@ public class AccessWindowController : ControllerBase
             return new AccessWindowResponse { Allowed = true };
         }
 
+        var span = lookAhead ?? DefaultLookAhead;
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(span, TimeSpan.Zero, nameof(lookAhead));
         now = now.ToUniversalTime();
-        var limit = now + (lookAhead ?? DefaultLookAhead);
+        var limit = now + span;
         var periods = BuildPeriods(entries, now, limit, zone);
         var current = periods.Find(p => p.Start <= now && now < p.End);
         var allowed = current != default;
@@ -162,8 +165,8 @@ public class AccessWindowController : ControllerBase
                 {
                     // Jellyfin compares the local hour of the day, 0 up to 24, with the hours as stored,
                     // so an end past 24 lasts to midnight and a start below 0 is midnight
-                    var open = (long)Math.Ceiling(Math.Clamp(entry.StartHour, 0, 24) * TimeSpan.TicksPerHour);
-                    var close = (long)Math.Min(Math.Floor(entry.EndHour * TimeSpan.TicksPerHour) + 1, TimeSpan.TicksPerDay);
+                    var open = FirstTick(entry.StartHour, hour => hour >= entry.StartHour);
+                    var close = FirstTick(entry.EndHour, hour => hour > entry.EndHour);
                     var midnight = day.Ticks - offset.Ticks;
                     var period = new AccessPeriod(
                         Later(start, new DateTimeOffset(midnight + open, TimeSpan.Zero)),
@@ -230,6 +233,29 @@ public class AccessWindowController : ControllerBase
         yield return (start, to, offset);
     }
 
+    /// <summary>
+    /// The first tick of the day at which the hour as Jellyfin reads it (TimeOfDay.TotalHours) passes
+    /// <paramref name="passes"/>, or the day's end when none does. The estimate from
+    /// <paramref name="hours"/> can be a tick out from rounding (an end of 8.04 still lets the user in
+    /// at 08:02:24 exactly), so it's moved a tick at a time to where the comparison turns.
+    /// </summary>
+    private static long FirstTick(double hours, Func<double, bool> passes)
+    {
+        var estimate = Math.Clamp(Math.Ceiling(hours * TimeSpan.TicksPerHour), 0, TimeSpan.TicksPerDay);
+        var tick = double.IsNaN(estimate) ? TimeSpan.TicksPerDay : (long)estimate;
+        while (tick > 0 && passes(TimeSpan.FromTicks(tick - 1).TotalHours))
+        {
+            tick--;
+        }
+
+        while (tick < TimeSpan.TicksPerDay && !passes(TimeSpan.FromTicks(tick).TotalHours))
+        {
+            tick++;
+        }
+
+        return tick;
+    }
+
     private static DateTimeOffset Earlier(DateTimeOffset a, DateTimeOffset b) => a < b ? a : b;
 
     private static DateTimeOffset Later(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
@@ -259,7 +285,7 @@ public class AccessWindowResponse
 
     /// <summary>
     /// When allowed, seconds until the schedule closes, rounded up. Left out when allowed with no
-    /// schedule, or when it doesn't close within a week.
+    /// schedule, or when it doesn't close within two weeks (open all week).
     /// </summary>
     [JsonPropertyName("secondsUntilClose")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -267,7 +293,7 @@ public class AccessWindowResponse
 
     /// <summary>
     /// When not allowed, seconds until the schedule next opens, rounded up. Left out when it
-    /// doesn't open within a week.
+    /// doesn't open within two weeks (an entry that never opens).
     /// </summary>
     [JsonPropertyName("secondsUntilOpen")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
