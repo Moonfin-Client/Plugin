@@ -196,16 +196,20 @@ public class AccessWindowController : ControllerBase
         return merged;
     }
 
-    // Offset changes are further apart than this in today's rules: the closest are Morocco's around
-    // Ramadan, about five weeks apart. Half that leaves room for a rule changed at short notice.
+    // Clock changes are never closer together than this. The closest in today's rules are Morocco's
+    // around Ramadan, about five weeks apart; two weeks leaves room for a rule changed at short notice.
     private static readonly TimeSpan OffsetChangeSpacing = TimeSpan.FromDays(14);
 
     /// <summary>
-    /// The stretches between the two instants over which the zone's UTC offset holds, split where it
-    /// changes, found to the tick. .NET has no call for the next change, but a piece shorter than
-    /// <see cref="OffsetChangeSpacing"/> holds one at most, so its ends show whether it does, and a
-    /// binary search finds it. The default look-ahead is one piece.
+    /// Splits the time from <paramref name="from"/> to <paramref name="to"/> into stretches with one UTC
+    /// offset each, cut wherever the server's clock goes forward or back.
     /// </summary>
+    /// <remarks>
+    /// .NET can't tell us when the next clock change is, so this searches for it. It steps through the
+    /// time in pieces of <see cref="OffsetChangeSpacing"/>. A piece that short holds one change at most,
+    /// so if the offset at its end differs from its start there is exactly one change in it, and a
+    /// binary search finds the tick it happens at.
+    /// </remarks>
     private static IEnumerable<(DateTimeOffset Start, DateTimeOffset End, TimeSpan Offset)> OffsetStretches(DateTimeOffset from, DateTimeOffset to, TimeZoneInfo zone)
     {
         var start = from;
@@ -216,9 +220,11 @@ public class AccessWindowController : ControllerBase
             var high = Earlier(piece + OffsetChangeSpacing, to);
             if (zone.GetUtcOffset(high) == offset)
             {
+                // Same offset at both ends: no change in this piece
                 continue;
             }
 
+            // Narrow down to the first tick with the new offset
             while (high.UtcTicks - low.UtcTicks > 1)
             {
                 var middle = low.AddTicks((high.UtcTicks - low.UtcTicks) / 2);
