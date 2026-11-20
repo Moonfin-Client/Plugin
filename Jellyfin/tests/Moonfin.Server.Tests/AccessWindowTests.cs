@@ -284,6 +284,17 @@ public sealed class AccessWindowTests
         Assert.Null(window.SecondsUntilOpen);
     }
 
+    [Fact]
+    public void LookAhead_LeavesOutAChangeExactlyAtItsEnd()
+    {
+        // Friday 21:00, opens Monday 08:00, exactly 59 hours on: left out at 59 hours, given a tick later
+        var friday = At(2026, 11, 20, 21);
+        var entries = new[] { Entry("Weekday", 8, 20) };
+
+        Assert.Null(AccessWindowController.Evaluate(entries, friday, Utc, TimeSpan.FromHours(59)).SecondsUntilOpen);
+        Assert.Equal(59 * 3600, AccessWindowController.Evaluate(entries, friday, Utc, TimeSpan.FromHours(59).Add(TimeSpan.FromTicks(1))).SecondsUntilOpen);
+    }
+
     public static IEnumerable<object[]> Zones() =>
         new[] { "America/New_York", "Australia/Sydney", "Europe/London", "Asia/Kolkata", "Pacific/Chatham" }
             .Select(id => new object[] { id });
