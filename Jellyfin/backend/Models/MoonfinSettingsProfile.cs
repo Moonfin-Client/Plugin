@@ -1047,6 +1047,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("liveTvCategoryDisplay")]
     public string? LiveTvCategoryDisplay { get; set; }
 
+    [JsonPropertyName("liveTvSavedFilters")]
+    public List<string>? LiveTvSavedFilters { get; set; }
+
     [JsonPropertyName("allGenresImageType")]
     public string? AllGenresImageType { get; set; }
 

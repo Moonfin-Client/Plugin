@@ -98,9 +98,15 @@ public sealed class ProfileDefaultsTests : IDisposable
         Assert.Equal("never", merged.ClockBehavior);
         Assert.True(merged.Use24HourClock);
         Assert.Equal(["lib-global"], merged.MediaBarLibraryIds!);
-        Assert.Same(config.DefaultUserSettings, MoonfinSettingsService.AdminDefaultsFor("global", config));
-        Assert.Same(config.DefaultUserSettings, MoonfinSettingsService.AdminDefaultsFor(null, config));
-        Assert.Same(config.DefaultUserSettings, MoonfinSettingsService.AdminDefaultsFor("mobile", config));
+        // Resolved defaults are a separate value so shared guide pins can be combined
+        // without mutating the administrator's stored configuration.
+        foreach (var profile in new string?[] { "global", null, "mobile" })
+        {
+            var defaults = MoonfinSettingsService.AdminDefaultsFor(profile, config)!;
+            Assert.Equal(config.DefaultUserSettings.ClockBehavior, defaults.ClockBehavior);
+            Assert.Equal(config.DefaultUserSettings.Use24HourClock, defaults.Use24HourClock);
+            Assert.Equal(config.DefaultUserSettings.MediaBarLibraryIds, defaults.MediaBarLibraryIds);
+        }
     }
 
     [Fact]

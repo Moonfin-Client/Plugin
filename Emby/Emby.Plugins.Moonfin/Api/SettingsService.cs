@@ -230,10 +230,16 @@ namespace Emby.Plugins.Moonfin.Api
 
             var body = await MoonfinJson.ReadBodyAsync<SaveProfileBody>(request.RequestStream).ConfigureAwait(false);
             if (body?.Profile == null) return Json(400, new { Error = "Profile data is required" });
+            if (body.LiveTvSavedFilterChange is { } change && !change.IsValid())
+                return Json(400, new { Error = "Invalid saved Live TV filter change" });
 
             var existed = Settings.UserSettingsExist(userId.Value);
-            await Settings.SaveProfileAsync(userId.Value, profile, body.Profile, body.ClientId).ConfigureAwait(false);
-            return Json(new { Success = true, Created = !existed, UserId = userId.Value });
+            await Settings.SaveProfileAsync(userId.Value, profile, body.Profile, body.ClientId,
+                savedFilterChange: body.LiveTvSavedFilterChange).ConfigureAwait(false);
+            var pins = body.LiveTvSavedFilterChange == null
+                ? null
+                : (await Settings.GetResolvedProfileAsync(userId.Value, "global").ConfigureAwait(false))?.LiveTvSavedFilters ?? new List<string>();
+            return Json(new { Success = true, Created = !existed, UserId = userId.Value, LiveTvSavedFilters = pins });
         }
 
         public async Task<object> Delete(DeleteMyProfileRequest request)

@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <DefineConstants>$(DefineConstants);MOONFIN_EMBY_TESTS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

@@ -37,6 +37,10 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("hiddenContentBaselines")]
         public Dictionary<string, HiddenContentBaseline>? HiddenContentBaselines { get; set; }
 
+        // Admin groups the user explicitly unpinned. Global.LiveTvSavedFilters stores personal additions.
+        [JsonPropertyName("liveTvSavedFilterExclusions")]
+        public List<string>? LiveTvSavedFilterExclusions { get; set; }
+
         [JsonPropertyName("seerrEnabled")] public bool? SeerrEnabled { get; set; }
         [JsonPropertyName("seerrApiKey")] public string? SeerrApiKey { get; set; }
         [JsonPropertyName("seerrRows")] public SeerrRowsConfig? SeerrRows { get; set; }

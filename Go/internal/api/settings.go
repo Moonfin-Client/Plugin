@@ -254,7 +254,24 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clientID, _ := body["clientid"].(string)
-	s.saveProfile(w, r, name, settings.Clean(incoming), clientID, nil)
+	cleaned := settings.Clean(incoming)
+	if raw, present := body["livetvsavedfilterchange"]; present {
+		change, valid := settings.ParseSavedFilterChange(raw)
+		if !valid {
+			writeError(w, http.StatusBadRequest, "Invalid saved Live TV filter change")
+			return
+		}
+		cfg := s.config(r.Context())
+		change.Defaults = settings.AdminSavedFilters(cfg.Defaults)
+		extra := M{}
+		s.save(w, r, func(env M) M {
+			updated := settings.SaveProfile(env, name, cleaned, clientID, serverKeys(s.config(r.Context())), time.Now(), change)
+			extra["liveTvSavedFilters"] = settings.EffectiveSavedFilters(updated, change.Defaults)
+			return updated
+		}, extra)
+		return
+	}
+	s.saveProfile(w, r, name, cleaned, clientID, nil)
 }
 
 // saveProfile merges one profile and answers like the Jellyfin plugin, with
@@ -339,7 +356,10 @@ func (s *Server) resolve(r *http.Request, name string, record bool) (M, error) {
 		return nil, err
 	}
 	cfg := configFrom(stored)
-	resolved := settings.Resolve(env, name, cfg.DefaultsFor(name), serverKeys(cfg))
+	defaults := settings.LayerDefaults(cfg.DefaultsFor(name), M{
+		"liveTvSavedFilters": settings.AdminSavedFilters(cfg.Defaults),
+	})
+	resolved := settings.Resolve(env, name, defaults, serverKeys(cfg))
 	if record && env != nil && settings.RecordBaseline(env, name, resolved) {
 		if err := s.storeEnvelope(r.Context(), id, env); err != nil {
 			logError(r, "record hidden content baseline", err)

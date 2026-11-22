@@ -54,6 +54,8 @@ type Config struct {
 // DefaultsFor is the admin's defaults for one profile.
 func (c Config) DefaultsFor(profile string) M {
 	device, _ := c.DeviceDefaults[profile].(M)
+	device = maps.Clone(device)
+	delete(device, "liveTvSavedFilters")
 	return settings.LayerDefaults(c.Defaults, device)
 }
 
