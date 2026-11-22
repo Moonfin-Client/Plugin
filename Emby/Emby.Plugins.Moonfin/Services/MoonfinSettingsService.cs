@@ -403,7 +403,8 @@ namespace Emby.Plugins.Moonfin.Services
             if (settingsChanged) NotifySettingsChanged(userId);
         }
 
-        public async Task SaveProfileAsync(Guid userId, string profileName, MoonfinSettingsProfile profile, string? clientId = null, bool notifySettingsChanged = true, bool replace = false, LiveTvSavedFilterChange? savedFilterChange = null, bool mergeAdminGuidePins = false)
+        public async Task SaveProfileAsync(Guid userId, string profileName, MoonfinSettingsProfile profile, string? clientId = null, bool notifySettingsChanged = true, bool replace = false, LiveTvSavedFilterChange? savedFilterChange = null, bool mergeAdminGuidePins = false,
+            bool copyGuidePins = false)
         {
             var filePath = GetUserSettingsPath(userId);
             bool settingsChanged;
@@ -413,6 +414,7 @@ namespace Emby.Plugins.Moonfin.Services
                 var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false)
                     ?? new MoonfinUserSettings();
                 var storedSavedFilters = settings.Global?.LiveTvSavedFilters?.ToList();
+                var copiedGuidePins = copyGuidePins ? profile.LiveTvSavedFilters?.ToList() : null;
                 // Explicit Merge restores selected managed pins without making them permanent.
                 if (mergeAdminGuidePins && profile.LiveTvSavedFilters != null)
                     settings.LiveTvSavedFilterExclusions?.RemoveAll(profile.LiveTvSavedFilters.Contains);
@@ -443,6 +445,11 @@ namespace Emby.Plugins.Moonfin.Services
                     settings.SetProfile(profileName, profile);
 
                 PreserveSavedFilters(settings, storedSavedFilters);
+                if (copyGuidePins)
+                {
+                    settings.Global ??= new MoonfinSettingsProfile();
+                    settings.Global.LiveTvSavedFilters = copiedGuidePins;
+                }
                 ApplySavedFilterChange(settings, savedFilterChange, AdminGuidePins(Plugin.Instance?.Configuration));
                 StripServerWideKeys(settings);
                 settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -753,7 +760,9 @@ namespace Emby.Plugins.Moonfin.Services
                 {
                     foreach (var entry in copies)
                     {
-                        await SaveProfileAsync(userId, entry.Key, CloneProfile(entry.Value), "admin-copy", notifySettingsChanged: false, replace: replace).ConfigureAwait(false);
+                        await SaveProfileAsync(userId, entry.Key, CloneProfile(entry.Value), "admin-copy",
+                            notifySettingsChanged: false, replace: replace,
+                            copyGuidePins: entry.Key == "global" && (entry.Value.LiveTvSavedFilters != null || replace)).ConfigureAwait(false);
                     }
 
                     NotifySettingsChanged(userId);
@@ -948,14 +957,14 @@ namespace Emby.Plugins.Moonfin.Services
         public async Task DeleteProfileAsync(Guid userId, string profileName)
         {
             if (string.Equals(profileName, "global", StringComparison.OrdinalIgnoreCase)) return;
-            var settings = await GetUserSettingsAsync(userId).ConfigureAwait(false);
-            if (settings == null) return;
-
-            settings.SetProfile(profileName, null);
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
                 var filePath = GetUserSettingsPath(userId);
+                var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false);
+                if (settings == null) return;
+                if (settings.NeedsMigration) settings = MigrateV1ToV2(settings);
+                settings.SetProfile(profileName, null);
                 settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 var json = JsonSerializer.Serialize(settings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);

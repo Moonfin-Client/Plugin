@@ -438,7 +438,8 @@ public class MoonfinSettingsService
           bool notifySettingsChanged = true,
           bool replace = false,
           LiveTvSavedFilterChange? savedFilterChange = null,
-          bool mergeAdminGuidePins = false)
+          bool mergeAdminGuidePins = false,
+          bool copyGuidePins = false)
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
@@ -448,6 +449,7 @@ public class MoonfinSettingsService
         {
             var settings = ReadSettingsWithRecovery(filePath) ?? new MoonfinUserSettings();
             var storedSavedFilters = settings.Global?.LiveTvSavedFilters?.ToList();
+            var copiedGuidePins = copyGuidePins ? profile.LiveTvSavedFilters?.ToList() : null;
             // Explicit Merge restores selected managed pins without making them permanent.
             if (mergeAdminGuidePins && profile.LiveTvSavedFilters != null)
                 settings.LiveTvSavedFilterExclusions?.RemoveAll(profile.LiveTvSavedFilters.Contains);
@@ -501,6 +503,11 @@ public class MoonfinSettingsService
             var savedProfile = existingProfile ?? profile;
 
             PreserveSavedFilters(settings, storedSavedFilters);
+            if (copyGuidePins)
+            {
+                settings.Global ??= new MoonfinSettingsProfile();
+                settings.Global.LiveTvSavedFilters = copiedGuidePins;
+            }
             ApplySavedFilterChange(settings, savedFilterChange, AdminGuidePins(MoonfinPlugin.Instance?.Configuration));
 
             // Update metadata
@@ -1412,7 +1419,9 @@ public class MoonfinSettingsService
             {
                 foreach (var (profileName, copy) in copies)
                 {
-                    await SaveProfileAsync(userId, profileName, CloneProfile(copy), "admin-copy", notifySettingsChanged: false, replace: replace);
+                    await SaveProfileAsync(userId, profileName, CloneProfile(copy), "admin-copy",
+                        notifySettingsChanged: false, replace: replace,
+                        copyGuidePins: profileName == "global" && (copy.LiveTvSavedFilters != null || replace));
                 }
 
                 NotifySettingsChanged(userId);
@@ -1594,15 +1603,14 @@ public class MoonfinSettingsService
             return;
         }
 
-        var settings = await GetUserSettingsAsync(userId);
-        if (settings == null) return;
-
-        settings.SetProfile(profileName, null);
-
         await _lock.WaitAsync();
         try
         {
             var filePath = GetUserSettingsPath(userId);
+            var settings = ReadSettingsWithRecovery(filePath);
+            if (settings == null) return;
+            if (settings.NeedsMigration) settings = MigrateV1ToV2(settings);
+            settings.SetProfile(profileName, null);
             settings.LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var json = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, json);

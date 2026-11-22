@@ -710,6 +710,14 @@ func (s *Server) handleCopySettings(w http.ResponseWriter, r *http.Request) {
 			} else {
 				target = settings.SaveProfile(target, p, clone(c), "admin-copy", serverKeys(cfg), time.Now())
 			}
+			// Only an explicit admin copy can replace the global pin list.
+			if p == "global" {
+				if pins, selected := c["liveTvSavedFilters"]; selected {
+					target["global"].(M)["liveTvSavedFilters"] = pins
+				} else if req.Replace {
+					delete(target["global"].(M), "liveTvSavedFilters")
+				}
+			}
 		}
 		raw, err := json.Marshal(target)
 		if err != nil {

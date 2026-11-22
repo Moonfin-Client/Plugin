@@ -1034,6 +1034,30 @@ func TestCopySettingsBetweenProfiles(t *testing.T) {
 	}
 }
 
+func TestAdminCopyCanReplaceSavedGuidePins(t *testing.T) {
+	s := newTestServer()
+	call(t, s, adminMain, "POST", "/Moonfin/Settings/Profile/global",
+		`{"profile":{},"liveTvSavedFilterChange":{"action":"add","filter":"group:News"}}`, nil)
+	call(t, s, other, "POST", "/Moonfin/Settings/Profile/global",
+		`{"profile":{"theme":"dark"},"liveTvSavedFilterChange":{"action":"add","filter":"group:Old"}}`, nil)
+
+	body := `{"fromUserId":"2~20","toUserIds":["4"],"profiles":["global"],"keys":["liveTvSavedFilters"]}`
+	if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/CopySettings", body, nil); code != 200 {
+		t.Fatalf("copy pins = %d", code)
+	}
+	_, env := call(t, s, other, "GET", "/Moonfin/Settings", "", nil)
+	global := env["global"].(map[string]any)
+	if !reflect.DeepEqual(global["liveTvSavedFilters"], []any{"group:News"}) || global["theme"] != "dark" {
+		t.Fatalf("explicit copy lost selected pins or other settings: %v", global)
+	}
+	call(t, s, other, "POST", "/Moonfin/Settings/Profile/mobile",
+		`{"profile":{"liveTvSavedFilters":["group:Stale"]}}`, nil)
+	_, env = call(t, s, other, "GET", "/Moonfin/Settings", "", nil)
+	if !reflect.DeepEqual(env["global"].(map[string]any)["liveTvSavedFilters"], []any{"group:News"}) {
+		t.Fatalf("ordinary sync replaced copied pins: %v", env["global"])
+	}
+}
+
 func TestPingCarriesADevicesDefaults(t *testing.T) {
 	s := newTestServer()
 	saveConfig(t, s, map[string]any{

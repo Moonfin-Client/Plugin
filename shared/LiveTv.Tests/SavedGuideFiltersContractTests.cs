@@ -88,6 +88,25 @@ public sealed class SavedGuideFiltersContractTests : IDisposable
     }
 
     [Fact]
+    public async Task AdminCopyAndProfileDeletionPreserveSavedPins()
+    {
+        var from = Guid.NewGuid();
+        var to = Guid.NewGuid();
+        await Edit(from, "tv", "add", "group:News");
+        await Edit(to, "tv", "add", "group:Old");
+        await _service.SaveProfileAsync(to, "tv", new MoonfinSettingsProfile { ClockBehavior = "never" }, notifySettingsChanged: false);
+
+        Assert.Equal(1, await _service.CopySettingsAsync(from, [to], ["global"], ["liveTvSavedFilters"], replace: false));
+        Assert.Equal(["group:News"], (await Read(to))!.Global!.LiveTvSavedFilters);
+        Assert.Equal("never", (await Read(to))!.Tv!.ClockBehavior);
+
+        await _service.DeleteProfileAsync(to, "tv");
+        Assert.Equal(["group:News"], (await Read(to))!.Global!.LiveTvSavedFilters);
+        await _service.SaveProfileAsync(to, "mobile", new MoonfinSettingsProfile { LiveTvSavedFilters = ["group:Stale"] }, notifySettingsChanged: false);
+        Assert.Equal(["group:News"], (await Read(to))!.Global!.LiveTvSavedFilters);
+    }
+
+    [Fact]
     public void ProgramCategoriesRetainDeviceOverrides()
     {
         var config = Defaults();
