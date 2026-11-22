@@ -156,8 +156,9 @@ public sealed class LiveTvChannelGroupsService(
                 result.MissingTuner = true;
                 return;
             }
-            // A tuner lookup may finish filling its cache after the viewer stops waiting.
-            var channels = await xtream.GetChannels(true, lifetime.ApplicationStopping);
+            // Bound the wait and release the reader lock even if the tuner ignores cancellation.
+            using var request = CancellationTokenSource.CreateLinkedTokenSource(token, lifetime.ApplicationStopping);
+            var channels = await xtream.GetChannels(true, request.Token).WaitAsync(request.Token);
             token.ThrowIfCancellationRequested();
             foreach (var channel in channels)
                 result.Add(1, channel.TunerHostId, channel.Id, [channel.ChannelGroup]);

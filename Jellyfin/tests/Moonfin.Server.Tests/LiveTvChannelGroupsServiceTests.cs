@@ -24,12 +24,15 @@ public class LiveTvChannelGroupsServiceTests
             File.WriteAllText(Path.Combine(cache.FullName, "first_channels"), """[{"Id":"m3u_news","ChannelGroup":"News"}]""");
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var calls = 0;
+            var recoveredTuner = false;
             var xtream = RecordingHostProxy.Create<ITunerHost>((method, _) => {
                 if (method.Name == "get_Type") return "xtream-library";
                 Assert.Equal("GetChannels", method.Name);
                 Interlocked.Increment(ref calls);
                 entered.TrySetResult();
-                return pending.Task;
+                return recoveredTuner
+                    ? Task.FromResult(new List<ChannelInfo> { new() { Id = "xtream_42", TunerHostId = "native", ChannelGroup = "Radio" } })
+                    : pending.Task;
             });
             var m3u = new LiveTvChannel { Id = Guid.NewGuid(), ExternalId = "m3u_news", ServiceName = "Emby" };
             var native = new LiveTvChannel { Id = Guid.NewGuid(), ExternalId = "xtream_42", ServiceName = "Emby" };
@@ -45,9 +48,12 @@ public class LiveTvChannelGroupsServiceTests
                 Assert.Equal("News", Assert.Single(partial.Groups[m3u.Id.ToString("N")]));
                 Assert.Equal(native.Id.ToString("N"), Assert.Single(partial.UnresolvedChannelIds!));
             }
-            Assert.Equal(1, calls);
-            pending.SetResult([new ChannelInfo { Id = native.ExternalId, TunerHostId = "native", ChannelGroup = "Radio" }]);
-            var recovered = await service.GetAsync(mixedUser, CancellationToken.None);
+            var callsBeforeRecovery = calls;
+            Assert.InRange(callsBeforeRecovery, 1, 2);
+            // The first tuner request still has not completed, yet a fresh one must run.
+            recoveredTuner = true;
+            var recovered = await service.GetAsync(mixedUser, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(calls > callsBeforeRecovery);
             Assert.False(recovered.Partial);
             Assert.Equal("Radio", Assert.Single(recovered.Groups[native.Id.ToString("N")]));
         }

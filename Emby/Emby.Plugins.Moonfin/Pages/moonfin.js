@@ -3211,6 +3211,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultAllGenresImageType', defaults.allGenresImageType, 'Configured image type');
         setSelectValue(view, '#DefaultAudioSortOption', defaults.audioSortOption, 'Configured sort');
         setSelectValue(view, '#DefaultLiveTvChannelSortBy', defaults.liveTvChannelSortBy, 'Configured sort');
+        setSelectValue(view, '#DefaultLiveTvCategoryDisplay', defaults.liveTvCategoryDisplay, 'Configured guide layout');
         setSelectValue(view, '#DefaultEpgMobileView', defaults.epgMobileView, 'Configured view');
         setSelectValue(view, '#DefaultMediaBarOverlayColor', defaults.mediaBarOverlayColor, 'Configured color');
         bindNullableRangeInput(view, '#DefaultMediaBarOpacity', '%');
@@ -3661,6 +3662,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.allGenresImageType = view.querySelector('#DefaultAllGenresImageType').value || null;
         d.audioSortOption = view.querySelector('#DefaultAudioSortOption').value || null;
         d.liveTvChannelSortBy = view.querySelector('#DefaultLiveTvChannelSortBy').value || null;
+        d.liveTvCategoryDisplay = view.querySelector('#DefaultLiveTvCategoryDisplay').value || null;
         d.epgMobileView = view.querySelector('#DefaultEpgMobileView').value || null;
         d.mediaBarOverlayColor = view.querySelector('#DefaultMediaBarOverlayColor').value || null;
         d.mediaBarOpacity = getNullableRangeInput(view, '#DefaultMediaBarOpacity');

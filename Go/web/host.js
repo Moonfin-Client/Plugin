@@ -32,7 +32,7 @@
                 'PINs',
                 'Studio Logos'
             ],
-            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultLiveTvCategoryDisplay', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
                 'DefaultShowCalendarButton', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll'],
             unsupported: {
                 'IMDb Charts': 'Not supported on Silo yet. These settings do nothing on Silo for now.',

@@ -4314,6 +4314,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLiveTvCategoryDisplay">Guide Categories</label>
+                                <select id="DefaultLiveTvCategoryDisplay" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="both">Channel Groups and Program Categories</option>
+                                    <option value="groups">Channel Groups</option>
+                                    <option value="programmes">Program Categories</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultEpgMobileView">Guide View (mobile)</label>
                                 <select id="DefaultEpgMobileView" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -11668,6 +11677,7 @@
                     setSelectValue('#DefaultAllGenresImageType', defaults.allGenresImageType, 'Configured image type');
                     setSelectValue('#DefaultAudioSortOption', defaults.audioSortOption, 'Configured sort');
                     setSelectValue('#DefaultLiveTvChannelSortBy', defaults.liveTvChannelSortBy, 'Configured sort');
+                    setSelectValue('#DefaultLiveTvCategoryDisplay', defaults.liveTvCategoryDisplay, 'Configured guide layout');
                     setSelectValue('#DefaultEpgMobileView', defaults.epgMobileView, 'Configured view');
                     setSelectValue('#DefaultMediaBarOverlayColor', defaults.mediaBarOverlayColor, 'Configured color');
                     bindNullableRangeInput('#DefaultMediaBarOpacity', '%');
@@ -12689,6 +12699,7 @@
                     ds.allGenresImageType = document.querySelector('#DefaultAllGenresImageType').value || null;
                     ds.audioSortOption = document.querySelector('#DefaultAudioSortOption').value || null;
                     ds.liveTvChannelSortBy = document.querySelector('#DefaultLiveTvChannelSortBy').value || null;
+                    ds.liveTvCategoryDisplay = document.querySelector('#DefaultLiveTvCategoryDisplay').value || null;
                     ds.epgMobileView = document.querySelector('#DefaultEpgMobileView').value || null;
                     ds.mediaBarOverlayColor = document.querySelector('#DefaultMediaBarOverlayColor').value || null;
                     ds.mediaBarOpacity = getNullableRangeInput('#DefaultMediaBarOpacity');
