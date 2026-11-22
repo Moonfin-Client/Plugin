@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -56,21 +57,43 @@ func rowProviders(t *testing.T, hits *atomic.Int32) *httptest.Server {
 				{"iso_3166_1":"US","release_dates":[{"certification":"","type":1},{"certification":"NR","type":1},{"certification":"R","type":3}]}]}}`)
 		case r.URL.Path == "/3/tv/1399" && q.Get("append_to_response") == "content_ratings":
 			io.WriteString(w, `{"overview":"Seven noble families.","episode_run_time":[60],"poster_path":"/got.jpg","content_ratings":{"results":[{"iso_3166_1":"US","rating":"TV-MA"}]}}`)
+		case r.URL.Path == "/3/list/42":
+			// 25 titles, 20 a page.
+			page := 1
+			if p, err := strconv.Atoi(q.Get("page")); err == nil {
+				page = p
+			}
+			var films []string
+			for n := (page-1)*20 + 1; n <= min(page*20, 25); n++ {
+				films = append(films, `{"id":`+strconv.Itoa(1000+n)+`,"media_type":"movie","title":"Film `+strconv.Itoa(n)+`"}`)
+			}
+			io.WriteString(w, `{"page":`+strconv.Itoa(page)+`,"total_pages":2,"items":[`+strings.Join(films, ",")+`]}`)
 		case r.URL.Path == "/3/trending/all/week" && q.Get("language") == "fr-FR":
 			io.WriteString(w, `{"results":[{"id":603,"media_type":"movie","title":"Matrix","release_date":"1999-03-31","poster_path":"/m.jpg"},
 				{"id":17419,"media_type":"person","name":"Someone"},{"id":1399,"media_type":"tv","name":"Le Trône de fer","first_air_date":"2011-04-17"}]}`)
-		case r.URL.Path == "/3/movie/603" || r.URL.Path == "/3/tv/1399":
-			io.WriteString(w, `{}`)
 		case r.URL.Path == "/lists/someone/best/items" && q.Get("apikey") == "mdb-key" && q.Get("cursor") == "":
 			io.WriteString(w, `{"movies":[{"id":278,"rank":2,"title":"The Shawshank Redemption","imdb_id":"tt0111161","release_year":1994,"poster":"https://image.tmdb.org/t/p/w200/s.jpg"}],
 				"shows":[{"rank":3,"title":"Game of Thrones","ids":{"tmdb":1399,"tvdb":121361}}],"pagination":{"next_cursor":"p2"}}`)
 		case r.URL.Path == "/lists/someone/best/items" && q.Get("cursor") == "p2":
 			io.WriteString(w, `{"movies":[{"id":603,"rank":1,"title":"The Matrix","mediatype":"movie","poster":false}],"shows":[],"pagination":{}}`)
+		case r.URL.Path == "/lists/official/week/items" && q.Get("cursor") == "":
+			io.WriteString(w, `{"movies":[],"shows":[{"id":1399,"rank":1,"title":"Game of Thrones"}],"pagination":{"next_cursor":"w2"}}`)
+		case r.URL.Path == "/lists/official/week/items" && q.Get("cursor") == "w2":
+			io.WriteString(w, `{"movies":[{"id":603,"rank":2,"title":"The Matrix"}],"shows":[{"id":94997,"rank":3,"title":"House of the Dragon"}],"pagination":{}}`)
 		case r.URL.Path == "/lists/official" && q.Get("apikey") == "mdb-key":
 			io.WriteString(w, `[{"slug":"top","name":"Top Watched","mediatype":null,"items":2},{"slug":"","name":"no slug"}]`)
 		case r.URL.Path == "/lists/official/top/items" && q.Get("apikey") == "mdb-key":
 			io.WriteString(w, `{"movies":[{"id":278,"rank":1,"title":"The Shawshank Redemption","imdb_id":"tt0111161","release_year":1994}],
 				"shows":[{"id":1399,"rank":2,"title":"Game of Thrones"}],"pagination":{}}`)
+		case r.URL.Path == "/3/discover/movie" && q.Get("with_watch_providers") == "1899|384" && q.Get("watch_region") == "GB":
+			io.WriteString(w, `{"results":[{"id":603,"title":"The Matrix","popularity":10.5}]}`)
+		case r.URL.Path == "/3/discover/tv" && q.Get("with_watch_providers") == "1899|384" && q.Get("watch_region") == "GB":
+			io.WriteString(w, `{"results":[{"id":1399,"name":"Game of Thrones","popularity":80},{"id":94997,"name":"House of the Dragon","popularity":2}]}`)
+		case r.URL.Path == "/3/movie/603" || r.URL.Path == "/3/tv/1399" || r.URL.Path == "/3/tv/94997":
+			io.WriteString(w, `{}`)
+		case r.URL.Path == "/justwatch/streaming-charts/show" && q.Get("apikey") == "mdb-key" && q.Get("country") == "GB" && q.Get("period") == "daily":
+			io.WriteString(w, `{"media_type":"show","results":[{"rank":1,"title":"Game of Thrones","year":2011,"mediatype":"show","ids":{"imdb":"tt0944947","tmdb":1399}},
+				{"rank":2,"title":"Nobody Knows","year":2025,"matched":false,"ids":{}},{"rank":3,"title":"House of the Dragon","year":2022,"ids":{"tmdb":94997}}]}`)
 		case r.URL.Path == "/dave/rss/":
 			io.WriteString(w, `<?xml version='1.0' encoding='utf-8'?><rss xmlns:letterboxd="https://letterboxd.com" xmlns:tmdb="https://themoviedb.org"><channel>
 				<item><title>Coward, 2026 - ★★★½</title><letterboxd:filmTitle>Coward</letterboxd:filmTitle><letterboxd:filmYear>2026</letterboxd:filmYear><letterboxd:memberRating>3.5</letterboxd:memberRating><tmdb:movieId>1437981</tmdb:movieId></item>
@@ -194,6 +217,15 @@ func TestTmdbChartSkipsPeopleAndAsksInTheAppsLanguage(t *testing.T) {
 	}
 }
 
+func TestTmdbListReadsEveryPage(t *testing.T) {
+	s, _, _ := rowServer(t)
+	withKeys(t, s, "", "tmdb-key")
+	items := rowItems(t, s, userMain, map[string]any{"source": "tmdb", "type": "user_list", "params": `{"id":"42"}`})
+	if len(items) != 25 || items[0]["name"] != "Film 1" || items[24]["name"] != "Film 25" {
+		t.Fatalf("got %d items, first %v, last %v", len(items), items[0]["name"], items[len(items)-1]["name"])
+	}
+}
+
 func TestMdbListUserListFollowsTheCursorInRankOrder(t *testing.T) {
 	s, _, _ := rowServer(t)
 	q := map[string]any{"source": "mdblist", "type": "user_list", "params": `{"username":"someone","listname":"best"}`}
@@ -213,6 +245,28 @@ func TestMdbListUserListFollowsTheCursorInRankOrder(t *testing.T) {
 	q["params"] = `{"username":"..","listname":"best"}`
 	if _, got := call(t, s, userMain, "GET", "/Moonfin/CustomRows/Items", "", q); got["success"] != false {
 		t.Fatalf("a name that climbs the path must be refused: %v", got)
+	}
+}
+
+func TestMdbListOfficialListKeepsOnlyTheChosenType(t *testing.T) {
+	s, _, _ := rowServer(t)
+	withKeys(t, s, "mdb-key", "")
+	names := func(params string) string {
+		var out []string
+		for _, it := range rowItems(t, s, userMain, map[string]any{"source": "mdblist", "type": "list_url", "params": params}) {
+			out = append(out, it["name"].(string)+"#"+strconv.Itoa(int(it["rank"].(float64))))
+		}
+		return strings.Join(out, ",")
+	}
+	// The first page only has a show, so a movies row has to keep paging past it.
+	for params, want := range map[string]string{
+		`{"username":"official","listname":"week","mediatype":"movie"}`: "The Matrix#1",
+		`{"username":"official","listname":"week","mediatype":"show"}`:  "Game of Thrones#1,House of the Dragon#2",
+		`{"username":"official","listname":"week"}`:                     "Game of Thrones#1,The Matrix#2,House of the Dragon#3",
+	} {
+		if got := names(params); got != want {
+			t.Errorf("%s = %s, want %s", params, got, want)
+		}
 	}
 }
 
@@ -287,5 +341,47 @@ func TestRowLocksWaitAndAreDroppedOnceFree(t *testing.T) {
 	rowLocks.Unlock()
 	if left {
 		t.Fatal("a key nobody holds must not keep its lock")
+	}
+}
+
+func TestTmdbDiscoverMergesAServicesMoviesAndShowsByPopularity(t *testing.T) {
+	s, _, _ := rowServer(t)
+	withKeys(t, s, "", "tmdb-key")
+	q := map[string]any{"source": "tmdb_discover", "type": "provider_hbo_max", "params": `{"region":"gb"}`}
+	var got []string
+	for _, it := range rowItems(t, s, userMain, q) {
+		got = append(got, it["name"].(string)+"/"+it["type"].(string))
+	}
+	if strings.Join(got, ",") != "Game of Thrones/Series,The Matrix/Movie,House of the Dragon/Series" {
+		t.Fatalf("items = %v", got)
+	}
+	q["type"] = "provider_hulu"
+	if _, got := call(t, s, userMain, "GET", "/Moonfin/CustomRows/Items", "", q); got["success"] != false {
+		t.Fatalf("an unknown chart must be refused: %v", got)
+	}
+}
+
+func TestDiscoverPathsMatchTheSharedCharts(t *testing.T) {
+	today := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	if got := discoverPaths("new_digital_movies", "", today); len(got) != 1 ||
+		!strings.Contains(got[0], "region=US&release_date.gte=2026-09-13&release_date.lte=2026-11-12") {
+		t.Fatalf("new digital = %v", got)
+	}
+	for region, want := range map[string]string{"de": "DE", "uk": "GB", "FR": "US", "u1": "US", "": "US"} {
+		if got := justWatchCountry(region); got != want {
+			t.Errorf("justWatchCountry(%q) = %s, want %s", region, got, want)
+		}
+	}
+}
+
+func TestJustWatchChartKeepsMatchedTitlesWithTheirYears(t *testing.T) {
+	s, _, _ := rowServer(t)
+	withKeys(t, s, "mdb-key", "")
+	var got []string
+	for _, it := range rowItems(t, s, userMain, map[string]any{"source": "justwatch", "type": "show", "params": `{"region":"uk"}`}) {
+		got = append(got, it["name"].(string)+"/"+it["type"].(string)+"/"+strconv.Itoa(int(it["productionYear"].(float64)))+"/"+strconv.Itoa(int(it["rank"].(float64))))
+	}
+	if strings.Join(got, ",") != "Game of Thrones/Series/2011/1,House of the Dragon/Series/2022/2" {
+		t.Fatalf("items = %v", got)
 	}
 }

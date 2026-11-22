@@ -341,6 +341,34 @@ public class GamesController : ControllerBase
         return Ok(_gamesService.GetGames(libraryId, system, this.GetUserIdFromClaims()));
     }
 
+    /// <summary>A library's newest games for the home screen, by date added or with sort=released by release year.</summary>
+    [HttpGet("{libraryId}/Recent")]
+    [Authorize]
+    [Produces(MediaTypeNames.Application.Json)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<RecentGame>>> GetRecentGames(
+        [FromRoute] string libraryId,
+        [FromQuery] string? sort,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!GamesEnabled())
+        {
+            return Ok(Array.Empty<RecentGame>());
+        }
+
+        var games = _gamesService.GetRecentGames(
+            libraryId,
+            this.GetUserIdFromClaims(),
+            string.Equals(sort, "released", StringComparison.OrdinalIgnoreCase),
+            Math.Clamp(limit ?? 16, 1, 100));
+        var artwork = await _artwork
+            .GetSystemArtworkBatchAsync(libraryId, games.Select(game => game.System).Distinct(StringComparer.Ordinal), cancellationToken)
+            .ConfigureAwait(false);
+        GameArtworkApi.AttachBoxart(libraryId, games, artwork);
+        return Ok(games);
+    }
+
     /// <summary>Resolves a single game's full detail (ROM, core, BIOS files).</summary>
     [HttpGet("{libraryId}/Games/{gameId}")]
     [Authorize]
@@ -983,13 +1011,13 @@ public class GamesController : ControllerBase
             return NotFound();
         }
 
-        if (!game.UnpackArchive)
+        if (!game.UnpackArchive && !game.RepackArchive)
         {
             return await ProxyRommAsync((method, range) => client.SendRomAsync(method, game, range, cancellationToken), cancellationToken).ConfigureAwait(false);
         }
 
-        // A zipped ROM is unpacked here like one in a folder library, so the app gets the same
-        // raw bytes either way. RomM listed the archive's contents, so a HEAD needs no download.
+        // A zipped ROM is unpacked here and a PlayStation .7z is repacked as a zip, the same way
+        // a folder library does it. RomM listed the archive's contents, so a HEAD needs no download.
         if (HttpMethods.IsHead(Request.Method))
         {
             Response.ContentType = "application/octet-stream";
@@ -1009,7 +1037,18 @@ public class GamesController : ControllerBase
                     new { error = $"The archive exceeds the {GamesService.MaxExtractedRomBytes / (1024 * 1024)} MB limit for extracted ROMs." });
             }
 
-            return status == HttpStatusCode.OK ? StreamExtractedRom(temp) : RommFailure(status);
+            if (status != HttpStatusCode.OK)
+            {
+                return RommFailure(status);
+            }
+
+            if (!game.RepackArchive)
+            {
+                return StreamExtractedRom(temp);
+            }
+
+            var discSet = DiscSet.ForSevenZip(temp);
+            return discSet == null ? NotFound() : await StreamDiscSetAsync(discSet).ConfigureAwait(false);
         }
         catch (HttpRequestException)
         {

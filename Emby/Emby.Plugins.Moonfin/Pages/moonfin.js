@@ -586,12 +586,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultDisplaySinceYouWatchedRows', fields: ['DefaultSinceYouWatchedSource', 'DefaultSinceYouWatchedSourceType', 'DefaultSinceYouWatchedSourceItem', 'DefaultSinceYouWatched1Enabled', 'DefaultSinceYouWatched2Enabled', 'DefaultSinceYouWatched3Enabled', 'DefaultSinceYouWatched4Enabled', 'DefaultSinceYouWatched5Enabled'] },
         { parent: 'DefaultSinceYouWatchedSource', off: ['online'], fields: ['DefaultSinceYouWatchedIncludeWatched'] },
         { parent: 'DefaultDisplayStudiosRows', fields: ['DefaultStudiosRowSortBy', 'DefaultStudiosRowSortOrder'] },
-        { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
+        { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultMediaBarNewReleaseKinds', 'DefaultMediaBarNewMovieDays', 'DefaultMediaBarNewMovieDetail', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
         { parent: 'DefaultMediaBarMode', off: ['off', 'bookshelf', 'aya'], fields: ['DefaultMediaBarRatingsHeading', 'DefaultMediaBarMdblistEnabled', 'DefaultMediaBarMdblistRatingSourcesList', 'DefaultMediaBarMdblistShowRatingNames', 'DefaultMediaBarMdblistShowRatingBadges'] },
         { parent: 'DefaultMediaBarAutoAdvance', fields: ['DefaultMediaBarIntervalMs'] },
+        { parent: 'DefaultMediaBarNewReleaseBanner', fields: ['DefaultMediaBarNewReleaseKinds'] },
         { parent: 'DefaultMediaBarTrailerPreview', fields: ['DefaultMediaBarTrailerAudio', 'DefaultTrailerVolume', 'DefaultMediaBarTrailerCaptions'] },
         { parent: 'DefaultHomeRowsStyle', off: ['v1'], fields: ['DefaultModernCardsOnMyMediaRow', 'DefaultModernHomeRowsPadding'] },
-        { parent: 'DefaultHomeRowsStyle', off: ['v2'], fields: ['DefaultClassicHomeRowsPadding', 'DefaultHomeRowInfoOverlay', 'DefaultHomeImageTypeContinueWatching', 'DefaultHomeRowsImageTypeOverride'] },
+        { parent: 'DefaultHomeRowsStyle', off: ['v2', 'carousel'], fields: ['DefaultClassicHomeRowsPadding', 'DefaultHomeRowInfoOverlay', 'DefaultHomeImageTypeContinueWatching', 'DefaultHomeRowsImageTypeOverride'] },
         { parent: 'DefaultHomeRowsImageTypeOverride', fields: ['DefaultHomeRowsImageType'] },
         { parent: 'DefaultHomeRowsImageTypeOverride', off: ['true'], fields: ['DefaultHomeRowImageTypesSection'] },
         { parent: 'DefaultMediaPreviewMode', off: ['off'], fields: ['DefaultPreviewAudioEnabled'] },
@@ -2302,7 +2303,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             customListEl(view, 'DefaultCustomListMdblistUser').value = params.username || '';
             if (type === 'list_url') {
                 customListEl(view, 'DefaultCustomListMdblistUrl').value = params.username && params.listname
-                    ? 'https://mdblist.com/lists/' + params.username + '/' + params.listname
+                    ? customListSourceUrl(source, type, params)
                     : '';
             } else {
                 customListEl(view, 'DefaultCustomListMdblistList').value = params.listname || '';
@@ -2336,6 +2337,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             if (type === 'list_url') {
                 // Takes https://mdblist.com/lists/{username}/{listname} with an optional trailing
                 // slash, query or fragment. Anchoring on /lists/ keeps extra path segments out.
+                // An official list's movies or shows page, /lists/official/{movies|shows}/{slug},
+                // keeps just that type.
                 var rawUrl = customListEl(view, 'DefaultCustomListMdblistUrl').value.trim();
                 var queryStart = rawUrl.search(/[?#]/);
                 if (queryStart >= 0) rawUrl = rawUrl.slice(0, queryStart);
@@ -2343,8 +2346,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 var urlParts = rawUrl.split('/').filter(function (part) { return part.length > 0; });
                 var parsedUser = '';
                 var parsedList = '';
+                var parsedType = '';
                 var listsIndex = urlParts.lastIndexOf('lists');
-                if (listsIndex >= 0 && urlParts.length >= listsIndex + 3) {
+                if (listsIndex >= 0 && urlParts.length >= listsIndex + 4 && urlParts[listsIndex + 1].toLowerCase() === 'official'
+                    && /^(movies|shows)$/i.test(urlParts[listsIndex + 2])) {
+                    parsedUser = 'official';
+                    parsedType = urlParts[listsIndex + 2].toLowerCase() === 'movies' ? 'movie' : 'show';
+                    parsedList = urlParts[listsIndex + 3];
+                } else if (listsIndex >= 0 && urlParts.length >= listsIndex + 3) {
                     parsedUser = urlParts[listsIndex + 1];
                     parsedList = urlParts[listsIndex + 2];
                 } else if (urlParts.length >= 2) {
@@ -2353,6 +2362,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 }
                 params.username = parsedUser;
                 params.listname = parsedList;
+                if (parsedType) params.mediatype = parsedType;
             } else {
                 params.username = customListEl(view, 'DefaultCustomListMdblistUser').value.trim();
                 params.listname = customListEl(view, 'DefaultCustomListMdblistList').value.trim();
@@ -2366,7 +2376,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             return 'https://www.themoviedb.org/' + (type === 'movie_collection' ? 'collection/' : 'list/') + params.id;
         }
         if (source === 'letterboxd') return 'https://letterboxd.com/' + params.user + '/';
-        return 'https://mdblist.com/lists/' + params.username + '/' + params.listname + '/';
+        var mediaPath = params.mediatype === 'movie' ? 'movies/' : params.mediatype === 'show' ? 'shows/' : '';
+        return 'https://mdblist.com/lists/' + params.username + '/' + mediaPath + params.listname + '/';
     }
 
     function saveCustomListRow(view) {
@@ -2869,6 +2880,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             setPosterBadgeRules(view, config.PosterBadgeRules, config.PosterBadgeDefaults);
             view.querySelector('#FcmServiceAccountJson').value = config.FcmServiceAccountJson || '';
             view.querySelector('#FcmServiceAccountPath').value = config.FcmServiceAccountPath || '';
+            view.querySelector('#PushRelayEnabled').checked = config.PushRelayEnabled !== false;
             view.querySelector('#PushRelayUrl').value = config.PushRelayUrl || '';
             view.querySelector('#PushRelayAppKey').value = config.PushRelayAppKey || '';
             view.querySelector('#WebDefaultServerUrl').value = config.WebDefaultServerUrl || '';
@@ -3053,6 +3065,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultMediaBarRowPeek', defaults.mediaBarRowPeek);
         setNullableBoolSelect(view, '#DefaultMediaBarNewReleaseBanner', defaults.mediaBarNewReleaseBanner);
         setSelectValue(view, '#DefaultMediaBarNewReleaseDays', defaults.mediaBarNewReleaseDays, 'Configured window');
+        setSelectValue(view, '#DefaultMediaBarNewReleaseKinds', defaults.mediaBarNewReleaseKinds, 'Configured labels');
+        setSelectValue(view, '#DefaultMediaBarNewMovieDays', defaults.mediaBarNewMovieDays, 'Configured window');
+        setNullableBoolSelect(view, '#DefaultMediaBarNewMovieDetail', defaults.mediaBarNewMovieDetail);
         setNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
         setNullableBoolSelect(view, '#DefaultMediaBarTrailerAudio', defaults.mediaBarTrailerAudio);
         bindNullableRangeInput(view, '#DefaultTrailerVolume', '%');
@@ -3138,6 +3153,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultNextUpMaxDays', defaults.nextUpMaxDays, 'Configured max days');
 
         setNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries', defaults.enableMultiServerLibraries);
+        setNullableBoolSelect(view, '#DefaultMergeLibrariesByType', defaults.mergeLibrariesByType);
+        setNullableBoolSelect(view, '#DefaultHideWatchedInRecentRows', defaults.hideWatchedInRecentRows);
         setNullableBoolSelect(view, '#DefaultMergeRecentRowsByType', defaults.mergeRecentRowsByType);
         setSelectValue(view, '#DefaultRecentlyReleasedSeriesType', defaults.recentlyReleasedSeriesType, 'Configured sort');
         setNullableBoolSelect(view, '#DefaultGroupItemsIntoCollections', defaults.groupItemsIntoCollections);
@@ -3145,6 +3162,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultLibraryCardTitles', defaults.libraryCardTitles);
         setNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings', defaults.useDetailedSubHeadings);
         setNullableBoolSelect(view, '#DefaultHideBackdropsInLibraries', defaults.hideBackdropsInLibraries);
+        setNullableBoolSelect(view, '#DefaultHideLibraryWatchProgress', defaults.hideLibraryWatchProgress);
+        setNullableBoolSelect(view, '#DefaultHideLibraryUnwatchedCount', defaults.hideLibraryUnwatchedCount);
 
         setNullableBoolSelect(view, '#DefaultShowShuffleButton', defaults.showShuffleButton);
         setNullableBoolSelect(view, '#DefaultShowGenresButton', defaults.showGenresButton);
@@ -3336,6 +3355,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.PosterBadgeDefaults = getPosterBadgeDefaults();
             config.FcmServiceAccountJson = view.querySelector('#FcmServiceAccountJson').value || null;
             config.FcmServiceAccountPath = view.querySelector('#FcmServiceAccountPath').value || null;
+            config.PushRelayEnabled = view.querySelector('#PushRelayEnabled').checked;
             config.PushRelayUrl = (view.querySelector('#PushRelayUrl').value || '').trim()
                 || 'https://push.moonfin.io/send';
             config.PushRelayAppKey = (view.querySelector('#PushRelayAppKey').value || '').trim() || null;
@@ -3501,6 +3521,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.mediaBarRowPeek = getNullableBoolSelect(view, '#DefaultMediaBarRowPeek');
         d.mediaBarNewReleaseBanner = getNullableBoolSelect(view, '#DefaultMediaBarNewReleaseBanner');
         d.mediaBarNewReleaseDays = getNullableIntInput(view, '#DefaultMediaBarNewReleaseDays');
+        d.mediaBarNewReleaseKinds = view.querySelector('#DefaultMediaBarNewReleaseKinds').value || null;
+        d.mediaBarNewMovieDays = getNullableIntInput(view, '#DefaultMediaBarNewMovieDays');
+        d.mediaBarNewMovieDetail = getNullableBoolSelect(view, '#DefaultMediaBarNewMovieDetail');
         d.mediaBarTrailerPreview = getNullableBoolSelect(view, '#DefaultMediaBarTrailerPreview');
         d.mediaBarTrailerAudio = getNullableBoolSelect(view, '#DefaultMediaBarTrailerAudio');
         d.trailerVolume = getNullableRangeInput(view, '#DefaultTrailerVolume');
@@ -3589,6 +3612,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.nextUpMaxDays = getNullableIntInput(view, '#DefaultNextUpMaxDays');
 
         d.enableMultiServerLibraries = getNullableBoolSelect(view, '#DefaultEnableMultiServerLibraries');
+        d.mergeLibrariesByType = getNullableBoolSelect(view, '#DefaultMergeLibrariesByType');
+        d.hideWatchedInRecentRows = getNullableBoolSelect(view, '#DefaultHideWatchedInRecentRows');
         d.mergeRecentRowsByType = getNullableBoolSelect(view, '#DefaultMergeRecentRowsByType');
         d.recentlyReleasedSeriesType = view.querySelector('#DefaultRecentlyReleasedSeriesType').value || null;
         d.groupItemsIntoCollections = getNullableBoolSelect(view, '#DefaultGroupItemsIntoCollections');
@@ -3596,6 +3621,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.libraryCardTitles = getNullableBoolSelect(view, '#DefaultLibraryCardTitles');
         d.useDetailedSubHeadings = getNullableBoolSelect(view, '#DefaultUseDetailedSubHeadings');
         d.hideBackdropsInLibraries = getNullableBoolSelect(view, '#DefaultHideBackdropsInLibraries');
+        d.hideLibraryWatchProgress = getNullableBoolSelect(view, '#DefaultHideLibraryWatchProgress');
+        d.hideLibraryUnwatchedCount = getNullableBoolSelect(view, '#DefaultHideLibraryUnwatchedCount');
 
         d.showShuffleButton = getNullableBoolSelect(view, '#DefaultShowShuffleButton');
         d.showGenresButton = getNullableBoolSelect(view, '#DefaultShowGenresButton');

@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Text.Json;
 using Emby.Plugins.Moonfin.Api;
+using Emby.Plugins.Moonfin.Models;
 using Xunit;
 
 namespace Emby.Plugins.Moonfin.Tests;
@@ -55,6 +57,8 @@ public class CustomRowLocalizationTests
         var listWithLang = CustomRowService.BuildTmdbListUrl("123", "de");
         Assert.Equal("https://api.themoviedb.org/3/list/123", listNoLang);
         Assert.Equal("https://api.themoviedb.org/3/list/123?language=de", listWithLang);
+        Assert.Equal("https://api.themoviedb.org/3/list/123?page=2", CustomRowService.BuildTmdbListUrl("123", null, 2));
+        Assert.Equal("https://api.themoviedb.org/3/list/123?language=de&page=2", CustomRowService.BuildTmdbListUrl("123", "de", 2));
 
         var chartNoLang = CustomRowService.BuildTmdbChartUrl("movie/popular", null);
         var chartWithLang = CustomRowService.BuildTmdbChartUrl("movie/popular", "es-ES");
@@ -69,5 +73,23 @@ public class CustomRowLocalizationTests
 
         var tvDetail = CustomRowService.BuildTmdbTvDetailUrl("1399", "it");
         Assert.Equal("https://api.themoviedb.org/3/tv/1399?language=it", tvDetail);
+    }
+
+    [Fact]
+    public void MdbListTitleTakesTheOverviewTmdbSentInTheRowsLanguage()
+    {
+        var item = new CustomRowItem { Id = 603, Name = "Matrix", PosterUrl = "/mdblist.jpg" };
+        using var details = JsonDocument.Parse("""
+            { "overview": "Haker Neo odkrywa prawdę o rzeczywistości.", "genres": [{ "id": 28, "name": "Akcja" }], "runtime": 136,
+               "poster_path": "/tmdb.jpg", "backdrop_path": "/backdrop.jpg" }
+            """);
+
+        CustomRowService.ApplyMdbListTmdbDetails(item, details.RootElement);
+
+        Assert.Equal("Haker Neo odkrywa prawdę o rzeczywistości.", item.Overview);
+        Assert.Equal(["Akcja"], item.Genres);
+        Assert.Equal(136 * TimeSpan.TicksPerMinute, item.RunTimeTicks);
+        Assert.Equal("/mdblist.jpg", item.PosterUrl);
+        Assert.Equal("/backdrop.jpg", item.BackdropUrl);
     }
 }

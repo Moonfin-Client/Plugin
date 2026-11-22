@@ -144,7 +144,7 @@ public sealed class RommClient
     public Task<HttpResponseMessage> SendRomAsync(HttpMethod method, RommGame game, string? range, CancellationToken cancellationToken) =>
         SendAsync(
             method,
-            $"/api/roms/{game.Id}/content/{Uri.EscapeDataString(game.Rom.FileName)}?file_ids={game.Rom.Id}&purpose=play",
+            $"/api/roms/{game.Id}/content/{Uri.EscapeDataString(game.Rom.FileName)}?file_ids={string.Join(",", game.FileIds.DefaultIfEmpty(game.Rom.Id))}&purpose=play",
             range,
             cancellationToken);
 

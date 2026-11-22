@@ -45,7 +45,7 @@ public class RelaySender
         var config = MoonfinPlugin.Instance?.Configuration;
         var relayUrl = config?.PushRelayUrl;
         var appKey = config?.GetRelayAppKey();
-        if (string.IsNullOrWhiteSpace(relayUrl) || string.IsNullOrWhiteSpace(appKey))
+        if (config?.PushRelayEnabled != true || string.IsNullOrWhiteSpace(relayUrl) || string.IsNullOrWhiteSpace(appKey))
         {
             return empty;
         }

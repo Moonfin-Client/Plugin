@@ -59,6 +59,7 @@ func (s *Server) notificationRoutes() {
 	}
 	s.mux.HandleFunc("POST /Moonfin/Notifications/Register", s.user(s.handleRegisterDevice))
 	s.mux.HandleFunc("DELETE /Moonfin/Notifications/Register", s.user(s.handleUnregisterDevice))
+	s.mux.HandleFunc("POST /Moonfin/Notifications/Test", s.user(s.handleTestNotification))
 }
 
 // serveStream holds the settings stream open the way the Jellyfin plugin
@@ -166,6 +167,38 @@ func (s *Server) handleUnregisterDevice(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, M{"success": true})
 }
 
+func (s *Server) handleTestNotification(w http.ResponseWriter, r *http.Request) {
+	caller := callerOf(r)
+	ctx := r.Context()
+	pushEnabled := s.pushKey(s.config(ctx)) != ""
+
+	allDevices, err := s.loadDevices(ctx)
+	if err != nil {
+		storageFailed(w, r, err)
+		return
+	}
+
+	devices := allDevices[strconv.Itoa(caller.UserID)]
+	title := "Moonfin Push Test"
+	body := "Notifications are working properly!"
+	route := ""
+
+	s.notifyUser(caller.UserID, M{
+		"type":  "seerrNotification",
+		"title": title,
+		"body":  body,
+		"route": route,
+	})
+
+	go s.pushToUser(context.Background(), caller.UserID, title, body, route)
+
+	writeJSON(w, http.StatusOK, M{
+		"success":      true,
+		"pushEnabled":  pushEnabled,
+		"devicesCount": len(devices),
+	})
+}
+
 func sameDevice(d pushDevice, token, deviceID string) bool {
 	return (token != "" && d.Token == token) || (deviceID != "" && d.DeviceID == deviceID)
 }
@@ -208,16 +241,25 @@ func (s *Server) saveWithin(ctx context.Context, key string, v any) (bool, error
 	return true, nil
 }
 
+// pushKey is the key pushes are signed with, or "" when push is off: the host
+// has no notifications, the admin turned the relay off, or there's no relay
+// address or key.
+func (s *Server) pushKey(cfg Config) string {
+	if !s.notify.on || !cfg.PushRelayEnabled || cfg.PushRelayURL == "" {
+		return ""
+	}
+	return cmp.Or(cfg.PushRelayAppKey, builtInRelayKey)
+}
+
 // pushToUser sends a push to each of the account's phones through the relay,
-// and forgets the devices the relay says are gone. Push is off without a
-// relay address and key.
+// and forgets the devices the relay says are gone.
 func (s *Server) pushToUser(ctx context.Context, userID int, title, body, route string) {
 	if !s.notify.on {
 		return
 	}
 	cfg := s.config(ctx)
-	key := cmp.Or(cfg.PushRelayAppKey, builtInRelayKey)
-	if cfg.PushRelayURL == "" || key == "" {
+	key := s.pushKey(cfg)
+	if key == "" {
 		return
 	}
 	all, err := s.loadDevices(ctx)

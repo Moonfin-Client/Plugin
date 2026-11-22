@@ -188,6 +188,7 @@ var formFields = []formField{
 	{Entry: "defaultsHomeScreen", Field: "sonarrCalendarShowEpisodeInfo", Key: "sonarrCalendarShowEpisodeInfo", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsHomeScreen", Field: "mediaTypeBadgeBehavior", Key: "mediaTypeBadgeBehavior", Defaults: true, Kind: kindString},
 	{Entry: "defaultsLibraries", Field: "enableMultiServerLibraries", Key: "enableMultiServerLibraries", Defaults: true, Kind: kindTribool},
+	{Entry: "defaultsLibraries", Field: "mergeLibrariesByType", Key: "mergeLibrariesByType", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsLibraries", Field: "showBookDiscoverTab", Key: "showBookDiscoverTab", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsLibraries", Field: "libraryStyle", Key: "libraryStyle", Defaults: true, Kind: kindString},
 	{Entry: "defaultsLibraries", Field: "bookLibraryStyle", Key: "bookLibraryStyle", Defaults: true, Kind: kindString},

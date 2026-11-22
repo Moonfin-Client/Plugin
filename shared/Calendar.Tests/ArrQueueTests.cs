@@ -124,6 +124,136 @@ public class ArrQueueTests
     }
 
     [Fact]
+    public async Task AnUnreleasedMovieCarriesItsReleaseDateAndLastSearch()
+    {
+        var arr = new FakeArr()
+            .On("api/v3/movie?tmdbId=550", """
+                [{"id":3,"monitored":true,"hasFile":false,"isAvailable":false,"status":"inCinemas","inCinemas":"2026-11-01T00:00:00Z",
+                  "releaseDate":"2027-01-15T00:00:00Z","lastSearchTime":"2026-11-12T08:00:00Z","path":"/movies/Some Movie (2026)"}]
+                """)
+            .On("api/v3/queue/details?movieId=3", "[]");
+
+        var body = Json(await ArrQueue.ReadAsync(arr.Send, false, "550", isAdmin: false));
+
+        Assert.False((bool?)body["isAvailable"]);
+        Assert.Equal("2027-01-15T00:00:00Z", (string?)body["releaseDate"]);
+        Assert.Equal("2026-11-12T08:00:00Z", (string?)body["lastSearchTime"]);
+        Assert.Null(body["status"]);
+        Assert.Null(body["inCinemas"]);
+        Assert.Null(body["path"]);
+        Assert.Null(body["seasons"]);
+    }
+
+    [Fact]
+    public async Task ASeriesCarriesEachSeasonsAiredAndDownloadedCounts()
+    {
+        var arr = new FakeArr()
+            .On("api/v3/series?tvdbId=280619", """
+                [{"id":1,"monitored":true,"status":"continuing","nextAiring":"2026-11-20T02:00:00Z","seasons":[
+                  {"seasonNumber":1,"monitored":true,"statistics":{"episodeFileCount":10,"episodeCount":10,"totalEpisodeCount":10,"previousAiring":"2025-05-01T02:00:00Z","sizeOnDisk":1}},
+                  {"seasonNumber":2,"monitored":true,"statistics":{"episodeFileCount":2,"episodeCount":3,"totalEpisodeCount":8,"nextAiring":"2026-11-20T02:00:00Z"}},
+                  {"monitored":true}]}]
+                """)
+            .On("api/v3/queue/details?seriesId=1&includeEpisode=true", "[]");
+
+        var body = Json(await ArrQueue.ReadAsync(arr.Send, true, "280619", isAdmin: false));
+
+        Assert.Null(body["status"]);
+        Assert.Null(body["nextAiring"]);
+        var seasons = body["seasons"]!.AsArray();
+        Assert.Equal(2, seasons.Count);
+        Assert.Equal(10, (int?)seasons[0]!["episodeFileCount"]);
+        Assert.Null(seasons[0]!["previousAiring"]);
+        Assert.Null(seasons[0]!["sizeOnDisk"]);
+        Assert.Equal(2, (int?)seasons[1]!["seasonNumber"]);
+        Assert.True((bool?)seasons[1]!["monitored"]);
+        Assert.Equal(3, (int?)seasons[1]!["episodeCount"]);
+        Assert.Null(seasons[1]!["totalEpisodeCount"]);
+        Assert.Equal("2026-11-20T02:00:00Z", (string?)seasons[1]!["nextAiring"]);
+        Assert.Null(body["hasFile"]);
+    }
+
+    [Theory]
+    [InlineData("""[{"name":"MoviesSearch","status":"started","body":{"movieIds":[9,3]}}]""", true)]
+    [InlineData("""[{"name":"MoviesSearch","status":"queued","body":{"movieIds":[3]}}]""", true)]
+    [InlineData("""[{"name":"MoviesSearch","status":"completed","body":{"movieIds":[3]}}]""", false)]
+    [InlineData("""[{"name":"MoviesSearch","status":"started","body":{"movieIds":[9]}}]""", false)]
+    [InlineData("""[{"name":"MissingMoviesSearch","status":"started","body":{}}]""", false)]
+    [InlineData("[]", false)]
+    public async Task AMovieSearchInProgressIsReported(string commands, bool searching)
+    {
+        var arr = new FakeArr()
+            .On("api/v3/movie?tmdbId=550", """[{"id":3,"monitored":true,"hasFile":false,"isAvailable":true}]""")
+            .On("api/v3/queue/details?movieId=3", "[]")
+            .On("api/v3/command", commands);
+
+        var body = Json(await ArrQueue.ReadAsync(arr.Send, false, "550", isAdmin: false));
+
+        Assert.Equal(searching, (bool?)body["searching"]);
+    }
+
+    [Theory]
+    [InlineData("""[{"name":"SeriesSearch","status":"started","body":{"seriesId":1}}]""", true)]
+    [InlineData("""[{"name":"SeasonSearch","status":"queued","body":{"seriesId":1,"seasonNumber":2}}]""", true)]
+    [InlineData("""[{"name":"SeriesSearch","status":"started","body":{"seriesId":4}}]""", false)]
+    [InlineData("""[{"name":"SeriesSearch","status":"failed","body":{"seriesId":1}}]""", false)]
+    [InlineData("""[{"name":"MissingEpisodeSearch","status":"started","body":{"seriesId":1,"seriesIds":[]}}]""", true)]
+    [InlineData("""[{"name":"MissingEpisodeSearch","status":"queued","body":{"seriesIds":[4,1]}}]""", true)]
+    [InlineData("""[{"name":"MissingEpisodeSearch","status":"started","body":{"seriesIds":[]}}]""", false)]
+    [InlineData("""[{"name":"EpisodeSearch","status":"started","body":{"episodeIds":[58]}}]""", false)]
+    public async Task ASeriesSearchInProgressIsReported(string commands, bool searching)
+    {
+        var arr = new FakeArr()
+            .On("api/v3/series?tvdbId=280619", """[{"id":1,"monitored":true}]""")
+            .On("api/v3/queue/details?seriesId=1&includeEpisode=true", "[]")
+            .On("api/v3/command", commands);
+
+        var body = Json(await ArrQueue.ReadAsync(arr.Send, true, "280619", isAdmin: false));
+
+        Assert.Equal(searching, (bool?)body["searching"]);
+    }
+
+    [Theory]
+    [InlineData(500, "[]")]
+    [InlineData(200, "not json")]
+    public async Task ACommandListThatCantBeReadLeavesSearchingOutAndSaysWhy(int status, string commands)
+    {
+        var arr = new FakeArr()
+            .On("api/v3/movie?tmdbId=550", """[{"id":3,"monitored":true,"hasFile":false,"isAvailable":true}]""")
+            .On("api/v3/queue/details?movieId=3", "[]")
+            .On("api/v3/command", commands, status);
+        var logged = new List<string>();
+
+        var answer = await ArrQueue.ReadAsync(arr.Send, false, "550", isAdmin: false, logged.Add);
+
+        Assert.Equal(200, answer.StatusCode);
+        var body = Json(answer);
+        Assert.Null(body["searching"]);
+        Assert.Empty(body["items"]!.AsArray());
+        var line = Assert.Single(logged);
+        Assert.Contains("radarr command list (status " + status, line);
+    }
+
+    [Fact]
+    public async Task TheArrIsntAskedAboutSearchesWhenSomethingIsQueuedOrOnDiskOrMissing()
+    {
+        var queued = new FakeArr()
+            .On("api/v3/movie?tmdbId=550", """[{"id":3,"monitored":true,"hasFile":false,"isAvailable":true}]""")
+            .On("api/v3/queue/details?movieId=3", "[" + BlockedMovie + "]");
+        var onDisk = new FakeArr()
+            .On("api/v3/movie?tmdbId=550", """[{"id":3,"monitored":true,"hasFile":true,"isAvailable":true}]""")
+            .On("api/v3/queue/details?movieId=3", "[]");
+        var missing = new FakeArr().On("api/v3/movie?tmdbId=550", "[]");
+
+        foreach (var arr in new[] { queued, onDisk, missing })
+        {
+            var body = Json(await ArrQueue.ReadAsync(arr.Send, false, "550", isAdmin: false));
+            Assert.Null(body["searching"]);
+            Assert.DoesNotContain("api/v3/command", arr.Requested);
+        }
+    }
+
+    [Fact]
     public async Task ATitleTheArrDoesntHaveIsAnEmptyAnswerNotAnError()
     {
         var arr = new FakeArr().On("api/v3/movie?tmdbId=550", "[]");

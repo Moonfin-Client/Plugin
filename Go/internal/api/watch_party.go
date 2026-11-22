@@ -68,6 +68,7 @@ func (s *Server) watchPartyRoutes() {
 	s.mux.HandleFunc("GET /Moonfin/WatchParty/{roomId}", s.user(s.handleGetWatchParty))
 	s.mux.HandleFunc("PUT /Moonfin/WatchParty/{roomId}", s.user(s.handlePutWatchParty))
 	s.mux.HandleFunc("PUT /Moonfin/WatchParty/{roomId}/Avatar", s.user(s.handlePutWatchPartyAvatar))
+	s.mux.HandleFunc("DELETE /Moonfin/WatchParty/{roomId}", s.user(s.handleDeleteWatchParty))
 }
 
 func (s *Server) handleGetWatchParty(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +146,43 @@ func (s *Server) handlePutWatchPartyAvatar(w http.ResponseWriter, r *http.Reques
 		room.Avatars[memberKey(caller)] = body.URL
 		return 0, ""
 	}, M{"url": body.URL})
+}
+
+// handleDeleteWatchParty drops a room when its party ends, so it stops
+// counting toward the account's share. The subtitles' owner can end it, or
+// the account that stored the room if nobody claimed them.
+func (s *Server) handleDeleteWatchParty(w http.ResponseWriter, r *http.Request) {
+	id, ok := roomID(w, r)
+	if !ok {
+		return
+	}
+	caller := callerOf(r)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var rooms map[string]watchPartyRoom
+	if _, err := s.loadJSON(r.Context(), keyWatchParty, &rooms); err != nil {
+		storageFailed(w, r, err)
+		return
+	}
+	room, known := rooms[id]
+	if !known || time.Since(room.UpdatedAt) > watchPartyTTL {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	mine := room.OwnerUserID == caller.UserID && room.OwnerProfileID == memberKey(caller)
+	if room.OwnerProfileID == "" {
+		mine = room.CreatedBy == caller.UserID
+	}
+	if !mine {
+		writeError(w, http.StatusForbidden, "Only the room's host can end it")
+		return
+	}
+	delete(rooms, id)
+	if err := s.saveJSON(r.Context(), keyWatchParty, rooms); err != nil {
+		storageFailed(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func validAvatarLink(link string) bool {

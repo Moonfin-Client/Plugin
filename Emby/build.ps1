@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "3.0.0.0",
+    [string]$Version = "3.1.1.0",
     [string]$TargetAbi = "4.9.1.90"
 )
 
@@ -45,8 +45,6 @@ if (Test-Path $OutputDir) { Remove-Item -Recurse -Force $OutputDir }
 New-Item -ItemType Directory -Path $OutputDir | Out-Null
 
 Copy-Item $DllPath $OutputDir
-# SharpCompress is not host-provided; ship it alongside the plugin (used for .7z ROM extraction).
-Copy-Item "$BuildOut\SharpCompress.dll" $OutputDir
 
 # Bundle web assets if present
 if (Test-Path "web\index.html") {

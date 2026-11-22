@@ -191,6 +191,26 @@ public class GameSummary
     public string FileName { get; set; } = string.Empty;
 }
 
+/// <summary>A game in a library's Recently Added or Recently Released home row.</summary>
+public class RecentGame : GameSummary
+{
+    [JsonPropertyName("dateAdded")]
+    public DateTime DateAdded { get; set; }
+
+    [JsonPropertyName("year")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Year { get; set; }
+
+    [JsonPropertyName("overview")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Overview { get; set; }
+
+    /// <summary>The cataloged box art, whose size gives the card its shape.</summary>
+    [JsonPropertyName("boxart")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GameArtworkDescriptor? Boxart { get; set; }
+}
+
 /// <summary>Full detail for a game, including BIOS files needed by its core.</summary>
 public class GameDetail : GameSummary
 {

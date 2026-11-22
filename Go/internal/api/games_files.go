@@ -54,6 +54,12 @@ func isBiosFile(p string) bool { return slices.Contains(biosExtensions, fileExt(
 
 func isCueSheet(p string) bool { return fileExt(p) == ".cue" }
 
+// isDiscSheet is a PlayStation .cue or .m3u, which only works with the files
+// beside it.
+func isDiscSheet(core, p string) bool {
+	return isDiscSetCore(core) && (isCueSheet(p) || fileExt(p) == ".m3u")
+}
+
 func isArcadeCore(core string) bool { return core == "mame" || core == "arcade" }
 
 // PlayStation discs are often several files, so the core gets a whole zip.

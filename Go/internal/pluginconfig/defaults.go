@@ -18,7 +18,7 @@ func Defaults() map[string]any {
 		"GamesEnabled": false, "GameLibraryIds": []any{}, "GamesIsolateWebApp": false, "GamesMetadataEnabled": true,
 		"GamesMetadataDbUrlBase": "https://cdn.jsdelivr.net/gh/libretro/libretro-database@master/rdb/",
 		"GamesLaunchBoxEnabled":  true, "GamesLaunchBoxUrl": "https://gamesdb.launchbox-app.com/Metadata.zip",
-		"SmartSearchEnabled": false, "SmartSearchModel": "english",
+		"SmartSearchEnabled": false, "SmartSearchModel": "english", "PushRelayEnabled": true,
 		"CalendarDaysBack": 14, "CalendarDaysAhead": 90, "CalendarAdminsOnly": false, "CalendarCacheMinutes": 5,
 		"WatchPartiesEnabled": true, "WatchPartyChat": true, "WatchPartyReactions": true, "WatchPartyAlerts": true,
 		"WatchPartyEveryoneControl": true, "WatchPartyMaxMembers": 20,

@@ -346,6 +346,36 @@ func TestAnArrivalFiresTheReminderOnce(t *testing.T) {
 	}
 }
 
+// With the hosted relay turned off nothing reaches it, and the ping tells the
+// apps there's no push.
+func TestTurningTheRelayOffStopsPush(t *testing.T) {
+	ctx := context.Background()
+	relay := newFakeRelay(t)
+	s := reminderServer(store.NewMemKV(), &reminderCatalog{})
+	sends := func() int {
+		relay.mu.Lock()
+		defer relay.mu.Unlock()
+		return len(relay.sends)
+	}
+	saveConfig(t, s, map[string]any{"PushRelayUrl": relay.URL, "PushRelayAppKey": "relay-key"})
+	call(t, s, userMain, "POST", "/Moonfin/Notifications/Register", `{"token":"phone","deviceId":"d1"}`, nil)
+	if _, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", nil); ping["pushSupported"] != true {
+		t.Fatalf("relay on, ping = %v", ping)
+	}
+	s.pushToUser(ctx, 3, "Hi", "there", "/")
+	if sends() != 1 {
+		t.Fatalf("relay on, pushes = %d", sends())
+	}
+	saveConfig(t, s, map[string]any{"PushRelayUrl": relay.URL, "PushRelayAppKey": "relay-key", "PushRelayEnabled": false})
+	if _, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", nil); ping["pushSupported"] != false {
+		t.Fatalf("relay off, ping = %v", ping)
+	}
+	s.pushToUser(ctx, 3, "Hi", "there", "/")
+	if sends() != 1 {
+		t.Fatalf("relay off, pushes = %d", sends())
+	}
+}
+
 func TestDeviceRegistrationReplacesTheSameDevice(t *testing.T) {
 	s := reminderServer(store.NewMemKV(), &reminderCatalog{})
 	if code, got := call(t, s, userMain, "POST", "/Moonfin/Notifications/Register", `{"platform":"ios"}`, nil); code != 400 || got["error"] != "Token is required" {
@@ -361,6 +391,43 @@ func TestDeviceRegistrationReplacesTheSameDevice(t *testing.T) {
 	call(t, s, userMain, "DELETE", "/Moonfin/Notifications/Register", `{"deviceId":"d1"}`, nil)
 	if devices, _ := s.loadDevices(context.Background()); len(devices["3"]) != 1 || devices["3"][0].Token != "c" {
 		t.Fatalf("after unregister = %v", devices)
+	}
+}
+
+// A test notification reaches the caller's settings stream and phones, with no
+// page to open, and says how many phones it went to.
+func TestTheTestNotificationReachesStreamAndPhones(t *testing.T) {
+	relay := newFakeRelay(t)
+	s := reminderServer(store.NewMemKV(), &reminderCatalog{})
+	saveConfig(t, s, map[string]any{"PushRelayUrl": relay.URL, "PushRelayAppKey": "relay-key"})
+	call(t, s, userMain, "POST", "/Moonfin/Notifications/Register", `{"token":"phone","deviceId":"d1"}`, nil)
+	events := make(chan []byte, 1)
+	s.notify.streams = map[int]map[chan []byte]struct{}{3: {events: {}}}
+
+	code, got := call(t, s, userMain, "POST", "/Moonfin/Notifications/Test", "", nil)
+	if code != 200 || got["success"] != true || got["pushEnabled"] != true || got["devicesCount"] != float64(1) {
+		t.Fatalf("test = %d %v", code, got)
+	}
+	var event map[string]any
+	select {
+	case raw := <-events:
+		_ = json.Unmarshal(raw, &event)
+	default:
+		t.Fatal("nothing reached the settings stream")
+	}
+	if event["type"] != "seerrNotification" || event["route"] != "" {
+		t.Fatalf("event = %v", event)
+	}
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		relay.mu.Lock()
+		sends := relay.sends
+		relay.mu.Unlock()
+		if len(sends) == 1 && sends[0]["route"] == "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("pushes = %v", sends)
+		}
 	}
 }
 

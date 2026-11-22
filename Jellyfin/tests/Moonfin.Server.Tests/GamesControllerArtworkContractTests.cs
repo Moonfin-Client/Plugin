@@ -152,6 +152,7 @@ public sealed class GamesControllerArtworkContractTests
             [nameof(GamesController.RefreshArtwork)] = "RequiresElevation",
             [nameof(GamesController.RefreshLibraryArtwork)] = "RequiresElevation",
             [nameof(GamesController.GetGames)] = null,
+            [nameof(GamesController.GetRecentGames)] = null,
             [nameof(GamesController.GetGame)] = null,
             [nameof(GamesController.PutCoreOverride)] = null,
             [nameof(GamesController.PutBackendOverride)] = null,

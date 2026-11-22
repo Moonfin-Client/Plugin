@@ -55,6 +55,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("continueWatchingDefaultAction")] public string? ContinueWatchingDefaultAction { get; set; }
         [JsonPropertyName("nextUpMaxDays")] public int? NextUpMaxDays { get; set; }
         [JsonPropertyName("enableMultiServerLibraries")] public bool? EnableMultiServerLibraries { get; set; }
+        [JsonPropertyName("mergeLibrariesByType")] public bool? MergeLibrariesByType { get; set; }
         [JsonPropertyName("enableFolderView")] public bool? EnableFolderView { get; set; }
         [JsonPropertyName("useDetailedSubHeadings")] public bool? UseDetailedSubHeadings { get; set; }
         [JsonPropertyName("confirmExit")] public bool? ConfirmExit { get; set; }
@@ -75,6 +76,9 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaBarSourceType")] public string? MediaBarSourceType { get; set; }
         [JsonPropertyName("mediaBarNewReleaseBanner")] public bool? MediaBarNewReleaseBanner { get; set; }
         [JsonPropertyName("mediaBarNewReleaseDays")] public int? MediaBarNewReleaseDays { get; set; }
+        [JsonPropertyName("mediaBarNewReleaseKinds")] public string? MediaBarNewReleaseKinds { get; set; }
+        [JsonPropertyName("mediaBarNewMovieDays")] public int? MediaBarNewMovieDays { get; set; }
+        [JsonPropertyName("mediaBarNewMovieDetail")] public bool? MediaBarNewMovieDetail { get; set; }
         [JsonPropertyName("mediaBarCollectionIds")] public List<string>? MediaBarCollectionIds { get; set; }
         [JsonPropertyName("mediaBarLibraryIds")] public List<string>? MediaBarLibraryIds { get; set; }
         [JsonPropertyName("mediaBarExcludedGenres")] public List<string>? MediaBarExcludedGenres { get; set; }
@@ -369,6 +373,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("showMediaDetailsOnLibraryPage")] public bool? ShowMediaDetailsOnLibraryPage { get; set; }
         [JsonPropertyName("libraryCardTitles")] public bool? LibraryCardTitles { get; set; }
         [JsonPropertyName("hideBackdropsInLibraries")] public bool? HideBackdropsInLibraries { get; set; }
+        [JsonPropertyName("hideLibraryWatchProgress")] public bool? HideLibraryWatchProgress { get; set; }
+        [JsonPropertyName("hideLibraryUnwatchedCount")] public bool? HideLibraryUnwatchedCount { get; set; }
         [JsonPropertyName("playlistsRowSortBy")] public string? PlaylistsRowSortBy { get; set; }
         [JsonPropertyName("playlistsRowSortOrder")] public string? PlaylistsRowSortOrder { get; set; }
         [JsonPropertyName("audioRowsSortBy")] public string? AudioRowsSortBy { get; set; }
@@ -425,6 +431,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("playbackTimeBelowCenter")] public string? PlaybackTimeBelowCenter { get; set; }
         [JsonPropertyName("playbackTimeBelowRight")] public string? PlaybackTimeBelowRight { get; set; }
         [JsonPropertyName("collectionsRowShowEpisodes")] public bool? CollectionsRowShowEpisodes { get; set; }
+        [JsonPropertyName("hideWatchedInRecentRows")] public bool? HideWatchedInRecentRows { get; set; }
         [JsonPropertyName("mergeRecentRowsByType")] public bool? MergeRecentRowsByType { get; set; }
         [JsonPropertyName("playlistsRowShowEpisodes")] public bool? PlaylistsRowShowEpisodes { get; set; }
         [JsonPropertyName("recentlyReleasedSeriesType")] public string? RecentlyReleasedSeriesType { get; set; }

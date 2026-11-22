@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/Moonfin-Client/Plugin/Go/internal/store"
 )
@@ -295,6 +296,16 @@ func TestFolderGameLibraryServesTheAppsScreens(t *testing.T) {
 	_, snes := getJSON[[]M](t, s, userMain, "/Moonfin/Games/section-7/Games", map[string]any{"system": "snes"})
 	if len(snes) != 2 || snes[0]["title"] != "loose" || snes[1]["title"] != "Super Mario World" || snes[1]["fileName"] != "Super Mario World (USA).sfc" {
 		t.Fatalf("SNES games = %v", snes)
+	}
+	future := time.Now().Add(48 * time.Hour)
+	if err := os.Chtimes(files["zipped"], future, future); err != nil {
+		t.Fatal(err)
+	}
+	if _, recent := getJSON[[]M](t, s, userMain, "/Moonfin/Games/section-7/Recent", map[string]any{"limit": 2}); len(recent) != 2 || recent[0]["fileName"] != "Zipped (USA).zip" || recent[0]["dateAdded"] == nil {
+		t.Fatalf("recent = %v", recent)
+	}
+	if _, released := getJSON[[]M](t, s, userMain, "/Moonfin/Games/section-7/Recent", map[string]any{"sort": "released"}); len(released) != 0 {
+		t.Fatalf("undated folder games came back as released: %v", released)
 	}
 	if code, _ := getJSON[[]M](t, s, userMain, "/Moonfin/Games/section-8/Systems", nil); code != 404 {
 		t.Fatalf("a library not picked for games answered %d", code)

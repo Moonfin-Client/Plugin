@@ -22,6 +22,15 @@ namespace Emby.Plugins.Moonfin.Api
         public string? System { get; set; }
     }
 
+    [Route("/Moonfin/Games/{LibraryId}/Recent", "GET")]
+    [Authenticated]
+    public class GetRecentGamesRequest : IReturn<object>
+    {
+        public string LibraryId { get; set; } = string.Empty;
+        public string? Sort { get; set; }
+        public int? Limit { get; set; }
+    }
+
     [Route("/Moonfin/Games/{LibraryId}/Games/{GameId}", "GET")]
     [Authenticated]
     public class GetGameDetailRequest : IReturn<object>

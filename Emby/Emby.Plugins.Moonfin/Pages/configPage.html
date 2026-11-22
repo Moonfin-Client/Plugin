@@ -2574,6 +2574,15 @@
                                 are set, the file path wins.
                             </div>
                         </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" id="PushRelayEnabled" is="emby-checkbox" />
+                                <span>Send push notifications through the hosted Moonfin relay</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Turning this off stops the push notifications that go through the relay.
+                            </div>
+                        </div>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="PushRelayUrl">Push Relay URL (Optional)</label>
                             <input type="text" id="PushRelayUrl" is="emby-input" placeholder="https://push.moonfin.io/send" />
@@ -2630,9 +2639,9 @@
                             </div>
                             <div class="fieldDescription">
                                 Upload an EmulatorJS <code>data</code> folder zipped up (the zip must contain
-                                <code>loader.js</code> somewhere inside). Get it from
+                                <code>loader.js</code> somewhere inside). Download the <code>.7z</code> file from
                                 <a href="https://github.com/EmulatorJS/EmulatorJS/releases/latest" target="_blank">EmulatorJS releases</a>
-                                (extract the archive and zip its <code>data</code> folder). ~290&nbsp;MB.
+                                (not the Source code download, which has no cores), extract it and zip its <code>data</code> folder. ~290&nbsp;MB.
                             </div>
                         </div>
                         <div class="inputContainer">
@@ -3435,6 +3444,15 @@
                                 <div class="fieldDescription">How long a show stays in Next Up after it was last watched.</div>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideWatchedInRecentRows">Hide Watched in Recent Rows</label>
+                                <select id="DefaultHideWatchedInRecentRows" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Hide watched content from Recently Added and Recently Released home rows.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultMergeRecentRowsByType">Merge Recent Rows by Type</label>
                                 <select id="DefaultMergeRecentRowsByType" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -3798,7 +3816,7 @@
                                 <div class="fieldDescription">Flag series in the media bar with a new season or new episodes that aired recently.</div>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseDays">New Release Window</label>
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseDays">New Episode Window</label>
                                 <select id="DefaultMediaBarNewReleaseDays" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="7">7 days</option>
@@ -3808,6 +3826,38 @@
                                     <option value="90">90 days</option>
                                 </select>
                                 <div class="fieldDescription">How long after an episode airs it still counts as new, for the banner and the New Seasons &amp; Episodes source.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewReleaseKinds">New Release Labels</label>
+                                <select id="DefaultMediaBarNewReleaseKinds" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="newSeries,newSeason,newEpisodes,newMovie">Series and movies</option>
+                                    <option value="newSeries,newSeason,newEpisodes">Series only</option>
+                                    <option value="newMovie">Movies only</option>
+                                </select>
+                                <div class="fieldDescription">Which titles get a label: new series, new seasons and new episodes, new movies.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewMovieDays">New Movie Window</label>
+                                <select id="DefaultMediaBarNewMovieDays" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="30">30 days</option>
+                                    <option value="60">60 days</option>
+                                    <option value="90">90 days</option>
+                                    <option value="120">120 days</option>
+                                    <option value="180">180 days</option>
+                                    <option value="365">365 days</option>
+                                </select>
+                                <div class="fieldDescription">How long after its release a movie stays new. Cinema releases reach servers months later, so this is longer than the series window.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarNewMovieDetail">New Movie Tagline</label>
+                                <select id="DefaultMediaBarNewMovieDetail" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Under the New Movie label, show the movie's tagline in the server's metadata language. With none, the label stays on its own.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Excluded Genres</label>
@@ -3948,6 +3998,7 @@
                                     <option value="">Not set (user decides)</option>
                                     <option value="v1">Classic</option>
                                     <option value="v2">Modern</option>
+                                    <option value="carousel">Carousel</option>
                                 </select>
                             </div>
                             <div class="inputContainer">
@@ -4288,6 +4339,17 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMergeLibrariesByType">Merge Movie and TV Show Libraries</label>
+                                <select id="DefaultMergeLibrariesByType" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">
+                                    With multi-server libraries on, shows one Movies library and one TV Shows library for every server. A title that several servers hold is listed once.
+                                </div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultShowBookDiscoverTab">Show Book Library Discovery</label>
                                 <select id="DefaultShowBookDiscoverTab" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -4390,6 +4452,22 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultHideBackdropsInLibraries">Hide Backdrops in Libraries</label>
                                 <select id="DefaultHideBackdropsInLibraries" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideLibraryWatchProgress">Hide Watch Progress in Libraries</label>
+                                <select id="DefaultHideLibraryWatchProgress" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideLibraryUnwatchedCount">Hide Unwatched Counts in Libraries</label>
+                                <select id="DefaultHideLibraryUnwatchedCount" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>

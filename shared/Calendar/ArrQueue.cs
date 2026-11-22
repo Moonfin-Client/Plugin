@@ -61,8 +61,9 @@ public static class ArrQueue
     /// <summary>
     /// The title's queue entries, and whether the arr has the title at all. A 200 always means the
     /// arr was read, so an empty list is an empty queue and not a server that couldn't be reached.
+    /// <paramref name="log"/> hears why searching was left out, for the server's debug log.
     /// </summary>
-    public static async Task<ArrAnswer> ReadAsync(ArrSend send, bool isSonarr, string? titleId, bool isAdmin)
+    public static async Task<ArrAnswer> ReadAsync(ArrSend send, bool isSonarr, string? titleId, bool isAdmin, Action<string>? log = null)
     {
         var id = PositiveId(titleId);
         if (id == null) return Error(400, MissingIdError);
@@ -90,6 +91,12 @@ public static class ArrQueue
                 result["isAvailable"] = title.IsAvailable;
             }
 
+            foreach (var field in title.Availability.ToList())
+            {
+                title.Availability.Remove(field.Key);
+                result[field.Key] = field.Value;
+            }
+
             var details = await send(HttpMethod.Get, DetailsPath(isSonarr, title.ArrId), null).ConfigureAwait(false);
             if (!details.Ok) return Failed(details, isSonarr);
 
@@ -99,6 +106,23 @@ public static class ArrQueue
             foreach (var record in records.OfType<JsonObject>())
             {
                 items.Add(Shape(record, isSonarr, isAdmin));
+            }
+
+            // Whether the arr is searching the indexers for the title right now. A download in the
+            // queue or a movie already on disk answers that, so the arr isn't asked. The queue is the
+            // answer, so a command list that can't be read leaves the field out rather than failing it.
+            if (items.Count == 0 && title.HasFile != true)
+            {
+                var commands = await send(HttpMethod.Get, "api/v3/command", null).ConfigureAwait(false);
+                if (commands.Ok && ParseArray(commands.Body) is JsonArray list)
+                {
+                    result["searching"] = IsSearching(list, isSonarr, title.ArrId);
+                }
+                else
+                {
+                    log?.Invoke("Could not read the " + service + " command list (status "
+                        + commands.StatusCode.ToString(CultureInfo.InvariantCulture) + "), so searching is left out");
+                }
             }
         }
 
@@ -240,9 +264,87 @@ public static class ArrQueue
             Int(first["id"])!.Value,
             Bool(first["monitored"]),
             isSonarr ? null : Bool(first["hasFile"]),
-            isSonarr ? null : Bool(first["isAvailable"]));
+            isSonarr ? null : Bool(first["isAvailable"]),
+            Availability(first, isSonarr));
         return true;
     }
+
+    /// <summary>
+    /// What a client needs to tell a title the arr hasn't found from one that isn't out yet, under
+    /// the arr's own names. Radarr's releaseDate is the day the movie reaches its minimum
+    /// availability, an estimate when Radarr only knows the cinema date, and lastSearchTime is its
+    /// last indexer search. Sonarr's seasons carry episodeCount (monitored aired episodes plus any
+    /// with a file), episodeFileCount and nextAiring (the next monitored episode). A field the arr
+    /// left out stays out.
+    /// </summary>
+    internal static JsonObject Availability(JsonObject title, bool isSonarr)
+    {
+        var fields = new JsonObject();
+        if (!isSonarr)
+        {
+            foreach (var name in new[] { "releaseDate", "lastSearchTime" })
+            {
+                if (Text(title[name]) is string date) fields[name] = date;
+            }
+
+            return fields;
+        }
+
+        if (title["seasons"] is not JsonArray seasons) return fields;
+
+        var shaped = new JsonArray();
+        foreach (var season in seasons.OfType<JsonObject>())
+        {
+            if (Int(season["seasonNumber"]) is not int number) continue;
+
+            var item = new JsonObject { ["seasonNumber"] = number };
+            if (Bool(season["monitored"]) is bool monitored) item["monitored"] = monitored;
+
+            var stats = season["statistics"] as JsonObject;
+            foreach (var name in new[] { "episodeCount", "episodeFileCount" })
+            {
+                if (Int(stats?[name]) is int count) item[name] = count;
+            }
+
+            if (Text(stats?["nextAiring"]) is string next) item["nextAiring"] = next;
+            shaped.Add(item);
+        }
+
+        fields["seasons"] = shaped;
+        return fields;
+    }
+
+    /// <summary>
+    /// Whether a queued or running search names this title: Radarr's MoviesSearch by its movie ids,
+    /// and Sonarr's SeriesSearch, SeasonSearch or MissingEpisodeSearch by the series id. Seerr and
+    /// Sonarr start a MissingEpisodeSearch for a new request. A search over every missing title
+    /// names no series, so it isn't counted, and neither is an EpisodeSearch, which only names
+    /// episodes.
+    /// </summary>
+    internal static bool IsSearching(JsonArray commands, bool isSonarr, int arrId) =>
+        commands.OfType<JsonObject>().Any(command =>
+        {
+            var status = Text(command["status"]);
+            if (!string.Equals(status, "queued", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(status, "started", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var name = Text(command["name"]);
+            var body = command["body"] as JsonObject;
+            if (isSonarr)
+            {
+                return (string.Equals(name, "SeriesSearch", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(name, "SeasonSearch", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(name, "MissingEpisodeSearch", StringComparison.OrdinalIgnoreCase))
+                    && (Int(body?["seriesId"]) == arrId
+                        || (body?["seriesIds"] as JsonArray ?? new JsonArray()).Any(id => Int(id) == arrId));
+            }
+
+            return string.Equals(name, "MoviesSearch", StringComparison.OrdinalIgnoreCase)
+                && (body?["movieIds"] as JsonArray ?? new JsonArray()).Any(id => Int(id) == arrId);
+        });
 
     internal static string DetailsPath(bool isSonarr, int arrId) =>
         isSonarr
@@ -298,12 +400,13 @@ public static class ArrQueue
 /// <summary>A movie or series as the arr has it.</summary>
 public sealed class ArrQueueTitle
 {
-    public ArrQueueTitle(int arrId, bool? monitored, bool? hasFile, bool? isAvailable)
+    public ArrQueueTitle(int arrId, bool? monitored, bool? hasFile, bool? isAvailable, JsonObject? availability = null)
     {
         ArrId = arrId;
         Monitored = monitored;
         HasFile = hasFile;
         IsAvailable = isAvailable;
+        Availability = availability ?? new JsonObject();
     }
 
     public int ArrId { get; }
@@ -313,4 +416,7 @@ public sealed class ArrQueueTitle
     public bool? HasFile { get; }
 
     public bool? IsAvailable { get; }
+
+    /// <summary>The release date, last search and season counts a client reads availability from.</summary>
+    internal JsonObject Availability { get; }
 }

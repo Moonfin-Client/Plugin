@@ -57,6 +57,19 @@ public class RommClientTests
     }
 
     [Fact]
+    public async Task AsksForEveryFileOfADiscSetAtOnce()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var game = new RommGame { Id = 20, Rom = new RommFile { Id = 32, FileName = "Final Fantasy VII (USA)" }, FileIds = new List<int> { 31, 30, 32 } };
+
+        using var response = await Client(handler).SendRomAsync(HttpMethod.Get, game, null, CancellationToken.None);
+
+        Assert.Equal(
+            BaseUrl + "/api/roms/20/content/Final%20Fantasy%20VII%20%28USA%29?file_ids=31,30,32&purpose=play",
+            Assert.Single(handler.Requests).Url);
+    }
+
+    [Fact]
     public async Task DropsARangeHeaderThatIsNotAByteRange()
     {
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));

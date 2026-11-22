@@ -91,6 +91,9 @@ namespace Emby.Plugins.Moonfin.Api
                 // Older plugins leave this out, so the app shows an outside title with only what
                 // its list carried.
                 tmdbDetailsSupported = true,
+                // Older plugins leave this out, so the app doesn't offer the JustWatch and TMDB
+                // discover rows.
+                discoverChartsSupported = true,
                 // Older plugins leave this out, which the app reads as false and hides the
                 // messages button.
                 messagesSupported = true,
@@ -108,6 +111,8 @@ namespace Emby.Plugins.Moonfin.Api
                 calendarReminders = true,
                 // Older plugins leave this out, so the app shows no download queue details.
                 arrQueueAvailable = seerrEnabled && !string.IsNullOrEmpty(config?.GetEffectiveSeerrUrl()),
+                // Older plugins leave this out, which the app reads as true.
+                pushSupported = config?.PushEnabled ?? false,
                 defaultSettings = MoonfinSettingsService.AdminDefaultsFor(request.Profile, config)
             });
         }
@@ -613,6 +618,7 @@ namespace Emby.Plugins.Moonfin.Api
             if (LibraryManager == null)
                 return Json(new { Items = Array.Empty<object>(), TotalRecordCount = 0 });
 
+            var hideWatched = !isFallback && settings.HideWatchedInRecentRows == true;
             List<BaseItem> items;
             // The picked libraries and collections draw as one pool whatever the source type, and the
             // library and collection sources from before fall through to the random draw.
@@ -620,9 +626,9 @@ namespace Emby.Plugins.Moonfin.Api
                 ? null
                 : (settings.MediaBarLibraryIds ?? new List<string>()).Concat(settings.MediaBarCollectionIds ?? new List<string>()).ToList();
             if (sourceType == "recentlyAdded")
-                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.DateCreated, hideWatched);
             else if (sourceType == "recentlyReleased")
-                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate);
+                items = QueryItems(parentIds, limit, user, excludedNames, ItemSortBy.PremiereDate, hideWatched);
             else if (sourceType == "newReleases")
                 items = QueryNewReleaseSeries(parentIds, settings.MediaBarNewReleaseDays ?? 30, limit, user, excludedNames);
             else
@@ -681,7 +687,7 @@ namespace Emby.Plugins.Moonfin.Api
         /// genre-name exclusion. Shuffled, or newest first by <paramref name="orderBy"/>. A release date
         /// still to come isn't recently released.
         /// </summary>
-        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null)
+        private List<BaseItem> QueryItems(List<string>? containerGuids, int limit, User user, HashSet<string>? excludedNames, string? orderBy = null, bool excludePlayed = false)
         {
             var lm = LibraryManager;
             if (lm == null) return new List<BaseItem>();
@@ -698,6 +704,8 @@ namespace Emby.Plugins.Moonfin.Api
                 User = user,
                 Limit = candidates
             };
+
+            if (excludePlayed) query.IsPlayed = false;
 
             if (containerGuids != null && containerGuids.Count > 0)
             {

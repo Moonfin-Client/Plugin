@@ -142,6 +142,7 @@ public class MoonfinController : ControllerBase
             TmdbPersonLinksSupported = true,
             TmdbReviewsSupported = true,
             TmdbDetailsSupported = true,
+            DiscoverChartsSupported = true,
             MessagesSupported = true,
             PinSupported = true,
             IncompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
@@ -156,6 +157,7 @@ public class MoonfinController : ControllerBase
             CalendarReminders = true,
             ArrQueueAvailable = config?.SeerrEnabled == true && !string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()),
             SocketRelay = config?.EnableSocketRelay ?? false,
+            PushSupported = config?.PushEnabled ?? false,
             DefaultSettings = _settingsService.AdminDefaultsFor(profile)
         });
     }
@@ -1274,10 +1276,11 @@ public class MoonfinController : ControllerBase
         // library and collection sources from before fall through to the random draw.
         var libraryIds = isFallback ? null : settings.MediaBarLibraryIds;
         var collectionIds = isFallback ? null : settings.MediaBarCollectionIds;
+        var hideWatched = !isFallback && settings.HideWatchedInRecentRows == true;
         var items = sourceType switch
         {
-            "recentlyAdded" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated),
-            "recentlyReleased" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate),
+            "recentlyAdded" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.DateCreated, hideWatched),
+            "recentlyReleased" => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres, ItemSortBy.PremiereDate, hideWatched),
             "newReleases" => GetNewReleaseSeries(libraryIds, collectionIds, settings.MediaBarNewReleaseDays ?? 30, limit, queryUser, excludedGenres),
             _ => GetLibraryItems(libraryIds, collectionIds, limit, queryUser, excludedGenres)
         };
@@ -1430,7 +1433,7 @@ public class MoonfinController : ControllerBase
     /// newest first by <paramref name="order"/>, with genre exclusions applied at the database level.
     /// With nothing picked it reads every library.
     /// </summary>
-    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, List<string>? collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random)
+    private List<BaseItem> GetLibraryItems(List<string>? libraryIds, List<string>? collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, ItemSortBy order = ItemSortBy.Random, bool excludePlayed = false)
     {
         var includedGenreIds = GetIncludedGenreIds(excludedGenreIds, queryUser);
 
@@ -1442,26 +1445,41 @@ public class MoonfinController : ControllerBase
         var collectionCount = collectionIds?.Count ?? 0;
         if (libraryIds is not { Count: > 0 } && collectionCount == 0)
         {
-            var query = new InternalItemsQuery
+            var pool = new List<BaseItem>();
+            var pooledIds = new HashSet<Guid>();
+            foreach (var types in MediaBarItemTypes(excludePlayed))
             {
-                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                Limit = fetchLimit,
-                Recursive = true
-            };
+                var query = new InternalItemsQuery
+                {
+                    IncludeItemTypes = types,
+                    Limit = fetchLimit,
+                    Recursive = true
+                };
 
-            if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+                if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+                if (excludePlayed) query.IsPlayed = false;
 
-            if (!UserReflection.ApplyUser(query, queryUser)) return [];
+                if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
-            SetMediaBarOrder(query, order);
-            return _libraryManager.GetItemsResult(query).Items
-                .Where(item => UserReflection.IsVisibleTo(item, queryUser) && HasBackdropImage(item))
-                .Take(limit)
-                .ToList();
+                SetMediaBarOrder(query, order);
+                foreach (var item in _libraryManager.GetItemsResult(query).Items)
+                {
+                    if (pooledIds.Add(item.Id)) pool.Add(item);
+                }
+            }
+
+            var visible = pool.Where(item => UserReflection.IsVisibleTo(item, queryUser) && HasBackdropImage(item));
+            if (excludePlayed)
+            {
+                // Movies and series came back from two queries, so they're put back in one order.
+                visible = visible.OrderByDescending(item => order == ItemSortBy.DateCreated ? item.DateCreated : item.PremiereDate ?? DateTime.MinValue);
+            }
+
+            return visible.Take(limit).ToList();
         }
 
         List<Guid> allowedLibraryIds = libraryIds is { Count: > 0 } ? VisibleLibraryIds(libraryIds, queryUser) : [];
-        List<BaseItem> collectionItems = collectionCount > 0 ? GetCollectionItems(collectionIds!, int.MaxValue, queryUser, excludedGenreIds) : [];
+        List<BaseItem> collectionItems = collectionCount > 0 ? GetCollectionItems(collectionIds!, int.MaxValue, queryUser, excludedGenreIds, excludePlayed) : [];
         if (allowedLibraryIds.Count == 0 && collectionItems.Count == 0) return [];
 
         var allItems = new List<BaseItem>();
@@ -1471,25 +1489,29 @@ public class MoonfinController : ControllerBase
 
         foreach (var parentGuid in allowedLibraryIds)
         {
-            var query = new InternalItemsQuery
+            foreach (var types in MediaBarItemTypes(excludePlayed))
             {
-                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                ParentId = parentGuid,
-                Limit = perLibraryLimit,
-                Recursive = true
-            };
+                var query = new InternalItemsQuery
+                {
+                    IncludeItemTypes = types,
+                    ParentId = parentGuid,
+                    Limit = perLibraryLimit,
+                    Recursive = true
+                };
 
-            if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+                if (includedGenreIds != null) query.GenreIds = includedGenreIds;
+                if (excludePlayed) query.IsPlayed = false;
 
-            if (!UserReflection.ApplyUser(query, queryUser)) return [];
+                if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
-            SetMediaBarOrder(query, order);
+                SetMediaBarOrder(query, order);
 
-            foreach (var item in _libraryManager.GetItemsResult(query).Items)
-            {
-                if (!seenIds.Add(item.Id)) continue;
-                if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
-                allItems.Add(item);
+                foreach (var item in _libraryManager.GetItemsResult(query).Items)
+                {
+                    if (!seenIds.Add(item.Id)) continue;
+                    if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
+                    allItems.Add(item);
+                }
             }
         }
 
@@ -1656,7 +1678,13 @@ public class MoonfinController : ControllerBase
     /// Queries items from specified collections/playlists, filtered to Movie/Series.
     /// Collection items are iterated individually, so genre exclusion is applied in-memory.
     /// </summary>
-    private List<BaseItem> GetCollectionItems(List<string> collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null)
+    // Jellyfin only checks a series' unplayed episodes when series are asked for on their own,
+    // so a played filter asks for movies and series separately.
+    private static BaseItemKind[][] MediaBarItemTypes(bool excludePlayed) => excludePlayed
+        ? [[BaseItemKind.Movie], [BaseItemKind.Series]]
+        : [[BaseItemKind.Movie, BaseItemKind.Series]];
+
+    private List<BaseItem> GetCollectionItems(List<string> collectionIds, int limit, object queryUser, List<string>? excludedGenreIds = null, bool excludePlayed = false)
     {
         var allItems = new List<BaseItem>();
         var seenIds = new HashSet<Guid>();
@@ -1677,22 +1705,27 @@ public class MoonfinController : ControllerBase
 
             if (linkedIds.Length == 0) continue;
 
-            var query = new InternalItemsQuery
+            foreach (var types in MediaBarItemTypes(excludePlayed))
             {
-                ItemIds = linkedIds,
-                IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series],
-                Limit = linkedIds.Length
-            };
+                var query = new InternalItemsQuery
+                {
+                    ItemIds = linkedIds,
+                    IncludeItemTypes = types,
+                    Limit = linkedIds.Length
+                };
 
-            if (!UserReflection.ApplyUser(query, queryUser)) return [];
+                if (excludePlayed) query.IsPlayed = false;
 
-            foreach (var item in _libraryManager.GetItemsResult(query).Items)
-            {
-                if (!seenIds.Add(item.Id)) continue;
-                if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
-                if (excludedNames != null && item.Genres.Any(g => excludedNames.Contains(g))) continue;
+                if (!UserReflection.ApplyUser(query, queryUser)) return [];
 
-                allItems.Add(item);
+                foreach (var item in _libraryManager.GetItemsResult(query).Items)
+                {
+                    if (!seenIds.Add(item.Id)) continue;
+                    if (!UserReflection.IsVisibleTo(item, queryUser)) continue;
+                    if (excludedNames != null && item.Genres.Any(g => excludedNames.Contains(g))) continue;
+
+                    allItems.Add(item);
+                }
             }
         }
 
@@ -1829,6 +1862,13 @@ public class MoonfinPingResponse
     public bool? TmdbDetailsSupported { get; set; }
 
     /// <summary>
+    /// True when the custom rows endpoint serves the justwatch and tmdb_discover sources. Older
+    /// plugins leave it out, so the apps don't offer those rows.
+    /// </summary>
+    [JsonPropertyName("discoverChartsSupported")]
+    public bool? DiscoverChartsSupported { get; set; }
+
+    /// <summary>
     /// True when this plugin has the admin messages endpoints. Older plugins leave it out, so
     /// the app reads a missing value as false and hides the button.
     /// </summary>
@@ -1896,6 +1936,13 @@ public class MoonfinPingResponse
     /// </summary>
     [JsonPropertyName("arrQueueAvailable")]
     public bool? ArrQueueAvailable { get; set; }
+
+    /// <summary>
+    /// True when the server can deliver push right now, through its own service account or the
+    /// hosted relay. Older plugins leave it out, so the app reads a missing value as true.
+    /// </summary>
+    [JsonPropertyName("pushSupported")]
+    public bool? PushSupported { get; set; }
 
     [JsonPropertyName("defaultSettings")]
     public MoonfinSettingsProfile? DefaultSettings { get; set; }

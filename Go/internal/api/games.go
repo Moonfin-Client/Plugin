@@ -269,6 +269,8 @@ func (g *games) handleListOrSave(w http.ResponseWriter, r *http.Request) {
 		g.handleSystems(w, r)
 	case r.PathValue("b") == "Games":
 		g.handleGames(w, r)
+	case r.PathValue("b") == "Recent":
+		g.handleRecent(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -320,6 +322,14 @@ func (g *games) handleGames(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
+	l.eachFolderGame(system, func(game M, _ string) { out = append(out, game) })
+	sortByFold(out, "title")
+	writeJSON(w, http.StatusOK, out)
+}
+
+// eachFolderGame walks a folder library's games, in every system when system
+// is empty, handing over each game with its ROM's path.
+func (l gameLib) eachFolderGame(system string, fn func(game M, rom string)) {
 	for _, root := range l.roots {
 		dirs, _ := dirEntries(root)
 		for _, dir := range dirs {
@@ -330,12 +340,52 @@ func (g *games) handleGames(w http.ResponseWriter, r *http.Request) {
 			roms := gamesInSystem(dir)
 			core, _ := systemCore(name, roms)
 			for _, rom := range roms {
-				out = append(out, M{"id": gameToken(rom), "title": gameTitle(dir, rom), "system": name, "core": core, "fileName": filepath.Base(rom)})
+				fn(M{"id": gameToken(rom), "title": gameTitle(dir, rom), "system": name, "core": core, "fileName": filepath.Base(rom)}, rom)
 			}
 		}
 	}
-	sortByFold(out, "title")
-	writeJSON(w, http.StatusOK, out)
+}
+
+// handleRecent is a library's newest games for the home screen, by when they
+// were added or, with sort=released, by release year with undated games left out.
+func (g *games) handleRecent(w http.ResponseWriter, r *http.Request) {
+	cfg, l, ok := g.library(w, r)
+	if !ok {
+		return
+	}
+	limit := queryInt(r, "limit")
+	if limit <= 0 {
+		limit = 16
+	}
+	released := strings.EqualFold(r.URL.Query().Get("sort"), "released")
+	out := []M{}
+	if l.romm {
+		if snap := g.rommSnapshot(cfg.romm); snap != nil {
+			out = snap.recentList()
+		}
+	} else {
+		l.eachFolderGame("", func(game M, rom string) {
+			// Go has no portable creation time, so a copy that kept its file dates sorts as old.
+			var added time.Time
+			if info, err := os.Stat(rom); err == nil {
+				added = info.ModTime().UTC()
+			}
+			game["dateAdded"] = added
+			out = append(out, game)
+		})
+	}
+	if released {
+		out = slices.DeleteFunc(out, func(m M) bool { _, dated := m["year"].(int); return !dated })
+	}
+	slices.SortStableFunc(out, func(a, b M) int {
+		if released {
+			if c := b["year"].(int) - a["year"].(int); c != 0 {
+				return c
+			}
+		}
+		return b["dateAdded"].(time.Time).Compare(a["dateAdded"].(time.Time))
+	})
+	writeJSON(w, http.StatusOK, out[:min(limit, 100, len(out))])
 }
 
 func sortByFold(items []M, key string) {

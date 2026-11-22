@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -12,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Emby.Plugins.Moonfin.Models;
 using MediaBrowser.Controller.Session;
+using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Logging;
 
 namespace Emby.Plugins.Moonfin.Services
@@ -25,6 +27,15 @@ namespace Emby.Plugins.Moonfin.Services
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly ILogger _logger;
         private static readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
+
+        // Counts each user's saves, so a HidePlayedInLatest write from an older save never lands
+        // after a newer one.
+        private readonly ConcurrentDictionary<Guid, long> _userSaveGenerations = new ConcurrentDictionary<Guid, long>();
+        private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _nativeSyncLocks = new ConcurrentDictionary<Guid, SemaphoreSlim>();
+
+        internal Func<string, MoonfinSettingsProfile?>? AdminDefaultsOverrideForTesting { get; set; }
+
+        internal Action<Guid>? BeforeNativeSyncWaitForTesting { get; set; }
 
         // Cached once. GetProperties() is called on the warm settings-resolve path.
         private static readonly System.Reflection.PropertyInfo[] ProfileProps = typeof(MoonfinSettingsProfile).GetProperties();
@@ -353,6 +364,8 @@ namespace Emby.Plugins.Moonfin.Services
         {
             var filePath = GetUserSettingsPath(userId);
             bool settingsChanged;
+            MoonfinUserSettings saved;
+            long saveGeneration;
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -391,11 +404,15 @@ namespace Emby.Plugins.Moonfin.Services
 
                 var json = JsonSerializer.Serialize(finalSettings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
+                saved = finalSettings;
+                saveGeneration = NextSaveGeneration(userId);
             }
             finally
             {
                 _lock.Release();
             }
+
+            await SyncHideWatchedAsync(userId, saved, null, saveGeneration).ConfigureAwait(false);
 
             // A merge that changed nothing is the client echoing state it already
             // holds. Broadcasting it anyway sends the echo straight back and keeps
@@ -408,6 +425,8 @@ namespace Emby.Plugins.Moonfin.Services
         {
             var filePath = GetUserSettingsPath(userId);
             bool settingsChanged;
+            MoonfinUserSettings saved;
+            long saveGeneration;
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -462,11 +481,15 @@ namespace Emby.Plugins.Moonfin.Services
 
                 var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, serialized)).ConfigureAwait(false);
+                saved = settings;
+                saveGeneration = NextSaveGeneration(userId);
             }
             finally
             {
                 _lock.Release();
             }
+
+            await SyncHideWatchedAsync(userId, saved, profileName, saveGeneration).ConfigureAwait(false);
 
             // Same echo guard as SaveUserSettingsAsync.
             if (notifySettingsChanged && settingsChanged) NotifySettingsChanged(userId);
@@ -877,7 +900,12 @@ namespace Emby.Plugins.Moonfin.Services
 
             foreach (var userId in userSet)
             {
-                try { await WriteDefaultsOnlyAsync(userId, push).ConfigureAwait(false); usersAffected++; }
+                try
+                {
+                    var (written, saveGeneration) = await WriteDefaultsOnlyAsync(userId, push).ConfigureAwait(false);
+                    usersAffected++;
+                    await SyncHideWatchedAsync(userId, written, null, saveGeneration).ConfigureAwait(false);
+                }
                 catch (Exception ex) { _logger.ErrorException("Failed to reset user " + userId, ex); }
             }
 
@@ -896,7 +924,7 @@ namespace Emby.Plugins.Moonfin.Services
             return (usersAffected, orphansDeleted);
         }
 
-        private async Task WriteDefaultsOnlyAsync(Guid userId, IReadOnlyDictionary<string, MoonfinSettingsProfile> push)
+        private async Task<(MoonfinUserSettings Settings, long SaveGeneration)> WriteDefaultsOnlyAsync(Guid userId, IReadOnlyDictionary<string, MoonfinSettingsProfile> push)
         {
             var clean = new MoonfinUserSettings
             {
@@ -914,17 +942,22 @@ namespace Emby.Plugins.Moonfin.Services
             // Reset personal pin choices; subsequent administrator edits remain inherited.
             clean.Global!.LiveTvSavedFilters = new List<string>();
             clean.LiveTvSavedFilterExclusions = new List<string>();
+
+            long saveGeneration;
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
                 var filePath = GetUserSettingsPath(userId);
                 var json = JsonSerializer.Serialize(clean, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, json)).ConfigureAwait(false);
+                saveGeneration = NextSaveGeneration(userId);
             }
             finally
             {
                 _lock.Release();
             }
+
+            return (clean, saveGeneration);
         }
 
         private static MoonfinSettingsProfile CloneProfile(MoonfinSettingsProfile source)
@@ -1319,6 +1352,129 @@ namespace Emby.Plugins.Moonfin.Services
             foreach (var prop in ProfileProps)
                 if (prop.GetValue(profile) != null) return true;
             return false;
+        }
+
+        private long NextSaveGeneration(Guid userId) =>
+            _userSaveGenerations.AddOrUpdate(userId, 1, (_, previous) => previous + 1);
+
+        /// <summary>
+        /// Moves HidePlayedInLatest to match every user who inherits a Hide Watched admin default,
+        /// after an admin changes one. A user who saves while this runs keeps their own value.
+        /// </summary>
+        internal async Task SyncHideWatchedForAffectedUsersAsync(CancellationToken cancellationToken = default)
+        {
+            var userManager = PluginServices.UserManager;
+            if (userManager == null) return;
+
+            MediaBrowser.Controller.Entities.User[]? users;
+            try { users = userManager.GetUserList(new UserQuery()); }
+            catch (Exception ex)
+            {
+                _logger.Warn("Could not list users to apply the Hide Watched default: " + ex.Message);
+                return;
+            }
+
+            if (users == null) return;
+
+            foreach (var user in users)
+            {
+                if (cancellationToken.IsCancellationRequested) return;
+                if (user == null || user.Id == Guid.Empty) continue;
+
+                try
+                {
+                    var expectedGeneration = _userSaveGenerations.GetOrAdd(user.Id, 0L);
+                    var settings = ReadSettingsWithRecovery(GetUserSettingsPath(user.Id)) ?? new MoonfinUserSettings();
+                    var hideWatched = ResolveHideWatchedWithDefaults(settings, "global");
+                    if (hideWatched.HasValue)
+                    {
+                        await SyncNativeHideWatchedAsync(user.Id, hideWatched.Value, expectedGeneration).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug("Skipping the Hide Watched default for user " + user.Id + ": " + ex.Message);
+                }
+            }
+        }
+
+        private MoonfinSettingsProfile? GetAdminDefaultsForProfile(string profileName) =>
+            AdminDefaultsOverrideForTesting != null
+                ? AdminDefaultsOverrideForTesting(profileName)
+                : AdminDefaultsFor(profileName);
+
+        /// <summary>
+        /// The Hide Watched value for a user's single HidePlayedInLatest. When neither the active
+        /// or global profile nor the admin global default sets one, any device that hides watched
+        /// items wins over one that shows them.
+        /// </summary>
+        internal bool? ResolveHideWatchedWithDefaults(MoonfinUserSettings settings, string? activeProfileName)
+        {
+            var profileName = string.IsNullOrEmpty(activeProfileName) ? "global" : activeProfileName!;
+            var resolved = ResolveProfile(settings, profileName);
+            if (resolved.HideWatchedInRecentRows.HasValue) return resolved.HideWatchedInRecentRows;
+            if (settings.Global?.HideWatchedInRecentRows.HasValue == true) return settings.Global.HideWatchedInRecentRows;
+
+            var deviceValue = AnyDeviceHides(
+                settings.Tv?.HideWatchedInRecentRows,
+                settings.Desktop?.HideWatchedInRecentRows,
+                settings.Mobile?.HideWatchedInRecentRows);
+            if (deviceValue.HasValue) return deviceValue;
+
+            var adminDefault = GetAdminDefaultsForProfile(profileName)?.HideWatchedInRecentRows
+                ?? GetAdminDefaultsForProfile("global")?.HideWatchedInRecentRows;
+            if (adminDefault.HasValue) return adminDefault;
+
+            return AnyDeviceHides(
+                GetAdminDefaultsForProfile("tv")?.HideWatchedInRecentRows,
+                GetAdminDefaultsForProfile("desktop")?.HideWatchedInRecentRows,
+                GetAdminDefaultsForProfile("mobile")?.HideWatchedInRecentRows);
+        }
+
+        private static bool? AnyDeviceHides(params bool?[] values) =>
+            values.Any(v => v == true) ? true : values.Any(v => v == false) ? false : (bool?)null;
+
+        private async Task SyncHideWatchedAsync(Guid userId, MoonfinUserSettings settings, string? activeProfileName, long saveGeneration)
+        {
+            var hideWatched = ResolveHideWatchedWithDefaults(settings, activeProfileName);
+            if (hideWatched.HasValue)
+            {
+                await SyncNativeHideWatchedAsync(userId, hideWatched.Value, saveGeneration).ConfigureAwait(false);
+            }
+        }
+
+        private async Task SyncNativeHideWatchedAsync(Guid userId, bool hideWatched, long expectedSaveGeneration)
+        {
+            var syncGate = _nativeSyncLocks.GetOrAdd(userId, _ => new SemaphoreSlim(1, 1));
+            BeforeNativeSyncWaitForTesting?.Invoke(userId);
+            await syncGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_userSaveGenerations.TryGetValue(userId, out var currentGeneration) &&
+                    currentGeneration != expectedSaveGeneration)
+                {
+                    return;
+                }
+
+                var userManager = PluginServices.UserManager;
+                var user = userManager?.GetUserById(userId);
+                if (userManager == null || user == null) return;
+
+                var userConfig = userManager.GetUserConfiguration(user);
+                if (userConfig != null && userConfig.HidePlayedInLatest != hideWatched)
+                {
+                    userConfig.HidePlayedInLatest = hideWatched;
+                    userManager.UpdateConfiguration(user, userConfig);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug("Could not sync HidePlayedInLatest for user " + userId + ": " + ex.Message);
+            }
+            finally
+            {
+                syncGate.Release();
+            }
         }
     }
 }

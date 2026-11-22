@@ -81,11 +81,19 @@ type rommGame struct {
 	Cover, Screenshot string
 	Rom               rommFile
 	// ServedName and ServedSize are what the app gets, the ROM inside a zip
-	// that Moonbase unpacks.
+	// that Moonbase unpacks. A zip made on the way out, by RomM or by Moonbase,
+	// is given the size of the files in it, a little under the zip's own length.
 	ServedName string
 	ServedSize int64
 	Unpack     bool
-	Meta       M
+	// Repack rewrites a PlayStation .7z as a zip, since the players only unpack zips.
+	Repack bool
+	// FileIDs is every file of a game that only plays as a set, like a
+	// PlayStation .cue and its tracks, which RomM sends as one zip.
+	FileIDs []int
+	Meta    M
+	// Added is when RomM first listed the game.
+	Added time.Time
 }
 
 type rommSnapshot struct {
@@ -157,6 +165,7 @@ func parseRommRom(raw json.RawMessage, platforms map[int]rommPlatform) (rommGame
 		Cover       string   `json:"path_cover_large"`
 		Screenshots []string `json:"merged_screenshots"`
 		Summary     string   `json:"summary"`
+		CreatedAt   string   `json:"created_at"`
 		Regions     []string `json:"regions"`
 		Missing     bool     `json:"missing_from_fs"`
 		Files       []struct {
@@ -186,17 +195,33 @@ func parseRommRom(raw json.RawMessage, platforms map[int]rommPlatform) (rommGame
 	}
 	game := rommGame{ID: r.ID, PlatformID: r.PlatformID, Title: firstText(r.Name, r.FsNameNoExt, r.FsName, strconv.Itoa(r.ID)),
 		Cover: strings.TrimSpace(r.Cover)}
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999999999"} {
+		if t, err := time.Parse(layout, r.CreatedAt); err == nil {
+			game.Added = t.UTC()
+			break
+		}
+	}
 	if shots := nonEmpty(r.Screenshots); len(shots) > 0 {
 		game.Screenshot = shots[0]
 	}
 
 	// A RomM game folder often holds extras, so the pick is a file the core
 	// plays, a plain ROM ahead of an archive, then the largest.
-	chosen := -1
+	chosen, sheet := -1, -1
 	chosenArchive := false
+	var setIDs []int
+	var setSize int64
 	for i, f := range r.Files {
 		name := strings.TrimSpace(f.FileName)
-		if name == "" || f.ID <= 0 || f.Category != "" && !strings.EqualFold(f.Category, "game") || !playableForCore(platform.Core, name) {
+		if name == "" || f.ID <= 0 || f.Category != "" && !strings.EqualFold(f.Category, "game") {
+			continue
+		}
+		setIDs = append(setIDs, f.ID)
+		setSize += f.Size
+		if sheet < 0 && isDiscSheet(platform.Core, name) {
+			sheet = i
+		}
+		if !playableForCore(platform.Core, name) {
 			continue
 		}
 		archive := isGameArchive(name)
@@ -204,33 +229,51 @@ func parseRommRom(raw json.RawMessage, platforms map[int]rommPlatform) (rommGame
 			chosen, chosenArchive = i, archive
 		}
 	}
-	if chosen < 0 {
+	// A .cue needs its tracks and an .m3u its discs, so RomM is asked for
+	// every file of the game at once, which it sends as one zip the way its
+	// own player gets it.
+	switch {
+	case sheet >= 0 && len(setIDs) > 1:
+		sheetName := strings.TrimSpace(r.Files[sheet].FileName)
+		name := firstText(r.FsName, strings.TrimSuffix(sheetName, path.Ext(sheetName)))
+		game.Rom = rommFile{ID: r.Files[sheet].ID, FileName: name}
+		game.FileIDs = setIDs
+		game.ServedName, game.ServedSize = name+".zip", setSize
+	case chosen < 0:
 		return rommGame{}, false
-	}
-	picked := r.Files[chosen]
-	game.Rom = rommFile{ID: picked.ID, FileName: strings.TrimSpace(picked.FileName), Size: picked.Size}
-	game.ServedName, game.ServedSize = game.Rom.FileName, game.Rom.Size
-	if chosenArchive && !keepArchiveIntact(platform.Core, game.Rom.FileName) {
-		// Moonbase unpacks it, so the app is told the inner file's name. An
-		// archive RomM hasn't listed is skipped rather than misnamed.
-		member, size := "", int64(-1)
-		for _, m := range picked.Members {
-			name := path.Base(strings.TrimRight(strings.ReplaceAll(strings.TrimSpace(m.Name), `\`, "/"), "/"))
-			if name == "" || name == "." || name == "/" {
-				continue
+	default:
+		picked := r.Files[chosen]
+		game.Rom = rommFile{ID: picked.ID, FileName: strings.TrimSpace(picked.FileName), Size: picked.Size}
+		game.ServedName, game.ServedSize = game.Rom.FileName, game.Rom.Size
+		if chosenArchive && repackForCore(platform.Core, game.Rom.FileName) {
+			var size int64
+			for _, m := range picked.Members {
+				size += m.Size
 			}
-			if isKnownRomExt(name) {
-				member, size = name, m.Size
-				break
+			game.ServedName = strings.TrimSuffix(game.Rom.FileName, path.Ext(game.Rom.FileName)) + ".zip"
+			game.ServedSize, game.Repack = size, true
+		} else if chosenArchive && !keepArchiveIntact(platform.Core, game.Rom.FileName) {
+			// Moonbase unpacks it, so the app is told the inner file's name. An
+			// archive RomM hasn't listed is skipped rather than misnamed.
+			member, size := "", int64(-1)
+			for _, m := range picked.Members {
+				name := path.Base(strings.TrimRight(strings.ReplaceAll(strings.TrimSpace(m.Name), `\`, "/"), "/"))
+				if name == "" || name == "." || name == "/" {
+					continue
+				}
+				if isKnownRomExt(name) {
+					member, size = name, m.Size
+					break
+				}
+				if m.Size > size {
+					member, size = name, m.Size
+				}
 			}
-			if m.Size > size {
-				member, size = name, m.Size
+			if member == "" {
+				return rommGame{}, false
 			}
+			game.ServedName, game.ServedSize, game.Unpack = member, size, true
 		}
-		if member == "" {
-			return rommGame{}, false
-		}
-		game.ServedName, game.ServedSize, game.Unpack = member, size, true
 	}
 
 	meta := M{}
@@ -362,9 +405,30 @@ func (s *rommSnapshot) gameList(system string) []M {
 		if !ok || system != "" && !strings.EqualFold(p.SystemID, system) {
 			continue
 		}
-		out = append(out, M{"id": rommGamePrefix + strconv.Itoa(g.ID), "title": g.Title, "system": p.SystemID, "core": p.Core, "fileName": g.ServedName})
+		out = append(out, rommSummary(g, p))
 	}
 	sortByFold(out, "title")
+	return out
+}
+
+func rommSummary(g rommGame, p rommPlatform) M {
+	return M{"id": rommGamePrefix + strconv.Itoa(g.ID), "title": g.Title, "system": p.SystemID, "core": p.Core, "fileName": g.ServedName}
+}
+
+func (s *rommSnapshot) recentList() []M {
+	out := []M{}
+	for _, g := range s.games {
+		if p, ok := s.platform(g.PlatformID); ok {
+			m := rommSummary(g, p)
+			m["dateAdded"] = g.Added
+			for _, key := range []string{"year", "overview"} {
+				if v, ok := g.Meta[key]; ok {
+					m[key] = v
+				}
+			}
+			out = append(out, m)
+		}
+	}
 	return out
 }
 
@@ -612,8 +676,16 @@ func (g *games) handleRommTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func rommRomPath(game rommGame) string {
+	ids := strconv.Itoa(game.Rom.ID)
+	if len(game.FileIDs) > 0 {
+		parts := make([]string, len(game.FileIDs))
+		for i, id := range game.FileIDs {
+			parts[i] = strconv.Itoa(id)
+		}
+		ids = strings.Join(parts, ",")
+	}
 	return "/api/roms/" + strconv.Itoa(game.ID) + "/content/" + url.PathEscape(game.Rom.FileName) +
-		"?file_ids=" + strconv.Itoa(game.Rom.ID) + "&purpose=play"
+		"?file_ids=" + ids + "&purpose=play"
 }
 
 func (g *games) serveRommRom(w http.ResponseWriter, r *http.Request, set rommSettings, gameID string) {
@@ -622,12 +694,13 @@ func (g *games) serveRommRom(w http.ResponseWriter, r *http.Request, set rommSet
 		http.NotFound(w, r)
 		return
 	}
-	if !game.Unpack {
+	if !game.Unpack && !game.Repack {
 		rommProxy(w, r, set, rommRomPath(game))
 		return
 	}
-	// A zipped ROM is unpacked like one in a folder library. RomM listed what
-	// it holds, so a HEAD needs no download.
+	// A zipped ROM is unpacked and a PlayStation .7z is repacked as a zip, the
+	// same way a folder library does it. RomM listed what it holds, so a HEAD
+	// needs no download.
 	if r.Method == http.MethodHead {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Length", strconv.FormatInt(game.ServedSize, 10))
@@ -657,6 +730,14 @@ func (g *games) serveRommRom(w http.ResponseWriter, r *http.Request, set rommSet
 		w.WriteHeader(http.StatusBadGateway)
 	case status != http.StatusOK:
 		rommFailure(w, status)
+	case game.Repack:
+		entries, done, err := readArchive(tmp.Name())
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer done()
+		serveStoredZip(w, r, entries)
 	default:
 		serveUnpacked(w, r, tmp.Name())
 	}
