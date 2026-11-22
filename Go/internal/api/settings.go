@@ -255,7 +255,7 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	clientID, _ := body["clientid"].(string)
 	cleaned := settings.Clean(incoming)
-	if raw, present := body["livetvsavedfilterchange"]; present {
+	if raw := body["livetvsavedfilterchange"]; raw != nil {
 		change, valid := settings.ParseSavedFilterChange(raw)
 		if !valid {
 			writeError(w, http.StatusBadRequest, "Invalid saved Live TV filter change")
@@ -357,10 +357,7 @@ func (s *Server) resolve(r *http.Request, name string, record bool) (M, error) {
 		return nil, err
 	}
 	cfg := configFrom(stored)
-	defaults := settings.LayerDefaults(cfg.DefaultsFor(name), M{
-		"liveTvSavedFilters": settings.AdminSavedFilters(cfg.Defaults),
-	})
-	resolved := settings.Resolve(env, name, defaults, serverKeys(cfg))
+	resolved := settings.Resolve(env, name, cfg.DefaultsFor(name), serverKeys(cfg))
 	if record && env != nil && settings.RecordBaseline(env, name, resolved) {
 		if err := s.storeEnvelope(r.Context(), id, env); err != nil {
 			logError(r, "record hidden content baseline", err)

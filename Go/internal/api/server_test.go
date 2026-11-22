@@ -364,6 +364,28 @@ func TestGuidePinsUseGlobalDefaultsAndAtomicProfileEdits(t *testing.T) {
 	}
 }
 
+func TestOptionalGuidePinsDoNotChangeOrdinaryProfileUpdates(t *testing.T) {
+	s := newTestServer()
+	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/global",
+		`{"profile":{"theme":"dark"},"liveTvSavedFilterChange":null}`, nil); code != 200 {
+		t.Fatalf("null pin change rejected: %d", code)
+	}
+	_, got := call(t, s, userMain, "GET", "/Moonfin/Settings/Resolved/global", "", nil)
+	if got["theme"] != "dark" {
+		t.Fatalf("ordinary settings were not saved: %v", got)
+	}
+	if _, present := got["liveTvSavedFilters"]; present {
+		t.Fatalf("unset guide pins should be omitted: %v", got)
+	}
+	saveConfig(t, s, map[string]any{
+		"DefaultUserSettings": map[string]any{"liveTvSavedFilters": []any{}},
+	})
+	_, got = call(t, s, userMain, "GET", "/Moonfin/Settings/Resolved/tv", "", nil)
+	if pins, ok := got["liveTvSavedFilters"].([]any); !ok || len(pins) != 0 {
+		t.Fatalf("explicit empty admin pins should be returned: %v", got)
+	}
+}
+
 func TestWatchPartySubtitlesBelongToTheirHost(t *testing.T) {
 	s := newTestServer()
 	const path = "/Moonfin/WatchParty/31366623-4606-488f-b5c0-c837c80d0227"
