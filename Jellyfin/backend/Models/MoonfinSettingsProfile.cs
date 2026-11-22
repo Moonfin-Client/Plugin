@@ -481,6 +481,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("detailShowTechnicalDetails")]
     public bool? DetailShowTechnicalDetails { get; set; }
 
+    [JsonPropertyName("detailShowFullDate")]
+    public bool? DetailShowFullDate { get; set; }
+
     [JsonPropertyName("detailTrailersExternal")]
     public bool? DetailTrailersExternal { get; set; }
 

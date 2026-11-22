@@ -163,6 +163,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaBarContentType")] public string? MediaBarContentType { get; set; }
 
         [JsonPropertyName("detailShowTechnicalDetails")] public bool? DetailShowTechnicalDetails { get; set; }
+        [JsonPropertyName("detailShowFullDate")] public bool? DetailShowFullDate { get; set; }
         [JsonPropertyName("detailTrailersExternal")] public bool? DetailTrailersExternal { get; set; }
         [JsonPropertyName("hideDetailsMediaDescription")] public bool? HideDetailsMediaDescription { get; set; }
         [JsonPropertyName("detailUseSeriesThumbnails")] public bool? DetailUseSeriesThumbnails { get; set; }
