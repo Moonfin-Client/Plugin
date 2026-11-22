@@ -2908,9 +2908,66 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             fillUploadedThemes(view, config.UploadedThemes);
             populateDefaults(view, defaultsState.profiles.global);
             refreshDefaultsActions(view);
+            discoverDefaultGuideGroups(view);
 
             loading.hide();
         }).catch(reportConfigError);
+    }
+
+    // The admin selects the same native channel tags used by the guide.
+    var availableDefaultGuideGroups = [];
+    var defaultGuideGroupsMessage = 'Loading available groups…';
+    var defaultGuideCategories = [['movies', 'Movies'], ['series', 'Series'], ['sports', 'Sports'],
+        ['news', 'News'], ['kids', 'Kids'], ['premiere', 'Premieres']];
+
+    function renderDefaultGuideGroups(view, defaults, preserveSelection) {
+        var host = view.querySelector('#DefaultPinnedGuideGroups');
+        if (!host) return;
+        if (defaultsState.active !== 'global') {
+            host.textContent = 'Shared pins are configured on the Global tab.';
+            return;
+        }
+        var current = preserveSelection
+            ? new Map(Array.from(host.querySelectorAll('input[data-guide-filter]'), function(input) {
+                return [input.getAttribute('data-guide-filter'), input.checked];
+            })) : null;
+        var saved = Array.isArray(defaults.liveTvSavedFilters)
+            ? defaults.liveTvSavedFilters.filter(function(key) { return typeof key === 'string'; })
+            : [];
+        var names = Array.from(new Set(saved.filter(function(key) { return key.startsWith('group:'); })
+            .map(function(key) { return key.slice(6); }).concat(availableDefaultGuideGroups)));
+        function checkbox(key, label) {
+            return '<label style="display:flex;align-items:center;gap:8px;padding:5px 3px;">' +
+                '<input type="checkbox" data-guide-filter="' + esc(key) + '"' +
+                ((current && current.has(key) ? current.get(key) : saved.includes(key)) ? ' checked' : '') + '><span>' + esc(label) + '</span></label>';
+        }
+        host.innerHTML = '<div style="font-weight:600;padding:5px 3px;">Program Categories</div>' +
+            defaultGuideCategories.map(function(category) { return checkbox('category:' + category[0], category[1]); }).join('') +
+            '<div style="font-weight:600;padding:8px 3px 5px;">Channel Groups</div>' +
+            (names.length ? names.map(function(name) { return checkbox('group:' + name, name); }).join('') : defaultGuideGroupsMessage);
+    }
+
+    function discoverDefaultGuideGroups(view) {
+        ApiClient.ajax({
+            type: 'GET',
+            url: ApiClient.getUrl('LiveTv/Channels', {Fields: 'ImageTags,UserData,Tags', EnableTotalRecordCount: false}),
+            dataType: 'json'
+        }).then(function(result) {
+            var names = [];
+            (result.Items || result.items || []).forEach(function(channel) {
+                var tags = (channel.TagItems || channel.tagItems || []).map(function(tag) { return tag.Name || tag.name; })
+                    .filter(function(name) { return typeof name === 'string' && name.trim(); });
+                names.push.apply(names, tags.length ? tags : channel.Tags || channel.tags || []);
+            });
+            availableDefaultGuideGroups = Array.from(new Set(names.filter(function(name) {
+                return typeof name === 'string' && name.trim();
+            }).map(function(name) { return name.trim(); }))).sort();
+            defaultGuideGroupsMessage = 'No channel tags available.';
+        }).catch(function() {
+            defaultGuideGroupsMessage = 'Could not load channel tags. Reload to retry.';
+        }).finally(function() {
+            renderDefaultGuideGroups(view, defaultsState.profiles[defaultsState.active] || {}, true);
+        });
     }
 
     // Fills the User defaults form from one profile's defaults. The same form edits every
@@ -3212,6 +3269,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultAudioSortOption', defaults.audioSortOption, 'Configured sort');
         setSelectValue(view, '#DefaultLiveTvChannelSortBy', defaults.liveTvChannelSortBy, 'Configured sort');
         setSelectValue(view, '#DefaultLiveTvCategoryDisplay', defaults.liveTvCategoryDisplay, 'Configured guide layout');
+        renderDefaultGuideGroups(view, defaults);
         setSelectValue(view, '#DefaultEpgMobileView', defaults.epgMobileView, 'Configured view');
         setSelectValue(view, '#DefaultMediaBarOverlayColor', defaults.mediaBarOverlayColor, 'Configured color');
         bindNullableRangeInput(view, '#DefaultMediaBarOpacity', '%');
@@ -3663,6 +3721,19 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.audioSortOption = view.querySelector('#DefaultAudioSortOption').value || null;
         d.liveTvChannelSortBy = view.querySelector('#DefaultLiveTvChannelSortBy').value || null;
         d.liveTvCategoryDisplay = view.querySelector('#DefaultLiveTvCategoryDisplay').value || null;
+        if (defaultsState.active === 'global') {
+            var inputs = Array.from(view.querySelectorAll('#DefaultPinnedGuideGroups input[data-guide-filter]'));
+            var visiblePins = inputs.map(function(input) { return input.getAttribute('data-guide-filter'); });
+            var selectedPins = inputs.filter(function(input) { return input.checked; })
+                .map(function(input) { return input.getAttribute('data-guide-filter'); });
+            // Keep shortcuts that this server's picker does not display.
+            var existingPins = Array.isArray(d.liveTvSavedFilters) ? d.liveTvSavedFilters : [];
+            var keptPins = existingPins.filter(function(key) {
+                return typeof key === 'string' && (!visiblePins.includes(key) || selectedPins.includes(key));
+            });
+            selectedPins.forEach(function(key) { if (!keptPins.includes(key)) keptPins.push(key); });
+            d.liveTvSavedFilters = keptPins.length ? keptPins : null;
+        }
         d.epgMobileView = view.querySelector('#DefaultEpgMobileView').value || null;
         d.mediaBarOverlayColor = view.querySelector('#DefaultMediaBarOverlayColor').value || null;
         d.mediaBarOpacity = getNullableRangeInput(view, '#DefaultMediaBarOpacity');
@@ -6529,7 +6600,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var who = state.users === 'all' ? 'every user' : joinWithAnd(state.pickedUsers.map(userName));
         var message = reset
             ? 'Reset ' + who + ' to the defaults?\n\nThis permanently erases their current Moonfin settings, device profiles included, and replaces them with the ' + joinWithAnd(on.map(function(e) { return e.label; })) + ' defaults.'
-            : 'Apply the defaults to ' + who + '?\n\nEach default you push replaces that user\'s own choice for that setting. Everything else they chose stays.';
+            : 'Apply the defaults to ' + who + '?\n\nSelected defaults replace the user\'s choices. Pinned groups already update on Save; Merge restores selected groups they hid and keeps their personal additions.';
         if (!window.confirm(message)) return;
 
         var button = view.querySelector('#ApplyDefaultsBtn');

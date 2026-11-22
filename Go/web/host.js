@@ -33,6 +33,7 @@
                 'Studio Logos'
             ],
             hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultLiveTvCategoryDisplay', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
+                'DefaultPinnedGuideGroups',
                 'DefaultShowCalendarButton', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll'],
             unsupported: {
                 'IMDb Charts': 'Not supported on Silo yet. These settings do nothing on Silo for now.',
@@ -81,6 +82,15 @@
         }
     };
     var host = hosts[hostName] || hosts.Silo;
+
+    // The admin form is identical to Jellyfin's. Supply only host-specific guide options.
+    window.moonbaseHost.guideCategories = [['movies', 'Movies'], ['series', 'Series'], ['premiere', 'Premieres']];
+    window.moonbaseHost.loadGuideGroups = function () {
+        if (hostName !== 'Plex') return Promise.resolve([]);
+        // The Plex companion already offers these labels on the Defaults route.
+        return window.ApiClient.getJSON(getUrl('Moonfin/Defaults', { includeLiveTvGroups: 'true' }))
+            .then(function (result) { return result.availableGuideGroups || result.AvailableGuideGroups || []; });
+    };
 
     // The page is served at <base>/admin and the routes live under <base>/Moonfin.
     var base = location.origin + location.pathname.replace(/\/admin\/?$/, '');

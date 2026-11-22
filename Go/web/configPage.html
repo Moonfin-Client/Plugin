@@ -4323,6 +4323,11 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused">Default Pinned Guide Shortcuts</label>
+                                <div id="DefaultPinnedGuideGroups" role="group" aria-label="Default pinned guide shortcuts" style="max-height:210px;overflow:auto;padding:6px;border:1px solid rgba(128,128,128,.25);border-radius:5px;">Loading available groups…</div>
+                                <div class="fieldDescription">Administrator pins update across devices when Moonfin syncs. Users can add or hide shortcuts. Program-category pins appear when Guide Categories is set to Channel Groups and Program Categories.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultEpgMobileView">Guide View (mobile)</label>
                                 <select id="DefaultEpgMobileView" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -5582,8 +5587,9 @@
                     <div class="verticalSection" id="ApplyDefaultsSection">
                         <h3 class="sectionTitle">Apply Defaults To Users</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            New users and users who never synced pick up the defaults on their own once you Save. Use this
-                            to also write them over settings users already have. Applying saves your changes first.
+                            Saved pinned groups update automatically for everyone, preserving personal additions and removals.
+                            Other defaults are inherited until users override them. Apply Defaults pushes settings to
+                            existing users; applying saves your changes first.
                         </div>
 
                         <div class="moonfinActionRow">
@@ -5628,7 +5634,7 @@
                             <div class="moonfinActionBody moonfinModeCards">
                                 <label class="moonfinModeCard">
                                     <input type="radio" name="ApplyMode" value="merge" checked />
-                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Merge</span><span class="moonfinModeDesc">The pushed settings replace the user's own. Everything else they chose stays.</span></span>
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Merge</span><span class="moonfinModeDesc">Selected settings replace the user's choices. Pinned groups already follow saved defaults; Merge restores selected groups users unpinned, keeping personal additions.</span></span>
                                 </label>
                                 <label class="moonfinModeCard is-danger">
                                     <input type="radio" name="ApplyMode" value="reset" />
@@ -11373,9 +11379,66 @@
                     fillUploadedThemes(config.UploadedThemes);
                     populateDefaults(defaultsState.profiles.global);
                     refreshDefaultsActions();
+                    discoverDefaultGuideGroups();
 
                     Dashboard.hideLoadingMsg();
                 });
+
+                // Use the same group identifiers as the guide's saved shortcuts.
+                var availableDefaultGuideGroups = [];
+                var defaultGuideGroupsMessage = 'Loading available groups…';
+                var defaultGuideCategories = (window.moonbaseHost && window.moonbaseHost.guideCategories) ||
+                    [['movies', 'Movies'], ['series', 'Series'], ['sports', 'Sports'],
+                     ['news', 'News'], ['kids', 'Kids'], ['premiere', 'Premieres']];
+
+                function renderDefaultGuideGroups(defaults, preserveSelection) {
+                    var host = document.querySelector('#DefaultPinnedGuideGroups');
+                    if (!host) return;
+                    if (defaultsState.active !== 'global') {
+                        host.textContent = 'Shared pins are configured on the Global tab.';
+                        return;
+                    }
+                    var current = preserveSelection
+                        ? new Map(Array.from(host.querySelectorAll('input[data-guide-filter]'), function(input) {
+                            return [input.getAttribute('data-guide-filter'), input.checked];
+                        })) : null;
+                    var saved = Array.isArray(defaults.liveTvSavedFilters)
+                        ? defaults.liveTvSavedFilters.filter(function(key) { return typeof key === 'string'; })
+                        : [];
+                    var names = Array.from(new Set(saved.filter(function(key) { return key.startsWith('group:'); })
+                        .map(function(key) { return key.slice(6); }).concat(availableDefaultGuideGroups)));
+                    function checkbox(key, label) {
+                        return '<label style="display:flex;align-items:center;gap:8px;padding:5px 3px;">' +
+                            '<input type="checkbox" data-guide-filter="' + esc(key) + '"' +
+                            ((current && current.has(key) ? current.get(key) : saved.includes(key)) ? ' checked' : '') + '><span>' + esc(label) + '</span></label>';
+                    }
+                    host.innerHTML = '<div style="font-weight:600;padding:5px 3px;">Program Categories</div>' +
+                        defaultGuideCategories.map(function(category) { return checkbox('category:' + category[0], category[1]); }).join('') +
+                        '<div style="font-weight:600;padding:8px 3px 5px;">Channel Groups</div>' +
+                        (names.length ? names.map(function(name) { return checkbox('group:' + name, name); }).join('') : defaultGuideGroupsMessage);
+                }
+
+                function discoverDefaultGuideGroups() {
+                    // A host adapter may supply genres using its existing backend route.
+                    var hostLoader = window.moonbaseHost && window.moonbaseHost.loadGuideGroups;
+                    var discovery = hostLoader ? hostLoader() :
+                        ApiClient.ajax({type: 'GET', url: ApiClient.getUrl('Moonfin/LiveTv/ChannelGroups'), dataType: 'json'})
+                            .then(function(result) {
+                                var names = [];
+                                (result.channels || result.Channels || []).forEach(function(channel) {
+                                    names.push.apply(names, channel.groups || channel.Groups || []);
+                                });
+                                return names;
+                            });
+                    discovery.then(function(names) {
+                        availableDefaultGuideGroups = Array.from(new Set(names)).sort();
+                        defaultGuideGroupsMessage = 'No channel groups available.';
+                    }).catch(function() {
+                        defaultGuideGroupsMessage = 'Could not load groups. Reload to retry.';
+                    }).finally(function() {
+                        renderDefaultGuideGroups(defaultsState.profiles[defaultsState.active] || {}, true);
+                    });
+                }
 
                 // Fills the User defaults form from one profile's defaults. The same form edits
                 // every profile, so switching profiles reads the form back first and refills it.
@@ -11678,6 +11741,7 @@
                     setSelectValue('#DefaultAudioSortOption', defaults.audioSortOption, 'Configured sort');
                     setSelectValue('#DefaultLiveTvChannelSortBy', defaults.liveTvChannelSortBy, 'Configured sort');
                     setSelectValue('#DefaultLiveTvCategoryDisplay', defaults.liveTvCategoryDisplay, 'Configured guide layout');
+                    renderDefaultGuideGroups(defaults);
                     setSelectValue('#DefaultEpgMobileView', defaults.epgMobileView, 'Configured view');
                     setSelectValue('#DefaultMediaBarOverlayColor', defaults.mediaBarOverlayColor, 'Configured color');
                     bindNullableRangeInput('#DefaultMediaBarOpacity', '%');
@@ -12700,6 +12764,19 @@
                     ds.audioSortOption = document.querySelector('#DefaultAudioSortOption').value || null;
                     ds.liveTvChannelSortBy = document.querySelector('#DefaultLiveTvChannelSortBy').value || null;
                     ds.liveTvCategoryDisplay = document.querySelector('#DefaultLiveTvCategoryDisplay').value || null;
+                    if (defaultsState.active === 'global') {
+                        var inputs = Array.from(document.querySelectorAll('#DefaultPinnedGuideGroups input[data-guide-filter]'));
+                        var visiblePins = inputs.map(function(input) { return input.getAttribute('data-guide-filter'); });
+                        var selectedPins = inputs.filter(function(input) { return input.checked; })
+                            .map(function(input) { return input.getAttribute('data-guide-filter'); });
+                        // Keep shortcuts that this server's picker does not display.
+                        var existingPins = Array.isArray(ds.liveTvSavedFilters) ? ds.liveTvSavedFilters : [];
+                        var keptPins = existingPins.filter(function(key) {
+                            return typeof key === 'string' && (!visiblePins.includes(key) || selectedPins.includes(key));
+                        });
+                        selectedPins.forEach(function(key) { if (!keptPins.includes(key)) keptPins.push(key); });
+                        ds.liveTvSavedFilters = keptPins.length ? keptPins : null;
+                    }
                     ds.epgMobileView = document.querySelector('#DefaultEpgMobileView').value || null;
                     ds.mediaBarOverlayColor = document.querySelector('#DefaultMediaBarOverlayColor').value || null;
                     ds.mediaBarOpacity = getNullableRangeInput('#DefaultMediaBarOpacity');
@@ -12991,7 +13068,7 @@
                     var who = state.users === 'all' ? 'every user' : joinWithAnd(state.pickedUsers.map(userName));
                     var message = reset
                         ? 'Reset ' + who + ' to the defaults?\n\nThis permanently erases their current Moonfin settings, device profiles included, and replaces them with the ' + joinWithAnd(on.map(function(e) { return e.label; })) + ' defaults.'
-                        : 'Apply the defaults to ' + who + '?\n\nEach default you push replaces that user\'s own choice for that setting. Everything else they chose stays.';
+                        : 'Apply the defaults to ' + who + '?\n\nSelected defaults replace the user\'s choices. Pinned groups already update on Save; Merge restores selected groups they hid and keeps their personal additions.';
                     if (!window.confirm(message)) return;
 
                     var button = document.querySelector('#ApplyDefaultsBtn');

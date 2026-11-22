@@ -306,6 +306,64 @@ func TestDeviceDefaults(t *testing.T) {
 	}
 }
 
+// Exercise the existing pin endpoint, global-only inheritance and admin actions together.
+func TestGuidePinsUseGlobalDefaultsAndAtomicProfileEdits(t *testing.T) {
+	s := newTestServer()
+	saveConfig(t, s, map[string]any{
+		"DefaultUserSettings": map[string]any{
+			"liveTvSavedFilters": []any{"group:Sports", "group:News"}, "liveTvCategoryDisplay": "groups",
+		},
+		"DefaultDeviceSettings": map[string]any{"tv": map[string]any{
+			"liveTvSavedFilters": []any{"group:TV"}, "liveTvCategoryDisplay": "programmes",
+		}},
+	})
+	check := func(want ...any) map[string]any {
+		_, got := call(t, s, userMain, "GET", "/Moonfin/Settings/Resolved/tv", "", nil)
+		if !reflect.DeepEqual(got["liveTvSavedFilters"], want) {
+			t.Fatalf("resolved pins = %v, want %v", got["liveTvSavedFilters"], want)
+		}
+		return got
+	}
+	_, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", map[string]any{"profile": "tv"})
+	if !reflect.DeepEqual(ping["defaultSettings"].(map[string]any)["liveTvSavedFilters"], []any{"group:Sports", "group:News"}) {
+		t.Fatalf("device pin leaked into sign-in defaults: %v", ping)
+	}
+	if got := check("group:Sports", "group:News"); got["liveTvCategoryDisplay"] != "programmes" {
+		t.Fatalf("category display defaults: %v", got)
+	}
+	for _, change := range []string{
+		`{"action":"add","filter":"group:Movies"}`,
+		`{"action":"remove","filter":"group:Sports"}`,
+	} {
+		call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/tv",
+			`{"profile":{},"liveTvSavedFilterChange":`+change+`}`, nil)
+	}
+	call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/mobile", `{"profile":{"liveTvSavedFilters":[]}}`, nil)
+	check("group:News", "group:Movies")
+	for _, profile := range []string{"tv", "global"} {
+		body := `{"profiles":["` + profile + `"],"keys":["liveTvSavedFilters"],"userIds":["3~30"]}`
+		if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults", body, nil); code != 200 {
+			t.Fatalf("apply %s defaults: %d", profile, code)
+		}
+		if profile == "tv" {
+			check("group:News", "group:Movies")
+		}
+	}
+	check("group:Sports", "group:News", "group:Movies")
+	call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults",
+		`{"overwrite":true,"profiles":["global"],"userIds":["3~30"]}`, nil)
+	check("group:Sports", "group:News")
+	call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/tv",
+		`{"profile":{"liveTvCategoryDisplay":"both"}}`, nil)
+	if got := check("group:Sports", "group:News"); got["liveTvCategoryDisplay"] != "both" {
+		t.Fatalf("user category display: %v", got)
+	}
+	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/tv",
+		`{"profile":{},"liveTvSavedFilterChange":{"action":"initializeIfAbsent","filters":[42]}}`, nil); code != 400 {
+		t.Fatalf("invalid pin import accepted: %d", code)
+	}
+}
+
 func TestWatchPartySubtitlesBelongToTheirHost(t *testing.T) {
 	s := newTestServer()
 	const path = "/Moonfin/WatchParty/31366623-4606-488f-b5c0-c837c80d0227"
@@ -608,6 +666,7 @@ func TestAdminPageServesTheJellyfinPage(t *testing.T) {
 	s := newTestServer()
 	page := string(readAll(t, serve(context.Background(), s, adminMain, "GET", "/admin", "", nil)))
 	for _, want := range []string{`<script src="admin-assets/host.js?v=1.2.3">`, `id="MoonfinConfigPage"`, "MoonfinConfig.pluginUniqueId",
+		`id="DefaultLiveTvCategoryDisplay"`,
 		`window.moonbaseHost = {"name":"Silo"};`, `href="/admin/plugins" title="Back to Silo"`, "Moonbase 1.2.3 for Silo"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page is missing %q", want)
