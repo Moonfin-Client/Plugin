@@ -393,6 +393,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("mediaSegmentAutoHide")] public string? MediaSegmentAutoHide { get; set; }
         [JsonPropertyName("mediaTypeBadgeBehavior")] public string? MediaTypeBadgeBehavior { get; set; }
         [JsonPropertyName("personalRatingStyle")] public string? PersonalRatingStyle { get; set; }
+        [JsonPropertyName("personalRatingIntervals")] public int? PersonalRatingIntervals { get; set; }
         [JsonPropertyName("epgMobileView")] public string? EpgMobileView { get; set; }
         [JsonPropertyName("sinceYouWatched1Enabled")] public bool? SinceYouWatched1Enabled { get; set; }
         [JsonPropertyName("sinceYouWatched2Enabled")] public bool? SinceYouWatched2Enabled { get; set; }

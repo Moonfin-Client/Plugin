@@ -4429,6 +4429,16 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultPersonalRatingIntervals">Rating Intervals</label>
+                                <select id="DefaultPersonalRatingIntervals" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="6">Whole stars (0–5, Stars only)</option>
+                                    <option value="11">Half stars / Whole numbers (0–10)</option>
+                                    <option value="21">Quarter stars / 0.5 steps (0–10)</option>
+                                    <option value="41">0.25 steps (0–10, Numeric only)</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDetailsScreenBlur">Details Screen Blur</label>
                                 <div style="display:flex; align-items:center; gap: 12px; margin-top: 6px; max-width: 440px;">
                                     <select id="DefaultDetailsScreenBlur_Set" is="emby-select" style="width: auto; min-width: 195px;">
@@ -11740,6 +11750,7 @@
                     setNullableBoolSelect('#DefaultRadarrCalendarHideDownloaded', defaults.radarrCalendarHideDownloaded);
                     setNullableBoolSelect('#DefaultSonarrCalendarHideDownloaded', defaults.sonarrCalendarHideDownloaded);
                     setSelectValue('#DefaultPersonalRatingStyle', defaults.personalRatingStyle, 'Configured style');
+                    setSelectValue('#DefaultPersonalRatingIntervals', defaults.personalRatingIntervals == null ? null : String(defaults.personalRatingIntervals), 'Configured intervals');
                     setSelectValue('#DefaultPersonPageSortOption', defaults.personPageSortOption, 'Configured sort');
                     setSelectValue('#DefaultShuffleContentType', defaults.shuffleContentType, 'Configured content');
                     setSelectValue('#DefaultHomeRowsImageType', defaults.homeRowsImageType, 'Configured image type');
@@ -12770,6 +12781,7 @@
                     ds.radarrCalendarHideDownloaded = getNullableBoolSelect('#DefaultRadarrCalendarHideDownloaded');
                     ds.sonarrCalendarHideDownloaded = getNullableBoolSelect('#DefaultSonarrCalendarHideDownloaded');
                     ds.personalRatingStyle = document.querySelector('#DefaultPersonalRatingStyle').value || null;
+                    ds.personalRatingIntervals = getNullableIntInput('#DefaultPersonalRatingIntervals');
                     ds.personPageSortOption = document.querySelector('#DefaultPersonPageSortOption').value || null;
                     ds.shuffleContentType = document.querySelector('#DefaultShuffleContentType').value || null;
                     ds.homeRowsImageType = document.querySelector('#DefaultHomeRowsImageType').value || null;
