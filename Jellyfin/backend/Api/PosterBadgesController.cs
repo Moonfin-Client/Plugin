@@ -110,10 +110,11 @@ public class PosterBadgesController : ControllerBase
             try
             {
                 var file = HasRatingOnly(item) ? (null, null) : FileFor(item);
-                // Unread tracks would pass every "no such track" rule, so the item gets no labels rather than wrong ones.
-                if (file.Streams == null && !HasRatingOnly(item))
+                // Unread tracks would pass every "no such track" rule, so an unread file counts as
+                // none: only labels from the rating can show.
+                if (file.Streams == null)
                 {
-                    continue;
+                    file = (null, null);
                 }
 
                 var rating = RatingOf(item);
@@ -210,8 +211,7 @@ public class PosterBadgesController : ControllerBase
 
         try
         {
-            var score = RatingScoreMethod.Invoke(_localization, new object?[] { text, null });
-            return score is int level ? level : score?.GetType().GetProperty("Score")?.GetValue(score) as int?;
+            return AgeFrom(RatingScoreMethod.Invoke(_localization, new object?[] { text, null }));
         }
         catch (Exception ex)
         {
@@ -219,6 +219,10 @@ public class PosterBadgesController : ControllerBase
             return null;
         }
     }
+
+    /// <summary>The age in either answer: 10.10's number, or 10.11's score.</summary>
+    private static int? AgeFrom(object? score) =>
+        score is int level ? level : score?.GetType().GetProperty("Score")?.GetValue(score) as int?;
 
     /// <summary>How long one request for up to 200 items may spend matching.</summary>
     private static readonly TimeSpan RequestBudget = TimeSpan.FromSeconds(3);

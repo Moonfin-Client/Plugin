@@ -368,7 +368,8 @@ public static class PosterBadgeMatcher
                     && rule.Conditions.TrueForAll(condition => Holds(condition, path, tracks, rating));
             }
 
-            if (holds)
+            // The rating's text is only known now, and may match another label's.
+            if (holds && (!IsRating(rule) || shown.Add(label)))
             {
                 shown.Add(key);
                 badges.Add(Resolve(rule, label, defaults ?? new PosterBadgeDefaults(), icon, color));

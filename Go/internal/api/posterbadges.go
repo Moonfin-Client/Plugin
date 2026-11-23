@@ -155,9 +155,10 @@ func (s *Server) handleBadgeItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for id, file := range files {
-		// Unread tracks would pass every "no such track" rule, so the item gets no labels rather than wrong ones.
-		if file.Tracks == nil && !file.NoFile {
-			continue
+		// Unread tracks would pass every "no such track" rule, so an unread file counts as
+		// none: only labels from the rating can show.
+		if file.Tracks == nil {
+			file.Path, file.NoFile = "", true
 		}
 		if badges := matchBadges(rules, file, defaults); len(badges) > 0 {
 			items[id] = badges

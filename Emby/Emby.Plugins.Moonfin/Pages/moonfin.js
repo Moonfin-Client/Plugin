@@ -4646,7 +4646,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 Enabled: posterBadgeValue(rule, 'Enabled') !== false,
                 Preset: posterBadgeValue(rule, 'Preset') || '',
                 RatingCountry: posterBadgeValue(rule, 'RatingCountry') || '',
-                AgeColors: (posterBadgeValue(rule, 'AgeColors') || []).map(function(color) { return labelHex(color, ''); }).filter(Boolean),
+                // One colour per band, so a bad one takes the label's colour, as on the server, and the rest keep their place.
+                AgeColors: (posterBadgeValue(rule, 'AgeColors') || []).map(function(color) { return labelHex(color, labelHex(posterBadgeValue(rule, 'Color'), POSTER_BADGE_DEFAULT_COLOR)); }),
                 AgeIcons: (posterBadgeValue(rule, 'AgeIcons') || []).slice(),
                 Style: labelChoice('Style', posterBadgeValue(rule, 'Style'), ''),
                 Shape: labelChoice('Shape', posterBadgeValue(rule, 'Shape'), ''),
@@ -5626,7 +5627,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 rule.Conditions.splice(Number(button.closest('[data-condition]').getAttribute('data-condition')), 1);
             } else if (action === 'oneColor') {
                 rule.AgeColors = [];
-            } else if (action === 'ageColors') {
+            } else if (action === 'ageColors' && rule.AgeColors.length !== LABEL_AGE_BANDS.length) {
                 rule.AgeColors = LABEL_AGE_BANDS.map(function(band) { return band[2]; });
                 rule.AgeIcons = LABEL_AGE_BANDS.map(function() { return ''; });
             } else {

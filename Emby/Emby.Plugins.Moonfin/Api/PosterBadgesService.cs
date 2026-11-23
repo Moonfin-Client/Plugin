@@ -104,10 +104,11 @@ namespace Emby.Plugins.Moonfin.Api
                 try
                 {
                     var file = HasRatingOnly(item) ? (null, null) : FileFor(item);
-                    // Unread tracks would pass every "no such track" rule, so the item gets no labels rather than wrong ones.
-                    if (file.Streams == null && !HasRatingOnly(item))
+                    // Unread tracks would pass every "no such track" rule, so an unread file counts as
+                    // none: only labels from the rating can show.
+                    if (file.Streams == null)
                     {
-                        continue;
+                        file = (null, null);
                     }
 
                     var badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults, RatingOf(item));

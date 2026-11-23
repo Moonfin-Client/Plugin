@@ -146,6 +146,19 @@ public class PosterBadgeRatingTests
     }
 
     [Fact]
+    public void TheSameTextShowsOnce()
+    {
+        var custom = new PosterBadgeRule
+        {
+            Label = "PG-13",
+            Conditions = { new PosterBadgeCondition { Field = "Rating", Operator = PosterBadgeMatcher.OneOf, Value = "PG-13" } },
+        };
+
+        Assert.Single(PosterBadgeMatcher.Match(new[] { RatingRule(), custom }, null, null, rating: "PG-13"));
+        Assert.Single(PosterBadgeMatcher.Match(new[] { custom, RatingRule() }, null, null, rating: "PG-13"));
+    }
+
+    [Fact]
     public void AnUnratedItemPassesAnUnless()
     {
         var rule = new PosterBadgeRule

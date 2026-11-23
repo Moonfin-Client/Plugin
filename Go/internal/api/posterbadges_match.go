@@ -61,16 +61,22 @@ func matchBadges(rules []badgeRule, file BadgeFile, d badgeDefaults) []posterBad
 		if !ruleHolds(rule, file, &presets) {
 			continue
 		}
-		shown[key] = true
 		badge := resolveBadge(rule, d)
 		if isRatingRule(rule) {
 			age := ageInText(file.Rating)
 			icon := cmp.Or(knownIcon(forAge(rule.AgeIcons, age)), badge.Icon)
 			badge.Label, badge.Icon = showRating(file.Rating, rule.RatingCountry, icon)
+			// The rating's text is only known now, and may match another label's.
+			text := strings.ToLower(badge.Label)
+			if shown[text] {
+				continue
+			}
+			shown[text] = true
 			if color := badgeHexOf(forAge(rule.AgeColors, age)); color != "" {
 				badge.Color = color
 			}
 		}
+		shown[key] = true
 		badges = append(badges, badge)
 	}
 	return badges

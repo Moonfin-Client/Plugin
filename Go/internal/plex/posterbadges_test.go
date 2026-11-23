@@ -101,6 +101,29 @@ func TestSeasonsAndEpisodesUseTheShowsRating(t *testing.T) {
 	}
 }
 
+func TestAFailedShowLookupKeepsTheFiles(t *testing.T) {
+	pms := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/library/metadata/30" {
+			http.Error(w, "down", http.StatusInternalServerError)
+			return
+		}
+		io.WriteString(w, `{"MediaContainer":{"Metadata":[{"ratingKey":"32","type":"episode","title":"Pilot","grandparentRatingKey":"30","Media":[{"Part":[{"file":"/tv/Pilot.mkv","Stream":[]}]}]}]}}`)
+	}))
+	t.Cleanup(pms.Close)
+	c, err := New(Config{PMS: pms.URL, DataDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := c.BadgeFiles(context.Background(), api.Identity{Token: "viewer"}, []string{"32"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file, ok := files["32"]; !ok || file.Path != "/tv/Pilot.mkv" || file.Rating != "" {
+		t.Errorf("files %+v", files)
+	}
+}
+
 func TestVideoRangeType(t *testing.T) {
 	compat := func(n int) *int { return &n }
 	cases := []struct {

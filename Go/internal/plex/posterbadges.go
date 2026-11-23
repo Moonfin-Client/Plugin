@@ -80,10 +80,8 @@ func (c *Companion) BadgeFiles(ctx context.Context, caller api.Identity, ids []s
 		}
 	}
 	if len(missing) > 0 {
-		parents, err := c.badgeItems(ctx, caller, missing)
-		if err != nil {
-			return nil, err
-		}
+		// The show's rating is only a fallback, so a failed lookup leaves it empty.
+		parents, _ := c.badgeItems(ctx, caller, missing)
 		shows := map[string]string{}
 		for _, show := range parents {
 			shows[show.RatingKey] = show.ContentRating
