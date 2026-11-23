@@ -569,6 +569,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: ['AnimeMarkersEnabled', 'AnimeAudioMarkersEnabled'], fields: ['AnimeMarkerLibraryPicker', 'AnimeAudioTrustSelectedLibraries', 'AnimeMarkerPlacement', 'AnimeMarkerDiagBtn', 'AnimeMarkerPreviewName', 'AnimeMarkerVerboseLogging', 'AnimeMarkerLogBtn'] },
         { parent: 'GamesEnabled', fields: ['GameCoresStatus', 'GameCoresFile', 'GameLibraryPicker', 'GamesRommUrl', 'GamesRommToken', 'GamesRommLibraryId', 'GamesRommTestBtn'] },
         { parent: 'DefaultNavbarPosition', off: ['top', 'left'], fields: ['DefaultBottomNavbarStyle', 'DefaultBottomNavbarTab1'] },
+        { parent: 'DefaultNavbarPosition', off: ['left', 'bottom'], fields: ['DefaultTopNavbarStyle'] },
+        { parent: 'DefaultNavbarPosition', off: ['top', 'bottom'], fields: ['DefaultSidebarStyle'] },
         { parent: 'DefaultNavbarPosition', off: ['bottom'], fields: ['DefaultNavbarAlwaysExpanded'] },
         { parent: 'DefaultShowShuffleButton', fields: ['DefaultShuffleContentType'] },
         { parent: 'DefaultShowSeerrAvailabilityBadges', fields: ['DefaultSeerrBadgeStyle'] },
@@ -2989,6 +2991,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableRangeInput(view, '#DefaultNavbarOpacity', defaults.navbarOpacity, '%');
         setNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded', defaults.navbarAlwaysExpanded);
         setSelectValue(view, '#DefaultBottomNavbarStyle', defaults.bottomNavbarStyle, 'Configured style');
+        setSelectValue(view, '#DefaultTopNavbarStyle', defaults.topNavbarStyle, 'Configured style');
+        setSelectValue(view, '#DefaultSidebarStyle', defaults.sidebarStyle, 'Configured style');
         setBottomNavbarTabSelects(view, defaults.bottomNavbarTabs);
         setNullableBoolSelect(view, '#DefaultEnableFolderView', defaults.enableFolderView);
         setNullableBoolSelect(view, '#DefaultShowSeerrButton', defaults.showSeerrButton);
@@ -3441,6 +3445,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.navbarOpacity = getNullableRangeInput(view, '#DefaultNavbarOpacity');
         d.navbarAlwaysExpanded = getNullableBoolSelect(view, '#DefaultNavbarAlwaysExpanded');
         d.bottomNavbarStyle = view.querySelector('#DefaultBottomNavbarStyle').value || null;
+        d.topNavbarStyle = view.querySelector('#DefaultTopNavbarStyle').value || null;
+        d.sidebarStyle = view.querySelector('#DefaultSidebarStyle').value || null;
         d.bottomNavbarTabs = getBottomNavbarTabSelects(view);
         d.enableFolderView = getNullableBoolSelect(view, '#DefaultEnableFolderView');
         d.showSeerrButton = getNullableBoolSelect(view, '#DefaultShowSeerrButton');
