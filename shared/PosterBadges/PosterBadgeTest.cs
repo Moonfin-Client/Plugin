@@ -41,7 +41,7 @@ public static class PosterBadgeTest
         "VideoRangeType", "VideoRange", "ExtendedVideoType", "IsDefault", "IsForced",
     };
 
-    public static List<PosterBadgeRuleResult> Explain(IReadOnlyList<PosterBadgeRule>? rules, string? path, IEnumerable? streams)
+    public static List<PosterBadgeRuleResult> Explain(IReadOnlyList<PosterBadgeRule>? rules, string? path, IEnumerable? streams, string? rating = null)
     {
         var results = new List<PosterBadgeRuleResult>();
         if (rules == null)
@@ -65,7 +65,11 @@ public static class PosterBadgeTest
             }
 
             bool holds;
-            if (!string.IsNullOrWhiteSpace(rule.Preset))
+            if (PosterBadgeMatcher.IsRating(rule))
+            {
+                holds = PosterBadgeRating.Clean(rating) != null;
+            }
+            else if (!string.IsNullOrWhiteSpace(rule.Preset))
             {
                 holds = presets.Contains(rule.Preset!.Trim());
             }
@@ -73,7 +77,7 @@ public static class PosterBadgeTest
             {
                 foreach (var condition in rule.Conditions ?? new List<PosterBadgeCondition>())
                 {
-                    result.Conditions.Add(PosterBadgeMatcher.Holds(condition, path, tracks));
+                    result.Conditions.Add(PosterBadgeMatcher.Holds(condition, path, tracks, rating));
                 }
 
                 holds = result.Conditions.Count > 0 && result.Conditions.TrueForAll(passed => passed);

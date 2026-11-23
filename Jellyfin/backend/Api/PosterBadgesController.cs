@@ -3,7 +3,9 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Net.Mime;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -25,15 +27,18 @@ public class PosterBadgesController : ControllerBase
 {
     private readonly ILibraryManager _libraryManager;
     private readonly IMediaSourceManager _mediaSourceManager;
+    private readonly ILocalizationManager _localization;
     private readonly ILogger<PosterBadgesController> _logger;
 
     public PosterBadgesController(
         ILibraryManager libraryManager,
         IMediaSourceManager mediaSourceManager,
+        ILocalizationManager localization,
         ILogger<PosterBadgesController> logger)
     {
         _libraryManager = libraryManager;
         _mediaSourceManager = mediaSourceManager;
+        _localization = localization;
         _logger = logger;
     }
 
@@ -95,23 +100,24 @@ public class PosterBadgesController : ControllerBase
                 continue;
             }
 
-            // A series, season or collection has no file of its own to read.
+            // A collection has nothing to label. A series or season has no file, only a rating.
             var item = _libraryManager.GetItemById(itemGuid);
-            if (item == null || item is Folder || !UserReflection.IsVisibleTo(item, viewer))
+            if (item == null || (item is Folder && !HasRatingOnly(item)) || !UserReflection.IsVisibleTo(item, viewer))
             {
                 continue;
             }
 
             try
             {
-                var file = FileFor(item);
+                var file = HasRatingOnly(item) ? (null, null) : FileFor(item);
                 // Unread tracks would pass every "no such track" rule, so the item gets no labels rather than wrong ones.
-                if (file.Streams == null)
+                if (file.Streams == null && !HasRatingOnly(item))
                 {
                     continue;
                 }
 
-                var badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults);
+                var rating = RatingOf(item);
+                var badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults, rating, AgeOf(rating));
 
                 if (badges.Count > 0)
                 {
@@ -142,26 +148,76 @@ public class PosterBadgesController : ControllerBase
             return BadRequest(new { error = "Pick a movie or an episode." });
         }
 
-        // A series, season or collection has no file of its own to read.
+        // A collection has nothing to label.
         var item = _libraryManager.GetItemById(itemGuid);
-        if (item == null || item is Folder)
+        if (item == null || (item is Folder && !HasRatingOnly(item)))
         {
-            return BadRequest(new { error = "Pick a movie or an episode." });
+            return BadRequest(new { error = "Pick a movie, an episode or a series." });
         }
 
         var rules = request.Rules ?? new List<PosterBadgeRule>();
         var defaults = request.Defaults ?? new PosterBadgeDefaults();
-        var file = FileFor(item);
+        var file = HasRatingOnly(item) ? (null, null) : FileFor(item);
+        var rating = RatingOf(item);
+        var age = AgeOf(rating) ?? PosterBadgeRating.AgeInText(rating);
 
         return Ok(new
         {
             name = item.Name,
             path = file.Path,
+            rating = PosterBadgeRating.Clean(rating),
+            age,
             tracks = PosterBadgeTest.DescribeTracks(file.Streams),
-            results = PosterBadgeTest.Explain(rules, file.Path, file.Streams).Select(r => new { index = r.Index, outcome = r.Outcome, conditions = r.Conditions }),
-            badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults).Select(b => b.ToJson()),
+            results = PosterBadgeTest.Explain(rules, file.Path, file.Streams, rating).Select(r => new { index = r.Index, outcome = r.Outcome, conditions = r.Conditions }),
+            badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults, rating, age).Select(b => b.ToJson()),
             maxPerCorner = Math.Max(1, defaults.MaxPerCorner),
         });
+    }
+
+    /// <summary>A series or season: no file of its own, but a rating.</summary>
+    private static bool HasRatingOnly(BaseItem item) => item is Series || item is Season;
+
+    /// <summary>The item's own age rating, else its series'. Episodes and seasons seldom have one.</summary>
+    private static string? RatingOf(BaseItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.OfficialRating))
+        {
+            return item.OfficialRating;
+        }
+
+        return item is Episode episode ? episode.Series?.OfficialRating
+            : item is Season season ? season.Series?.OfficialRating
+            : null;
+    }
+
+    /// <summary>
+    /// Jellyfin's own reading of a rating, from the tables it ships for each country, so R
+    /// and TV-MA get an age though their text has no number. 10.11 renamed GetRatingLevel,
+    /// which answered a number, to GetRatingScore, which answers a score and a sub-score.
+    /// </summary>
+    private static readonly MethodInfo? RatingScoreMethod =
+        typeof(ILocalizationManager).GetMethod("GetRatingScore", new[] { typeof(string), typeof(string) })
+        ?? typeof(ILocalizationManager).GetMethod("GetRatingLevel", new[] { typeof(string), typeof(string) });
+
+    /// <summary>The age Jellyfin gives the rating, or null when it doesnt know it.</summary>
+    private int? AgeOf(string? rating)
+    {
+        var text = PosterBadgeRating.Clean(rating);
+        if (text == null || RatingScoreMethod == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var score = RatingScoreMethod.Invoke(_localization, new object?[] { text, null });
+            return score is int level ? level : score?.GetType().GetProperty("Score")?.GetValue(score) as int?;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Poster badges: no age for rating {Rating}", text);
+            return null;
+        }
     }
 
     /// <summary>How long one request for up to 200 items may spend matching.</summary>

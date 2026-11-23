@@ -38,6 +38,7 @@ var (
 var badgeIcons = append([]string{
 	"contrast", "hdr_on", "high_quality", "movie", "theaters", "aspect_ratio", "surround_sound",
 	"speaker", "graphic_eq", "album", "translate", "subtitles", "record_voice_over", "star", "check_circle",
+	"person", "family_restroom", "child_care", "escalator_warning", "18_up_rating", "warning",
 }, func() []string {
 	flags := make([]string, len(badgeFlagCodes))
 	for i, code := range badgeFlagCodes {
@@ -61,13 +62,25 @@ func matchBadges(rules []badgeRule, file BadgeFile, d badgeDefaults) []posterBad
 			continue
 		}
 		shown[key] = true
-		badges = append(badges, resolveBadge(rule, d))
+		badge := resolveBadge(rule, d)
+		if isRatingRule(rule) {
+			age := ageInText(file.Rating)
+			icon := cmp.Or(knownIcon(forAge(rule.AgeIcons, age)), badge.Icon)
+			badge.Label, badge.Icon = showRating(file.Rating, rule.RatingCountry, icon)
+			if color := badgeHexOf(forAge(rule.AgeColors, age)); color != "" {
+				badge.Color = color
+			}
+		}
+		badges = append(badges, badge)
 	}
 	return badges
 }
 
 // ruleHolds checks a rule, working out the built-in labels once per file.
 func ruleHolds(rule badgeRule, file BadgeFile, presets *map[string]bool) bool {
+	if isRatingRule(rule) {
+		return cleanRating(file.Rating) != ""
+	}
 	if preset := strings.TrimSpace(rule.Preset); preset != "" {
 		if *presets == nil {
 			*presets = detectPresets(file.Path, file.Tracks)
@@ -76,7 +89,7 @@ func ruleHolds(rule badgeRule, file BadgeFile, presets *map[string]bool) bool {
 	}
 	// A rule with no conditions would label every poster on the server.
 	return len(rule.Conditions) > 0 && !slices.ContainsFunc(rule.Conditions, func(c badgeCondition) bool {
-		return !conditionHolds(c, file.Path, file.Tracks)
+		return !conditionHolds(c, file)
 	})
 }
 
@@ -99,7 +112,7 @@ func explainBadges(rules []badgeRule, file BadgeFile) []badgeResult {
 			holds = ruleHolds(rule, file, &presets)
 		} else {
 			for _, c := range rule.Conditions {
-				res.conditions = append(res.conditions, conditionHolds(c, file.Path, file.Tracks))
+				res.conditions = append(res.conditions, conditionHolds(c, file))
 			}
 			holds = len(res.conditions) > 0 && !slices.Contains(res.conditions, false)
 		}
@@ -141,6 +154,10 @@ func describeTracks(tracks []BadgeTrack) []M {
 // shownKey is what makes two labels the same: the text, or the icon for a
 // label without any. Empty for a label with neither.
 func shownKey(rule badgeRule) string {
+	// Its text comes from the item, so two age rating rules are alternatives.
+	if isRatingRule(rule) {
+		return "preset:" + ratingPreset
+	}
 	if label := strings.TrimSpace(rule.Label); label != "" {
 		return label
 	}
@@ -150,8 +167,10 @@ func shownKey(rule badgeRule) string {
 	return ""
 }
 
-func iconOf(rule badgeRule) string {
-	icon := strings.TrimSpace(rule.Icon)
+func iconOf(rule badgeRule) string { return knownIcon(rule.Icon) }
+
+func knownIcon(name string) string {
+	icon := strings.TrimSpace(name)
 	for _, known := range badgeIcons {
 		if strings.EqualFold(known, icon) {
 			return known
@@ -247,7 +266,7 @@ var badgeTrackTypes = []string{"Audio", "Video", "Subtitle", "EmbeddedImage", "D
 // conditionHolds checks one condition. A track condition looks at every
 // track of its type: "any" holds when one passes, "none" when none does and
 // "every" when there is at least one and all of them pass.
-func conditionHolds(c badgeCondition, path string, tracks []BadgeTrack) bool {
+func conditionHolds(c badgeCondition, file BadgeFile) bool {
 	field := strings.TrimSpace(c.Field)
 	op := strings.TrimSpace(c.Operator)
 	match := strings.TrimSpace(c.Match)
@@ -260,7 +279,7 @@ func conditionHolds(c badgeCondition, path string, tracks []BadgeTrack) bool {
 	if field == "" || !badgeValueUsable(op, c.Value) {
 		return false
 	}
-	values, ok := conditionValues(field, path, tracks)
+	values, ok := conditionValues(field, file)
 	if !ok {
 		return false
 	}
@@ -280,12 +299,18 @@ func conditionHolds(c badgeCondition, path string, tracks []BadgeTrack) bool {
 	return passing > 0
 }
 
-// conditionValues is what a condition looks at: the path, how many tracks of
-// a type there are, or one property of each. False for a field naming nothing,
-// and for tracks that were never read.
-func conditionValues(field, path string, tracks []BadgeTrack) ([]string, bool) {
+// conditionValues is what a condition looks at: the path, the age rating, how
+// many tracks of a type there are, or one property of each. False for a field
+// naming nothing, for tracks that were never read, and for the path of a
+// series, so "unless the path says REMUX" doesn't hold there.
+func conditionValues(field string, file BadgeFile) ([]string, bool) {
+	tracks := file.Tracks
 	if strings.EqualFold(field, "Path") {
-		return []string{path}, true
+		return []string{file.Path}, !file.NoFile
+	}
+	// An item with no rating has an empty one, so "unless the rating is 18" holds.
+	if strings.EqualFold(field, "Rating") {
+		return []string{cleanRating(file.Rating)}, true
 	}
 	trackType, property, found := strings.Cut(field, ".")
 	if !found || trackType == "" || property == "" || tracks == nil || !slices.ContainsFunc(badgeTrackTypes, func(t string) bool { return strings.EqualFold(t, trackType) }) {
@@ -475,6 +500,103 @@ var badgePresets = []badgePreset{
 
 	{"remux", "REMUX", "release", "#BE123C", "\"REMUX\" in the file path."},
 	{"imax", "IMAX", "release", "#0369A1", "\"IMAX\" in the file path, but not \"NON-IMAX\"."},
+
+	// Not detected from the file: the matcher reads it from the item.
+	{ratingPreset, "Age rating", "rating", "#4B5563", "The age rating from the metadata, such as PG-13 or TV-MA. Episodes and seasons without one use the rating of their series."},
+}
+
+// The built-in label that shows the item's age rating, as
+// PosterBadgeRating.PresetId. There is no list of ratings to keep up: the
+// label shows the stored text, a little cleaned up.
+const ratingPreset = "ageRating"
+
+func isRatingRule(rule badgeRule) bool {
+	return strings.EqualFold(strings.TrimSpace(rule.Preset), ratingPreset)
+}
+
+// cleanRating is the rating to show, empty for none. NFO files write
+// "Rated R", and a rating can say there is none, with or without a country
+// as in "FR-NR".
+func cleanRating(rating string) string {
+	text := strings.TrimSpace(rating)
+	if len(text) > 6 && strings.EqualFold(text[:6], "Rated ") {
+		text = strings.TrimSpace(text[6:])
+	}
+	_, rest := splitRating(text)
+	switch strings.ToLower(rest) {
+	case "", "nr", "n/a", "unrated", "not rated":
+		return ""
+	}
+	return text
+}
+
+// splitRating is the country and the rating without it. Jellyfin and Emby
+// write a rating from outside the US as "FR-12", Plex as "fr/12", and
+// Jellyfin turns "DE-12" into "FSK-12". PG-13, NC-17 and TV-MA are US
+// ratings, not Papua New Guinea's, New Caledonia's or Tuvalu's.
+func splitRating(text string) (country, rest string) {
+	if len(text) > 4 && strings.EqualFold(text[:4], "FSK-") {
+		return "de", strings.TrimSpace(text[4:])
+	}
+	if len(text) > 3 && (text[2] == '-' || text[2] == '/') && isASCIILetter(text[0]) && isASCIILetter(text[1]) {
+		code := strings.ToLower(text[:2])
+		if code != "pg" && code != "nc" && code != "tv" && slices.Contains(badgeFlagCodes, code) {
+			return code, strings.TrimSpace(text[3:])
+		}
+	}
+	return "", text
+}
+
+// badgeAgeBands is the youngest age of each colour band: all ages, then 7,
+// 12, 16 and 18 and over, as PosterBadgeRating.AgeBands.
+var badgeAgeBands = []int{0, 7, 12, 16, 18}
+
+var badgeDigits = regexp.MustCompile(`\d+`)
+
+// ageInText is the age a rating names in its text: 13 in PG-13, 7 in TV-Y7.
+// Nil for letters only, such as R. Plex has no table of its own to place them.
+func ageInText(rating string) *int {
+	text := cleanRating(rating)
+	if text == "" {
+		return nil
+	}
+	_, rest := splitRating(text)
+	age, err := strconv.Atoi(badgeDigits.FindString(rest))
+	if err != nil {
+		return nil
+	}
+	return &age
+}
+
+// forAge is the rule's colour or icon for the age, empty to keep the label's own.
+func forAge(perBand []string, age *int) string {
+	if age == nil || len(perBand) != len(badgeAgeBands) {
+		return ""
+	}
+	band := len(badgeAgeBands) - 1
+	for band > 0 && *age < badgeAgeBands[band] {
+		band--
+	}
+	return perBand[band]
+}
+
+func isASCIILetter(b byte) bool { return (b|0x20) >= 'a' && (b|0x20) <= 'z' }
+
+// showRating is the text and icon the age rating label shows. The country is
+// "keep" (FR-12), "hide" (12) or "flag" (the French flag, then 12). A rating
+// with no country always shows whole, with the rule's own icon.
+func showRating(rating, country, icon string) (string, string) {
+	text := cleanRating(rating)
+	code, rest := splitRating(text)
+	switch {
+	case code == "":
+		return text, icon
+	case strings.EqualFold(strings.TrimSpace(country), "hide"):
+		return rest, icon
+	case strings.EqualFold(strings.TrimSpace(country), "flag"):
+		return rest, "flag-" + code
+	}
+	return text, icon
 }
 
 // Best first. A file with several audio tracks gets the best one's label.

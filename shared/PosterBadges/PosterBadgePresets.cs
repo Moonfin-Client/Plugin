@@ -62,6 +62,10 @@ public static class PosterBadgePresets
 
         P("remux", "REMUX", "release", "#BE123C", "\"REMUX\" in the file path."),
         P("imax", "IMAX", "release", "#0369A1", "\"IMAX\" in the file path, but not \"NON-IMAX\"."),
+
+        // Not detected from the file: the matcher reads it from the item, see PosterBadgeRating.
+        // Spelled out, since the Go copy's test reads this list as text.
+        P("ageRating", "Age rating", "rating", "#4B5563", "The age rating from the metadata, such as PG-13 or TV-MA. Episodes and seasons without one use the rating of their series."),
     };
 
     private static PosterBadgePreset P(string id, string label, string group, string color, string description) =>
