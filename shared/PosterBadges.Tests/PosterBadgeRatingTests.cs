@@ -165,6 +165,16 @@ public class PosterBadgeRatingTests
 
         custom.Label = "Teens";
         Assert.Equal(new[] { "shown", "shown" }, Outcomes(RatingRule(), custom));
+
+        // A rating rule that loses to "12" leaves the next one free to show FR-12.
+        var twelve = new PosterBadgeRule
+        {
+            Label = "12",
+            Conditions = { new PosterBadgeCondition { Field = "Rating", Operator = PosterBadgeMatcher.OneOf, Value = "FR-12" } },
+        };
+        var rules = new[] { twelve, RatingRule("hide"), RatingRule("keep") };
+        Assert.Equal(new[] { "12", "FR-12" }, PosterBadgeMatcher.Match(rules, null, null, rating: "FR-12").Select(b => b.Label));
+        Assert.Equal(new[] { "shown", "sameText", "shown" }, PosterBadgeTest.Explain(rules, null, null, "FR-12").Select(r => r.Outcome));
     }
 
     [Fact]

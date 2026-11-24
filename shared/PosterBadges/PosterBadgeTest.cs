@@ -84,6 +84,8 @@ public static class PosterBadgeTest
             }
 
             var key = PosterBadgeMatcher.ShownKey(rule);
+            // The rating's text may match another label's, as in Match.
+            var text = holds && PosterBadgeMatcher.IsRating(rule) ? PosterBadgeRating.Show(rating, rule.RatingCountry)?.Text : null;
             if (!rule.Enabled)
             {
                 result.Outcome = "off";
@@ -96,13 +98,18 @@ public static class PosterBadgeTest
             {
                 result.Outcome = "notMet";
             }
-            // The rating's text may match another label's, as in Match.
-            else if (!shown.Add(key) || (PosterBadgeMatcher.IsRating(rule) && !shown.Add(PosterBadgeRating.Show(rating, rule.RatingCountry)!.Value.Text)))
+            else if (shown.Contains(key) || (text != null && shown.Contains(text)))
             {
                 result.Outcome = "sameText";
             }
             else
             {
+                shown.Add(key);
+                if (text != null)
+                {
+                    shown.Add(text);
+                }
+
                 result.Outcome = "shown";
             }
         }
