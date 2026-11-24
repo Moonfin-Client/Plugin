@@ -123,6 +123,12 @@ func explainBadges(rules []badgeRule, file BadgeFile) []badgeResult {
 			holds = len(res.conditions) > 0 && !slices.Contains(res.conditions, false)
 		}
 		key := strings.ToLower(shownKey(rule))
+		// The rating's text may match another label's, as in matchBadges.
+		text := ""
+		if isRatingRule(rule) && holds {
+			label, _ := showRating(file.Rating, rule.RatingCountry, "")
+			text = strings.ToLower(label)
+		}
 		switch {
 		case !rule.enabled():
 			res.outcome = "off"
@@ -130,10 +136,13 @@ func explainBadges(rules []badgeRule, file BadgeFile) []badgeResult {
 			res.outcome = "noText"
 		case !holds:
 			res.outcome = "notMet"
-		case shown[key]:
+		case shown[key] || (text != "" && shown[text]):
 			res.outcome = "sameText"
 		default:
 			shown[key] = true
+			if text != "" {
+				shown[text] = true
+			}
 			res.outcome = "shown"
 		}
 		results = append(results, res)

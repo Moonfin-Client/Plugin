@@ -357,3 +357,31 @@ func TestAgeRatingIcons(t *testing.T) {
 		t.Errorf("a flag should win: %+v", got)
 	}
 }
+
+func TestTheSameTextShowsOnce(t *testing.T) {
+	rating := badgeRule{Preset: "ageRating", Label: "Age rating"}
+	custom := badgeRule{Label: "PG-13", Conditions: []badgeCondition{{Field: "Rating", Operator: "is", Value: "PG-13"}}}
+	teens := badgeRule{Label: "Teens", Conditions: custom.Conditions}
+	file := BadgeFile{Rating: "PG-13", NoFile: true}
+	cases := []struct {
+		rules  []badgeRule
+		labels int
+		want   []string
+	}{
+		{[]badgeRule{rating, custom}, 1, []string{"shown", "sameText"}},
+		{[]badgeRule{custom, rating}, 1, []string{"shown", "sameText"}},
+		{[]badgeRule{rating, teens}, 2, []string{"shown", "shown"}},
+	}
+	for _, c := range cases {
+		if got := matchBadges(c.rules, file, newBadgeDefaults()); len(got) != c.labels {
+			t.Errorf("%v: %d labels, want %d", c.want, len(got), c.labels)
+		}
+		outcomes := []string{}
+		for _, r := range explainBadges(c.rules, file) {
+			outcomes = append(outcomes, r.outcome)
+		}
+		if !reflect.DeepEqual(outcomes, c.want) {
+			t.Errorf("outcomes %v, want %v", outcomes, c.want)
+		}
+	}
+}

@@ -96,7 +96,8 @@ public static class PosterBadgeTest
             {
                 result.Outcome = "notMet";
             }
-            else if (!shown.Add(key))
+            // The rating's text may match another label's, as in Match.
+            else if (!shown.Add(key) || (PosterBadgeMatcher.IsRating(rule) && !shown.Add(PosterBadgeRating.Show(rating, rule.RatingCountry)!.Value.Text)))
             {
                 result.Outcome = "sameText";
             }

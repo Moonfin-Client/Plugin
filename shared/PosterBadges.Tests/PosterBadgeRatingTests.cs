@@ -156,6 +156,15 @@ public class PosterBadgeRatingTests
 
         Assert.Single(PosterBadgeMatcher.Match(new[] { RatingRule(), custom }, null, null, rating: "PG-13"));
         Assert.Single(PosterBadgeMatcher.Match(new[] { custom, RatingRule() }, null, null, rating: "PG-13"));
+
+        // The Test tool says the same.
+        string[] Outcomes(params PosterBadgeRule[] rules) =>
+            PosterBadgeTest.Explain(rules, null, null, "PG-13").Select(r => r.Outcome).ToArray();
+        Assert.Equal(new[] { "shown", "sameText" }, Outcomes(RatingRule(), custom));
+        Assert.Equal(new[] { "shown", "sameText" }, Outcomes(custom, RatingRule()));
+
+        custom.Label = "Teens";
+        Assert.Equal(new[] { "shown", "shown" }, Outcomes(RatingRule(), custom));
     }
 
     [Fact]
