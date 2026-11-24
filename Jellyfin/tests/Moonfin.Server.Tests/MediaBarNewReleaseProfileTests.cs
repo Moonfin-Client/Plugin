@@ -24,4 +24,14 @@ public class MediaBarNewReleaseProfileTests
         Assert.Contains("\"mediaBarFollowedFirst\":false", json);
         Assert.Contains("\"mediaBarMixTypes\":true", json);
     }
+
+    [Fact]
+    public void AnOlderProfileLeavesThemUnset()
+    {
+        // Unset, not false, so the admin default applies.
+        var profile = JsonSerializer.Deserialize<MoonfinSettingsProfile>("{}")!;
+
+        Assert.Null(profile.MediaBarFollowedFirst);
+        Assert.Null(profile.MediaBarMixTypes);
+    }
 }
