@@ -96,6 +96,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("homeBackdropStyle")] public string? HomeBackdropStyle { get; set; }
         [JsonPropertyName("detailsBackdropEnabled")] public bool? DetailsBackdropEnabled { get; set; }
         [JsonPropertyName("detailsBackdropSize")] public string? DetailsBackdropSize { get; set; }
+        [JsonPropertyName("detailsBackdropShuffle")] public bool? DetailsBackdropShuffle { get; set; }
+        [JsonPropertyName("detailsBackdropIntervalMs")] public int? DetailsBackdropIntervalMs { get; set; }
         [JsonPropertyName("homeRowsImageTypeOverride")] public bool? HomeRowsImageTypeOverride { get; set; }
         [JsonPropertyName("homeRowsStyle")] public string? HomeRowsStyle { get; set; }
         [JsonPropertyName("modernCardsOnMyMediaRow")] public bool? ModernCardsOnMyMediaRow { get; set; }

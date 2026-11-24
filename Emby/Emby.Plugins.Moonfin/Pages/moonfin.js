@@ -591,6 +591,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultMediaBarNewReleaseKinds', 'DefaultMediaBarNewMovieDays', 'DefaultMediaBarNewMovieDetail', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
         { parent: 'DefaultMediaBarMode', off: ['off', 'bookshelf', 'aya'], fields: ['DefaultMediaBarRatingsHeading', 'DefaultMediaBarMdblistEnabled', 'DefaultMediaBarMdblistRatingSourcesList', 'DefaultMediaBarMdblistShowRatingNames', 'DefaultMediaBarMdblistShowRatingBadges'] },
         { parent: 'DefaultMediaBarAutoAdvance', fields: ['DefaultMediaBarIntervalMs'] },
+        { parent: 'DefaultDetailsBackdropEnabled', fields: ['DefaultDetailsBackdropShuffle', 'DefaultDetailsBackdropIntervalMs'] },
         { parent: 'DefaultMediaBarNewReleaseBanner', fields: ['DefaultMediaBarNewReleaseKinds'] },
         { parent: 'DefaultMediaBarTrailerPreview', fields: ['DefaultMediaBarTrailerAudio', 'DefaultTrailerVolume', 'DefaultMediaBarTrailerCaptions'] },
         { parent: 'DefaultHomeRowsStyle', off: ['v1'], fields: ['DefaultModernCardsOnMyMediaRow', 'DefaultModernHomeRowsPadding'] },
@@ -2954,6 +2955,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultDesktopUiScale', defaults.desktopUiScale, 'Configured scale');
         setSelectValue(view, '#DefaultHomeBackdropStyle', homeBackdropStyleOf(defaults), 'Configured style');
         setNullableBoolSelect(view, '#DefaultDetailsBackdropEnabled', defaults.detailsBackdropEnabled);
+        setNullableBoolSelect(view, '#DefaultDetailsBackdropShuffle', defaults.detailsBackdropShuffle);
+        setSelectValue(view, '#DefaultDetailsBackdropIntervalMs', defaults.detailsBackdropIntervalMs, 'Configured duration');
         setSelectValue(view, '#DefaultDetailsBackdropSize', defaults.detailsBackdropSize, 'Configured size');
         setNullableBoolSelect(view, '#DefaultShowBookDiscoverTab', defaults.showBookDiscoverTab);
         setNullableBoolSelect(view, '#DefaultBookFoldersAsSeries', defaults.bookFoldersAsSeries);
@@ -3403,6 +3406,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.homeBackdropEnabled = homeBackdropStyle ? homeBackdropStyle !== 'off' : null;
         d.homeBackdropStyle = homeBackdropStyle || null;
         d.detailsBackdropEnabled = getNullableBoolSelect(view, '#DefaultDetailsBackdropEnabled');
+        d.detailsBackdropShuffle = getNullableBoolSelect(view, '#DefaultDetailsBackdropShuffle');
+        d.detailsBackdropIntervalMs = getNullableIntInput(view, '#DefaultDetailsBackdropIntervalMs');
         d.detailsBackdropSize = view.querySelector('#DefaultDetailsBackdropSize').value || null;
         d.showBookDiscoverTab = getNullableBoolSelect(view, '#DefaultShowBookDiscoverTab');
         d.bookFoldersAsSeries = getNullableBoolSelect(view, '#DefaultBookFoldersAsSeries');
