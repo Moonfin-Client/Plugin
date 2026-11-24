@@ -3007,6 +3007,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultMediaBarMode', defaults.mediaBarMode, 'Configured mode');
         setSelectValue(view, '#DefaultMediaBarContentType', defaults.mediaBarContentType, 'Configured content type');
         setSelectValue(view, '#DefaultMediaBarItemCount', defaults.mediaBarItemCount, 'Configured item count');
+        setSelectValue(view, '#DefaultMediaBarSortOrder', defaults.mediaBarSortOrder, 'Configured sort order');
         setNullableBoolSelect(view, '#DefaultMediaBarAutoAdvance', defaults.mediaBarAutoAdvance);
         setSelectValue(view, '#DefaultMediaBarIntervalMs', defaults.mediaBarIntervalMs, 'Configured interval');
         setNullableBoolSelect(view, '#DefaultMediaBarRowPeek', defaults.mediaBarRowPeek);
@@ -3463,6 +3464,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.mediaBarMode = view.querySelector('#DefaultMediaBarMode').value || null;
         d.mediaBarContentType = view.querySelector('#DefaultMediaBarContentType').value || null;
         d.mediaBarItemCount = getNullableIntInput(view, '#DefaultMediaBarItemCount');
+        d.mediaBarSortOrder = view.querySelector('#DefaultMediaBarSortOrder').value || null;
         d.mediaBarAutoAdvance = getNullableBoolSelect(view, '#DefaultMediaBarAutoAdvance');
         d.mediaBarIntervalMs = getNullableIntInput(view, '#DefaultMediaBarIntervalMs');
         d.mediaBarRowPeek = getNullableBoolSelect(view, '#DefaultMediaBarRowPeek');

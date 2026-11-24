@@ -74,6 +74,7 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("previewAudioEnabled")] public bool? PreviewAudioEnabled { get; set; }
         [JsonPropertyName("previewVolume")] public int? PreviewVolume { get; set; }
         [JsonPropertyName("mediaBarSourceType")] public string? MediaBarSourceType { get; set; }
+        [JsonPropertyName("mediaBarSortOrder")] public string? MediaBarSortOrder { get; set; }
         [JsonPropertyName("mediaBarNewReleaseBanner")] public bool? MediaBarNewReleaseBanner { get; set; }
         [JsonPropertyName("mediaBarNewReleaseDays")] public int? MediaBarNewReleaseDays { get; set; }
         [JsonPropertyName("mediaBarNewReleaseKinds")] public string? MediaBarNewReleaseKinds { get; set; }

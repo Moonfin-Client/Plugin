@@ -3617,6 +3617,17 @@
                                     <option value="newReleases">New Seasons &amp; Episodes</option>
                                 </select>
                             </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarSortOrder">Media Bar Sort Order</label>
+                                <select id="DefaultMediaBarSortOrder" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="random">Random</option>
+                                    <option value="dateAddedDesc">Date Added (Newest First)</option>
+                                    <option value="dateAddedAsc">Date Added (Oldest First)</option>
+                                    <option value="releaseDateDesc">Release Date (Newest First)</option>
+                                    <option value="releaseDateAsc">Release Date (Oldest First)</option>
+                                </select>
+                            </div>
                             <div id="DefaultLibraryPickerSection">
                                 <div class="inputContainer">
                                     <label class="inputLabel inputLabelUnfocused">Default Libraries</label>
@@ -11561,6 +11572,7 @@
                     setSelectValue('#DefaultMediaBarMode', defaults.mediaBarMode, 'Configured mode');
                     setSelectValue('#DefaultMediaBarContentType', defaults.mediaBarContentType, 'Configured content type');
                     setSelectValue('#DefaultMediaBarItemCount', defaults.mediaBarItemCount, 'Configured item count');
+                    setSelectValue('#DefaultMediaBarSortOrder', defaults.mediaBarSortOrder, 'Configured sort order');
                     setNullableBoolSelect('#DefaultMediaBarAutoAdvance', defaults.mediaBarAutoAdvance);
                     setSelectValue('#DefaultMediaBarIntervalMs', defaults.mediaBarIntervalMs, 'Configured interval');
                     setNullableBoolSelect('#DefaultMediaBarRowPeek', defaults.mediaBarRowPeek);
@@ -12570,6 +12582,7 @@
                     ds.mediaBarMode = document.querySelector('#DefaultMediaBarMode').value || null;
                     ds.mediaBarContentType = document.querySelector('#DefaultMediaBarContentType').value || null;
                     ds.mediaBarItemCount = getNullableIntInput('#DefaultMediaBarItemCount');
+                    ds.mediaBarSortOrder = document.querySelector('#DefaultMediaBarSortOrder').value || null;
                     ds.mediaBarAutoAdvance = getNullableBoolSelect('#DefaultMediaBarAutoAdvance');
                     ds.mediaBarIntervalMs = getNullableIntInput('#DefaultMediaBarIntervalMs');
                     ds.mediaBarRowPeek = getNullableBoolSelect('#DefaultMediaBarRowPeek');
