@@ -56,7 +56,7 @@
             sessionEnded: 'You’re signed out of Moonbase. Sign in again with your Plex account. Changes you tried to save are kept and come back when you do.',
             signInUrl: 'admin/signin',
             hidden: ['Active Downloads', 'Live TV Recordings', 'Studio Logos', 'Stuck downloads'],
-            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay', 'SeerrWebhookBlock', 'FcmServiceAccountJson', 'FcmServiceAccountPath', 'PublicServerUrl'],
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'EnableSocketRelay', 'SeerrWebhookBlock', 'FcmServiceAccountJson', 'FcmServiceAccountPath', 'PublicServerUrl', 'DefaultDetailsBackdropShuffle', 'DefaultDetailsBackdropIntervalMs'],
             unsupported: {
                 'Connecting to this server': 'Moonbase for Plex serves Moonfin Web at /Moonfin/Web/ on its own port, 32500 by default. With Default Server URL empty, the app offers the Plex address Moonbase uses.',
                 'Seerr Integration': 'Moonfin apps sign each person in to Seerr with their own Plex account, so Seerr has to use Plex sign-in and know them as a user of this server.',

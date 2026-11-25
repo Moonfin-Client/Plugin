@@ -333,6 +333,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("detailsBackdropSize")]
     public string? DetailsBackdropSize { get; set; }
 
+    [JsonPropertyName("detailsBackdropShuffle")]
+    public bool? DetailsBackdropShuffle { get; set; }
+
+    [JsonPropertyName("detailsBackdropIntervalMs")]
+    public int? DetailsBackdropIntervalMs { get; set; }
+
     [JsonPropertyName("homeRowsImageTypeOverride")]
     public bool? HomeRowsImageTypeOverride { get; set; }
 
