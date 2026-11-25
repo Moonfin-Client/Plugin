@@ -3207,6 +3207,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setNullableBoolSelect(view, '#DefaultRadarrCalendarHideDownloaded', defaults.radarrCalendarHideDownloaded);
         setNullableBoolSelect(view, '#DefaultSonarrCalendarHideDownloaded', defaults.sonarrCalendarHideDownloaded);
         setSelectValue(view, '#DefaultPersonalRatingStyle', defaults.personalRatingStyle, 'Configured style');
+        setSelectValue(view, '#DefaultPersonalRatingIntervals', defaults.personalRatingIntervals == null ? null : String(defaults.personalRatingIntervals), 'Configured intervals');
         setSelectValue(view, '#DefaultPersonPageSortOption', defaults.personPageSortOption, 'Configured sort');
         setSelectValue(view, '#DefaultShuffleContentType', defaults.shuffleContentType, 'Configured content');
         setSelectValue(view, '#DefaultHomeRowsImageType', defaults.homeRowsImageType, 'Configured image type');
@@ -3667,6 +3668,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.radarrCalendarHideDownloaded = getNullableBoolSelect(view, '#DefaultRadarrCalendarHideDownloaded');
         d.sonarrCalendarHideDownloaded = getNullableBoolSelect(view, '#DefaultSonarrCalendarHideDownloaded');
         d.personalRatingStyle = view.querySelector('#DefaultPersonalRatingStyle').value || null;
+        d.personalRatingIntervals = getNullableIntInput(view, '#DefaultPersonalRatingIntervals');
         d.personPageSortOption = view.querySelector('#DefaultPersonPageSortOption').value || null;
         d.shuffleContentType = view.querySelector('#DefaultShuffleContentType').value || null;
         d.homeRowsImageType = view.querySelector('#DefaultHomeRowsImageType').value || null;

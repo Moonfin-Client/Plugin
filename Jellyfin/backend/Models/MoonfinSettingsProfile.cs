@@ -1145,6 +1145,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("personalRatingStyle")]
     public string? PersonalRatingStyle { get; set; }
 
+    [JsonPropertyName("personalRatingIntervals")]
+    public int? PersonalRatingIntervals { get; set; }
+
     [JsonPropertyName("epgMobileView")]
     public string? EpgMobileView { get; set; }
 
