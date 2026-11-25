@@ -38,12 +38,18 @@ type BadgeFile struct {
 	// Tracks is nil when the host hasn't read them yet, which isn't the same
 	// as a file without tracks.
 	Tracks []BadgeTrack
+	// Rating is the age rating as the host stores it, the series' one for an
+	// episode or season without its own.
+	Rating string
+	// NoFile is a series or season: no path, no tracks, only a rating.
+	NoFile bool
 }
 
 // BadgeCatalog is a host that can read its movies' and episodes' files.
 type BadgeCatalog interface {
 	// BadgeFiles reads the files of the movies and episodes among ids that
-	// the caller can see, by id. Anything else is left out.
+	// the caller can see, by id, and the ratings of its series and seasons.
+	// Anything else is left out.
 	BadgeFiles(ctx context.Context, caller Identity, ids []string) (map[string]BadgeFile, error)
 	// BadgeSearch finds movies and episodes by name for the admin page's
 	// test, shaped like Jellyfin's items.
@@ -71,9 +77,15 @@ type badgeRule struct {
 	Enabled                               *bool
 	Conditions                            []badgeCondition
 	Style, TextColor, Size, Corner, Shape string
-	Icon                                  string
+	Icon, RatingCountry                   string
 	Opacity                               *float64
 	UserIds, Profiles                     []string
+	// AgeColors is one colour per band of badgeAgeBands, for the age rating
+	// label. Empty keeps its one colour.
+	AgeColors []string
+	// AgeIcons is one icon per band, for the same label. An empty one keeps
+	// the label's own icon.
+	AgeIcons []string
 }
 
 func (r badgeRule) enabled() bool { return r.Enabled == nil || *r.Enabled }
@@ -143,9 +155,10 @@ func (s *Server) handleBadgeItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for id, file := range files {
-		// Unread tracks would pass every "no such track" rule, so the item gets no labels rather than wrong ones.
+		// Unread tracks would pass every "no such track" rule, so an unread file counts as
+		// none: only labels from the rating can show.
 		if file.Tracks == nil {
-			continue
+			file.Path, file.NoFile = "", true
 		}
 		if badges := matchBadges(rules, file, defaults); len(badges) > 0 {
 			items[id] = badges
@@ -176,7 +189,7 @@ func (s *Server) handleBadgeTest(w http.ResponseWriter, r *http.Request) {
 		Defaults *badgeDefaults
 	}{Defaults: &defaults}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil || strings.TrimSpace(req.ItemID) == "" {
-		writeError(w, http.StatusBadRequest, "Pick a movie or an episode.")
+		writeError(w, http.StatusBadRequest, "Pick a movie, an episode or a series.")
 		return
 	}
 	catalog, ok := s.catalog.(BadgeCatalog)
@@ -193,7 +206,7 @@ func (s *Server) handleBadgeTest(w http.ResponseWriter, r *http.Request) {
 	}
 	file, found := files[id]
 	if !found {
-		writeError(w, http.StatusBadRequest, "Pick a movie or an episode.")
+		writeError(w, http.StatusBadRequest, "Pick a movie, an episode or a series.")
 		return
 	}
 	results := []M{}
@@ -203,6 +216,8 @@ func (s *Server) handleBadgeTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, M{
 		"name":         file.Name,
 		"path":         file.Path,
+		"rating":       cleanRating(file.Rating),
+		"age":          ageInText(file.Rating),
 		"tracks":       describeTracks(file.Tracks),
 		"results":      results,
 		"badges":       matchBadges(req.Rules, file, defaults),
@@ -300,8 +315,8 @@ func badgeVersion(rules []badgeRule, d badgeDefaults) string {
 		if r.Opacity != nil {
 			opacity = strconv.FormatFloat(*r.Opacity, 'f', -1, 64)
 		}
-		add(r.Label, r.Color, r.enabled(), r.Preset, r.TextColor, r.Style, opacity, r.Size, r.Corner, r.Shape, r.Icon,
-			strings.Join(r.UserIds, ","), strings.Join(r.Profiles, ","))
+		add(r.Label, r.Color, r.enabled(), r.Preset, r.TextColor, r.Style, opacity, r.Size, r.Corner, r.Shape, r.Icon, r.RatingCountry,
+			strings.Join(r.UserIds, ","), strings.Join(r.Profiles, ","), strings.Join(r.AgeColors, ","), strings.Join(r.AgeIcons, ","))
 		for _, c := range r.Conditions {
 			add(c.Field, c.Match, c.Operator, c.Value)
 		}

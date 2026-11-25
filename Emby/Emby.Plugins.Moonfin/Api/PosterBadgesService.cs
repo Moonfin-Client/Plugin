@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using MediaBrowser.Common;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Logging;
@@ -93,23 +94,24 @@ namespace Emby.Plugins.Moonfin.Api
                     break;
                 }
 
-                // A series, season or collection has no file of its own to read.
+                // A collection has nothing to label. A series or season has no file, only a rating.
                 var item = FindItem(raw);
-                if (item == null || item is Folder || !item.IsVisible(viewer))
+                if (item == null || (item is Folder && !HasRatingOnly(item)) || !item.IsVisible(viewer))
                 {
                     continue;
                 }
 
                 try
                 {
-                    var file = FileFor(item);
-                    // Unread tracks would pass every "no such track" rule, so the item gets no labels rather than wrong ones.
+                    var file = HasRatingOnly(item) ? (null, null) : FileFor(item);
+                    // Unread tracks would pass every "no such track" rule, so an unread file counts as
+                    // none: only labels from the rating can show.
                     if (file.Streams == null)
                     {
-                        continue;
+                        file = (null, null);
                     }
 
-                    var badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults);
+                    var badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults, RatingOf(item));
                     if (badges.Count > 0)
                     {
                         answer[raw] = badges.Select(b => b.ToJson());
@@ -132,27 +134,46 @@ namespace Emby.Plugins.Moonfin.Api
         {
             var body = await MoonfinJson.ReadBodyAsync<PosterBadgeTestRequest>(request.RequestStream).ConfigureAwait(false);
 
-            // A series, season or collection has no file of its own to read.
+            // A collection has nothing to label.
             var item = body?.ItemId == null ? null : FindItem(body.ItemId);
-            if (body == null || item == null || item is Folder)
+            if (body == null || item == null || (item is Folder && !HasRatingOnly(item)))
             {
                 Request.Response.StatusCode = 400;
-                return Json(new { error = "Pick a movie or an episode." });
+                return Json(new { error = "Pick a movie, an episode or a series." });
             }
 
             var rules = body.Rules ?? new List<PosterBadgeRule>();
             var defaults = body.Defaults ?? new PosterBadgeDefaults();
-            var file = FileFor(item);
+            var file = HasRatingOnly(item) ? (null, null) : FileFor(item);
+            var rating = RatingOf(item);
 
             return Json(new
             {
                 name = item.Name,
                 path = file.Path,
+                rating = PosterBadgeRating.Clean(rating),
+                age = PosterBadgeRating.AgeInText(rating),
                 tracks = PosterBadgeTest.DescribeTracks(file.Streams),
-                results = PosterBadgeTest.Explain(rules, file.Path, file.Streams).Select(r => new { index = r.Index, outcome = r.Outcome, conditions = r.Conditions }),
-                badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults).Select(b => b.ToJson()),
+                results = PosterBadgeTest.Explain(rules, file.Path, file.Streams, rating).Select(r => new { index = r.Index, outcome = r.Outcome, conditions = r.Conditions }),
+                badges = PosterBadgeMatcher.Match(rules, file.Path, file.Streams, defaults, rating).Select(b => b.ToJson()),
                 maxPerCorner = Math.Max(1, defaults.MaxPerCorner),
             });
+        }
+
+        /// <summary>A series or season: no file of its own, but a rating.</summary>
+        private static bool HasRatingOnly(BaseItem item) => item is Series || item is Season;
+
+        /// <summary>The item's own age rating, else its series'. Episodes and seasons seldom have one.</summary>
+        private static string? RatingOf(BaseItem item)
+        {
+            if (!string.IsNullOrWhiteSpace(item.OfficialRating))
+            {
+                return item.OfficialRating;
+            }
+
+            return item is Episode episode ? episode.Series?.OfficialRating
+                : item is Season season ? season.Series?.OfficialRating
+                : null;
         }
 
         /// <summary>How long one request for up to 200 items may spend matching.</summary>

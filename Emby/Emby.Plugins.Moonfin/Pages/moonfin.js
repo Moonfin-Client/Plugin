@@ -4155,6 +4155,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // Fields are the server's track properties by name, so another one only needs adding here.
     var POSTER_BADGE_FIELDS = [
         ['Path', 'File path'],
+        ['Rating', 'Age rating'],
         ['Audio.Language', 'Audio track: language'],
         ['Audio.Title', 'Audio track: title'],
         ['Audio.Codec', 'Audio track: codec'],
@@ -4179,7 +4180,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     // The path and a count are one value, so they read "when" or "unless" rather than
     // naming tracks.
     function labelMatchChoices(field) {
-        return field === 'Path' || /Count$/.test(field)
+        return field === 'Path' || field === 'Rating' || /Count$/.test(field)
             ? [['any', 'When'], ['none', 'Unless']]
             : [['any', 'Any'], ['none', 'No'], ['every', 'Every']];
     }
@@ -4225,7 +4226,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     var LABEL_PROFILES = [['tv', 'TV'], ['desktop', 'Desktop'], ['mobile', 'Mobile']];
 
-    var LABEL_PRESET_GROUPS = [['resolution', 'Resolution'], ['hdr', 'Dynamic range'], ['audio', 'Audio format'], ['channels', 'Channels'], ['codec', 'Video codec'], ['release', 'Release']];
+    var LABEL_PRESET_GROUPS = [['resolution', 'Resolution'], ['hdr', 'Dynamic range'], ['audio', 'Audio format'], ['channels', 'Channels'], ['codec', 'Video codec'], ['release', 'Release'], ['rating', 'Age rating']];
 
     // The icons a label can carry: id, name, and the Material glyph the apps draw. Kept
     // in step with PosterBadgeMatcher.Icons and poster_badges.dart.
@@ -4244,7 +4245,13 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         ['subtitles', 'Subtitles', '<path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z"/>'],
         ['record_voice_over', 'Dub', '<circle cx="9" cy="9" r="4"/><path d="M9 15c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4zm7.76-9.64l-1.68 1.69c.84 1.18.84 2.71 0 3.89l1.68 1.69c2.02-2.02 2.02-5.07 0-7.27zM20.07 2l-1.63 1.63c2.77 3.02 2.77 7.56 0 10.74L20.07 16c3.9-3.89 3.91-9.95 0-14z"/>'],
         ['star', 'Star', '<path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>'],
-        ['check_circle', 'Check', '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>']
+        ['check_circle', 'Check', '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>'],
+        ['person', 'Person', '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>'],
+        ['family_restroom', 'Family', '<path d="M15.99 3.97C15.99 2.89 16.88 2 18.01 2C19.14 2 20.03 2.89 20.03 3.97C20.03 5.1 19.14 5.99 18.01 5.99C16.88 5.99 15.99 5.1 15.99 3.97ZM20.03 22V15.99H22.52L19.98 8.38C19.7 7.54 18.95 6.98 18.06 6.98H17.96C17.07 6.98 16.32 7.54 16.04 8.38L15.19 10.97C16.27 11.53 17.02 12.7 17.02 14.02V22H20.03ZM12.52 11.48C13.31 11.48 14.02 10.83 14.02 9.98C14.02 9.18 13.31 8.48 12.52 8.48C11.67 8.48 11.01 9.18 11.01 9.98C11.01 10.83 11.67 11.48 12.52 11.48ZM5.47 5.99C6.6 5.99 7.49 5.1 7.49 3.97C7.49 2.89 6.6 2 5.47 2C4.39 2 3.5 2.89 3.5 3.97C3.5 5.1 4.39 5.99 5.47 5.99ZM7.49 22V15H9V9C9 7.92 8.1 6.98 6.98 6.98H3.97C2.89 6.98 2 7.92 2 9V15H3.5V22H7.49ZM14.02 22V18.01H15V14.02C15 13.17 14.3 12.52 13.5 12.52H11.48C10.69 12.52 9.98 13.17 9.98 14.02V18.01H11.01V22H14.02Z"/>'],
+        ['child_care', 'Child', '<path d="M13.27 10.5C13.27 9.79 13.83 9.23 14.49 9.23C15.19 9.23 15.76 9.79 15.76 10.5C15.76 11.2 15.19 11.77 14.49 11.77C13.83 11.77 13.27 11.2 13.27 10.5ZM8.24 10.5C8.24 9.79 8.81 9.23 9.51 9.23C10.17 9.23 10.73 9.79 10.73 10.5C10.73 11.2 10.17 11.77 9.51 11.77C8.81 11.77 8.24 11.2 8.24 10.5ZM22.94 12.66C22.99 12.47 23.03 12.23 23.03 12C23.03 11.77 22.99 11.53 22.94 11.34C22.7 9.84 21.58 8.57 20.12 8.15C19.61 7.02 18.85 6.04 17.96 5.24C16.37 3.83 14.3 2.99 12 2.99C9.7 2.99 7.63 3.83 6.04 5.24C5.15 6.04 4.39 7.07 3.88 8.15C2.42 8.57 1.3 9.79 1.06 11.34C1.01 11.53 0.97 11.77 0.97 12C0.97 12.23 1.01 12.47 1.06 12.66C1.3 14.16 2.42 15.43 3.88 15.85C4.39 16.93 5.15 17.92 6.04 18.71C7.63 20.17 9.7 21.01 12 21.01C14.3 21.01 16.37 20.17 17.96 18.71C18.9 17.92 19.65 16.93 20.17 15.85C21.58 15.43 22.7 14.21 22.94 12.66ZM19 14.02C18.9 14.02 18.81 13.97 18.71 13.97C18.53 14.63 18.24 15.29 17.87 15.85C16.6 17.73 14.44 19 12 19C9.56 19 7.4 17.73 6.13 15.85C5.76 15.29 5.47 14.63 5.29 13.97C5.19 13.97 5.1 14.02 5 14.02C3.88 14.02 2.99 13.08 2.99 12C2.99 10.92 3.88 9.98 5 9.98C5.1 9.98 5.19 10.03 5.29 10.03C5.47 9.37 5.76 8.71 6.13 8.15C7.4 6.27 9.56 5 12 5C14.44 5 16.6 6.27 17.87 8.15C18.24 8.71 18.53 9.37 18.71 10.03C18.81 10.03 18.9 9.98 19 9.98C20.12 9.98 21.01 10.92 21.01 12C21.01 13.08 20.12 14.02 19 14.02ZM7.49 14.02C8.24 15.76 9.98 17.02 12 17.02C14.02 17.02 15.76 15.76 16.51 14.02H7.49Z"/>'],
+        ['escalator_warning', 'Parental guidance', '<path d="M6.51 2C7.59 2 8.48 2.89 8.48 3.97C8.48 5.1 7.59 5.99 6.51 5.99C5.38 5.99 4.49 5.1 4.49 3.97C4.49 2.89 5.38 2 6.51 2ZM15.52 9.51C15.52 10.31 16.18 11.01 17.02 11.01C17.82 11.01 18.53 10.31 18.53 9.51C18.53 8.67 17.82 8.01 17.02 8.01C16.18 8.01 15.52 8.67 15.52 9.51ZM18.53 12H15.66C15.1 12 14.54 12.33 14.21 12.85L13.31 14.21L9.7 8.01C9.32 7.35 8.67 7.02 8.01 6.98H5C3.88 6.98 2.99 7.92 2.99 9V15H4.49V22H9.51V11.62L12.05 15.99H14.25L15 14.91V22H19V17.02H20.03V13.5C20.03 12.7 19.32 12 18.53 12Z"/>'],
+        ['18_up_rating', 'Adults only (18)', '<path d="M12.99 12.52H14.49V14.02H12.99V12.52ZM12.99 9.98H14.49V11.48H12.99V9.98ZM19 2.99H5C3.88 2.99 2.99 3.88 2.99 5V19C2.99 20.12 3.88 21.01 5 21.01H19C20.12 21.01 21.01 20.12 21.01 19V5C21.01 3.88 20.12 2.99 19 2.99ZM9.98 15H8.48V10.5H6.98V9H9.98V15ZM15.99 14.02C15.99 14.54 15.57 15 15 15H12.52C11.95 15 11.48 14.54 11.48 14.02V9.98C11.48 9.46 11.95 9 12.52 9H15C15.57 9 15.99 9.46 15.99 9.98V14.02Z"/>'],
+        ['warning', 'Warning', '<path d="M0.97 21.01H23.03L12 2L0.97 21.01ZM12.99 18.01H11.01V15.99H12.99V18.01ZM12.99 14.02H11.01V9.98H12.99V14.02Z"/>']
     ];
 
     // Country and region flags, by code and name, sorted by name. The images come from
@@ -4635,6 +4642,10 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 TextColor: labelHex(posterBadgeValue(rule, 'TextColor'), ''),
                 Enabled: posterBadgeValue(rule, 'Enabled') !== false,
                 Preset: posterBadgeValue(rule, 'Preset') || '',
+                RatingCountry: posterBadgeValue(rule, 'RatingCountry') || '',
+                // One colour per band, so a bad one takes the label's colour, as on the server, and the rest keep their place.
+                AgeColors: (posterBadgeValue(rule, 'AgeColors') || []).map(function(color) { return labelHex(color, labelHex(posterBadgeValue(rule, 'Color'), POSTER_BADGE_DEFAULT_COLOR)); }),
+                AgeIcons: (posterBadgeValue(rule, 'AgeIcons') || []).slice(),
                 Style: labelChoice('Style', posterBadgeValue(rule, 'Style'), ''),
                 Shape: labelChoice('Shape', posterBadgeValue(rule, 'Shape'), ''),
                 Size: labelChoice('Size', posterBadgeValue(rule, 'Size'), ''),
@@ -4664,6 +4675,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 TextColor: rule.TextColor || null,
                 Enabled: rule.Enabled,
                 Preset: rule.Preset || null,
+                RatingCountry: rule.RatingCountry || null,
+                AgeColors: rule.Preset === 'ageRating' && rule.AgeColors.length === LABEL_AGE_BANDS.length ? rule.AgeColors : [],
+                AgeIcons: rule.Preset === 'ageRating' && rule.AgeColors.length === LABEL_AGE_BANDS.length ? LABEL_AGE_BANDS.map(function(band, i) { return rule.AgeIcons[i] || ''; }) : [],
                 Style: rule.Style || null,
                 Shape: rule.Shape || null,
                 Size: rule.Size || null,
@@ -4784,6 +4798,34 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }).join('');
     }
 
+    // US ratings carry no country code, so these say what happens to one that does.
+    var LABEL_RATING_COUNTRY = [['keep', 'Keep it (GB-15)'], ['hide', 'Hide it (15)'], ['flag', 'Show its flag']];
+
+    // The youngest age of each band, as PosterBadgeRating.AgeBands, with its name and
+    // the colour it starts with.
+    var LABEL_AGE_BANDS = [[0, 'All ages', '#16a34a', 'G'], [7, '7 to 11', '#65a30d', 'TV-Y7'], [12, '12 to 15', '#ca8a04', 'PG-13'], [16, '16 and 17', '#ea580c', 'R'], [18, '18 and over', '#dc2626', '18']];
+
+    // What a rule draws on the page. The age rating label takes its text from each item,
+    // so the page draws a sample one.
+    function labelShown(rule) {
+        var look = labelLook(rule);
+        if (rule.Preset !== 'ageRating') {
+            return { label: rule.Label.trim(), look: look };
+        }
+
+        // A US rating has no country code to keep, hide or swap for a flag, so the
+        // sample is British. 15 falls in the 12 to 15 band.
+        if (rule.AgeColors.length === LABEL_AGE_BANDS.length) {
+            look.color = rule.AgeColors[2];
+            look.icon = rule.AgeIcons[2] || look.icon;
+        }
+        var country = rule.RatingCountry || 'keep';
+        if (country === 'flag') {
+            look.icon = 'flag-gb';
+        }
+        return { label: country === 'keep' ? 'GB-15' : '15', look: look };
+    }
+
     function labelPreset(id) {
         return posterBadgePresets.filter(function(preset) { return preset.id === id; })[0];
     }
@@ -4849,10 +4891,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             var chips = posterBadgePresets.filter(function(preset) { return preset.group === group[0]; }).map(function(preset) {
                 var rule = posterBadgeRules.filter(function(r) { return r.Preset === preset.id; })[0];
                 var on = !!rule && rule.Enabled;
-                var look = rule ? labelLook(rule) : { color: preset.color, style: 'solid', shape: 'rounded', size: 'medium', opacity: 100 };
+                var shown = rule ? labelShown(rule) : { label: preset.id === 'ageRating' ? 'PG-13' : preset.label, look: { color: preset.color, style: 'solid', shape: 'rounded', size: 'medium', opacity: 100 } };
+                var look = shown.look;
                 look.size = 'medium';
                 return '<button type="button" class="labelsPreset" data-preset="' + esc(preset.id) + '" aria-pressed="' + on + '" aria-label="' + esc(preset.label) + '" title="' + esc(preset.description) + '">'
-                    + labelBadgeHtml(look, rule ? rule.Label : preset.label, 10)
+                    + labelBadgeHtml(look, shown.label, 10)
                     + '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
                     + '</button>';
             }).join('');
@@ -4903,7 +4946,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             return '<div class="labelsRule' + (rule._open ? ' is-open' : '') + (rule.Enabled ? '' : ' is-off') + '" data-rule="' + ruleIndex + '">'
                 + '<div class="labelsRuleHead">'
-                + '<span class="labelsRuleBadge">' + labelBadgeHtml(look, rule.Label, 11) + '</span>'
+                + '<span class="labelsRuleBadge">' + labelBadgeHtml(labelShown(rule).look, labelShown(rule).label, 11) + '</span>'
                 + '<button type="button" class="labelsRuleToggle" data-action="toggleOpen" aria-expanded="' + !!rule._open + '">'
                 + '<span class="labelsRuleName">' + esc(labelRuleName(rule)) + '</span>'
                 + '<span class="labelsRuleSummary">' + esc(labelSummary(rule)) + '</span>'
@@ -4918,8 +4961,16 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 + '<div class="labelsRuleBody">'
                 + '<h4>Shows when</h4>' + when
                 + '<h4>Look</h4>'
-                + '<div class="labelsField"><span class="labelsFieldName">Text and colour</span><div class="labelsInline">'
-                + '<input type="text" class="homeCustomListInput" data-key="Label" maxlength="16" aria-label="Text" value="' + esc(rule.Label) + '" />'
+                + (rule.Preset === 'ageRating'
+                    ? '<div class="labelsField"><span class="labelsFieldName">Country code</span><div class="labelsStyles" role="group" aria-label="Country code">'
+                        + LABEL_RATING_COUNTRY.map(function(choice) {
+                            return '<button type="button" class="labelsOption" data-pick="RatingCountry" data-value="' + choice[0] + '" aria-pressed="' + ((rule.RatingCountry || 'keep') === choice[0]) + '">' + esc(choice[1]) + '</button>';
+                        }).join('')
+                        + '<span class="fieldDescription" style="margin:0;">Only for ratings stored with a country code, such as GB-15. US ratings such as PG-13 have none and show as they are, with the icon below.</span>'
+                        + '</div></div>'
+                    : '')
+                + '<div class="labelsField"><span class="labelsFieldName">' + (rule.Preset === 'ageRating' ? 'Colour' : 'Text and colour') + '</span><div class="labelsInline">'
+                + (rule.Preset === 'ageRating' ? '' : '<input type="text" class="homeCustomListInput" data-key="Label" maxlength="16" aria-label="Text" value="' + esc(rule.Label) + '" />')
                 + '<input type="color" class="labelsColor" data-key="Color" aria-label="Colour" title="Colour" value="' + esc(rule.Color) + '" />'
                 + '<select class="homeCustomListInput" data-key="TextColorMode" aria-label="Text colour"><option value=""' + (rule.TextColor ? '' : ' selected') + '>Text colour: automatic</option><option value="custom"' + (rule.TextColor ? ' selected' : '') + '>Text colour: custom</option></select>'
                 + (rule.TextColor ? '<input type="color" class="labelsColor" data-key="TextColor" aria-label="Text colour" title="Text colour" value="' + esc(rule.TextColor) + '" />' : '')
@@ -4939,6 +4990,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 + '</select>'
                 + '<span class="fieldDescription" style="margin:0;">Takes the place of the icon.</span>'
                 + '</div></div>'
+                + (rule.Preset === 'ageRating' ? labelAgeColorsField(rule) : '')
                 + '<div class="labelsField"><span class="labelsFieldName">Style</span><div class="labelsStyles">' + labelOptionButtons('Style', rule.Style, true) + '</div></div>'
                 + '<div class="labelsField"><span class="labelsFieldName">Shape</span><div class="labelsStyles">' + labelOptionButtons('Shape', rule.Shape, true) + '</div></div>'
                 + '<div class="labelsField"><span class="labelsFieldName">Size</span><div class="labelsStyles">' + labelOptionButtons('Size', rule.Size, true) + '</div></div>'
@@ -4956,6 +5008,37 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 + '</div>'
                 + '</div>';
         }).join('');
+    }
+
+    function labelAgeColorsField(rule) {
+        var byAge = rule.AgeColors.length === LABEL_AGE_BANDS.length;
+        var icons = [['', 'Label\'s icon']].concat(LABEL_ICONS);
+        return '<div class="labelsField is-top"><span class="labelsFieldName">By age</span><div>'
+            + '<div class="labelsInline">'
+            + '<button type="button" class="labelsOption" data-action="oneColor" aria-pressed="' + !byAge + '">Same for every age</button>'
+            + '<button type="button" class="labelsOption" data-action="ageColors" aria-pressed="' + byAge + '">A colour and icon per age</button>'
+            + '</div>'
+            + (byAge
+                ? LABEL_AGE_BANDS.map(function(band, i) {
+                    return '<div class="labelsInline" data-age-row style="margin-top:' + (i ? 8 : 12) + 'px;">'
+                        + '<span style="min-width:96px;">' + band[1] + '</span>'
+                        + '<input type="color" class="labelsColor" data-key="AgeColor" data-band="' + i + '" aria-label="' + band[1] + ', colour" title="Colour" value="' + esc(rule.AgeColors[i]) + '" />'
+                        + '<select class="homeCustomListInput" data-key="AgeIcon" data-band="' + i + '" aria-label="' + band[1] + ', icon">' + posterBadgeOptions(icons, rule.AgeIcons[i] || '') + '</select>'
+                        + '<span class="labelsAgeSample">' + labelAgeSample(rule, i) + '</span>'
+                        + '</div>';
+                }).join('')
+                    + '<span class="fieldDescription" style="display:block;margin:8px 0 0;">A rating with no known age keeps the colour and icon above, and a country flag takes the icon\'s place. Jellyfin knows the age of most ratings, R or TV-MA included; Emby and Plex only of those with a number, such as PG-13.</span>'
+                : '')
+            + '</div></div>';
+    }
+
+    // One band's label as the apps draw it, with that band's US example.
+    function labelAgeSample(rule, i) {
+        var look = labelLook(rule);
+        look.color = rule.AgeColors[i];
+        look.icon = rule.AgeIcons[i] || look.icon;
+        look.size = 'medium';
+        return labelBadgeHtml(look, LABEL_AGE_BANDS[i][3], 10);
     }
 
     // A list rather than a button per user, so a server with many users stays readable.
@@ -4990,7 +5073,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }
 
         drawLabelCorners(poster, posterBadgeRules.filter(function(rule) { return rule.Enabled; }).map(function(rule) {
-            return { label: rule.Label.trim(), look: labelLook(rule) };
+            return labelShown(rule);
         }));
     }
 
@@ -5156,8 +5239,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                     ? '<div class="labelsMatchList">' + badges.map(function(badge) {
                         return labelBadgeHtml(labelTestLook(badge), badge.label, 10);
                     }).join('') + '</div>'
-                    : '<span class="labelsReportWhy">No label matches this file.</span>')
+                    : '<span class="labelsReportWhy">No label matches this item.</span>')
                 + '</div>'
+                + '<div class="labelsTrack">Age rating: ' + esc(labelTestResult.rating ? labelTestResult.rating + (labelTestResult.age != null ? ', age ' + labelTestResult.age : ', age unknown') : 'none') + '</div>'
                 + '<details><summary>Tracks in this file (' + tracks.length + ')</summary>'
                 + '<div class="labelsTrack">' + esc(labelTestResult.path || '') + '</div>'
                 + tracks.map(function(track) { return '<div class="labelsTrack">' + esc(labelTrackText(track)) + '</div>'; }).join('')
@@ -5197,7 +5281,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         ApiClient.getItems(ApiClient.getCurrentUserId(), {
             SearchTerm: term,
-            IncludeItemTypes: 'Movie,Episode',
+            IncludeItemTypes: 'Movie,Episode,Series',
             Recursive: true,
             Limit: 8
         }).then(function(result) {
@@ -5242,7 +5326,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function newLabelRule(fields) {
-        var rule = { Label: '', Icon: '', Color: POSTER_BADGE_DEFAULT_COLOR, TextColor: '', Enabled: true, Preset: '', Style: '', Shape: '', Size: '', Corner: '', Opacity: null, UserIds: [], Profiles: [], Conditions: [] };
+        var rule = { Label: '', Icon: '', Color: POSTER_BADGE_DEFAULT_COLOR, TextColor: '', Enabled: true, Preset: '', RatingCountry: '', AgeColors: [], AgeIcons: [], Style: '', Shape: '', Size: '', Corner: '', Opacity: null, UserIds: [], Profiles: [], Conditions: [] };
         Object.keys(fields).forEach(function(key) { rule[key] = fields[key]; });
         return rule;
     }
@@ -5257,6 +5341,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var rule = posterBadgeRules[Number(ruleElement.getAttribute('data-rule'))];
         var conditionElement = target.closest('[data-condition]');
         var owner = conditionElement ? rule.Conditions[Number(conditionElement.getAttribute('data-condition'))] : rule;
+
+        if (key === 'AgeColor' || key === 'AgeIcon') {
+            var band = Number(target.getAttribute('data-band'));
+            (key === 'AgeColor' ? rule.AgeColors : rule.AgeIcons)[band] = target.value;
+            target.closest('[data-age-row]').querySelector('.labelsAgeSample').innerHTML = labelAgeSample(rule, band);
+            renderLabelPresets(view);
+            renderLabelPreview(view);
+            var badgeShown = labelShown(rule);
+            ruleElement.querySelector('.labelsRuleBadge').innerHTML = labelBadgeHtml(badgeShown.look, badgeShown.label, 11);
+            if (labelTestItem) {
+                scheduleLabelTest(view);
+            }
+            return;
+        }
 
         // A flag and an icon share one place, so picking either replaces the other.
         if (key === 'IconFlag') {
@@ -5303,8 +5401,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
         // Typing keeps the focus in place, so only the parts showing the label redraw.
         if (!conditionElement) {
-            var look = labelLook(rule);
-            ruleElement.querySelector('.labelsRuleBadge').innerHTML = labelBadgeHtml(look, rule.Label, 11);
+            var shown = labelShown(rule);
+            ruleElement.querySelector('.labelsRuleBadge').innerHTML = labelBadgeHtml(shown.look, shown.label, 11);
             ruleElement.querySelector('.labelsRuleName').textContent = labelRuleName(rule);
             if (rule.Preset) {
                 renderLabelPresets(view);
@@ -5524,6 +5622,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 rule.Conditions.push(newPosterBadgeCondition());
             } else if (action === 'removeCondition') {
                 rule.Conditions.splice(Number(button.closest('[data-condition]').getAttribute('data-condition')), 1);
+            } else if (action === 'oneColor') {
+                rule.AgeColors = [];
+            } else if (action === 'ageColors' && rule.AgeColors.length !== LABEL_AGE_BANDS.length) {
+                rule.AgeColors = LABEL_AGE_BANDS.map(function(band) { return band[2]; });
+                rule.AgeIcons = LABEL_AGE_BANDS.map(function() { return ''; });
             } else {
                 return;
             }

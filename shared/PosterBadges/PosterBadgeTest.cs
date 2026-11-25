@@ -41,7 +41,7 @@ public static class PosterBadgeTest
         "VideoRangeType", "VideoRange", "ExtendedVideoType", "IsDefault", "IsForced",
     };
 
-    public static List<PosterBadgeRuleResult> Explain(IReadOnlyList<PosterBadgeRule>? rules, string? path, IEnumerable? streams)
+    public static List<PosterBadgeRuleResult> Explain(IReadOnlyList<PosterBadgeRule>? rules, string? path, IEnumerable? streams, string? rating = null)
     {
         var results = new List<PosterBadgeRuleResult>();
         if (rules == null)
@@ -65,7 +65,11 @@ public static class PosterBadgeTest
             }
 
             bool holds;
-            if (!string.IsNullOrWhiteSpace(rule.Preset))
+            if (PosterBadgeMatcher.IsRating(rule))
+            {
+                holds = PosterBadgeRating.Clean(rating) != null;
+            }
+            else if (!string.IsNullOrWhiteSpace(rule.Preset))
             {
                 holds = presets.Contains(rule.Preset!.Trim());
             }
@@ -73,13 +77,15 @@ public static class PosterBadgeTest
             {
                 foreach (var condition in rule.Conditions ?? new List<PosterBadgeCondition>())
                 {
-                    result.Conditions.Add(PosterBadgeMatcher.Holds(condition, path, tracks));
+                    result.Conditions.Add(PosterBadgeMatcher.Holds(condition, path, tracks, rating));
                 }
 
                 holds = result.Conditions.Count > 0 && result.Conditions.TrueForAll(passed => passed);
             }
 
             var key = PosterBadgeMatcher.ShownKey(rule);
+            // The rating's text may match another label's, as in Match.
+            var text = holds && PosterBadgeMatcher.IsRating(rule) ? PosterBadgeRating.Show(rating, rule.RatingCountry)?.Text : null;
             if (!rule.Enabled)
             {
                 result.Outcome = "off";
@@ -92,12 +98,18 @@ public static class PosterBadgeTest
             {
                 result.Outcome = "notMet";
             }
-            else if (!shown.Add(key))
+            else if (shown.Contains(key) || (text != null && shown.Contains(text)))
             {
                 result.Outcome = "sameText";
             }
             else
             {
+                shown.Add(key);
+                if (text != null)
+                {
+                    shown.Add(text);
+                }
+
                 result.Outcome = "shown";
             }
         }

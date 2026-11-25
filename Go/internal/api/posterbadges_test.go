@@ -81,7 +81,7 @@ func TestBadgeConditions(t *testing.T) {
 		{"the HDR type", cond("Video.VideoRangeType", "any", "is", "dovi"), atmos4K, true},
 	}
 	for _, c := range cases {
-		if got := conditionHolds(c.c, "/m/x.mkv", c.tracks); got != c.want {
+		if got := conditionHolds(c.c, BadgeFile{Path: "/m/x.mkv", Tracks: c.tracks}); got != c.want {
 			t.Errorf("%s: got %v", c.name, got)
 		}
 	}
@@ -283,6 +283,105 @@ func TestBadgeListsMatchTheSharedCode(t *testing.T) {
 		want := badgePreset{m[1], m[2], m[3], m[4], strings.ReplaceAll(m[5], `\"`, `"`)}
 		if badgePresets[i] != want {
 			t.Errorf("preset %d: %+v, want %+v", i, badgePresets[i], want)
+		}
+	}
+}
+
+func TestAgeRatingLabel(t *testing.T) {
+	rule := func(country, icon string) []badgeRule {
+		return []badgeRule{{Preset: "ageRating", Label: "Age rating", RatingCountry: country, Icon: icon}}
+	}
+	cases := []struct {
+		rules         []badgeRule
+		rating        string
+		label, icon   string
+		noLabelWanted bool
+	}{
+		{rules: rule("", ""), rating: "FR-12", label: "FR-12"},
+		{rules: rule("hide", ""), rating: "FR-12", label: "12"},
+		{rules: rule("flag", "person"), rating: "FR-12", label: "12", icon: "flag-fr"},
+		{rules: rule("flag", "person"), rating: "PG-13", label: "PG-13", icon: "person"},
+		{rules: rule("hide", ""), rating: "TV-MA", label: "TV-MA"},
+		{rules: rule("hide", ""), rating: "gb/15", label: "15"},
+		{rules: rule("flag", ""), rating: "FSK-16", label: "16", icon: "flag-de"},
+		{rules: rule("", ""), rating: "Rated R", label: "R"},
+		{rules: rule("", ""), rating: "FR-NR", noLabelWanted: true},
+		{rules: rule("", ""), rating: "", noLabelWanted: true},
+	}
+	for _, c := range cases {
+		got := matchBadges(c.rules, BadgeFile{Rating: c.rating, NoFile: true}, newBadgeDefaults())
+		if c.noLabelWanted {
+			if len(got) != 0 {
+				t.Errorf("%q: %+v, want no label", c.rating, got)
+			}
+			continue
+		}
+		if len(got) != 1 || got[0].Label != c.label || got[0].Icon != c.icon {
+			t.Errorf("%q %+v: %+v, want %s %s", c.rating, c.rules[0], got, c.label, c.icon)
+		}
+	}
+}
+
+func TestRatingConditionAndSeriesPaths(t *testing.T) {
+	kids := badgeCondition{Field: "Rating", Match: "any", Operator: "oneOf", Value: "FR-TP, G"}
+	if !conditionHolds(kids, BadgeFile{Rating: "FR-TP"}) || conditionHolds(kids, BadgeFile{Rating: "FR-12"}) {
+		t.Error("a rating condition should read the rating")
+	}
+	noRemux := badgeCondition{Field: "Path", Match: "none", Operator: "contains", Value: "REMUX"}
+	if conditionHolds(noRemux, BadgeFile{NoFile: true, Rating: "TV-MA"}) {
+		t.Error("a series has no path, so a path condition can't hold")
+	}
+}
+
+func TestAgeRatingColours(t *testing.T) {
+	bands := []string{"#000000", "#000007", "#000012", "#000016", "#000018"}
+	rules := []badgeRule{{Preset: "ageRating", Color: "#4B5563", AgeColors: bands}}
+	for rating, want := range map[string]string{"G": "#4B5563", "PG-13": "#000012", "TV-Y7": "#000007", "FR-16": "#000016", "18": "#000018", "R": "#4B5563"} {
+		if got := matchBadges(rules, BadgeFile{Rating: rating, NoFile: true}, newBadgeDefaults()); len(got) != 1 || got[0].Color != want {
+			t.Errorf("%s: %+v, want %s", rating, got, want)
+		}
+	}
+}
+
+func TestAgeRatingIcons(t *testing.T) {
+	rules := []badgeRule{{Preset: "ageRating", Icon: "person", RatingCountry: "keep",
+		AgeColors: []string{"#000000", "#000007", "#000012", "#000016", "#000018"},
+		AgeIcons:  []string{"family_restroom", "", "made_up", "warning", "18_up_rating"}}}
+	for rating, want := range map[string]string{"FSK-0": "family_restroom", "PG-13": "person", "FR-18": "18_up_rating", "R": "person"} {
+		if got := matchBadges(rules, BadgeFile{Rating: rating, NoFile: true}, newBadgeDefaults()); len(got) != 1 || got[0].Icon != want {
+			t.Errorf("%s: %+v, want %s", rating, got, want)
+		}
+	}
+	rules[0].RatingCountry = "flag"
+	if got := matchBadges(rules, BadgeFile{Rating: "FR-18", NoFile: true}, newBadgeDefaults()); got[0].Icon != "flag-fr" {
+		t.Errorf("a flag should win: %+v", got)
+	}
+}
+
+func TestTheSameTextShowsOnce(t *testing.T) {
+	rating := badgeRule{Preset: "ageRating", Label: "Age rating"}
+	custom := badgeRule{Label: "PG-13", Conditions: []badgeCondition{{Field: "Rating", Operator: "is", Value: "PG-13"}}}
+	teens := badgeRule{Label: "Teens", Conditions: custom.Conditions}
+	file := BadgeFile{Rating: "PG-13", NoFile: true}
+	cases := []struct {
+		rules  []badgeRule
+		labels int
+		want   []string
+	}{
+		{[]badgeRule{rating, custom}, 1, []string{"shown", "sameText"}},
+		{[]badgeRule{custom, rating}, 1, []string{"shown", "sameText"}},
+		{[]badgeRule{rating, teens}, 2, []string{"shown", "shown"}},
+	}
+	for _, c := range cases {
+		if got := matchBadges(c.rules, file, newBadgeDefaults()); len(got) != c.labels {
+			t.Errorf("%v: %d labels, want %d", c.want, len(got), c.labels)
+		}
+		outcomes := []string{}
+		for _, r := range explainBadges(c.rules, file) {
+			outcomes = append(outcomes, r.outcome)
+		}
+		if !reflect.DeepEqual(outcomes, c.want) {
+			t.Errorf("outcomes %v, want %v", outcomes, c.want)
 		}
 	}
 }

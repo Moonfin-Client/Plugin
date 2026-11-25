@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -35,10 +36,14 @@ type plexBadgeStream struct {
 }
 
 type plexBadgeItem struct {
-	RatingKey string `json:"ratingKey"`
-	Type      string `json:"type"`
-	Title     string `json:"title"`
-	Media     []struct {
+	RatingKey     string `json:"ratingKey"`
+	Type          string `json:"type"`
+	Title         string `json:"title"`
+	ContentRating string `json:"contentRating"`
+	// The show of a season, and of an episode.
+	ParentRatingKey      string `json:"parentRatingKey"`
+	GrandparentRatingKey string `json:"grandparentRatingKey"`
+	Media                []struct {
 		Part []struct {
 			File string `json:"file"`
 			// Nil when Plex hasn't read the file's tracks yet.
@@ -47,8 +52,9 @@ type plexBadgeItem struct {
 	} `json:"Media"`
 }
 
-// BadgeFiles reads the files of the movies and episodes among ids, asking
-// Plex as the caller so a shared user only gets labels for what they can see.
+// BadgeFiles reads the files of the movies and episodes among ids, and the
+// ratings of the shows and seasons, asking Plex as the caller so a shared
+// user only gets labels for what they can see.
 func (c *Companion) BadgeFiles(ctx context.Context, caller api.Identity, ids []string) (map[string]api.BadgeFile, error) {
 	var keys []string
 	for _, id := range ids {
@@ -57,7 +63,53 @@ func (c *Companion) BadgeFiles(ctx context.Context, caller api.Identity, ids []s
 			keys = append(keys, id)
 		}
 	}
+	items, err := c.badgeItems(ctx, caller, keys)
+	if err != nil {
+		return nil, err
+	}
 	files := map[string]api.BadgeFile{}
+	// A season has no rating, and an episode seldom one of its own: theirs is
+	// the show's, read once for all of them.
+	var missing []string
+	for _, item := range items {
+		if file, ok := badgeFileOf(item); ok {
+			files[item.RatingKey] = file
+			if show := showOf(item); file.Rating == "" && show != "" && !slices.Contains(missing, show) {
+				missing = append(missing, show)
+			}
+		}
+	}
+	if len(missing) > 0 {
+		// The show's rating is only a fallback, so a failed lookup leaves it empty.
+		parents, _ := c.badgeItems(ctx, caller, missing)
+		shows := map[string]string{}
+		for _, show := range parents {
+			shows[show.RatingKey] = show.ContentRating
+		}
+		for _, item := range items {
+			if file, ok := files[item.RatingKey]; ok && file.Rating == "" {
+				file.Rating = shows[showOf(item)]
+				files[item.RatingKey] = file
+			}
+		}
+	}
+	return files, nil
+}
+
+// showOf is the show a season or an episode belongs to.
+func showOf(item plexBadgeItem) string {
+	switch item.Type {
+	case "season":
+		return item.ParentRatingKey
+	case "episode":
+		return item.GrandparentRatingKey
+	}
+	return ""
+}
+
+// badgeItems reads items through /library/metadata, in batches.
+func (c *Companion) badgeItems(ctx context.Context, caller api.Identity, keys []string) ([]plexBadgeItem, error) {
+	var items []plexBadgeItem
 	for start := 0; start < len(keys); start += badgeBatch {
 		batch := keys[start:min(start+badgeBatch, len(keys))]
 		status, body, err := c.get(ctx, c.cfg.PMS+"/library/metadata/"+strings.Join(batch, ","), caller.Token)
@@ -79,23 +131,22 @@ func (c *Companion) BadgeFiles(ctx context.Context, caller api.Identity, ids []s
 		if err := json.Unmarshal(body, &v); err != nil {
 			return nil, err
 		}
-		for _, item := range v.MediaContainer.Metadata {
-			if file, ok := badgeFileOf(item); ok {
-				files[item.RatingKey] = file
-			}
-		}
+		items = append(items, v.MediaContainer.Metadata...)
 	}
-	return files, nil
+	return items, nil
 }
 
 // badgeFileOf reads the version with the largest picture when a movie is
-// stored more than once. False for anything but a movie or an episode, which
-// have no file of their own.
+// stored more than once. A show or a season has no file, only a rating. False
+// for anything else.
 func badgeFileOf(item plexBadgeItem) (api.BadgeFile, bool) {
+	if item.Type == "show" || item.Type == "season" {
+		return api.BadgeFile{Name: item.Title, Rating: item.ContentRating, NoFile: true}, true
+	}
 	if item.Type != "movie" && item.Type != "episode" {
 		return api.BadgeFile{}, false
 	}
-	file := api.BadgeFile{Name: item.Title}
+	file := api.BadgeFile{Name: item.Title, Rating: item.ContentRating}
 	best := -1
 	for _, media := range item.Media {
 		if len(media.Part) == 0 {
@@ -199,7 +250,7 @@ func videoRangeType(s plexBadgeStream) string {
 	return "SDR"
 }
 
-// BadgeSearch finds movies and episodes by name for the admin page's test.
+// BadgeSearch finds movies, episodes and shows by name for the admin page's test.
 func (c *Companion) BadgeSearch(ctx context.Context, caller api.Identity, term string, limit int) ([]api.M, error) {
 	q := url.Values{"query": {term}, "limit": {strconv.Itoa(limit)}}
 	status, body, err := c.get(ctx, c.cfg.PMS+"/hubs/search?"+q.Encode(), caller.Token)
@@ -241,6 +292,9 @@ func (c *Companion) BadgeSearch(ctx context.Context, caller api.Identity, term s
 			case "episode":
 				items = append(items, api.M{"Id": m.RatingKey, "Name": m.Title, "Type": "Episode", "SeriesName": m.GrandparentTitle,
 					"SeriesId": m.GrandparentRatingKey, "ParentIndexNumber": m.ParentIndex, "IndexNumber": m.Index})
+			case "show":
+				// For the age rating label, the only one a show can have.
+				items = append(items, api.M{"Id": m.RatingKey, "Name": m.Title, "Type": "Series"})
 			}
 		}
 	}

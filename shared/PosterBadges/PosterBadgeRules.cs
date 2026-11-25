@@ -55,6 +55,25 @@ public class PosterBadgeRule
     /// </summary>
     public string? Icon { get; set; }
 
+    /// <summary>
+    /// For the age rating label, what happens to a country code such as "FR-" in "FR-12":
+    /// "keep", "hide", or "flag" to show the country's flag in place of the icon. Empty keeps it.
+    /// </summary>
+    public string? RatingCountry { get; set; }
+
+    /// <summary>
+    /// For the age rating label, one #RRGGBB colour per band of <see cref="PosterBadgeRating.AgeBands"/>:
+    /// all ages, 7, 12, 16, then 18 and over. Empty for the one colour above, which is also
+    /// what a rating of unknown age gets.
+    /// </summary>
+    public List<string> AgeColors { get; set; } = new();
+
+    /// <summary>
+    /// For the age rating label, one icon per age band, as <see cref="AgeColors"/>. An empty
+    /// one, or an empty list, keeps the label's own icon. A country flag still wins.
+    /// </summary>
+    public List<string> AgeIcons { get; set; } = new();
+
     // Who sees it. Empty means everyone.
 
     /// <summary>Server user ids allowed to see the label.</summary>
@@ -90,7 +109,7 @@ public class PosterBadgeDefaults
 public class PosterBadgeCondition
 {
     /// <summary>
-    /// "Path" for the file path, a track type and one of its properties, such as
+    /// "Path" for the file path, "Rating" for the age rating, a track type and one of its properties, such as
     /// "Audio.Title" or "Video.Height", or a track type and "Count" or "LanguageCount",
     /// such as "Audio.LanguageCount".
     /// </summary>
@@ -258,7 +277,9 @@ public static class PosterBadgeMatcher
             }
 
             Add(rule.Label); Add(rule.Color); Add(rule.Enabled); Add(rule.Preset); Add(rule.TextColor); Add(rule.Style);
-            Add(rule.Opacity); Add(rule.Size); Add(rule.Corner); Add(rule.Shape); Add(rule.Icon);
+            Add(rule.Opacity); Add(rule.Size); Add(rule.Corner); Add(rule.Shape); Add(rule.Icon); Add(rule.RatingCountry);
+            Add(string.Join(",", rule.AgeColors ?? new List<string>()));
+            Add(string.Join(",", rule.AgeIcons ?? new List<string>()));
             Add(string.Join(",", rule.UserIds ?? new List<string>()));
             Add(string.Join(",", rule.Profiles ?? new List<string>()));
             foreach (var condition in rule.Conditions ?? new List<PosterBadgeCondition>())
@@ -284,13 +305,18 @@ public static class PosterBadgeMatcher
 
     /// <summary>
     /// The badges for one item, in the order of the rules. The streams are the server's own
-    /// track objects, read by property name, so this works with Jellyfin and Emby alike.
+    /// track objects, read by property name, so this works with Jellyfin and Emby alike. A
+    /// series or season has no file: its path and streams are null, so only the rating counts.
+    /// The age is the server's own reading of the rating, when it has one; otherwise the
+    /// number in the rating's text is used.
     /// </summary>
     public static List<PosterBadge> Match(
         IEnumerable<PosterBadgeRule>? rules,
         string? path,
         IEnumerable? streams,
-        PosterBadgeDefaults? defaults = null)
+        PosterBadgeDefaults? defaults = null,
+        string? rating = null,
+        int? age = null)
     {
         var badges = new List<PosterBadge>();
         if (rules == null)
@@ -313,7 +339,23 @@ public static class PosterBadgeMatcher
             }
 
             bool holds;
-            if (!string.IsNullOrWhiteSpace(rule.Preset))
+            var label = rule.Label?.Trim() ?? string.Empty;
+            // The icon and colour the item's rating brings, over the rule's own.
+            string? icon = null;
+            string? color = null;
+            if (IsRating(rule))
+            {
+                var shownRating = PosterBadgeRating.Show(rating, rule.RatingCountry);
+                holds = shownRating != null;
+                if (holds)
+                {
+                    (label, icon) = shownRating!.Value;
+                    var ageOrText = age ?? PosterBadgeRating.AgeInText(rating);
+                    color = Hex(PosterBadgeRating.ForAge(rule.AgeColors, ageOrText));
+                    icon ??= KnownIcon(PosterBadgeRating.ForAge(rule.AgeIcons, ageOrText));
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(rule.Preset))
             {
                 presets ??= PosterBadgePresets.Detect(path, tracks ?? new List<object>());
                 holds = presets.Contains(rule.Preset!.Trim());
@@ -323,13 +365,14 @@ public static class PosterBadgeMatcher
                 // A rule with no conditions would badge every poster on the server.
                 holds = rule.Conditions != null
                     && rule.Conditions.Count > 0
-                    && rule.Conditions.TrueForAll(condition => Holds(condition, path, tracks));
+                    && rule.Conditions.TrueForAll(condition => Holds(condition, path, tracks, rating));
             }
 
-            if (holds)
+            // The rating's text is only known now, and may match another label's.
+            if (holds && (!IsRating(rule) || shown.Add(label)))
             {
                 shown.Add(key);
-                badges.Add(Resolve(rule, rule.Label?.Trim() ?? string.Empty, defaults ?? new PosterBadgeDefaults()));
+                badges.Add(Resolve(rule, label, defaults ?? new PosterBadgeDefaults(), icon, color));
             }
         }
 
@@ -352,11 +395,14 @@ public static class PosterBadgeMatcher
     {
         "contrast", "hdr_on", "high_quality", "movie", "theaters", "aspect_ratio", "surround_sound",
         "speaker", "graphic_eq", "album", "translate", "subtitles", "record_voice_over", "star", "check_circle",
+        "person", "family_restroom", "child_care", "escalator_warning", "18_up_rating", "warning",
     }.Concat(PosterBadgeFlags.Codes.Select(code => "flag-" + code)).ToArray();
 
     /// <summary>The rule's icon when it is one clients know, else null.</summary>
-    public static string? IconOf(PosterBadgeRule rule) =>
-        Array.Find(Icons, icon => string.Equals(icon, rule.Icon?.Trim(), StringComparison.OrdinalIgnoreCase));
+    public static string? IconOf(PosterBadgeRule rule) => KnownIcon(rule.Icon);
+
+    private static string? KnownIcon(string? name) =>
+        Array.Find(Icons, icon => string.Equals(icon, name?.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// What makes two labels the same, so it shows once: the text, or the icon for a label
@@ -364,6 +410,12 @@ public static class PosterBadgeMatcher
     /// </summary>
     public static string? ShownKey(PosterBadgeRule rule)
     {
+        // Its text comes from the item, so two age rating rules are alternatives.
+        if (IsRating(rule))
+        {
+            return "preset:" + PosterBadgeRating.PresetId;
+        }
+
         var label = rule.Label?.Trim();
         if (!string.IsNullOrEmpty(label))
         {
@@ -378,18 +430,22 @@ public static class PosterBadgeMatcher
     /// Fills every empty or unknown setting from the defaults, so clients draw exactly what
     /// they get and an old config or a typo never reaches them.
     /// </summary>
-    private static PosterBadge Resolve(PosterBadgeRule rule, string label, PosterBadgeDefaults defaults) => new()
+    private static PosterBadge Resolve(PosterBadgeRule rule, string label, PosterBadgeDefaults defaults, string? icon = null, string? color = null) => new()
     {
         Label = label,
-        Color = Hex(rule.Color) ?? "#2563EB",
+        Color = color ?? Hex(rule.Color) ?? "#2563EB",
         TextColor = Hex(rule.TextColor) ?? string.Empty,
         Style = Pick(Styles, rule.Style, defaults.Style),
         Opacity = Math.Max(10, Math.Min(100, rule.Opacity ?? defaults.Opacity)),
         Size = Pick(Sizes, rule.Size, defaults.Size),
         Corner = Pick(Corners, rule.Corner, defaults.Corner),
         Shape = Pick(Shapes, rule.Shape, defaults.Shape),
-        Icon = IconOf(rule) ?? string.Empty,
+        Icon = icon ?? IconOf(rule) ?? string.Empty,
     };
+
+    /// <summary>Whether the rule is the built-in age rating label, whose text comes from the item.</summary>
+    public static bool IsRating(PosterBadgeRule rule) =>
+        string.Equals(rule.Preset?.Trim(), PosterBadgeRating.PresetId, StringComparison.OrdinalIgnoreCase);
 
     private static string Pick(string[] allowed, string? value, string? fallback)
     {
@@ -433,7 +489,7 @@ public static class PosterBadgeMatcher
     }
 
     /// <summary>Whether one condition holds for the file. Public for the admin page's test.</summary>
-    public static bool Holds(PosterBadgeCondition? condition, string? path, List<object>? tracks)
+    public static bool Holds(PosterBadgeCondition? condition, string? path, List<object>? tracks, string? rating = null)
     {
         var field = condition?.Field?.Trim();
         if (condition == null || string.IsNullOrEmpty(field))
@@ -456,7 +512,7 @@ public static class PosterBadgeMatcher
             return false;
         }
 
-        var values = ValuesOf(field!, path, tracks);
+        var values = ValuesOf(field!, path, tracks, rating);
         if (values == null)
         {
             return false;
@@ -495,14 +551,22 @@ public static class PosterBadgeMatcher
     }
 
     /// <summary>
-    /// The values a condition looks at: the path, the number of tracks of a type, or that
-    /// property of each track of the type. Null for a field that names nothing.
+    /// The values a condition looks at: the path, the age rating, the number of tracks of a
+    /// type, or that property of each track of the type. Null for a field that names nothing.
     /// </summary>
-    private static List<string?>? ValuesOf(string field, string? path, List<object>? tracks)
+    private static List<string?>? ValuesOf(string field, string? path, List<object>? tracks, string? rating)
     {
+        // No path is no file, as on a series, not an empty path: "unless the path says
+        // REMUX" doesnt hold there.
         if (string.Equals(field, "Path", StringComparison.OrdinalIgnoreCase))
         {
-            return new List<string?> { path };
+            return path == null ? null : new List<string?> { path };
+        }
+
+        // An item with no rating has an empty one, so "unless the rating is 18" holds.
+        if (string.Equals(field, "Rating", StringComparison.OrdinalIgnoreCase))
+        {
+            return new List<string?> { PosterBadgeRating.Clean(rating) };
         }
 
         var dot = field.IndexOf('.');
