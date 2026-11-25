@@ -727,10 +727,10 @@ namespace Emby.Plugins.Moonfin.Services
 
         /// <summary>
         /// The whole queue of every Radarr or Sonarr set up in Seerr, for the stuck download check.
-        /// Null when there's no admin session or arr, or any arr couldn't be read, so a download
-        /// missing from a partial read isn't taken for one that left.
+        /// A server that couldn't be read is listed, so only its downloads are kept as they were. Null
+        /// when there's no admin session or arr, or no arr could be read.
         /// </summary>
-        public async Task<JsonArray?> ReadWholeArrQueueAsync(string service, CancellationToken cancellationToken = default)
+        public async Task<StuckQueue?> ReadWholeArrQueueAsync(string service, CancellationToken cancellationToken = default)
         {
             var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
             var (servers, error) = await ResolveArrServersAsync(service, isSonarr, Include4kServers).ConfigureAwait(false);
@@ -743,27 +743,11 @@ namespace Emby.Plugins.Moonfin.Services
             // Reading the arr settings is one Seerr call with its own timeout, so the token is checked after it.
             if (cancellationToken.IsCancellationRequested) return null;
 
-            var queues = await Task.WhenAll(servers.Select(server =>
-                StuckDownloads.ReadQueueAsync(ArrSender(service, server, cancellationToken), isSonarr, cancellationToken))).ConfigureAwait(false);
-            var all = new JsonArray();
-            for (var i = 0; i < servers.Count; i++)
-            {
-                var queue = queues[i];
-                if (queue == null)
-                {
-                    _logger.Warn("Stuck download check skipped " + service + ": the server " + servers[i].Info.Name + " couldn't be read");
-                    return null;
-                }
-
-                // The primary's entries stay unmarked, so the keys stored for them before still match.
-                if (i > 0) ArrServers.Tag(queue, servers[i].Id);
-
-                var entries = queue.ToList();
-                queue.Clear();
-                foreach (var entry in entries) all.Add(entry);
-            }
-
-            return all;
+            return await StuckDownloads.ReadServerQueuesAsync(
+                servers.Select(server => (server.Info, ArrSender(service, server, cancellationToken))).ToList(),
+                isSonarr,
+                message => _logger.Warn("Stuck download check: " + message),
+                cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>

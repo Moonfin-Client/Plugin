@@ -1119,10 +1119,10 @@ public class SeerrSessionService
 
     /// <summary>
     /// The whole queue of every Radarr or Sonarr set up in Seerr, for the stuck download check.
-    /// Null when there's no admin session or arr, or any arr couldn't be read, so a download
-    /// missing from a partial read isn't taken for one that left.
+    /// A server that couldn't be read is listed, so only its downloads are kept as they were. Null
+    /// when there's no admin session or arr, or no arr could be read.
     /// </summary>
-    public async Task<JsonArray?> ReadWholeArrQueueAsync(string service, CancellationToken cancellationToken = default)
+    public async Task<StuckQueue?> ReadWholeArrQueueAsync(string service, CancellationToken cancellationToken = default)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
         var (servers, error) = await ResolveArrServersAsync(service, isSonarr, Include4kServers);
@@ -1138,33 +1138,11 @@ public class SeerrSessionService
             return null;
         }
 
-        var queues = await Task.WhenAll(servers.Select(server =>
-            StuckDownloads.ReadQueueAsync(ArrSender(service, server, cancellationToken), isSonarr, cancellationToken)));
-        var all = new JsonArray();
-        for (var i = 0; i < servers.Count; i++)
-        {
-            var queue = queues[i];
-            if (queue == null)
-            {
-                _logger.LogWarning("Stuck download check skipped {Service}: the server {Server} couldn't be read", service, servers[i].Info.Name);
-                return null;
-            }
-
-            // The primary's entries stay unmarked, so the keys stored for them before still match.
-            if (i > 0)
-            {
-                ArrServers.Tag(queue, servers[i].Id);
-            }
-
-            var entries = queue.ToList();
-            queue.Clear();
-            foreach (var entry in entries)
-            {
-                all.Add(entry);
-            }
-        }
-
-        return all;
+        return await StuckDownloads.ReadServerQueuesAsync(
+            servers.Select(server => (server.Info, ArrSender(service, server, cancellationToken))).ToList(),
+            isSonarr,
+            message => _logger.LogWarning("Stuck download check: {Message}", message),
+            cancellationToken);
     }
 
     /// <summary>

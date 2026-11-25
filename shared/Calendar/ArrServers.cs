@@ -43,6 +43,9 @@ public static class ArrServers
     /// <summary>The property naming the server an element came from, on calendar elements and queue records.</summary>
     public const string ServerProperty = "moonfinArrServerId";
 
+    /// <summary>The property set to true on queue records from a 4K server, for the stuck download check.</summary>
+    public const string Is4kProperty = "moonfinArrIs4k";
+
     /// <summary>
     /// The regular default first, then the other regular servers in Seerr's order, then the 4K
     /// servers in Seerr's order. 4K servers are left out when include4k is false, unless they're
@@ -74,15 +77,6 @@ public static class ArrServers
         if (servers.Count == 0) return null;
         if (string.IsNullOrWhiteSpace(id)) return servers[0];
         return servers.FirstOrDefault(s => string.Equals(idOf(s), id!.Trim(), StringComparison.Ordinal));
-    }
-
-    /// <summary>Marks each record with the server it came from.</summary>
-    public static void Tag(JsonArray records, string serverId)
-    {
-        foreach (var record in records.OfType<JsonObject>())
-        {
-            record[ServerProperty] = serverId;
-        }
     }
 
     private static ArrServerInfo Info(JsonElement server, int index)

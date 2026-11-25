@@ -368,13 +368,143 @@ public class ArrServersTests
     public void QueueIdsFromOtherServersGetTheirOwnStuckKey()
     {
         var primary = JsonNode.Parse("""{"id":7}""")!.AsObject();
-        var other = JsonNode.Parse("""{"id":7}""")!.AsObject();
-        ArrServers.Tag(new JsonArray(other), "2");
+        var other = JsonNode.Parse("""{"id":7,"moonfinArrServerId":"2"}""")!.AsObject();
         var withDownload = JsonNode.Parse("""{"id":7,"downloadId":"ABC","moonfinArrServerId":"2"}""")!.AsObject();
 
         Assert.Equal("radarr:queue-7", StuckDownloads.Key(primary, isSonarr: false));
         Assert.Equal("radarr:queue-2-7", StuckDownloads.Key(other, isSonarr: false));
         Assert.Equal("radarr:abc", StuckDownloads.Key(withDownload, isSonarr: false));
+    }
+
+    private static readonly DateTime CheckTime = new DateTime(2026, 11, 25, 12, 0, 0, DateTimeKind.Utc);
+
+    private static JsonObject BlockedMovie(string downloadId, int tmdbId = 10378) => new JsonObject
+    {
+        ["id"] = 7,
+        ["downloadId"] = downloadId,
+        ["trackedDownloadState"] = "importBlocked",
+        ["trackedDownloadStatus"] = "warning",
+        ["movie"] = new JsonObject { ["title"] = "Big Buck Bunny", ["tmdbId"] = tmdbId },
+    };
+
+    private static ArrSend Holding(params JsonObject[] records) => (method, path, body) =>
+        Task.FromResult(new ArrAnswer(200, Bytes(new JsonObject
+        {
+            ["records"] = new JsonArray(records.Select(r => (JsonNode)r.DeepClone()).ToArray()),
+            ["totalRecords"] = records.Length,
+        }.ToJsonString())));
+
+    [Fact]
+    public async Task StuckQueuesMarkTheServerOfNonPrimaryRecordsAndThe4kOnes()
+    {
+        var queue = await StuckDownloads.ReadServerQueuesAsync(
+            new[] { (TwoServers[0], Holding(BlockedMovie("A"))), (TwoServers[1], Holding(BlockedMovie("B"))) },
+            isSonarr: false);
+
+        Assert.NotNull(queue);
+        Assert.Empty(queue!.Unread);
+        var records = queue.Records.OfType<JsonObject>().ToList();
+        Assert.Equal(2, records.Count);
+        Assert.False(records[0].ContainsKey(ArrServers.ServerProperty));
+        Assert.False(records[0].ContainsKey(ArrServers.Is4kProperty));
+        Assert.Equal("2", (string)records[1][ArrServers.ServerProperty]!);
+        Assert.True((bool)records[1][ArrServers.Is4kProperty]!);
+    }
+
+    [Fact]
+    public async Task AServerThatCannotBeReadIsListedAndTheOthersAreStillRead()
+    {
+        var queue = await StuckDownloads.ReadServerQueuesAsync(
+            new[] { (TwoServers[0], Holding(BlockedMovie("A"))), (TwoServers[1], Down()) },
+            isSonarr: false);
+        var primaryDown = await StuckDownloads.ReadServerQueuesAsync(
+            new[] { (TwoServers[0], Down()), (TwoServers[1], Holding(BlockedMovie("B"))) },
+            isSonarr: false);
+        var allDown = await StuckDownloads.ReadServerQueuesAsync(
+            new[] { (TwoServers[0], Down()), (TwoServers[1], Down()) },
+            isSonarr: false);
+
+        Assert.Equal(new string?[] { "2" }, queue!.Unread);
+        Assert.Single(queue.Records);
+        Assert.Equal(new string?[] { null }, primaryDown!.Unread);
+        Assert.Null(allDown);
+    }
+
+    [Fact]
+    public void AnUnreadServerKeepsItsOwnRecordsOnlyAndTheReadOnesAreScanned()
+    {
+        var previous = new Dictionary<string, StuckDownloadRecord>
+        {
+            ["radarr:main-gone"] = new StuckDownloadRecord { StuckSince = CheckTime.AddHours(-1) },
+            ["radarr:4k-kept"] = new StuckDownloadRecord { StuckSince = CheckTime.AddHours(-1), Server = "2" },
+            ["radarr:main-still"] = new StuckDownloadRecord { StuckSince = CheckTime.AddHours(-1) },
+        };
+        var fourKDown = new StuckQueue(new JsonArray(BlockedMovie("MAIN-STILL")), new string?[] { "2" });
+
+        var (next, due) = StuckDownloads.Scan(previous, fourKDown, null, CheckTime, TimeSpan.FromHours(6));
+
+        Assert.False(next.ContainsKey("radarr:main-gone"));
+        Assert.Equal("2", next["radarr:4k-kept"].Server);
+        Assert.Null(next["radarr:main-still"].Server);
+        Assert.Single(due);
+    }
+
+    [Fact]
+    public void AnUnreadPrimaryKeepsTheRecordsStoredBeforeSeveralServersWereRead()
+    {
+        var previous = new Dictionary<string, StuckDownloadRecord>
+        {
+            ["radarr:old"] = new StuckDownloadRecord { StuckSince = CheckTime.AddHours(-1) },
+            ["radarr:4k-gone"] = new StuckDownloadRecord { StuckSince = CheckTime.AddHours(-1), Server = "2" },
+        };
+        var primaryDown = new StuckQueue(new JsonArray(), new string?[] { null });
+
+        var (next, _) = StuckDownloads.Scan(previous, primaryDown, null, CheckTime, TimeSpan.FromHours(6));
+
+        Assert.True(next.ContainsKey("radarr:old"));
+        Assert.False(next.ContainsKey("radarr:4k-gone"));
+    }
+
+    [Fact]
+    public void ADownloadOnA4kServerIsToldToThe4kRequesterOnly()
+    {
+        var regularUser = Guid.NewGuid();
+        var fourKUser = Guid.NewGuid();
+        var requests = JsonNode.Parse($$$"""
+            [
+              {"is4k":false,"media":{"mediaType":"movie","tmdbId":10378},"requestedBy":{"jellyfinUserId":"{{{regularUser:N}}}"}},
+              {"is4k":true,"media":{"mediaType":"movie","tmdbId":10378},"requestedBy":{"jellyfinUserId":"{{{fourKUser:N}}}"}}
+            ]
+            """)!.AsArray();
+        StuckDownload Download(bool? is4k) => new StuckDownload("radarr:x", false, "Big Buck Bunny", 10378, null, System.Array.Empty<int>(), "import blocked", null, is4k);
+
+        Assert.Equal(new[] { fourKUser }, StuckDownloads.Requesters(requests, Download(true)).Users);
+        Assert.Equal(new[] { regularUser }, StuckDownloads.Requesters(requests, Download(false)).Users);
+        Assert.Equal(new[] { regularUser, fourKUser }, StuckDownloads.Requesters(requests, Download(null)).Users);
+    }
+
+    [Fact]
+    public void AStuckDownloadKnowsWhetherItIsOnA4kServer()
+    {
+        var previous = new Dictionary<string, StuckDownloadRecord>
+        {
+            ["radarr:4k"] = new StuckDownloadRecord { StuckSince = CheckTime.AddHours(-1), Server = "2" },
+            ["radarr:both"] = new StuckDownloadRecord { StuckSince = CheckTime.AddHours(-1) },
+            ["radarr:main"] = new StuckDownloadRecord { StuckSince = CheckTime.AddHours(-1) },
+        };
+        var on4k = BlockedMovie("4K");
+        on4k[ArrServers.ServerProperty] = "2";
+        on4k[ArrServers.Is4kProperty] = true;
+        var both4k = BlockedMovie("BOTH");
+        both4k[ArrServers.ServerProperty] = "2";
+        both4k[ArrServers.Is4kProperty] = true;
+        var queue = new StuckQueue(new JsonArray(on4k, both4k, BlockedMovie("BOTH"), BlockedMovie("MAIN")), System.Array.Empty<string?>());
+
+        var due = StuckDownloads.Scan(previous, queue, null, CheckTime, TimeSpan.FromHours(6)).Due.ToDictionary(d => d.Key);
+
+        Assert.True(due["radarr:4k"].Is4k);
+        Assert.Null(due["radarr:both"].Is4k);
+        Assert.False(due["radarr:main"].Is4k);
     }
 
     [Fact]
