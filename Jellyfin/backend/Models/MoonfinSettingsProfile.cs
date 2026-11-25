@@ -493,6 +493,21 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("hideDetailsMediaDescription")]
     public bool? HideDetailsMediaDescription { get; set; }
 
+    [JsonPropertyName("hideDetailsMediaDescriptionMovie")]
+    public bool? HideDetailsMediaDescriptionMovie { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionShow")]
+    public bool? HideDetailsMediaDescriptionShow { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionSeason")]
+    public bool? HideDetailsMediaDescriptionSeason { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionEpisode")]
+    public bool? HideDetailsMediaDescriptionEpisode { get; set; }
+
+    [JsonPropertyName("hideDetailsMediaDescriptionBoxSet")]
+    public bool? HideDetailsMediaDescriptionBoxSet { get; set; }
+
     [JsonPropertyName("detailUseSeriesThumbnails")]
     public bool? DetailUseSeriesThumbnails { get; set; }
 

@@ -167,6 +167,11 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("detailShowTechnicalDetails")] public bool? DetailShowTechnicalDetails { get; set; }
         [JsonPropertyName("detailTrailersExternal")] public bool? DetailTrailersExternal { get; set; }
         [JsonPropertyName("hideDetailsMediaDescription")] public bool? HideDetailsMediaDescription { get; set; }
+        [JsonPropertyName("hideDetailsMediaDescriptionMovie")] public bool? HideDetailsMediaDescriptionMovie { get; set; }
+        [JsonPropertyName("hideDetailsMediaDescriptionShow")] public bool? HideDetailsMediaDescriptionShow { get; set; }
+        [JsonPropertyName("hideDetailsMediaDescriptionSeason")] public bool? HideDetailsMediaDescriptionSeason { get; set; }
+        [JsonPropertyName("hideDetailsMediaDescriptionEpisode")] public bool? HideDetailsMediaDescriptionEpisode { get; set; }
+        [JsonPropertyName("hideDetailsMediaDescriptionBoxSet")] public bool? HideDetailsMediaDescriptionBoxSet { get; set; }
         [JsonPropertyName("detailUseSeriesThumbnails")] public bool? DetailUseSeriesThumbnails { get; set; }
         [JsonPropertyName("hideHomeMediaDescription")] public bool? HideHomeMediaDescription { get; set; }
         [JsonPropertyName("hideHomeWatchProgress")] public bool? HideHomeWatchProgress { get; set; }
