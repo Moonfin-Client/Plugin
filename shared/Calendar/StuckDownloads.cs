@@ -37,13 +37,42 @@ public sealed class StuckDownloadRecord
     /// <summary>Who was already told while someone else couldn't be, so a later check only retries the rest.</summary>
     [JsonPropertyName("told")]
     public List<Guid>? Told { get; set; }
+
+    /// <summary>
+    /// The server the download is on, null for the primary. Lets a check that can't read one server
+    /// keep only that server's records. Records stored before several servers were read have none.
+    /// </summary>
+    [JsonPropertyName("server")]
+    public string? Server { get; set; }
+}
+
+/// <summary>
+/// The queues of every Radarr or Sonarr read for one check, as one list, and the servers that
+/// couldn't be read. Records from a server other than the primary carry its id.
+/// </summary>
+public sealed class StuckQueue
+{
+    public StuckQueue(JsonArray records, IReadOnlyList<string?> unread)
+    {
+        Records = records;
+        Unread = unread;
+    }
+
+    public JsonArray Records { get; }
+
+    /// <summary>The servers that couldn't be read; null stands for the primary.</summary>
+    public IReadOnlyList<string?> Unread { get; }
+
+    /// <summary>One server's whole queue, or null when it couldn't be read.</summary>
+    public static StuckQueue? Whole(JsonArray? records) => records == null ? null : new StuckQueue(records, Array.Empty<string?>());
 }
 
 /// <summary>A download that has been stuck long enough to tell people about.</summary>
 public sealed class StuckDownload
 {
-    public StuckDownload(string key, bool isSonarr, string title, int? tmdbId, int? tvdbId, IReadOnlyList<int> seasons, string reason, string? detail)
+    public StuckDownload(string key, bool isSonarr, string title, int? tmdbId, int? tvdbId, IReadOnlyList<int> seasons, string reason, string? detail, bool? is4k = false)
     {
+        Is4k = is4k;
         Key = key;
         IsSonarr = isSonarr;
         Title = title;
@@ -73,6 +102,12 @@ public sealed class StuckDownload
 
     /// <summary>The arr's own message, which may hold server paths.</summary>
     public string? Detail { get; }
+
+    /// <summary>
+    /// Whether the download is on a 4K server, so it's told to 4K requesters. Null when one download
+    /// is on a regular and a 4K server alike, which matches both kinds of request.
+    /// </summary>
+    public bool? Is4k { get; }
 }
 
 /// <summary>The downloads already notified and when each first got stuck, in one small file.</summary>
@@ -113,10 +148,10 @@ public sealed class StuckDownloadStore
 public sealed class StuckDownloadRun
 {
     /// <summary>
-    /// The whole queue of the default Radarr (false) or Sonarr (true). Null when it couldn't be read.
+    /// The queues of every Radarr (false) or Sonarr (true) read. Null when none could be read.
     /// It should stop early once <see cref="Cancellation"/> is set.
     /// </summary>
-    public Func<bool, Task<JsonArray?>> ReadQueue { get; set; } = _ => Task.FromResult<JsonArray?>(null);
+    public Func<bool, Task<StuckQueue?>> ReadQueue { get; set; } = _ => Task.FromResult<StuckQueue?>(null);
 
     /// <summary>Sends a GET to the Seerr API with the admin session, such as "request?take=100".</summary>
     public Func<string, Task<ArrAnswer>> SeerrGet { get; set; } = _ => Task.FromResult(ArrAnswer.Unreachable);
@@ -325,24 +360,78 @@ public static class StuckDownloads
     }
 
     /// <summary>
-    /// The store after this check, and the downloads to notify now. A null queue couldn't be read,
-    /// so what was known about it is kept as it was. Everything else that left the queue is dropped.
+    /// The queues of every server, read in parallel. servers[0] is the primary: its records stay
+    /// unmarked, so the keys stored for them before several servers were read still match. Records
+    /// from other servers carry the server id, and records from a 4K server are marked as such.
+    /// A server that can't be read is listed in Unread. Null when none could be read.
     /// </summary>
+    public static async Task<StuckQueue?> ReadServerQueuesAsync(
+        IReadOnlyList<(ArrServerInfo Server, ArrSend Send)> servers,
+        bool isSonarr,
+        Action<string>? log = null,
+        CancellationToken cancellationToken = default)
+    {
+        var queues = await Task.WhenAll(servers.Select(s => ReadQueueAsync(s.Send, isSonarr, cancellationToken))).ConfigureAwait(false);
+        var all = new JsonArray();
+        var unread = new List<string?>();
+        for (var i = 0; i < servers.Count; i++)
+        {
+            var server = servers[i].Server;
+            var queue = queues[i];
+            if (queue == null)
+            {
+                log?.Invoke("The " + Service(isSonarr) + " server " + server.Name + " couldn't be read, so its downloads are kept as they were");
+                unread.Add(i == 0 ? null : server.Id);
+                continue;
+            }
+
+            var entries = queue.ToList();
+            queue.Clear();
+            foreach (var entry in entries)
+            {
+                if (entry is JsonObject record)
+                {
+                    if (i > 0) record[ArrServers.ServerProperty] = server.Id;
+                    if (server.Is4k) record[ArrServers.Is4kProperty] = true;
+                }
+
+                all.Add(entry);
+            }
+        }
+
+        return unread.Count == servers.Count ? null : new StuckQueue(all, unread);
+    }
+
+    /// <summary>One whole queue per service, as a single server gives it.</summary>
     internal static (Dictionary<string, StuckDownloadRecord> Next, List<StuckDownload> Due) Scan(
         IReadOnlyDictionary<string, StuckDownloadRecord> previous,
         JsonArray? radarr,
         JsonArray? sonarr,
+        DateTime now,
+        TimeSpan stalledThreshold) =>
+        Scan(previous, StuckQueue.Whole(radarr), StuckQueue.Whole(sonarr), now, stalledThreshold);
+
+    /// <summary>
+    /// The store after this check, and the downloads to notify now. A null queue couldn't be read,
+    /// so what was known about it is kept as it was, and so are the records of each server that
+    /// couldn't be read. Everything else that left the queue is dropped.
+    /// </summary>
+    internal static (Dictionary<string, StuckDownloadRecord> Next, List<StuckDownload> Due) Scan(
+        IReadOnlyDictionary<string, StuckDownloadRecord> previous,
+        StuckQueue? radarr,
+        StuckQueue? sonarr,
         DateTime now,
         TimeSpan stalledThreshold)
     {
         var next = new Dictionary<string, StuckDownloadRecord>();
         var due = new List<StuckDownload>();
 
-        foreach (var (records, isSonarr) in new[] { (radarr, false), (sonarr, true) })
+        foreach (var (queue, isSonarr) in new[] { (radarr, false), (sonarr, true) })
         {
-            if (records == null)
+            var stored = previous.Where(p => p.Key.StartsWith(Service(isSonarr) + ":", StringComparison.Ordinal)).ToList();
+            if (queue == null)
             {
-                foreach (var pair in previous.Where(p => p.Key.StartsWith(Service(isSonarr) + ":", StringComparison.Ordinal)))
+                foreach (var pair in stored)
                 {
                     next[pair.Key] = pair.Value;
                 }
@@ -350,12 +439,26 @@ public static class StuckDownloads
                 continue;
             }
 
-            foreach (var group in records.OfType<JsonObject>().GroupBy(r => Key(r, isSonarr)))
+            foreach (var group in queue.Records.OfType<JsonObject>().GroupBy(r => Key(r, isSonarr)))
             {
                 previous.TryGetValue(group.Key, out var before);
                 var (record, download) = Check(group.Key, group.ToList(), isSonarr, before, now, stalledThreshold);
                 if (record != null) next[group.Key] = record;
                 if (download != null) due.Add(download);
+            }
+
+            // A server that couldn't be read keeps what was known about its downloads, unless a
+            // server that was read has the same download.
+            if (queue.Unread.Count > 0)
+            {
+                var unread = new HashSet<string>(queue.Unread.Select(id => id ?? string.Empty), StringComparer.Ordinal);
+                foreach (var pair in stored)
+                {
+                    if (!next.ContainsKey(pair.Key) && unread.Contains(pair.Value.Server ?? string.Empty))
+                    {
+                        next[pair.Key] = pair.Value;
+                    }
+                }
             }
         }
 
@@ -370,7 +473,7 @@ public static class StuckDownloads
         DateTime now,
         TimeSpan stalledThreshold)
     {
-        var record = new StuckDownloadRecord { NotifiedAt = before?.NotifiedAt, Told = before?.Told };
+        var record = new StuckDownloadRecord { NotifiedAt = before?.NotifiedAt, Told = before?.Told, Server = Text(entries[0][ArrServers.ServerProperty]) };
         string? reason = null;
         string? detail = null;
         var sizeLeft = entries.Select(e => Long(e["sizeleft"])).Max();
@@ -484,7 +587,15 @@ public static class StuckDownloads
             isSonarr ? Int(title?["tvdbId"]) : null,
             seasons,
             reason,
-            detail);
+            detail,
+            Is4k(entries));
+    }
+
+    // True when every entry is from a 4K server, false when none is, null when it's mixed.
+    private static bool? Is4k(List<JsonObject> entries)
+    {
+        var kinds = entries.Select(e => Bool(e[ArrServers.Is4kProperty]) == true).Distinct().ToList();
+        return kinds.Count == 1 ? kinds[0] : null;
     }
 
     /// <summary>
@@ -551,7 +662,8 @@ public static class StuckDownloads
 
     /// <summary>
     /// The server users who asked for this title, and the title's TMDB id from their request. A 4K
-    /// request goes to the 4K arr, which isn't read, and a request for other seasons isn't this download.
+    /// request goes to a 4K arr, so it only matches a download on a 4K server and a regular request
+    /// one on a regular server. A request for other seasons isn't this download.
     /// </summary>
     internal static (List<Guid> Users, int? TmdbId) Requesters(JsonArray? requests, StuckDownload download)
     {
@@ -561,7 +673,7 @@ public static class StuckDownloads
 
         foreach (var request in requests.OfType<JsonObject>())
         {
-            if (Bool(request["is4k"]) == true) continue;
+            if (download.Is4k is bool want && (Bool(request["is4k"]) == true) != want) continue;
 
             var media = request["media"] as JsonObject;
             if (!string.Equals(Text(media?["mediaType"]), download.IsSonarr ? "tv" : "movie", StringComparison.OrdinalIgnoreCase)) continue;
@@ -587,13 +699,17 @@ public static class StuckDownloads
         return (users, tmdbId);
     }
 
-    // Episodes of a season pack share one download id, so they make one download.
-    private static string Key(JsonObject entry, bool isSonarr)
+    // Episodes of a season pack share one download id, so they make one download. Queue ids are only
+    // unique within one server, so an entry from a server other than the primary carries its server
+    // id, and the primary's keys stay the ones stored before several servers were read.
+    internal static string Key(JsonObject entry, bool isSonarr)
     {
         var downloadId = Text(entry["downloadId"]);
-        return Service(isSonarr) + ":" + (string.IsNullOrEmpty(downloadId)
-            ? "queue-" + (Int(entry["id"]) ?? 0).ToString(CultureInfo.InvariantCulture)
-            : downloadId!.ToLowerInvariant());
+        if (!string.IsNullOrEmpty(downloadId)) return Service(isSonarr) + ":" + downloadId!.ToLowerInvariant();
+
+        var server = Text(entry[ArrServers.ServerProperty]);
+        var queueId = (Int(entry["id"]) ?? 0).ToString(CultureInfo.InvariantCulture);
+        return Service(isSonarr) + ":queue-" + (string.IsNullOrEmpty(server) ? queueId : server + "-" + queueId);
     }
 
     private static string? FirstMessage(JsonObject entry) =>

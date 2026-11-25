@@ -2170,7 +2170,7 @@
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Calendar</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
-                            The Calendar screen reads Sonarr and Radarr through the servers set up in Seerr, so it needs Seerr turned on above.
+                            The Calendar screen reads every Sonarr and Radarr server set up in Seerr, so it needs Seerr turned on above.
                             Each user only sees titles from the Jellyfin libraries they have access to.
                         </div>
                         <div class="inputContainer">
@@ -2194,6 +2194,14 @@
                             <label class="inputLabel inputLabelUnfocused" for="CalendarCacheMinutes">Cache minutes</label>
                             <input type="number" id="CalendarCacheMinutes" is="emby-input" min="0" max="1440" step="1" />
                             <div class="fieldDescription">How long an answer from Sonarr or Radarr is reused before they're asked again. 0 asks every time.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="ArrInclude4kServers">4K servers</label>
+                            <select id="ArrInclude4kServers" is="emby-select">
+                                <option value="true">Include</option>
+                                <option value="false">Leave out</option>
+                            </select>
+                            <div class="fieldDescription">Whether the 4K Sonarr and Radarr servers set up in Seerr are read too, for the calendar and the download status. The calendar shows a movie or episode that's on several servers once; the download status lists each server's download. Stuck download notifications always check every server. When Seerr only has 4K servers they're read either way.</div>
                         </div>
                     </div>
 
@@ -6377,7 +6385,7 @@
             var FIELD_DEPENDENCIES = [
                 { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'SeerrWebhookBlock', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
                 { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
-                { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'StuckDownloadNotify', 'StuckDownloadStalledHours', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
+                { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'ArrInclude4kServers', 'StuckDownloadNotify', 'StuckDownloadStalledHours', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
                 { parent: 'StuckDownloadNotify', fields: ['StuckDownloadStalledHours'] },
                 { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
                 { parent: 'SmartSearchEnabled', fields: ['SmartSearchModel'] },
@@ -11406,6 +11414,7 @@
                     document.querySelector('#CalendarDaysBack').value = config.CalendarDaysBack != null ? config.CalendarDaysBack : 14;
                     document.querySelector('#CalendarDaysAhead').value = config.CalendarDaysAhead != null ? config.CalendarDaysAhead : 90;
                     document.querySelector('#CalendarCacheMinutes').value = config.CalendarCacheMinutes != null ? config.CalendarCacheMinutes : 5;
+                    document.querySelector('#ArrInclude4kServers').value = config.ArrInclude4kServers === false ? 'false' : 'true';
                     document.querySelector('#StuckDownloadNotify').checked = config.StuckDownloadNotify === true;
                     document.querySelector('#StuckDownloadStalledHours').value = config.StuckDownloadStalledHours != null ? config.StuckDownloadStalledHours : 6;
                     loadWebhookProvisioningStatus();
@@ -12349,6 +12358,7 @@
                         config.CalendarDaysBack = wholeNumberIn(document.querySelector('#CalendarDaysBack').value, 0, 365, 14);
                         config.CalendarDaysAhead = wholeNumberIn(document.querySelector('#CalendarDaysAhead').value, 0, 730, 90);
                         config.CalendarCacheMinutes = wholeNumberIn(document.querySelector('#CalendarCacheMinutes').value, 0, 1440, 5);
+                        config.ArrInclude4kServers = document.querySelector('#ArrInclude4kServers').value !== 'false';
                         config.StuckDownloadNotify = document.querySelector('#StuckDownloadNotify').checked;
                         config.StuckDownloadStalledHours = wholeNumberIn(document.querySelector('#StuckDownloadStalledHours').value, 1, 168, 6);
                         config.PushRelayEnabled = document.querySelector('#PushRelayEnabled').checked;

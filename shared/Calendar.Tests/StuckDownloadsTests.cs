@@ -425,7 +425,7 @@ public class StuckDownloadsTests
 
         StuckDownloadRun Run(DateTime now) => new StuckDownloadRun
         {
-            ReadQueue = isSonarr => Task.FromResult<JsonArray?>(isSonarr ? Queue() : Queue(blocked)),
+            ReadQueue = isSonarr => Task.FromResult(StuckQueue.Whole(isSonarr ? Queue() : Queue(blocked))),
             SeerrGet = path =>
             {
                 seerrCalls++;
@@ -461,7 +461,7 @@ public class StuckDownloadsTests
 
         StuckDownloadRun Run(DateTime now) => new StuckDownloadRun
         {
-            ReadQueue = isSonarr => Task.FromResult<JsonArray?>(isSonarr ? null : Queue(Movie())),
+            ReadQueue = isSonarr => Task.FromResult(StuckQueue.Whole(isSonarr ? null : Queue(Movie()))),
             SeerrGet = _ => Task.FromResult(new ArrAnswer(200, Encoding.UTF8.GetBytes(requests))),
             Admins = () => new[] { Admin },
             RequesterWantsIt = _ => false,
@@ -485,7 +485,7 @@ public class StuckDownloadsTests
 
         StuckDownloadRun Run(DateTime now) => new StuckDownloadRun
         {
-            ReadQueue = isSonarr => Task.FromResult<JsonArray?>(isSonarr ? Queue() : Queue(Movie())),
+            ReadQueue = isSonarr => Task.FromResult(StuckQueue.Whole(isSonarr ? Queue() : Queue(Movie()))),
             SeerrGet = _ => Task.FromResult(seerrUp ? new ArrAnswer(200, Encoding.UTF8.GetBytes(requests)) : ArrAnswer.Unreachable),
             Admins = () => new[] { Admin },
             Deliver = (user, _, _, _, _) => sent.Add(user),
@@ -510,7 +510,7 @@ public class StuckDownloadsTests
 
         StuckDownloadRun Run(DateTime now) => new StuckDownloadRun
         {
-            ReadQueue = isSonarr => Task.FromResult<JsonArray?>(isSonarr ? Queue() : Queue(Movie())),
+            ReadQueue = isSonarr => Task.FromResult(StuckQueue.Whole(isSonarr ? Queue() : Queue(Movie()))),
             SeerrGet = _ => Task.FromResult(new ArrAnswer(200, Encoding.UTF8.GetBytes("""{"results":[]}"""))),
             Admins = () => admins,
             Deliver = (user, _, _, _, _) => sent.Add(user),
@@ -535,7 +535,7 @@ public class StuckDownloadsTests
 
         StuckDownloadRun Run(DateTime now) => new StuckDownloadRun
         {
-            ReadQueue = isSonarr => Task.FromResult<JsonArray?>(isSonarr ? Queue() : Queue(Movie())),
+            ReadQueue = isSonarr => Task.FromResult(StuckQueue.Whole(isSonarr ? Queue() : Queue(Movie()))),
             SeerrGet = _ => Task.FromResult(new ArrAnswer(200, Encoding.UTF8.GetBytes("""{"results":[]}"""))),
             Admins = () => new[] { Admin, other },
             Deliver = (user, _, _, _, _) =>
@@ -572,7 +572,7 @@ public class StuckDownloadsTests
 
         StuckDownloadRun Run(DateTime now) => new StuckDownloadRun
         {
-            ReadQueue = isSonarr => Task.FromResult<JsonArray?>(isSonarr ? Queue() : Queue(Movie())),
+            ReadQueue = isSonarr => Task.FromResult(StuckQueue.Whole(isSonarr ? Queue() : Queue(Movie()))),
             SeerrGet = _ => Task.FromResult(new ArrAnswer(200, Encoding.UTF8.GetBytes("""{"results":[]}"""))),
             Admins = () => new[] { Admin, other },
             Deliver = (user, _, _, _, _) =>
@@ -600,7 +600,7 @@ public class StuckDownloadsTests
 
         await StuckDownloads.RunAsync(new StuckDownloadRun
         {
-            ReadQueue = isSonarr => Task.FromResult<JsonArray?>(Queue(Movie())),
+            ReadQueue = isSonarr => Task.FromResult(StuckQueue.Whole(Queue(Movie()))),
             NowUtc = Start,
             Cancellation = cancel.Token,
         }, store);
