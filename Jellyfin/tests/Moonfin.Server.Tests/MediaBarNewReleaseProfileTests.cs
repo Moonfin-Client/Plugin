@@ -13,12 +13,23 @@ public class MediaBarNewReleaseProfileTests
     public void TheFieldsSurviveARoundTrip()
     {
         const string sent = "{\"mediaBarNewReleaseKinds\":\"newSeason,newMovie\"," +
-            "\"mediaBarNewMovieDays\":120,\"mediaBarNewMovieDetail\":false}";
+            "\"mediaBarNewMovieDays\":120,\"mediaBarNewMovieDetail\":false," +
+            "\"mediaBarFollowedFirst\":true}";
 
         var json = JsonSerializer.Serialize(JsonSerializer.Deserialize<MoonfinSettingsProfile>(sent));
 
         Assert.Contains("\"mediaBarNewReleaseKinds\":\"newSeason,newMovie\"", json);
         Assert.Contains("\"mediaBarNewMovieDays\":120", json);
         Assert.Contains("\"mediaBarNewMovieDetail\":false", json);
+        Assert.Contains("\"mediaBarFollowedFirst\":true", json);
+    }
+
+    [Fact]
+    public void AnOlderProfileLeavesItUnset()
+    {
+        // Unset, not false, so the admin default applies.
+        var profile = JsonSerializer.Deserialize<MoonfinSettingsProfile>("{}")!;
+
+        Assert.Null(profile.MediaBarFollowedFirst);
     }
 }

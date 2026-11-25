@@ -3880,6 +3880,15 @@
                                 <div class="fieldDescription">Under the New Movie label, show the movie's tagline in the server's metadata language. With none, the label stays on its own.</div>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarFollowedFirst">Followed Series First</label>
+                                <select id="DefaultMediaBarFollowedFirst" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Put series the user has started or marked as favorite at the front of the media bar.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Excluded Genres</label>
                                 <div id="DefaultGenrePicker" style="max-height:260px;overflow-y:auto;border:1px solid rgba(128,128,128,0.3);border-radius:4px;padding:6px;margin-top:6px;"></div>
                                 <div class="fieldDescription">Titles in these genres never appear in the media bar.</div>

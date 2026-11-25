@@ -274,6 +274,10 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mediaBarNewMovieDetail")]
     public bool? MediaBarNewMovieDetail { get; set; }
 
+    /// <summary>Series the user has started or marked as favorite go first in the bar.</summary>
+    [JsonPropertyName("mediaBarFollowedFirst")]
+    public bool? MediaBarFollowedFirst { get; set; }
+
     [JsonPropertyName("mediaBarCollectionIds")]
     public List<string>? MediaBarCollectionIds { get; set; }
 
