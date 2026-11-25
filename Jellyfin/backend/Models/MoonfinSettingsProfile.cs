@@ -254,6 +254,9 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mediaBarSourceType")]
     public string? MediaBarSourceType { get; set; }
 
+    [JsonPropertyName("mediaBarSortOrder")]
+    public string? MediaBarSortOrder { get; set; }
+
     [JsonPropertyName("mediaBarNewReleaseBanner")]
     public bool? MediaBarNewReleaseBanner { get; set; }
 
