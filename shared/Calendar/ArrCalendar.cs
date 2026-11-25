@@ -46,8 +46,9 @@ public static class ArrCalendarWindow
         return query;
     }
 
-    public static string CacheKey(bool isSonarr, DateTime start, DateTime end, bool unmonitored) =>
-        (isSonarr ? "sonarr" : "radarr") + "|" + Day(start) + "|" + Day(end) + "|" + (unmonitored ? "all" : "monitored");
+    public static string CacheKey(bool isSonarr, DateTime start, DateTime end, bool unmonitored, bool include4k = true) =>
+        (isSonarr ? "sonarr" : "radarr") + "|" + Day(start) + "|" + Day(end) + "|" + (unmonitored ? "all" : "monitored")
+        + (include4k ? string.Empty : "|regular");
 
     private static string Day(DateTime value) => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 

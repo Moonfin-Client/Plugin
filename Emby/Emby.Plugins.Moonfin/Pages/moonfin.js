@@ -558,7 +558,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     var FIELD_DEPENDENCIES = [
         { parent: 'SeerrEnabled', fields: ['SeerrUrl', 'SeerrDisplayName', 'SeerrWebhookBlock', 'DefaultShowSeerrButton', 'DefaultSeerrHeading', 'DefaultSeerrBlockNsfw', 'DefaultSeerrShowMissingCollectionItems', 'DefaultShowSeerrAvailabilityBadges', 'DefaultSeerrBadgeStyle', 'DefaultSeerrDiscoveryList', 'DefaultRadarrCalendarShowCinema', 'DefaultRadarrCalendarShowDigital', 'DefaultRadarrCalendarShowPhysical', 'DefaultRadarrCalendarShowDate', 'DefaultRadarrCalendarHideDownloaded', 'DefaultSonarrCalendarShowDate', 'DefaultSonarrCalendarShowEpisodeInfo', 'DefaultSonarrCalendarHideDownloaded', 'DefaultMergeRadarrSonarrCalendars', 'DefaultSeerrRowsSortBy', 'DefaultSeerrRowsSortOrder'] },
         { parent: 'SeerrEnabled', off: ['true'], fields: ['DefaultSeerrOffNote'] },
-        { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'StuckDownloadNotify', 'StuckDownloadStalledHours', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
+        { parent: 'SeerrEnabled', fields: ['CalendarAdminsOnly', 'CalendarDaysBack', 'CalendarDaysAhead', 'CalendarCacheMinutes', 'ArrInclude4kServers', 'StuckDownloadNotify', 'StuckDownloadStalledHours', 'DefaultShowCalendarButton', 'DefaultCalendarHeading', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll', 'DefaultShowNextAirDate'] },
         { parent: 'StuckDownloadNotify', fields: ['StuckDownloadStalledHours'] },
         { parent: 'LiveTvDetectIncompleteRecordings', fields: ['LiveTvAutoRecordCompleteShowing', 'LiveTvDeleteIncompleteCopies', 'LiveTvIncompleteThresholdPercent'] },
         { parent: 'MdblistOfficialListsEnabled', fields: ['MdblistOfficialListsMaxItems'] },
@@ -2853,6 +2853,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#CalendarDaysBack').value = config.CalendarDaysBack != null ? config.CalendarDaysBack : 14;
             view.querySelector('#CalendarDaysAhead').value = config.CalendarDaysAhead != null ? config.CalendarDaysAhead : 90;
             view.querySelector('#CalendarCacheMinutes').value = config.CalendarCacheMinutes != null ? config.CalendarCacheMinutes : 5;
+            view.querySelector('#ArrInclude4kServers').value = config.ArrInclude4kServers === false ? 'false' : 'true';
             view.querySelector('#StuckDownloadNotify').checked = config.StuckDownloadNotify === true;
             view.querySelector('#StuckDownloadStalledHours').value = config.StuckDownloadStalledHours != null ? config.StuckDownloadStalledHours : 6;
             view.querySelector('#MdblistApiKey').value = config.MdblistApiKey || '';
@@ -3266,6 +3267,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.CalendarDaysBack = wholeNumberIn(view.querySelector('#CalendarDaysBack').value, 0, 365, 14);
             config.CalendarDaysAhead = wholeNumberIn(view.querySelector('#CalendarDaysAhead').value, 0, 730, 90);
             config.CalendarCacheMinutes = wholeNumberIn(view.querySelector('#CalendarCacheMinutes').value, 0, 1440, 5);
+            config.ArrInclude4kServers = view.querySelector('#ArrInclude4kServers').value !== 'false';
             config.StuckDownloadNotify = view.querySelector('#StuckDownloadNotify').checked;
             config.StuckDownloadStalledHours = wholeNumberIn(view.querySelector('#StuckDownloadStalledHours').value, 1, 168, 6);
             config.MdblistApiKey = (view.querySelector('#MdblistApiKey').value || '').trim() || null;

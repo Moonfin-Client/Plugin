@@ -373,20 +373,22 @@ public class SeerrProxyController : ControllerBase
 
     /// <summary>
     /// Drops a stuck Radarr download, blocklists the release and lets Radarr grab another one.
+    /// server is the queue item's server id; without it the Radarr holding the id is used.
     /// </summary>
     [HttpDelete("Radarr/Queue/{id:int}")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public Task<IActionResult> RemoveRadarrQueueItem(int id) => RemoveArrQueueItem("radarr", id);
+    public Task<IActionResult> RemoveRadarrQueueItem(int id, [FromQuery] string? server) => RemoveArrQueueItem("radarr", id, server);
 
     /// <summary>
     /// Drops a stuck Sonarr download, blocklists the release and lets Sonarr grab another one. Every
-    /// episode of a season pack goes with it, since they share one download.
+    /// episode of a season pack goes with it, since they share one download. server is the queue
+    /// item's server id; without it the Sonarr holding the id is used.
     /// </summary>
     [HttpDelete("Sonarr/Queue/{id:int}")]
     [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public Task<IActionResult> RemoveSonarrQueueItem(int id) => RemoveArrQueueItem("sonarr", id);
+    public Task<IActionResult> RemoveSonarrQueueItem(int id, [FromQuery] string? server) => RemoveArrQueueItem("sonarr", id, server);
 
     private async Task<IActionResult> GetArrQueue(string service, string? titleId)
     {
@@ -400,7 +402,7 @@ public class SeerrProxyController : ControllerBase
         return ArrResult(result);
     }
 
-    private async Task<IActionResult> RemoveArrQueueItem(string service, int id)
+    private async Task<IActionResult> RemoveArrQueueItem(string service, int id, string? server)
     {
         if (!SeerrConfigured())
         {
@@ -408,7 +410,7 @@ public class SeerrProxyController : ControllerBase
                 new { error = "Seerr integration is not enabled" });
         }
 
-        var result = await _sessionService.RemoveArrQueueItemAsync(service, id, HttpContext.RequestAborted);
+        var result = await _sessionService.RemoveArrQueueItemAsync(service, id, server, HttpContext.RequestAborted);
         return ArrResult(result);
     }
 
@@ -477,6 +479,8 @@ public class SeerrProxyController : ControllerBase
         {
             var user = UserReflection.ResolveUser(HttpContext.RequestServices, userId.Value);
             body = ArrCalendarAnnotator.Annotate(body, service == "sonarr", new JellyfinCalendarLibrary(_libraryManager, user));
+            // Folded only after the annotation dropped the copies this user can't see.
+            body = ArrCalendarMerge.Dedupe(body, service == "sonarr");
         }
 
         Response.StatusCode = result.StatusCode;

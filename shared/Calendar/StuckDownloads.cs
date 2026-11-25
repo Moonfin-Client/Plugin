@@ -587,13 +587,17 @@ public static class StuckDownloads
         return (users, tmdbId);
     }
 
-    // Episodes of a season pack share one download id, so they make one download.
-    private static string Key(JsonObject entry, bool isSonarr)
+    // Episodes of a season pack share one download id, so they make one download. Queue ids are only
+    // unique within one server, so an entry from a server other than the primary carries its server
+    // id, and the primary's keys stay the ones stored before several servers were read.
+    internal static string Key(JsonObject entry, bool isSonarr)
     {
         var downloadId = Text(entry["downloadId"]);
-        return Service(isSonarr) + ":" + (string.IsNullOrEmpty(downloadId)
-            ? "queue-" + (Int(entry["id"]) ?? 0).ToString(CultureInfo.InvariantCulture)
-            : downloadId!.ToLowerInvariant());
+        if (!string.IsNullOrEmpty(downloadId)) return Service(isSonarr) + ":" + downloadId!.ToLowerInvariant();
+
+        var server = Text(entry[ArrServers.ServerProperty]);
+        var queueId = (Int(entry["id"]) ?? 0).ToString(CultureInfo.InvariantCulture);
+        return Service(isSonarr) + ":queue-" + (string.IsNullOrEmpty(server) ? queueId : server + "-" + queueId);
     }
 
     private static string? FirstMessage(JsonObject entry) =>

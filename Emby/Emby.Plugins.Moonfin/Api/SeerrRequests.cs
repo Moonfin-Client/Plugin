@@ -61,6 +61,9 @@ namespace Emby.Plugins.Moonfin.Api
     public class RemoveRadarrQueueItemRequest : IReturn<object>
     {
         public int Id { get; set; }
+
+        /// <summary>The queue item's server id. Without it the Radarr holding the id is used.</summary>
+        public string? Server { get; set; }
     }
 
     [Route("/Moonfin/Seerr/Sonarr/Queue/{Id}", "DELETE")]
@@ -68,6 +71,9 @@ namespace Emby.Plugins.Moonfin.Api
     public class RemoveSonarrQueueItemRequest : IReturn<object>
     {
         public int Id { get; set; }
+
+        /// <summary>The queue item's server id. Without it the Sonarr holding the id is used.</summary>
+        public string? Server { get; set; }
     }
 
     [Route("/Moonfin/Seerr/Api/{Path*}", "GET")]

@@ -976,65 +976,120 @@ public class SeerrSessionService
 
     /// <summary>
     /// Fetches the Radarr or Sonarr upcoming calendar server-side so the API key never reaches the
-    /// client. The arr connection is read from an admin Seerr session and the arr is called directly,
-    /// which also lets remote clients see the calendar when the arr host is only on the local network.
+    /// client. The arr connections are read from an admin Seerr session and every arr is called
+    /// directly, which also lets remote clients see the calendar when the arrs are only on the local
+    /// network. With several servers set up in Seerr their calendars come back as one.
     /// </summary>
     public Task<SeerrProxyResponse> GetArrCalendarAsync(string service, DateTime start, DateTime end, bool unmonitored, int cacheMinutes)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
+        var include4k = Include4kServers;
         return CalendarCache.GetOrFetchAsync(
-            ArrCalendarWindow.CacheKey(isSonarr, start, end, unmonitored),
+            ArrCalendarWindow.CacheKey(isSonarr, start, end, unmonitored, include4k),
             cacheMinutes,
-            () => FetchArrCalendarFromSeerrAsync(service, isSonarr, ArrCalendarWindow.Query(isSonarr, start, end, unmonitored)),
-            response => response.StatusCode == 200 && response.Body != null);
+            () => FetchArrCalendarFromSeerrAsync(service, isSonarr, include4k, ArrCalendarWindow.Query(isSonarr, start, end, unmonitored)),
+            // A calendar missing a server that couldn't be read isn't kept, so the server is asked again next time.
+            response => response.StatusCode == 200 && response.Body != null && !response.Partial);
     }
 
     // The arr's own answer, shared by every user. Each user's annotation runs on top of it.
     private ArrCalendarCache<SeerrProxyResponse> CalendarCache { get; } = new();
 
-    private async Task<SeerrProxyResponse> FetchArrCalendarFromSeerrAsync(string service, bool isSonarr, string query)
+    private static bool Include4kServers => MoonfinPlugin.Instance?.Configuration?.ArrInclude4kServers ?? true;
+
+    private async Task<SeerrProxyResponse> FetchArrCalendarFromSeerrAsync(string service, bool isSonarr, bool include4k, string query)
     {
-        var (server, error) = await ResolveArrServerAsync(service, isSonarr);
-        if (server == null)
+        var (servers, error) = await ResolveArrServersAsync(service, isSonarr, include4k);
+        if (servers == null)
         {
             return error!;
         }
 
-        return await FetchArrCalendarAsync(_httpClientFactory, _logger, service, server.Bases, server.ApiKey, query);
+        var responses = await Task.WhenAll(servers.Select(server =>
+            FetchArrCalendarAsync(_httpClientFactory, _logger, service, server.Bases, server.ApiKey, query)));
+        var combined = ArrCalendarMerge.Combine(
+            servers.Select((server, i) => new ArrCalendarPart(server.Id, responses[i].StatusCode, responses[i].Body)).ToList());
+        foreach (var failed in combined.Failed)
+        {
+            _logger.LogWarning(
+                "The {Service} server {Server} couldn't be read, so the calendar leaves out its titles",
+                service,
+                servers.First(s => s.Id == failed).Info.Name);
+        }
+
+        if (combined.PassThrough is int index)
+        {
+            return responses[index];
+        }
+
+        return new SeerrProxyResponse
+        {
+            StatusCode = 200,
+            Body = combined.Body,
+            ContentType = "application/json",
+            Partial = combined.Partial
+        };
     }
 
     /// <summary>
-    /// The queue entries for one title on the default Radarr or Sonarr, read through the same Seerr
-    /// connection as the calendar. Never cached, since a download's state is what's being asked.
+    /// The queue entries for one title on every Radarr or Sonarr set up in Seerr, read through the
+    /// same Seerr connection as the calendar. Never cached, since a download's state is what's being asked.
     /// </summary>
     public async Task<SeerrProxyResponse> GetArrQueueAsync(string service, string? titleId, bool isAdmin, CancellationToken cancellationToken = default)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
-        var (server, error) = await ResolveArrServerAsync(service, isSonarr);
-        if (server == null)
+        var (servers, error) = await ResolveArrServersAsync(service, isSonarr, Include4kServers);
+        if (servers == null)
         {
             return QueueError(error!);
         }
 
-        return ToProxyResponse(await ArrQueue.ReadAsync(
+        var answers = await Task.WhenAll(servers.Select(server => ArrQueue.ReadAsync(
             ArrSender(service, server, cancellationToken),
             isSonarr,
             titleId,
             isAdmin,
-            message => _logger.LogDebug("{Message}", message)));
+            message => _logger.LogDebug("{Message}", message))));
+        return ToProxyResponse(ArrQueueMerge.Combine(servers.Select(s => s.Info).ToList(), answers, isAdmin));
     }
 
-    /// <summary>Drops a stuck download, blocklists its release and lets the arr grab another.</summary>
-    public async Task<SeerrProxyResponse> RemoveArrQueueItemAsync(string service, int queueId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Drops a stuck download, blocklists its release and lets the arr grab another. Queue ids are
+    /// only unique within one server, so serverId names the server; without it the server holding
+    /// the id is used, and an id on more than one server is refused.
+    /// </summary>
+    public async Task<SeerrProxyResponse> RemoveArrQueueItemAsync(string service, int queueId, string? serverId = null, CancellationToken cancellationToken = default)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
-        var (server, error) = await ResolveArrServerAsync(service, isSonarr);
-        if (server == null)
+        // Every server is listed here, so an item shown before the 4K setting changed can still go.
+        var (servers, error) = await ResolveArrServersAsync(service, isSonarr, include4k: true);
+        if (servers == null)
         {
             return QueueError(error!);
         }
 
-        _logger.LogInformation("Removing {Service} queue entry {QueueId} and blocklisting its release", service, queueId);
+        ArrServerConnection? server;
+        if (string.IsNullOrWhiteSpace(serverId))
+        {
+            // Without a server id the id is looked up on every server, so older clients can remove too.
+            var (index, notFound) = await ArrQueue.LocateAsync(servers.Select(s => ArrSender(service, s, cancellationToken)).ToList(), isSonarr, queueId);
+            if (index == null)
+            {
+                return ToProxyResponse(notFound!);
+            }
+
+            server = servers[index.Value];
+        }
+        else
+        {
+            server = ArrServers.Pick(servers, s => s.Id, serverId);
+            if (server == null)
+            {
+                return CalendarError(404, $"No {service} server with id {serverId} is set up in Seerr");
+            }
+        }
+
+        _logger.LogInformation("Removing {Service} queue entry {QueueId} on {Server} and blocklisting its release", service, queueId, server.Info.Name);
         return ToProxyResponse(await ArrQueue.RemoveAsync(ArrSender(service, server, cancellationToken), isSonarr, queueId));
     }
 
@@ -1063,14 +1118,15 @@ public class SeerrSessionService
         s => s.SeerrUserId == OwnerSeerrUserId || (s.Permissions & AdminBit) != 0);
 
     /// <summary>
-    /// The whole queue of the default Radarr or Sonarr, for the stuck download check. Null when
-    /// there's no admin session or arr, or the arr couldn't be read.
+    /// The whole queue of every Radarr or Sonarr set up in Seerr, for the stuck download check.
+    /// Null when there's no admin session or arr, or any arr couldn't be read, so a download
+    /// missing from a partial read isn't taken for one that left.
     /// </summary>
     public async Task<JsonArray?> ReadWholeArrQueueAsync(string service, CancellationToken cancellationToken = default)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
-        var (server, error) = await ResolveArrServerAsync(service, isSonarr);
-        if (server == null)
+        var (servers, error) = await ResolveArrServersAsync(service, isSonarr, Include4kServers);
+        if (servers == null)
         {
             _logger.LogDebug("Stuck download check skipped {Service}: {Status}", service, error?.StatusCode);
             return null;
@@ -1082,11 +1138,40 @@ public class SeerrSessionService
             return null;
         }
 
-        return await StuckDownloads.ReadQueueAsync(ArrSender(service, server, cancellationToken), isSonarr, cancellationToken);
+        var queues = await Task.WhenAll(servers.Select(server =>
+            StuckDownloads.ReadQueueAsync(ArrSender(service, server, cancellationToken), isSonarr, cancellationToken)));
+        var all = new JsonArray();
+        for (var i = 0; i < servers.Count; i++)
+        {
+            var queue = queues[i];
+            if (queue == null)
+            {
+                _logger.LogWarning("Stuck download check skipped {Service}: the server {Server} couldn't be read", service, servers[i].Info.Name);
+                return null;
+            }
+
+            // The primary's entries stay unmarked, so the keys stored for them before still match.
+            if (i > 0)
+            {
+                ArrServers.Tag(queue, servers[i].Id);
+            }
+
+            var entries = queue.ToList();
+            queue.Clear();
+            foreach (var entry in entries)
+            {
+                all.Add(entry);
+            }
+        }
+
+        return all;
     }
 
-    /// <summary>The default Sonarr or Radarr as Seerr has it, read through an admin Seerr session.</summary>
-    private async Task<(ArrServerConnection? Server, SeerrProxyResponse? Error)> ResolveArrServerAsync(string service, bool isSonarr)
+    /// <summary>
+    /// Every Sonarr or Radarr set up in Seerr that can be reached, primary first, read through an
+    /// admin Seerr session. A server listed twice is read once.
+    /// </summary>
+    private async Task<(List<ArrServerConnection>? Servers, SeerrProxyResponse? Error)> ResolveArrServersAsync(string service, bool isSonarr, bool include4k)
     {
         var settingsPath = isSonarr ? "settings/sonarr" : "settings/radarr";
 
@@ -1102,7 +1187,7 @@ public class SeerrSessionService
             return (null, settings);
         }
 
-        JsonElement server;
+        List<ArrServerInfo> ordered;
         try
         {
             using var doc = JsonDocument.Parse(settings.Body);
@@ -1110,48 +1195,51 @@ public class SeerrSessionService
             {
                 return (null, CalendarError(404, $"No {service} server is configured in Seerr"));
             }
-            server = SelectArrServer(doc.RootElement).Clone();
+
+            ordered = ArrServers.Order(doc.RootElement, include4k);
         }
         catch (JsonException)
         {
             return (null, CalendarError(502, "Could not read the arr settings from Seerr"));
         }
 
-        var hostname = server.TryGetProperty("hostname", out var h) ? h.GetString() ?? string.Empty : string.Empty;
-        if (hostname.Length == 0)
+        var servers = new List<ArrServerConnection>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var info in ordered)
         {
-            return (null, CalendarError(404, $"No {service} host is configured in Seerr"));
-        }
-
-        var apiKey = server.TryGetProperty("apiKey", out var k) ? k.GetString() ?? string.Empty : string.Empty;
-        return (new ArrServerConnection(ArrCalendarBases(server, isSonarr), apiKey), null);
-    }
-
-    private sealed record ArrServerConnection(List<string> Bases, string ApiKey);
-
-    /// <summary>
-    /// The server the calendar is read from. Seerr marks a default server for regular and for 4K
-    /// requests, and the regular default holds the library users mean by upcoming.
-    /// </summary>
-    internal static JsonElement SelectArrServer(JsonElement servers)
-    {
-        JsonElement? firstRegular = null;
-        foreach (var candidate in servers.EnumerateArray())
-        {
-            if (IsTrue(candidate, "is4k"))
+            var hostname = info.Element.TryGetProperty("hostname", out var h) ? h.GetString() ?? string.Empty : string.Empty;
+            if (hostname.Length == 0)
             {
+                _logger.LogDebug("Skipped the {Service} server {Server}: no host is set for it in Seerr", service, info.Name);
                 continue;
             }
 
-            if (IsTrue(candidate, "isDefault"))
+            var apiKey = info.Element.TryGetProperty("apiKey", out var k) ? k.GetString() ?? string.Empty : string.Empty;
+            var bases = ArrCalendarBases(info.Element, isSonarr);
+            if (seen.Add(bases[0] + "|" + apiKey))
             {
-                return candidate;
+                servers.Add(new ArrServerConnection(info, bases, apiKey));
             }
-
-            firstRegular ??= candidate;
         }
 
-        return firstRegular ?? servers[0];
+        return servers.Count == 0
+            ? (null, CalendarError(404, $"No {service} host is configured in Seerr"))
+            : (servers, null);
+    }
+
+    private sealed record ArrServerConnection(ArrServerInfo Info, List<string> Bases, string ApiKey)
+    {
+        public string Id => Info.Id;
+    }
+
+    /// <summary>
+    /// The primary server: the one a request without a server id goes to. Seerr marks a default
+    /// server for regular and for 4K requests, and the regular default holds the library users mean by upcoming.
+    /// </summary>
+    internal static JsonElement SelectArrServer(JsonElement servers)
+    {
+        var ordered = ArrServers.Order(servers, include4k: true);
+        return ordered.Count > 0 ? ordered[0].Element : servers[0];
     }
 
     private static bool IsTrue(JsonElement element, string property) =>
@@ -1657,4 +1745,7 @@ public class SeerrProxyResponse
 
     /// <summary>Response content type.</summary>
     public string ContentType { get; set; } = "application/json";
+
+    /// <summary>A merged arr answer that's missing a server that couldn't be read. Not cached.</summary>
+    public bool Partial { get; set; }
 }

@@ -127,8 +127,8 @@ namespace Emby.Plugins.Moonfin.Api
 
         public Task<object?> Get(GetRadarrQueueRequest request) => GetArrQueue("radarr", request.TmdbId);
         public Task<object?> Get(GetSonarrQueueRequest request) => GetArrQueue("sonarr", request.TvdbId);
-        public Task<object?> Delete(RemoveRadarrQueueItemRequest request) => RemoveArrQueueItem("radarr", request.Id);
-        public Task<object?> Delete(RemoveSonarrQueueItemRequest request) => RemoveArrQueueItem("sonarr", request.Id);
+        public Task<object?> Delete(RemoveRadarrQueueItemRequest request) => RemoveArrQueueItem("radarr", request.Id, request.Server);
+        public Task<object?> Delete(RemoveSonarrQueueItemRequest request) => RemoveArrQueueItem("sonarr", request.Id, request.Server);
 
         private async Task<object?> GetArrQueue(string service, string? titleId)
         {
@@ -140,13 +140,13 @@ namespace Emby.Plugins.Moonfin.Api
             return ArrResult(result);
         }
 
-        private async Task<object?> RemoveArrQueueItem(string service, int id)
+        private async Task<object?> RemoveArrQueueItem(string service, int id, string? server)
         {
             var config = Plugin.Instance?.Configuration;
             if (config?.SeerrEnabled != true || string.IsNullOrEmpty(config.GetEffectiveSeerrUrl()))
             { Request.Response.StatusCode = 503; return MoonfinJson.Result(Request, ResultFactory, new { error = "Seerr integration is not enabled" }); }
 
-            var result = await Session.RemoveArrQueueItemAsync(service, id).ConfigureAwait(false);
+            var result = await Session.RemoveArrQueueItemAsync(service, id, server).ConfigureAwait(false);
             return ArrResult(result);
         }
 
@@ -186,6 +186,9 @@ namespace Emby.Plugins.Moonfin.Api
             {
                 body = ArrCalendarAnnotator.Annotate(body, service == "sonarr", new EmbyCalendarLibrary(libraryManager, user));
             }
+
+            // Folded only after the annotation dropped the copies this user can't see.
+            if (result.StatusCode == 200) body = ArrCalendarMerge.Dedupe(body, service == "sonarr");
 
             var responseContentType = string.IsNullOrWhiteSpace(result.ContentType) ? "application/octet-stream" : result.ContentType;
             return ResultFactory.GetResult(Request, new MemoryStream(body), responseContentType, null);

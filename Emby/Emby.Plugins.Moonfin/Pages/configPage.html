@@ -2405,7 +2405,7 @@
                     <div class="verticalSection">
                         <h3 class="sectionTitle">Calendar</h3>
                         <div class="fieldDescription" style="margin-bottom: 1em;">
-                            The Calendar screen reads Sonarr and Radarr through the servers set up in Seerr, so it needs Seerr turned on above.
+                            The Calendar screen reads every Sonarr and Radarr server set up in Seerr, so it needs Seerr turned on above.
                             Each user only sees titles from the Emby libraries they have access to.
                         </div>
                         <div class="inputContainer">
@@ -2429,6 +2429,14 @@
                             <label class="inputLabel inputLabelUnfocused" for="CalendarCacheMinutes">Cache minutes</label>
                             <input type="number" id="CalendarCacheMinutes" is="emby-input" min="0" max="1440" step="1" />
                             <div class="fieldDescription">How long an answer from Sonarr or Radarr is reused before they're asked again. 0 asks every time.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="ArrInclude4kServers">4K servers</label>
+                            <select id="ArrInclude4kServers" is="emby-select">
+                                <option value="true">Include</option>
+                                <option value="false">Leave out</option>
+                            </select>
+                            <div class="fieldDescription">Whether the 4K Sonarr and Radarr servers set up in Seerr are read too, for the calendar and the download status. A title on several servers shows once. When Seerr only has 4K servers they're read either way.</div>
                         </div>
                     </div>
 

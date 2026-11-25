@@ -159,6 +159,45 @@ public static class ArrQueue
     }
 
     /// <summary>
+    /// Which server holds a queue id, for a removal that doesn't name its server. Queue ids are only
+    /// unique within one server, so an id on more than one server is a 409 rather than a guess.
+    /// An id on no server is the same 404 a single server gives, unless a server couldn't be read:
+    /// then that error is returned, since the download may be on it. One server needs no lookup.
+    /// </summary>
+    public static async Task<(int? Index, ArrAnswer? Error)> LocateAsync(IReadOnlyList<ArrSend> servers, bool isSonarr, int queueId)
+    {
+        if (queueId <= 0) return (null, Error(400, "A positive queue id is required"));
+        if (servers.Count == 1) return (0, null);
+
+        var path = "api/v3/queue?page=1&pageSize=" + QueuePageSize.ToString(CultureInfo.InvariantCulture);
+        var queues = await Task.WhenAll(servers.Select(send => send(HttpMethod.Get, path, null))).ConfigureAwait(false);
+        var holding = new List<int>();
+        ArrAnswer? failure = null;
+        for (var i = 0; i < queues.Length; i++)
+        {
+            if (!queues[i].Ok)
+            {
+                failure ??= Failed(queues[i], isSonarr);
+                continue;
+            }
+
+            var ids = RemovalIds(queues[i].Body, queueId);
+            if (ids == null)
+            {
+                failure ??= Unreadable(isSonarr);
+            }
+            else if (ids.Count > 0)
+            {
+                holding.Add(i);
+            }
+        }
+
+        if (holding.Count == 1) return (holding[0], null);
+        if (holding.Count > 1) return (null, Error(409, "That queue id is on more than one " + Service(isSonarr) + " server, so the server has to be named"));
+        return (null, failure ?? Error(404, "That download is no longer in the " + Service(isSonarr) + " queue"));
+    }
+
+    /// <summary>
     /// The queue ids to remove with this one: every entry with its download id, or just this one
     /// when it has none. Empty when the id isn't in the queue, null when the queue page can't be read.
     /// </summary>
