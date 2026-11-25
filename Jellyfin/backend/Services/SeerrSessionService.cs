@@ -1061,8 +1061,8 @@ public class SeerrSessionService
     public async Task<SeerrProxyResponse> RemoveArrQueueItemAsync(string service, int queueId, string? serverId = null, CancellationToken cancellationToken = default)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
-        // Every server is listed here, so an item shown before the 4K setting changed can still go.
-        var (servers, error) = await ResolveArrServersAsync(service, isSonarr, include4k: true);
+        // The same servers the queue was read from, so a removal never looks at a server the caller can't see.
+        var (servers, error) = await ResolveArrServersAsync(service, isSonarr, Include4kServers);
         if (servers == null)
         {
             return QueueError(error!);
@@ -1125,7 +1125,9 @@ public class SeerrSessionService
     public async Task<StuckQueue?> ReadWholeArrQueueAsync(string service, CancellationToken cancellationToken = default)
     {
         var isSonarr = string.Equals(service, "sonarr", StringComparison.OrdinalIgnoreCase);
-        var (servers, error) = await ResolveArrServersAsync(service, isSonarr, Include4kServers);
+        // Every server, whatever the 4K setting: it only decides what's shown, and a server left out
+        // here would lose what's stored about its downloads.
+        var (servers, error) = await ResolveArrServersAsync(service, isSonarr, include4k: true);
         if (servers == null)
         {
             _logger.LogDebug("Stuck download check skipped {Service}: {Status}", service, error?.StatusCode);

@@ -75,7 +75,8 @@ public class PluginConfiguration : BasePluginConfiguration, IGamesConfig
 
     /// <summary>
     /// Also reads the 4K Sonarr and Radarr servers set up in Seerr for the calendar and the download
-    /// queue. When Seerr only has 4K servers they're read either way.
+    /// queue. When Seerr only has 4K servers they're read either way. The stuck download check
+    /// always reads every server.
     /// </summary>
     public bool ArrInclude4kServers { get; set; } = true;
 

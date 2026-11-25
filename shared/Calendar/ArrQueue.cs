@@ -160,9 +160,11 @@ public static class ArrQueue
 
     /// <summary>
     /// Which server holds a queue id, for a removal that doesn't name its server. Queue ids are only
-    /// unique within one server, so an id on more than one server is a 409 rather than a guess.
-    /// An id on no server is the same 404 a single server gives, unless a server couldn't be read:
-    /// then that error is returned, since the download may be on it. One server needs no lookup.
+    /// unique within one server, so the id must be on exactly one server and every queue must have
+    /// been read: an id on more than one server is a 409, and a server that couldn't be read returns
+    /// its error even when another server has the id, since the download meant may be on the one
+    /// that couldn't be read. An id on no server is the same 404 a single server gives. One server
+    /// needs no lookup.
     /// </summary>
     public static async Task<(int? Index, ArrAnswer? Error)> LocateAsync(IReadOnlyList<ArrSend> servers, bool isSonarr, int queueId)
     {
@@ -192,9 +194,10 @@ public static class ArrQueue
             }
         }
 
-        if (holding.Count == 1) return (holding[0], null);
         if (holding.Count > 1) return (null, Error(409, "That queue id is on more than one " + Service(isSonarr) + " server, so the server has to be named"));
-        return (null, failure ?? Error(404, "That download is no longer in the " + Service(isSonarr) + " queue"));
+        if (failure != null) return (null, failure);
+        if (holding.Count == 1) return (holding[0], null);
+        return (null, Error(404, "That download is no longer in the " + Service(isSonarr) + " queue"));
     }
 
     /// <summary>

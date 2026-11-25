@@ -357,11 +357,34 @@ public class ArrServersTests
     }
 
     [Fact]
-    public async Task AnIdFoundWhileAnotherServerIsDownIsStillRemoved()
+    public async Task AnIdFoundWhileAnotherServerIsDownIsNotRemoved()
     {
-        var (index, _) = await ArrQueue.LocateAsync(new[] { Down(), QueueHolding(7) }, isSonarr: false, queueId: 7);
+        // The download meant may be the one on the server that couldn't be read.
+        var (index, error) = await ArrQueue.LocateAsync(new[] { Down(), QueueHolding(7) }, isSonarr: false, queueId: 7);
 
-        Assert.Equal(1, index);
+        Assert.Null(index);
+        Assert.Equal(502, error!.StatusCode);
+        Assert.DoesNotContain("no longer in the", Error(error));
+    }
+
+    [Fact]
+    public async Task AnIdFoundOnAnUnreadableQueueIsNotRemovedEither()
+    {
+        ArrSend unreadable = (method, path, body) => Task.FromResult(new ArrAnswer(200, Bytes("<html>login</html>")));
+
+        var (index, error) = await ArrQueue.LocateAsync(new[] { QueueHolding(7), unreadable }, isSonarr: true, queueId: 7);
+
+        Assert.Null(index);
+        Assert.Equal(502, error!.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnIdOnTwoServersIsRefusedEvenWithAThirdDown()
+    {
+        var (index, error) = await ArrQueue.LocateAsync(new[] { QueueHolding(7), Down(), QueueHolding(7) }, isSonarr: false, queueId: 7);
+
+        Assert.Null(index);
+        Assert.Equal(409, error!.StatusCode);
     }
 
     [Fact]
