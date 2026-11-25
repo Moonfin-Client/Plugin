@@ -25,6 +25,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddSingleton<MoonfinSettingsService>();
+        serviceCollection.AddSingleton<AudioOffsetStreamService>();
         serviceCollection.AddSingleton<IUserDirectory, UserDirectory>();
         serviceCollection.AddSingleton<DefaultHiddenLibraries>();
         serviceCollection.AddScoped<IEventConsumer<UserCreatedEventArgs>, DefaultHiddenLibrariesOnUserCreated>();
