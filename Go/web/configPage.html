@@ -3685,15 +3685,6 @@
                                 <div class="fieldDescription">Under the New Movie label, show the movie's tagline in the server's metadata language. With none, the label stays on its own.</div>
                             </div>
                              <div class="inputContainer">
-                                 <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarMixTypes">Mix Movies and Series</label>
-                                 <select id="DefaultMediaBarMixTypes" is="emby-select">
-                                     <option value="">Not set (user decides)</option>
-                                     <option value="true">Yes</option>
-                                     <option value="false">No</option>
-                                 </select>
-                                 <div class="fieldDescription">Movies and series take turns in the media bar, as long as each has titles. Only applies when the bar shows both.</div>
-                             </div>
-                             <div class="inputContainer">
                                  <label class="inputLabel inputLabelUnfocused" for="DefaultMediaBarFollowedFirst">Followed Series First</label>
                                  <select id="DefaultMediaBarFollowedFirst" is="emby-select">
                                      <option value="">Not set (user decides)</option>
@@ -6425,11 +6416,10 @@
                 { parent: 'DefaultDisplaySinceYouWatchedRows', fields: ['DefaultSinceYouWatchedSource', 'DefaultSinceYouWatchedSourceType', 'DefaultSinceYouWatchedSourceItem', 'DefaultSinceYouWatched1Enabled', 'DefaultSinceYouWatched2Enabled', 'DefaultSinceYouWatched3Enabled', 'DefaultSinceYouWatched4Enabled', 'DefaultSinceYouWatched5Enabled'] },
                 { parent: 'DefaultSinceYouWatchedSource', off: ['online'], fields: ['DefaultSinceYouWatchedIncludeWatched'] },
                 { parent: 'DefaultDisplayStudiosRows', fields: ['DefaultStudiosRowSortBy', 'DefaultStudiosRowSortOrder'] },
-                { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultMediaBarNewReleaseKinds', 'DefaultMediaBarNewMovieDays', 'DefaultMediaBarNewMovieDetail', 'DefaultMediaBarMixTypes', 'DefaultMediaBarFollowedFirst', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
+                { parent: 'DefaultMediaBarMode', off: ['off'], fields: ['DefaultMediaBarContentType', 'DefaultMediaBarItemCount', 'DefaultMediaBarSourceType', 'DefaultMediaBarNewReleaseBanner', 'DefaultMediaBarNewReleaseDays', 'DefaultMediaBarNewReleaseKinds', 'DefaultMediaBarNewMovieDays', 'DefaultMediaBarNewMovieDetail', 'DefaultMediaBarFollowedFirst', 'DefaultCollectionPickerSection', 'DefaultLibraryPickerSection', 'DefaultGenrePicker', 'DefaultMediaBarAutoAdvance', 'DefaultMediaBarOpacity', 'DefaultMediaBarOverlayColor', 'DefaultMediaBarRowPeek', 'DefaultMediaBarTrailerPreview'] },
                 { parent: 'DefaultMediaBarMode', off: ['off', 'bookshelf', 'aya'], fields: ['DefaultMediaBarRatingsHeading', 'DefaultMediaBarMdblistEnabled', 'DefaultMediaBarMdblistRatingSourcesList', 'DefaultMediaBarMdblistShowRatingNames', 'DefaultMediaBarMdblistShowRatingBadges'] },
                 { parent: 'DefaultMediaBarAutoAdvance', fields: ['DefaultMediaBarIntervalMs'] },
                 // Mixing needs both kinds, and a movies only bar has no series to put first.
-                { parent: 'DefaultMediaBarContentType', off: ['movies', 'tvshows'], fields: ['DefaultMediaBarMixTypes'] },
                 { parent: 'DefaultMediaBarContentType', off: ['movies'], fields: ['DefaultMediaBarFollowedFirst'] },
                 { parent: 'DefaultMediaBarNewReleaseBanner', fields: ['DefaultMediaBarNewReleaseKinds'] },
                 { parent: 'DefaultMediaBarTrailerPreview', fields: ['DefaultMediaBarTrailerAudio', 'DefaultTrailerVolume', 'DefaultMediaBarTrailerCaptions'] },
@@ -11590,7 +11580,6 @@
                     setSelectValue('#DefaultMediaBarNewReleaseKinds', defaults.mediaBarNewReleaseKinds, 'Configured labels');
                     setSelectValue('#DefaultMediaBarNewMovieDays', defaults.mediaBarNewMovieDays, 'Configured window');
                     setNullableBoolSelect('#DefaultMediaBarNewMovieDetail', defaults.mediaBarNewMovieDetail);
-                    setNullableBoolSelect('#DefaultMediaBarMixTypes', defaults.mediaBarMixTypes);
                     setNullableBoolSelect('#DefaultMediaBarFollowedFirst', defaults.mediaBarFollowedFirst);
                     setNullableBoolSelect('#DefaultMediaBarTrailerPreview', defaults.mediaBarTrailerPreview);
                     setNullableBoolSelect('#DefaultMediaBarTrailerAudio', defaults.mediaBarTrailerAudio);
@@ -12601,7 +12590,6 @@
                     ds.mediaBarNewReleaseKinds = document.querySelector('#DefaultMediaBarNewReleaseKinds').value || null;
                     ds.mediaBarNewMovieDays = getNullableIntInput('#DefaultMediaBarNewMovieDays');
                     ds.mediaBarNewMovieDetail = getNullableBoolSelect('#DefaultMediaBarNewMovieDetail');
-                    ds.mediaBarMixTypes = getNullableBoolSelect('#DefaultMediaBarMixTypes');
                     ds.mediaBarFollowedFirst = getNullableBoolSelect('#DefaultMediaBarFollowedFirst');
                     ds.mediaBarTrailerPreview = getNullableBoolSelect('#DefaultMediaBarTrailerPreview');
                     ds.mediaBarTrailerAudio = getNullableBoolSelect('#DefaultMediaBarTrailerAudio');

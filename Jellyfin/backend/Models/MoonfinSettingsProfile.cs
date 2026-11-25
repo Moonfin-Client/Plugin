@@ -278,10 +278,6 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("mediaBarFollowedFirst")]
     public bool? MediaBarFollowedFirst { get; set; }
 
-    /// <summary>Movies and series take turns on the bar, as long as each has titles.</summary>
-    [JsonPropertyName("mediaBarMixTypes")]
-    public bool? MediaBarMixTypes { get; set; }
-
     [JsonPropertyName("mediaBarCollectionIds")]
     public List<string>? MediaBarCollectionIds { get; set; }
 
