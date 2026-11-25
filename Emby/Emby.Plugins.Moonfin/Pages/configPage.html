@@ -4700,8 +4700,49 @@
                                 <div class="fieldDescription">Play trailers in the system browser or YouTube app instead of inside Moonfin.</div>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescription">Hide Description</label>
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescription">Hide Description (Legacy)</label>
                                 <select id="DefaultHideDetailsMediaDescription" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <h4 style="margin: 1.5em 0 0.5em; font-size: 0.95em; color: #00a4dc;">Media Description Visibility</h4>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionMovie">Hide Movie Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionMovie" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionShow">Hide Show Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionShow" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionSeason">Hide Season Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionSeason" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionEpisode">Hide Episode Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionEpisode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultHideDetailsMediaDescriptionBoxSet">Hide Collection Description</label>
+                                <select id="DefaultHideDetailsMediaDescriptionBoxSet" is="emby-select">
                                     <option value="">Not set (user decides)</option>
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>

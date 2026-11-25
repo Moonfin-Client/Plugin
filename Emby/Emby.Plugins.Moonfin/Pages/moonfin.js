@@ -3167,6 +3167,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultKeyboardStyle', defaults.keyboardStyle, 'Configured style');
         setNullableBoolSelect(view, '#DefaultUpdateNotificationsEnabled', defaults.updateNotificationsEnabled);
         setNullableBoolSelect(view, '#DefaultHideDetailsMediaDescription', defaults.hideDetailsMediaDescription);
+        setNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionMovie', defaults.hideDetailsMediaDescriptionMovie);
+        setNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionShow', defaults.hideDetailsMediaDescriptionShow);
+        setNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionSeason', defaults.hideDetailsMediaDescriptionSeason);
+        setNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionEpisode', defaults.hideDetailsMediaDescriptionEpisode);
+        setNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionBoxSet', defaults.hideDetailsMediaDescriptionBoxSet);
         setNullableBoolSelect(view, '#DefaultDetailTrailersExternal', defaults.detailTrailersExternal);
         setNullableBoolSelect(view, '#DefaultDetailUseSeriesThumbnails', defaults.detailUseSeriesThumbnails);
         setNullableBoolSelect(view, '#DefaultPersonPageGroupItems', defaults.personPageGroupItems);
@@ -3630,6 +3635,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.keyboardStyle = view.querySelector('#DefaultKeyboardStyle').value || null;
         d.updateNotificationsEnabled = getNullableBoolSelect(view, '#DefaultUpdateNotificationsEnabled');
         d.hideDetailsMediaDescription = getNullableBoolSelect(view, '#DefaultHideDetailsMediaDescription');
+        d.hideDetailsMediaDescriptionMovie = getNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionMovie');
+        d.hideDetailsMediaDescriptionShow = getNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionShow');
+        d.hideDetailsMediaDescriptionSeason = getNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionSeason');
+        d.hideDetailsMediaDescriptionEpisode = getNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionEpisode');
+        d.hideDetailsMediaDescriptionBoxSet = getNullableBoolSelect(view, '#DefaultHideDetailsMediaDescriptionBoxSet');
         d.detailTrailersExternal = getNullableBoolSelect(view, '#DefaultDetailTrailersExternal');
         d.detailUseSeriesThumbnails = getNullableBoolSelect(view, '#DefaultDetailUseSeriesThumbnails');
         d.personPageGroupItems = getNullableBoolSelect(view, '#DefaultPersonPageGroupItems');
