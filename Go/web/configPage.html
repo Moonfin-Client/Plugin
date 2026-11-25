@@ -4483,6 +4483,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDetailShowFullDate">Show Full Date</label>
+                                <select id="DefaultDetailShowFullDate" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                                <div class="fieldDescription">Show the full release or air date instead of only the year on details pages.</div>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultDetailTrailersExternal">Open Trailers Externally</label>
                                 <select id="DefaultDetailTrailersExternal" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -11473,6 +11482,7 @@
                     setSelectValue('#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
                     setNullableBoolSelect('#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
                     setNullableBoolSelect('#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
+                    setNullableBoolSelect('#DefaultDetailShowFullDate', defaults.detailShowFullDate);
                     setSelectValue('#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
                     setNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
                     setNullableBoolSelect('#DefaultShowBookDiscoverTab', defaults.showBookDiscoverTab);
@@ -12446,6 +12456,7 @@
                     ds.detailScreenStyle = document.querySelector('#DefaultDetailScreenStyle').value || null;
                     ds.detailExpandedTabs = getNullableBoolSelect('#DefaultDetailExpandedTabs');
                     ds.detailShowTechnicalDetails = getNullableBoolSelect('#DefaultDetailShowTechnicalDetails');
+                    ds.detailShowFullDate = getNullableBoolSelect('#DefaultDetailShowFullDate');
                     ds.recommendationSystemSource = document.querySelector('#DefaultRecommendationSystemSource').value || null;
                     ds.recommendationsApplyParentalRatingCap = getNullableBoolSelect('#DefaultRecommendationsApplyParentalRatingCap');
                     // Clients read a different key per form factor, so one arrangement covers all three.

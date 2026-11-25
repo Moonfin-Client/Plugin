@@ -2934,6 +2934,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
         setNullableBoolSelect(view, '#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
         setNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
+        setNullableBoolSelect(view, '#DefaultDetailShowFullDate', defaults.detailShowFullDate);
         setSelectValue(view, '#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
         setNullableBoolSelect(view, '#DefaultRecommendationsApplyParentalRatingCap', defaults.recommendationsApplyParentalRatingCap);
         // One picker stands in for all three form factors.
@@ -3370,6 +3371,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.detailScreenStyle = view.querySelector('#DefaultDetailScreenStyle').value || null;
         d.detailExpandedTabs = getNullableBoolSelect(view, '#DefaultDetailExpandedTabs');
         d.detailShowTechnicalDetails = getNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails');
+        d.detailShowFullDate = getNullableBoolSelect(view, '#DefaultDetailShowFullDate');
         d.recommendationSystemSource = view.querySelector('#DefaultRecommendationSystemSource').value || null;
         d.recommendationsApplyParentalRatingCap = getNullableBoolSelect(view, '#DefaultRecommendationsApplyParentalRatingCap');
         var metaVal = getButtonPickerValue(view, '#DefaultDetailMetadataList');

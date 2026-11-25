@@ -214,6 +214,7 @@ var formFields = []formField{
 	{Entry: "defaultsDetailsPage", Field: "detailsScreenBlur", Key: "detailsScreenBlur", Defaults: true, Kind: kindIntText},
 	{Entry: "defaultsDetailsPage", Field: "detailExpandedTabs", Key: "detailExpandedTabs", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsDetailsPage", Field: "detailShowTechnicalDetails", Key: "detailShowTechnicalDetails", Defaults: true, Kind: kindTribool},
+	{Entry: "defaultsDetailsPage", Field: "detailShowFullDate", Key: "detailShowFullDate", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsDetailsPage", Field: "detailTrailersExternal", Key: "detailTrailersExternal", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsDetailsPage", Field: "hideDetailsMediaDescription", Key: "hideDetailsMediaDescription", Defaults: true, Kind: kindTribool},
 	{Entry: "defaultsDetailsPage", Field: "detailUseSeriesThumbnails", Key: "detailUseSeriesThumbnails", Defaults: true, Kind: kindTribool},
