@@ -309,7 +309,6 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("imdbMostPopularMoviesEnabled")] public bool? ImdbMostPopularMoviesEnabled { get; set; }
         [JsonPropertyName("imdbMostPopularTvShowsEnabled")] public bool? ImdbMostPopularTvShowsEnabled { get; set; }
         [JsonPropertyName("imdbLowestRatedMoviesEnabled")] public bool? ImdbLowestRatedMoviesEnabled { get; set; }
-        [JsonPropertyName("imdbTopEnglishMoviesEnabled")] public bool? ImdbTopEnglishMoviesEnabled { get; set; }
         [JsonPropertyName("tmdbPopularMoviesEnabled")] public bool? TmdbPopularMoviesEnabled { get; set; }
         [JsonPropertyName("tmdbTopRatedMoviesEnabled")] public bool? TmdbTopRatedMoviesEnabled { get; set; }
         [JsonPropertyName("tmdbNowPlayingMoviesEnabled")] public bool? TmdbNowPlayingMoviesEnabled { get; set; }

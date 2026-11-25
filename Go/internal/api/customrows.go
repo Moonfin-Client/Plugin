@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
@@ -90,13 +89,13 @@ var (
 	// mdbSlug can't start with a dot, so ".." can't climb out of the list path.
 	mdbSlug     = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$`)
 	languageTag = regexp.MustCompile(`^([A-Za-z]{2,3})(?:-([A-Za-z]{4}))?(?:-([A-Za-z]{2}|[0-9]{3}))?$`)
-	imdbCharts  = map[string]string{
-		"imdb_top_250_movies":        "TOP_RATED_MOVIES",
-		"imdb_top_250_tv_shows":      "TOP_RATED_TV_SHOWS",
-		"imdb_most_popular_movies":   "MOST_POPULAR_MOVIES",
-		"imdb_most_popular_tv_shows": "MOST_POPULAR_TV_SHOWS",
-		"imdb_lowest_rated_movies":   "LOWEST_RATED_MOVIES",
-		"imdb_top_english_movies":    "TOP_RATED_ENGLISH_MOVIES",
+	// IMDb blocks other sites from reading its charts, so each one comes from the MDBList list that mirrors it.
+	imdbCharts = map[string]map[string]string{
+		"imdb_top_250_movies":        {"username": "snoak", "listname": "imdb-top-250-movies", "mediatype": "movie"},
+		"imdb_top_250_tv_shows":      {"username": "snoak", "listname": "imdb-top-250-shows", "mediatype": "show"},
+		"imdb_most_popular_movies":   {"username": "official", "listname": "moviemeter", "mediatype": "movie"},
+		"imdb_most_popular_tv_shows": {"username": "official", "listname": "moviemeter", "mediatype": "show"},
+		"imdb_lowest_rated_movies":   {"username": "carpenter_", "listname": "imdb-charts-bottom-100-films", "mediatype": "movie"},
 	}
 )
 
@@ -145,7 +144,7 @@ func (s *Server) handleCustomRowItems(w http.ResponseWriter, r *http.Request) {
 	sum := sha256.Sum256(canonical)
 	cacheKey := "row:" + source + ":" + typ + ":" + hex.EncodeToString(sum[:]) + ":" + lang
 	// A private list is only visible to its owner's key, so a row fetched with the caller's own key isn't shared.
-	if (tmdbKey != "" && tmdbKey != cfg.TmdbAPIKey) || (source == "mdblist" && mdbKey != "" && mdbKey != cfg.MdblistAPIKey) {
+	if (tmdbKey != "" && tmdbKey != cfg.TmdbAPIKey) || ((source == "mdblist" || source == "imdb") && mdbKey != "" && mdbKey != cfg.MdblistAPIKey) {
 		cacheKey += ":" + strconv.Itoa(callerOf(r).UserID)
 	}
 
@@ -156,7 +155,11 @@ func (s *Server) handleCustomRowItems(w http.ResponseWriter, r *http.Request) {
 		var err error
 		switch source {
 		case "imdb":
-			items, err = s.imdbChart(ctx, typ)
+			chart, ok := imdbCharts[typ]
+			if !ok {
+				return nil, errors.New("Unsupported IMDb chart: " + typ)
+			}
+			items, err = s.mdbUserList(ctx, mdbKey, chart, lang)
 		case "tmdb":
 			items, err = s.tmdbList(ctx, tmdbKey, typ, params["id"], lang)
 		case "tmdb_chart":
@@ -272,72 +275,6 @@ func (s *Server) libraryIndex(ctx context.Context, catalog RowCatalog, caller Id
 	}
 	s.ext.cache.set(key, index)
 	return index
-}
-
-func (s *Server) imdbChart(ctx context.Context, typ string) ([]rowItem, error) {
-	chart, ok := imdbCharts[typ]
-	if !ok {
-		return nil, errors.New("Invalid chart key: " + typ)
-	}
-	query := `{ chartTitles(chart: {chartType: ` + chart + `}, first: 250) { edges { node { id titleText { text } primaryImage { url } releaseYear { year } titleType { id } } } } }`
-	body, _ := json.Marshal(M{"query": query})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.ext.imdbBase, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	// IMDb's GraphQL only answers requests that look like they come from its own site.
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Origin", "https://www.imdb.com")
-	req.Header.Set("Referer", "https://www.imdb.com/")
-	var v struct {
-		Data struct {
-			ChartTitles struct {
-				Edges []struct {
-					Node struct {
-						ID           string                `json:"id"`
-						TitleText    struct{ Text string } `json:"titleText"`
-						PrimaryImage struct{ URL string }  `json:"primaryImage"`
-						ReleaseYear  struct{ Year int }    `json:"releaseYear"`
-						TitleType    struct {
-							ID string `json:"id"`
-						} `json:"titleType"`
-					} `json:"node"`
-				} `json:"edges"`
-			} `json:"chartTitles"`
-		} `json:"data"`
-	}
-	status, raw, err := s.send(req)
-	if err != nil || status/100 != 2 {
-		return nil, errors.New(providerError("IMDb", status, err))
-	}
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, errors.New("IMDb sent an unreadable chart.")
-	}
-	items := []rowItem{}
-	for _, e := range v.Data.ChartTitles.Edges {
-		n := e.Node
-		if n.ID == "" {
-			continue
-		}
-		item := rowItem{Name: cmp.Or(n.TitleText.Text, "Unknown Title"), Type: "Movie", ProductionYear: n.ReleaseYear.Year,
-			Rank: len(items) + 1, PosterURL: imdbPoster(n.PrimaryImage.URL), ProviderIDs: rowIDs{Imdb: n.ID}}
-		if n.TitleType.ID == "tvSeries" || n.TitleType.ID == "tvMiniSeries" {
-			item.Type = "Series"
-		}
-		items = append(items, item)
-	}
-	return items, nil
-}
-
-// imdbPoster asks IMDb's image host for a 500 pixel wide poster in place of
-// the original, which runs to a few megabytes.
-func imdbPoster(u string) string {
-	if i := strings.LastIndex(u, "._V1_."); i >= 0 {
-		return u[:i] + "._V1_UX500_." + u[i+len("._V1_."):]
-	}
-	return u
 }
 
 func (s *Server) tmdbList(ctx context.Context, key, typ, id, lang string) ([]rowItem, error) {

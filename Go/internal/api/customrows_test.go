@@ -37,16 +37,9 @@ func rowProviders(t *testing.T, hits *atomic.Int32) *httptest.Server {
 		hits.Add(1)
 		q := r.URL.Query()
 		switch {
-		case r.URL.Path == "/imdb" && r.Method == http.MethodPost:
-			body, _ := io.ReadAll(r.Body)
-			if !strings.Contains(string(body), "TOP_RATED_MOVIES") {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			io.WriteString(w, `{"data":{"chartTitles":{"edges":[
-				{"node":{"id":"tt0111161","titleText":{"text":"The Shawshank Redemption"},"primaryImage":{"url":"https://m.media-amazon.com/images/M/x@._V1_.jpg"},"releaseYear":{"year":1994},"titleType":{"id":"movie"}}},
-				{"node":{"id":"","titleText":{"text":"skipped"}}},
-				{"node":{"id":"tt0944947","titleText":{"text":"Game of Thrones"},"primaryImage":null,"releaseYear":{"year":2011},"titleType":{"id":"tvSeries"}}}]}}}`)
+		case r.URL.Path == "/lists/snoak/imdb-top-250-movies/items" && q.Get("apikey") == "mdb-key":
+			io.WriteString(w, `{"movies":[{"id":278,"rank":1,"title":"The Shawshank Redemption","imdb_id":"tt0111161","release_year":1994,"mediatype":"movie"}],
+				"shows":[{"id":1399,"rank":2,"title":"Game of Thrones","mediatype":"show"}],"pagination":{}}`)
 		case r.URL.Path == "/3/find/tt0111161" && q.Get("api_key") == "tmdb-key":
 			io.WriteString(w, `{"movie_results":[{"id":278}],"tv_results":[]}`)
 		case r.URL.Path == "/3/find/tt0944947" && q.Get("api_key") == "tmdb-key":
@@ -112,7 +105,7 @@ func rowServer(t *testing.T) (*Server, *atomic.Int32, *atomic.Int32) {
 	h := testHost(store.NewMemKV())
 	h.Catalog = rowFakeCatalog{reads: &reads}
 	s := NewServer("1.2.3", h)
-	s.ext.tmdbBase, s.ext.mdblistBase, s.ext.imdbBase, s.ext.letterboxdBase = srv.URL, srv.URL, srv.URL+"/imdb", srv.URL
+	s.ext.tmdbBase, s.ext.mdblistBase, s.ext.letterboxdBase = srv.URL, srv.URL, srv.URL
 	return s, &hits, &reads
 }
 
@@ -155,32 +148,30 @@ func TestCustomRowsNeedAHostThatMatchesTitles(t *testing.T) {
 	}
 }
 
-func TestImdbChartIsFilledFromTmdbAndMatchedToTheLibrary(t *testing.T) {
+func TestImdbChartReadsItsMdbListMirror(t *testing.T) {
 	s, hits, reads := rowServer(t)
-	withKeys(t, s, "", "tmdb-key")
 	q := map[string]any{"source": "imdb", "type": "imdb_top_250_movies", "params": "{}"}
+	withKeys(t, s, "", "tmdb-key")
+	if _, got := call(t, s, userMain, "GET", "/Moonfin/CustomRows/Items", "", q); got["success"] != false || got["error"] != "MDBList API key is not configured." {
+		t.Fatalf("without an MDBList key = %v", got)
+	}
+	withKeys(t, s, "mdb-key", "tmdb-key")
 
+	// The mirror's show is left out, since this chart is movies only.
 	items := rowItems(t, s, userMain, q)
-	if len(items) != 2 {
+	if len(items) != 1 {
 		t.Fatalf("items = %v", items)
 	}
-	movie, show := items[0], items[1]
+	movie := items[0]
 	ids := movie["providerIds"].(map[string]any)
-	if movie["localItemId"] != "m1" || ids["Tmdb"] != "278" || movie["officialRating"] != "R" || movie["rank"] != 1.0 ||
+	if movie["localItemId"] != "m1" || ids["Tmdb"] != "278" || ids["Imdb"] != "tt0111161" || movie["officialRating"] != "R" || movie["rank"] != 1.0 ||
 		movie["overview"] != "Two imprisoned men bond." || movie["runTimeTicks"] != 142*600_000_000.0 || movie["backdropUrl"] != "/shawshank.jpg" {
 		t.Errorf("the owned movie = %v", movie)
-	}
-	if movie["posterUrl"] != "https://m.media-amazon.com/images/M/x@._V1_UX500_.jpg" {
-		t.Errorf("IMDb's poster must be asked for at 500 pixels: %v", movie["posterUrl"])
-	}
-	// The library knows the show by the TMDB id that TMDB gave its IMDb id.
-	if show["type"] != "Series" || show["officialRating"] != "TV-MA" || show["posterUrl"] != "/got.jpg" || show["rank"] != 2.0 || show["localItemId"] != "s1" {
-		t.Errorf("the show = %v", show)
 	}
 
 	before := hits.Load()
 	rowItems(t, s, userMain, q)
-	if hits.Load() != before || reads.Load() != 2 {
+	if hits.Load() != before || reads.Load() != 1 {
 		t.Fatalf("a second ask must come from the caches, providers saw %d more and the library was read %d times", hits.Load()-before, reads.Load())
 	}
 	q["params"] = `{"_nocache":"1"}`
@@ -188,14 +179,18 @@ func TestImdbChartIsFilledFromTmdbAndMatchedToTheLibrary(t *testing.T) {
 	if hits.Load() == before {
 		t.Fatal("an older app's _nocache must refetch")
 	}
+	q["type"] = "imdb_top_english_movies"
+	if _, got := call(t, s, userMain, "GET", "/Moonfin/CustomRows/Items", "", q); got["success"] != false {
+		t.Fatalf("a chart with no mirror = %v", got)
+	}
 }
 
 func TestLocalItemIdsOnlyComeWhenAskedFor(t *testing.T) {
 	s, _, reads := rowServer(t)
-	withKeys(t, s, "", "tmdb-key")
+	withKeys(t, s, "mdb-key", "tmdb-key")
 	_, got := call(t, s, userMain, "GET", "/Moonfin/CustomRows/Items", "", map[string]any{"source": "imdb", "type": "imdb_top_250_movies", "params": "{}"})
 	items, _ := got["items"].([]any)
-	if len(items) != 2 || items[0].(map[string]any)["localItemId"] != nil || reads.Load() != 0 {
+	if len(items) != 1 || items[0].(map[string]any)["localItemId"] != nil || reads.Load() != 0 {
 		t.Fatalf("without the opt-in = %v, library read %d times", got, reads.Load())
 	}
 }

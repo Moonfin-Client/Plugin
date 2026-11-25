@@ -890,9 +890,6 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("imdbLowestRatedMoviesEnabled")]
     public bool? ImdbLowestRatedMoviesEnabled { get; set; }
 
-    [JsonPropertyName("imdbTopEnglishMoviesEnabled")]
-    public bool? ImdbTopEnglishMoviesEnabled { get; set; }
-
     [JsonPropertyName("tmdbPopularMoviesEnabled")]
     public bool? TmdbPopularMoviesEnabled { get; set; }
 

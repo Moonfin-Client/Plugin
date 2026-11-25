@@ -1558,7 +1558,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         { type: 'imdb_most_popular_movies', label: 'IMDB Most Popular Movies' },
         { type: 'imdb_most_popular_tv_shows', label: 'IMDB Most Popular Shows' },
         { type: 'imdb_lowest_rated_movies', label: 'IMDB Lowest Rated Movies' },
-        { type: 'imdb_top_english_movies', label: 'IMDB Top English Movies' },
         { type: 'tmdb_popular_movies', label: 'TMDB Popular Movies' },
         { type: 'tmdb_top_rated_movies', label: 'TMDB Top Rated Movies' },
         { type: 'tmdb_now_playing_movies', label: 'TMDB Now Playing Movies' },
@@ -2859,7 +2858,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             view.querySelector('#MdblistOfficialListsEnabled').checked = config.MdblistOfficialListsEnabled !== false;
             view.querySelector('#MdblistOfficialListsMaxItems').value = config.MdblistOfficialListsMaxItems || 250;
             view.querySelector('#TmdbApiKey').value = config.TmdbApiKey || '';
-            view.querySelector('#ImdbListsEnabled').checked = config.ImdbListsEnabled !== false;
             view.querySelector('#RecommendationsProviderEnabled').checked = config.RecommendationsProviderEnabled !== false;
             view.querySelector('#StudioLogosEnabled').checked = config.StudioLogosEnabled !== false;
             view.querySelector('#StudioLogosMaxAgeDays').value = config.StudioLogosMaxAgeDays || 30;
@@ -3272,7 +3270,6 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             config.MdblistOfficialListsEnabled = view.querySelector('#MdblistOfficialListsEnabled').checked;
             config.MdblistOfficialListsMaxItems = parseInt(view.querySelector('#MdblistOfficialListsMaxItems').value, 10) || 250;
             config.TmdbApiKey = (view.querySelector('#TmdbApiKey').value || '').trim() || null;
-            config.ImdbListsEnabled = view.querySelector('#ImdbListsEnabled').checked;
             config.RecommendationsProviderEnabled = view.querySelector('#RecommendationsProviderEnabled').checked;
             config.StudioLogosEnabled = view.querySelector('#StudioLogosEnabled').checked;
             config.StudioLogosMaxAgeDays = parseInt(view.querySelector('#StudioLogosMaxAgeDays').value, 10) || 30;

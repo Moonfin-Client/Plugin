@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -23,35 +22,36 @@ namespace Moonfin.Server.Services;
 public class CustomRowFetchService
 {
     private readonly MoonfinSettingsService _settingsService;
-    private readonly ImdbListsCacheService _imdbCacheService;
     private readonly TmdbRatingService _ratingService;
     private readonly TmdbThumbService _thumbService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CustomRowFetchService> _logger;
-    private readonly ILogger<ImdbListsTask> _taskLogger;
 
     private const int MdbListPageSize = 100;
     private const int MdbListMaxItems = 500;
 
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ImdbFetchGates =
-        new(StringComparer.OrdinalIgnoreCase);
+    // IMDb blocks other sites from reading its charts, so each one comes from the MDBList list that mirrors it.
+    private static readonly Dictionary<string, (string Username, string Listname, string Mediatype)> ImdbCharts = new()
+    {
+        ["imdb_top_250_movies"] = ("snoak", "imdb-top-250-movies", "movie"),
+        ["imdb_top_250_tv_shows"] = ("snoak", "imdb-top-250-shows", "show"),
+        ["imdb_most_popular_movies"] = ("official", "moviemeter", "movie"),
+        ["imdb_most_popular_tv_shows"] = ("official", "moviemeter", "show"),
+        ["imdb_lowest_rated_movies"] = ("carpenter_", "imdb-charts-bottom-100-films", "movie")
+    };
 
     public CustomRowFetchService(
         MoonfinSettingsService settingsService,
-        ImdbListsCacheService imdbCacheService,
         TmdbRatingService ratingService,
         TmdbThumbService thumbService,
         IHttpClientFactory httpClientFactory,
-        ILogger<CustomRowFetchService> logger,
-        ILogger<ImdbListsTask> taskLogger)
+        ILogger<CustomRowFetchService> logger)
     {
         _settingsService = settingsService;
-        _imdbCacheService = imdbCacheService;
         _ratingService = ratingService;
         _thumbService = thumbService;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
-        _taskLogger = taskLogger;
     }
 
     private HttpClient CreateClient() => _httpClientFactory.CreateClient("MoonfinHttpClient");
@@ -126,7 +126,18 @@ public class CustomRowFetchService
 
         if (source == "imdb")
         {
-            return await FetchImdbList(type, userId, cancellationToken);
+            if (!ImdbCharts.TryGetValue(type, out var chart))
+            {
+                throw new NotSupportedException($"Unsupported IMDb chart: {type}");
+            }
+
+            source = "mdblist";
+            parsedParams = new Dictionary<string, string>
+            {
+                ["username"] = chart.Username,
+                ["listname"] = chart.Listname,
+                ["mediatype"] = chart.Mediatype
+            };
         }
 
         var items = source switch
@@ -166,7 +177,7 @@ public class CustomRowFetchService
         var config = MoonfinPlugin.Instance?.Configuration;
         var ownTmdbKey = !string.IsNullOrWhiteSpace(resolved.TmdbApiKey) && resolved.TmdbApiKey != config?.TmdbApiKey;
         var ownMdblistKey = !string.IsNullOrWhiteSpace(resolved.MdblistApiKey) && resolved.MdblistApiKey != config?.MdblistApiKey;
-        return source.Trim().ToLowerInvariant() == "mdblist" ? ownMdblistKey || ownTmdbKey : ownTmdbKey;
+        return source.Trim().ToLowerInvariant() is "mdblist" or "imdb" ? ownMdblistKey || ownTmdbKey : ownTmdbKey;
     }
 
     private Task<string?> ResolveTmdbApiKey(Guid? userId) => TmdbApiKeys.ResolveAsync(_settingsService, userId);
@@ -946,71 +957,6 @@ public class CustomRowFetchService
         var stars = new string('★', fullStars);
         if (halfStar) stars += "½";
         return stars;
-    }
-
-    private async Task<List<CustomRowItem>> FetchImdbList(string type, Guid? userId, CancellationToken cancellationToken)
-    {
-        var items = await LoadImdbList(type, cancellationToken).ConfigureAwait(false);
-        ImdbListsCacheService.DropPosterBackdrops(items);
-
-        // The sync task fills ratings with the admin key. This covers a chart it fetched before
-        // a key was set, or one fetched on demand here.
-        if (items.Count > 0 && !_imdbCacheService.RatingsFilled(type))
-        {
-            var apiKey = await ResolveTmdbApiKey(userId);
-            if (!string.IsNullOrWhiteSpace(apiKey))
-            {
-                await _ratingService.FillRatingsAsync(items, apiKey, cancellationToken).ConfigureAwait(false);
-                await _thumbService.FillDetailsAsync(items, apiKey, cancellationToken).ConfigureAwait(false);
-                _imdbCacheService.MarkRatingsFilled(type);
-                await _imdbCacheService.FlushAsync().ConfigureAwait(false);
-            }
-        }
-
-        return items;
-    }
-
-    private async Task<List<CustomRowItem>> LoadImdbList(string type, CancellationToken cancellationToken)
-    {
-        var cached = _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(1));
-        if (cached != null && cached.Count > 0)
-        {
-            return cached;
-        }
-
-        var gate = ImdbFetchGates.GetOrAdd(type, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var refreshed = _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(1));
-            if (refreshed != null && refreshed.Count > 0)
-            {
-                return refreshed;
-            }
-
-            _logger.LogInformation("IMDb chart {Type} cache miss or expired, fetching on-demand", type);
-            try
-            {
-                var task = new ImdbListsTask(_httpClientFactory, _imdbCacheService, _ratingService, _thumbService, _taskLogger);
-                var items = await task.FetchChartAsync(type, cancellationToken);
-                if (items != null && items.Count > 0)
-                {
-                    _imdbCacheService.SetItems(type, items);
-                    await _imdbCacheService.FlushAsync();
-                    return items;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to fetch IMDb chart {Type} on-demand", type);
-            }
-
-            return _imdbCacheService.TryGetItems(type, TimeSpan.FromDays(30)) ?? new List<CustomRowItem>();
-        }
-        finally
-        {
-            gate.Release();
-        }
     }
 }
 

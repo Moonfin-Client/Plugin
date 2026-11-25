@@ -81,16 +81,4 @@ public sealed class ImdbChartBackdropTests
         Assert.True(TmdbRatingService.IsCurrentFind(unknown));
         Assert.True(TmdbRatingService.IsCurrentFind(current));
     }
-
-    [Fact]
-    public void AChartCachedWithThePosterAsBackdropServesNone()
-    {
-        var poster = Chart(backdrop: "https://m.media-amazon.com/images/M/poster.jpg");
-        var real = Chart(backdrop: "/ht3.jpg");
-
-        ImdbListsCacheService.DropPosterBackdrops([poster, real]);
-
-        Assert.Null(poster.BackdropUrl);
-        Assert.Equal("/ht3.jpg", real.BackdropUrl);
-    }
 }

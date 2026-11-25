@@ -131,9 +131,6 @@ namespace Emby.Plugins.Moonfin
         /// <summary>Maximum number of items cached per official list (250 covers charts like IMDb Top 250).</summary>
         public int MdblistOfficialListsMaxItems { get; set; } = 250;
 
-        /// <summary>Fetch and cache IMDb charts (Top 250, Most Popular, etc.) on a schedule so clients can show them as home rows and custom rows can resolve the imdb source.</summary>
-        public bool ImdbListsEnabled { get; set; } = true;
-
         /// <summary>Rank the similar items Moonfin apps show with Moonfin Recommends. Off hands them back to Emby's own similar items.</summary>
         public bool RecommendationsProviderEnabled { get; set; } = true;
 

@@ -2261,19 +2261,6 @@
                     </div>
 
                     <div class="verticalSection">
-                        <h3 class="sectionTitle">IMDb Charts</h3>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="ImdbListsEnabled" is="emby-checkbox" />
-                                <span>Sync IMDb charts</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Nightly task that caches IMDb charts (Top 250, Popular, etc.) for IMDb custom rows.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
                         <h3 class="sectionTitle">Recommendations</h3>
                         <div class="checkboxContainer">
                             <label>
@@ -6771,7 +6758,6 @@
                 { type: 'imdb_most_popular_movies', label: 'IMDB Most Popular Movies' },
                 { type: 'imdb_most_popular_tv_shows', label: 'IMDB Most Popular Shows' },
                 { type: 'imdb_lowest_rated_movies', label: 'IMDB Lowest Rated Movies' },
-                { type: 'imdb_top_english_movies', label: 'IMDB Top English Movies' },
                 { type: 'tmdb_popular_movies', label: 'TMDB Popular Movies' },
                 { type: 'tmdb_top_rated_movies', label: 'TMDB Top Rated Movies' },
                 { type: 'tmdb_now_playing_movies', label: 'TMDB Now Playing Movies' },
@@ -7546,7 +7532,6 @@
                 imdb_most_popular_movies: true,
                 imdb_most_popular_tv_shows: true,
                 imdb_lowest_rated_movies: true,
-                imdb_top_english_movies: true,
                 tmdb_popular_movies: true,
                 tmdb_top_rated_movies: true,
                 tmdb_now_playing_movies: true,
@@ -11418,7 +11403,6 @@
                     document.querySelector('#TmdbApiKey').value = config.TmdbApiKey || '';
                     document.querySelector('#MdblistOfficialListsEnabled').checked = config.MdblistOfficialListsEnabled !== false;
                     document.querySelector('#MdblistOfficialListsMaxItems').value = config.MdblistOfficialListsMaxItems || 250;
-                    document.querySelector('#ImdbListsEnabled').checked = config.ImdbListsEnabled !== false;
                     document.querySelector('#RecommendationsProviderEnabled').checked = config.RecommendationsProviderEnabled !== false;
                     document.querySelector('#StudioLogosEnabled').checked = config.StudioLogosEnabled !== false;
                     document.querySelector('#StudioLogosMaxAgeDays').value = config.StudioLogosMaxAgeDays || 30;
@@ -12361,7 +12345,6 @@
                         config.TmdbApiKey = document.querySelector('#TmdbApiKey').value.trim() || null;
                         config.MdblistOfficialListsEnabled = document.querySelector('#MdblistOfficialListsEnabled').checked;
                         config.MdblistOfficialListsMaxItems = parseInt(document.querySelector('#MdblistOfficialListsMaxItems').value, 10) || 250;
-                        config.ImdbListsEnabled = document.querySelector('#ImdbListsEnabled').checked;
                         config.RecommendationsProviderEnabled = document.querySelector('#RecommendationsProviderEnabled').checked;
                         config.StudioLogosEnabled = document.querySelector('#StudioLogosEnabled').checked;
                         config.StudioLogosMaxAgeDays = parseInt(document.querySelector('#StudioLogosMaxAgeDays').value, 10) || 30;
