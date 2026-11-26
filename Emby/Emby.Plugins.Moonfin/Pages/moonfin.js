@@ -2838,6 +2838,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function loadConfig(view) {
+        var visit = ++guideGroupsVisit;
         loading.show();
         ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
             view.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
@@ -2920,13 +2921,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             fillUploadedThemes(view, config.UploadedThemes);
             populateDefaults(view, defaultsState.profiles.global);
             refreshDefaultsActions(view);
-            discoverDefaultGuideGroups(view);
+            if (visit === guideGroupsVisit) discoverDefaultGuideGroups(view, visit);
 
             loading.hide();
         }).catch(reportConfigError);
     }
 
     // The admin selects the same native channel tags used by the guide.
+    var guideGroupsVisit = 0;
     var availableDefaultGuideGroups = [];
     var defaultGuideGroupsMessage = 'Loading available groups…';
     var defaultGuideCategories = [['movies', 'Movies'], ['series', 'Series'], ['sports', 'Sports'],
@@ -2949,35 +2951,45 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var names = Array.from(new Set(saved.filter(function(key) { return key.startsWith('group:'); })
             .map(function(key) { return key.slice(6); }).concat(availableDefaultGuideGroups)));
         function checkbox(key, label) {
+            var tooLong = key.length > 1024;
+            var selected = current && current.has(key) ? current.get(key) : saved.includes(key);
+            var state = tooLong ? ' disabled' : selected ? ' checked' : '';
             return '<label style="display:flex;align-items:center;gap:8px;padding:5px 3px;">' +
-                '<input type="checkbox" data-guide-filter="' + esc(key) + '"' +
-                ((current && current.has(key) ? current.get(key) : saved.includes(key)) ? ' checked' : '') + '><span>' + esc(label) + '</span></label>';
+                '<input type="checkbox" data-guide-filter="' + esc(key) + '"' + state + '><span>' +
+                esc(label) + (tooLong ? ' (too long to pin)' : '') + '</span></label>';
         }
         host.innerHTML = '<div style="font-weight:600;padding:5px 3px;">Program Categories</div>' +
             defaultGuideCategories.map(function(category) { return checkbox('category:' + category[0], category[1]); }).join('') +
             '<div style="font-weight:600;padding:8px 3px 5px;">Channel Groups</div>' +
-            (names.length ? names.map(function(name) { return checkbox('group:' + name, name); }).join('') : defaultGuideGroupsMessage);
+            names.map(function(name) { return checkbox('group:' + name, name); }).join('') +
+            (defaultGuideGroupsMessage || (names.length ? '' : 'No channel tags available.'));
     }
 
-    function discoverDefaultGuideGroups(view) {
+    function discoverDefaultGuideGroups(view, visit) {
         ApiClient.ajax({
             type: 'GET',
             url: ApiClient.getUrl('LiveTv/Channels', {Fields: 'ImageTags,UserData,Tags', EnableTotalRecordCount: false}),
             dataType: 'json'
         }).then(function(result) {
+            if (visit !== guideGroupsVisit) return;
             var names = [];
             (result.Items || result.items || []).forEach(function(channel) {
-                var tags = (channel.TagItems || channel.tagItems || []).map(function(tag) { return tag.Name || tag.name; })
-                    .filter(function(name) { return typeof name === 'string' && name.trim(); });
-                names.push.apply(names, tags.length ? tags : channel.Tags || channel.tags || []);
+                if (!channel) return;
+                var items = channel.TagItems || channel.tagItems;
+                var tags = Array.isArray(items) ? items.map(function(tag) { return tag && (tag.Name || tag.name); })
+                    .filter(function(name) { return typeof name === 'string' && name.trim(); }) : [];
+                var raw = tags.length ? tags : channel.Tags || channel.tags;
+                if (Array.isArray(raw)) names.push.apply(names, raw);
             });
             availableDefaultGuideGroups = Array.from(new Set(names.filter(function(name) {
                 return typeof name === 'string' && name.trim();
             }).map(function(name) { return name.trim(); }))).sort();
-            defaultGuideGroupsMessage = 'No channel tags available.';
+            defaultGuideGroupsMessage = '';
         }).catch(function() {
+            if (visit !== guideGroupsVisit) return;
             defaultGuideGroupsMessage = 'Could not load channel tags. Reload to retry.';
         }).finally(function() {
+            if (visit !== guideGroupsVisit) return;
             renderDefaultGuideGroups(view, defaultsState.profiles[defaultsState.active] || {}, true);
         });
     }
@@ -3749,7 +3761,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.liveTvChannelSortBy = view.querySelector('#DefaultLiveTvChannelSortBy').value || null;
         d.liveTvCategoryDisplay = view.querySelector('#DefaultLiveTvCategoryDisplay').value || null;
         if (defaultsState.active === 'global') {
-            var inputs = Array.from(view.querySelectorAll('#DefaultPinnedGuideGroups input[data-guide-filter]'));
+            var inputs = Array.from(view.querySelectorAll('#DefaultPinnedGuideGroups input[data-guide-filter]:not(:disabled)'));
             var visiblePins = inputs.map(function(input) { return input.getAttribute('data-guide-filter'); });
             var selectedPins = inputs.filter(function(input) { return input.checked; })
                 .map(function(input) { return input.getAttribute('data-guide-filter'); });
@@ -6974,6 +6986,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     };
 
     View.prototype.onPause = function () {
+        guideGroupsVisit++;
         var view = this.view;
         if (view.__moonfinState && view.__moonfinState.timer) {
             clearInterval(view.__moonfinState.timer);

@@ -412,6 +412,7 @@ func (s *Server) handleGetDefaults(w http.ResponseWriter, r *http.Request) {
 		}); ok {
 			groups, err := provider.LiveTvFreeGroups(r.Context(), callerOf(r).Token)
 			if err != nil {
+				logError(r, "load Plex Free TV groups", err)
 				writeError(w, http.StatusBadGateway, "Could not load Plex Free TV groups")
 				return
 			}

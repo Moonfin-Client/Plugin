@@ -27,6 +27,7 @@ public sealed class LiveTvChannelGroupsService(
     internal async Task<ChannelGroupResult> GetAsync(Guid userId, CancellationToken token)
     {
         var importTime = ChannelGroupResult.StableImportTime(tasks);
+        bool ImportCurrent() => importTime.HasValue && ChannelGroupResult.StableImportTime(tasks) == importTime;
         var query = new LiveTvChannelQuery { UserId = userId, AddCurrentProgram = false };
         var options = new DtoOptions(false) { EnableImages = true, EnableUserData = true, AddCurrentProgram = false };
         var visible = liveTv.GetInternalChannels(query, options, token).Items;
@@ -42,7 +43,7 @@ public sealed class LiveTvChannelGroupsService(
         var m3u = channels.Where(c => !IsNativeXtreamChannel(c.ExternalId)).ToArray();
         if (m3u.Length != 0)
         {
-            var snapshot = await _m3uReader.GetAsync(m3u.Select(c => c.ExternalId), ReadM3uAsync, token);
+            var snapshot = await _m3uReader.GetAsync(m3u.Select(c => c.ExternalId), importTime, ImportCurrent, ReadM3uAsync, token);
             snapshot.AddVisibleChannelsTo(result, m3u);
         }
         var xtream = channels.Where(c => IsNativeXtreamChannel(c.ExternalId)).ToArray();
@@ -52,7 +53,7 @@ public sealed class LiveTvChannelGroupsService(
             deadline.CancelAfter(XtreamGuideWait);
             try
             {
-                var snapshot = await _xtreamReader.GetAsync(xtream.Select(c => c.ExternalId), ReadXtreamAsync, deadline.Token)
+                var snapshot = await _xtreamReader.GetAsync(xtream.Select(c => c.ExternalId), importTime, ImportCurrent, ReadXtreamAsync, deadline.Token)
                     .WaitAsync(deadline.Token);
                 snapshot.AddVisibleChannelsTo(result, xtream);
             }
@@ -71,6 +72,14 @@ public sealed class LiveTvChannelGroupsService(
             logger.LogWarning(ex, "Could not read guide programme categories");
         }
         var items = visible.Count == 0 ? [] : BuildChannelDtos(visible, options, viewer.Value);
+        if (!ImportCurrent())
+        {
+            result = new ChannelGroupResult
+            {
+                Partial = true,
+                UnresolvedChannelIds = channels.Select(c => c.ClientId).ToList(),
+            };
+        }
         result.SetChannels(items, item => item.Id.ToString("N"));
         return result;
     }
@@ -109,6 +118,7 @@ public sealed class LiveTvChannelGroupsService(
     private async Task ReadM3uAsync(ChannelGroupSnapshot result, CancellationToken token)
     {
         var configured = ((LiveTvOptions)config.GetConfiguration("livetv")).TunerHosts;
+        var import = tasks.ScheduledTasks.FirstOrDefault(task => task.ScheduledTask.Key == "RefreshGuide")?.LastExecutionResult;
         // Read the imported M3U lineup instead of downloading the playlist again.
         // Jellyfin's tuner may refetch it even with caching enabled.
         foreach (var host in configured.Where(host => IsM3u(host.Type)))
@@ -122,6 +132,12 @@ public sealed class LiveTvChannelGroupsService(
                     continue;
                 }
                 var path = Path.Combine(config.ApplicationPaths.CachePath, host.Id + "_channels");
+                // An import can update some tuner caches and leave others from the previous lineup.
+                if (import != null && File.GetLastWriteTimeUtc(path) < import.StartTimeUtc)
+                {
+                    result.MissingTuner = true;
+                    continue;
+                }
                 var bytes = await File.ReadAllBytesAsync(path, token);
                 var channels = ReadImportedChannels(bytes);
                 foreach (var channel in channels)

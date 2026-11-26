@@ -11475,8 +11475,11 @@
                 });
 
                 // Use the same group identifiers as the guide's saved shortcuts.
-                var availableDefaultGuideGroups = [];
-                var defaultGuideGroupsMessage = 'Loading available groups…';
+                // Profile-switch listeners outlive a page visit. They read the latest discovery.
+                var guideGroups = { names: [], message: 'Loading available groups…' };
+                defaultsState.guideGroups = guideGroups;
+                // The Go hosts count UTF-8 bytes. Jellyfin counts UTF-16 code units.
+                var guideKeyEncoder = window.moonbaseHost ? new TextEncoder() : null;
                 var defaultGuideCategories = (window.moonbaseHost && window.moonbaseHost.guideCategories) ||
                     [['movies', 'Movies'], ['series', 'Series'], ['sports', 'Sports'],
                      ['news', 'News'], ['kids', 'Kids'], ['premiere', 'Premieres']];
@@ -11496,24 +11499,30 @@
                         ? defaults.liveTvSavedFilters.filter(function(key) { return typeof key === 'string'; })
                         : [];
                     var names = Array.from(new Set(saved.filter(function(key) { return key.startsWith('group:'); })
-                        .map(function(key) { return key.slice(6); }).concat(availableDefaultGuideGroups)));
+                        .map(function(key) { return key.slice(6); }).concat(defaultsState.guideGroups.names)));
                     function checkbox(key, label) {
+                        var tooLong = (guideKeyEncoder ? guideKeyEncoder.encode(key).length : key.length) > 1024;
+                        var selected = current && current.has(key) ? current.get(key) : saved.includes(key);
+                        var state = tooLong ? ' disabled' : selected ? ' checked' : '';
                         return '<label style="display:flex;align-items:center;gap:8px;padding:5px 3px;">' +
-                            '<input type="checkbox" data-guide-filter="' + esc(key) + '"' +
-                            ((current && current.has(key) ? current.get(key) : saved.includes(key)) ? ' checked' : '') + '><span>' + esc(label) + '</span></label>';
+                            '<input type="checkbox" data-guide-filter="' + esc(key) + '"' + state + '><span>' +
+                            esc(label) + (tooLong ? ' (too long to pin)' : '') + '</span></label>';
                     }
                     host.innerHTML = '<div style="font-weight:600;padding:5px 3px;">Program Categories</div>' +
                         defaultGuideCategories.map(function(category) { return checkbox('category:' + category[0], category[1]); }).join('') +
                         '<div style="font-weight:600;padding:8px 3px 5px;">Channel Groups</div>' +
-                        (names.length ? names.map(function(name) { return checkbox('group:' + name, name); }).join('') : defaultGuideGroupsMessage);
+                        names.map(function(name) { return checkbox('group:' + name, name); }).join('') +
+                        (defaultsState.guideGroups.message || (names.length ? '' : 'No channel groups available.'));
                 }
 
                 function discoverDefaultGuideGroups() {
                     // A host adapter may supply genres using its existing backend route.
                     var hostLoader = window.moonbaseHost && window.moonbaseHost.loadGuideGroups;
+                    var partial = false;
                     var discovery = hostLoader ? hostLoader() :
                         ApiClient.ajax({type: 'GET', url: ApiClient.getUrl('Moonfin/LiveTv/ChannelGroups'), dataType: 'json'})
                             .then(function(result) {
+                                partial = result.partial || result.Partial;
                                 var names = [];
                                 (result.channels || result.Channels || []).forEach(function(channel) {
                                     names.push.apply(names, channel.groups || channel.Groups || []);
@@ -11521,11 +11530,12 @@
                                 return names;
                             });
                     discovery.then(function(names) {
-                        availableDefaultGuideGroups = Array.from(new Set(names)).sort();
-                        defaultGuideGroupsMessage = 'No channel groups available.';
+                        guideGroups.names = Array.from(new Set(names)).sort();
+                        guideGroups.message = partial ? 'Some channel groups could not be loaded. Reload to retry.' : '';
                     }).catch(function() {
-                        defaultGuideGroupsMessage = 'Could not load groups. Reload to retry.';
+                        guideGroups.message = 'Could not load groups. Reload to retry.';
                     }).finally(function() {
+                        if (defaultsState.guideGroups !== guideGroups) return;
                         renderDefaultGuideGroups(defaultsState.profiles[defaultsState.active] || {}, true);
                     });
                 }
@@ -12870,7 +12880,7 @@
                     ds.liveTvChannelSortBy = document.querySelector('#DefaultLiveTvChannelSortBy').value || null;
                     ds.liveTvCategoryDisplay = document.querySelector('#DefaultLiveTvCategoryDisplay').value || null;
                     if (defaultsState.active === 'global') {
-                        var inputs = Array.from(document.querySelectorAll('#DefaultPinnedGuideGroups input[data-guide-filter]'));
+                        var inputs = Array.from(document.querySelectorAll('#DefaultPinnedGuideGroups input[data-guide-filter]:not(:disabled)'));
                         var visiblePins = inputs.map(function(input) { return input.getAttribute('data-guide-filter'); });
                         var selectedPins = inputs.filter(function(input) { return input.checked; })
                             .map(function(input) { return input.getAttribute('data-guide-filter'); });

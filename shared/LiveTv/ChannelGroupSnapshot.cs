@@ -67,14 +67,13 @@ namespace Moonfin.LiveTv
         private readonly HashSet<string> _incompleteGroups = new HashSet<string>(StringComparer.Ordinal);
         public bool MissingTuner { get; set; }
 
-        // Only a complete read can clear a previous ID conflict.
-        // Each viewer can only resolve conflicts for channels they can access.
+        // Clear a conflict only when a complete read identifies the viewer's exact channel.
         public void UpdateConflicts(HashSet<string> known)
         {
-            if (MissingTuner)
-                _ambiguous.UnionWith(known.Where(_visibleIds.Contains));
-            else
-                known.ExceptWith(_visibleIds);
+            if (!MissingTuner)
+                known.RemoveWhere(id => _visibleIds.TryGetValue(id, out var visibleId) &&
+                    _channels.TryGetValue(id, out var source) && source.ExternalId == visibleId);
+            _ambiguous.UnionWith(known.Where(_visibleIds.Contains));
             known.UnionWith(_ambiguous);
         }
 
@@ -148,20 +147,25 @@ namespace Moonfin.LiveTv
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1);
         private readonly HashSet<string> _conflicts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private ChannelGroupSnapshot? _lastRead;
+        private long? _lastImportTime;
 
         public async Task<ChannelGroupSnapshot> GetAsync(
-            IEnumerable<string> visibleIds, Func<ChannelGroupSnapshot, CancellationToken, Task> read, CancellationToken token)
+            IEnumerable<string> visibleIds, long? importTime, Func<bool> importCurrent,
+            Func<ChannelGroupSnapshot, CancellationToken, Task> read, CancellationToken token)
         {
             var previous = Volatile.Read(ref _lastRead);
             await _gate.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                if (_lastRead != null && _lastRead != previous && _lastRead.Covers(visibleIds))
+                if (!importCurrent()) return new ChannelGroupSnapshot(visibleIds);
+                if (_lastRead != null && _lastRead != previous && _lastImportTime == importTime && _lastRead.Covers(visibleIds))
                     return _lastRead;
                 var current = new ChannelGroupSnapshot(visibleIds);
                 await read(current, token).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
+                if (!importCurrent()) return new ChannelGroupSnapshot(visibleIds);
                 current.UpdateConflicts(_conflicts);
+                _lastImportTime = importTime;
                 Volatile.Write(ref _lastRead, current.CanShare ? current : null);
                 return current;
             }

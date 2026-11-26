@@ -4,6 +4,7 @@
 package plex
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/rand"
@@ -15,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -124,7 +126,9 @@ func (c *Companion) LiveTvFreeGroups(ctx context.Context, token string) ([]strin
 		if status != http.StatusOK {
 			return fmt.Errorf("Plex guide replied %d", status)
 		}
-		return json.Unmarshal(body, target)
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.UseNumber()
+		return decoder.Decode(target)
 	}
 	var provider struct {
 		MediaProvider struct {
@@ -157,7 +161,9 @@ func (c *Companion) LiveTvFreeGroups(ctx context.Context, token string) ([]strin
 			continue
 		}
 		for _, key := range channel.Keys {
-			used[fmt.Sprint(key)] = true
+			if id := genreKey(key); id != "" {
+				used[id] = true
+			}
 		}
 	}
 	unique := map[string]bool{}
@@ -168,7 +174,7 @@ func (c *Companion) LiveTvFreeGroups(ctx context.Context, token string) ([]strin
 		}
 		for _, group := range feature.GridChannelFilter {
 			name := strings.TrimSpace(group.Title)
-			if name != "" && used[fmt.Sprint(group.Key)] && !unique[name] {
+			if name != "" && used[genreKey(group.Key)] && !unique[name] {
 				unique[name] = true
 				groups = append(groups, name)
 			}
@@ -176,6 +182,39 @@ func (c *Companion) LiveTvFreeGroups(ctx context.Context, token string) ([]strin
 	}
 	sort.Strings(groups)
 	return groups, nil
+}
+
+var genreDecimal = regexp.MustCompile(`^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$`)
+
+// Compare numeric IDs by their significant digits and decimal exponent.
+// This keeps every digit without expanding a short ID such as 1e1000000.
+func genreKey(key any) string {
+	raw, isString := key.(string)
+	if !isString {
+		number, ok := key.(json.Number)
+		if !ok {
+			return ""
+		}
+		raw = number.String()
+	}
+	if raw == "" {
+		return ""
+	}
+	match := genreDecimal.FindStringSubmatch(raw)
+	if match == nil || (isString && (match[4] != "" || strings.HasSuffix(match[3], "0"))) {
+		return "string:" + raw // Preserve opaque or specially formatted string IDs.
+	}
+	digits := strings.TrimLeft(match[2]+match[3], "0")
+	if digits == "" {
+		return match[1] + "0"
+	}
+	significant := strings.TrimRight(digits, "0")
+	var exponent big.Int
+	if match[4] != "" {
+		exponent.SetString(match[4], 10)
+	}
+	exponent.Add(&exponent, big.NewInt(int64(len(digits)-len(significant)-len(match[3]))))
+	return match[1] + significant + "e" + exponent.String()
 }
 
 // loadOrCreateClientID keeps one X-Plex-Client-Identifier per install, so
