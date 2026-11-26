@@ -1,3 +1,4 @@
+using MediaBrowser.Model.Dto;
 using Moonfin.LiveTv;
 using Xunit;
 
@@ -5,6 +6,22 @@ namespace Moonfin.Tests;
 
 public class ChannelGroupTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UnresolvedIdsFollowTheViewersFinalChannelList(bool hasVisibleChannels)
+    {
+        var visible = new BaseItemDto { Id = Guid.NewGuid() };
+        var resolved = new BaseItemDto { Id = Guid.NewGuid() };
+        var hiddenId = Guid.NewGuid().ToString("N");
+        var visibleId = visible.Id.ToString("N");
+        var result = new ChannelGroupResult { Partial = true, UnresolvedChannelIds = [hiddenId, visibleId] };
+
+        result.SetChannels(hasVisibleChannels ? [visible, resolved] : []);
+
+        Assert.Equal(hasVisibleChannels ? [visibleId] : Array.Empty<string>(), result.UnresolvedChannelIds);
+    }
+
     [Fact]
     public void ConflictingTunersOnlyRecoverWhenTheExactStationReturns()
     {

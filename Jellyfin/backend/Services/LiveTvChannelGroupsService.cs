@@ -34,11 +34,7 @@ public sealed class LiveTvChannelGroupsService(
         // Jellyfin moved the User type between 10.10 and 10.11.
         var viewer = new Lazy<object>(() => typeof(IUserManager).GetMethod(nameof(IUserManager.GetUserById), [typeof(Guid)])!
             .Invoke(users, [userId]) ?? throw new InvalidOperationException("Guide user is unavailable"));
-        // Jellyfin lists its built-in tuners under the service name "Emby".
-        var channels = visible.OfType<LiveTvChannel>()
-            .Where(c => c.ServiceName == "Emby" && c.ExternalId is { } id
-                && (id.StartsWith("m3u_", StringComparison.Ordinal) || IsNativeXtreamChannel(id)))
-            .Select(c => (ClientId: c.Id.ToString("N"), c.ExternalId)).ToArray();
+        var channels = ChannelsWithGroupSupport(visible).ToArray();
         var result = new ChannelGroupResult();
         var m3u = channels.Where(c => !IsNativeXtreamChannel(c.ExternalId)).ToArray();
         if (m3u.Length != 0)
@@ -63,35 +59,49 @@ public sealed class LiveTvChannelGroupsService(
                 (result.UnresolvedChannelIds ??= []).AddRange(xtream.Select(c => c.ClientId));
             }
         }
-        try
+        if (ImportCurrent())
         {
-            result.ReadProgrammeCategories(tasks, importTime, () => ReadCategories(viewer, visible.Select(c => c.Id).ToArray(), token));
-        }
-        catch (Exception ex) when (!token.IsCancellationRequested)
-        {
-            logger.LogWarning(ex, "Could not read guide programme categories");
-        }
-        var items = visible.Count == 0 ? [] : BuildChannelDtos(visible, options, viewer.Value);
-        if (!ImportCurrent())
-        {
-            result = new ChannelGroupResult
+            var visibleDtos = GetVisibleChannelDtos(visible, options, viewer);
+            result.SetChannels(visibleDtos);
+            try
             {
-                Partial = true,
-                UnresolvedChannelIds = channels.Select(c => c.ClientId).ToList(),
-            };
+                result.ReadProgrammeCategories(tasks, importTime, () => ReadCategories(viewer, visibleDtos.Select(c => c.Id).ToArray(), token));
+            }
+            catch (Exception ex) when (!token.IsCancellationRequested)
+            {
+                logger.LogWarning(ex, "Could not read guide programme categories");
+            }
+            if (ImportCurrent()) return result;
         }
-        result.SetChannels(items, item => item.Id.ToString("N"));
-        return result;
+
+        // A refresh can replace channels while their groups or DTOs are being read.
+        visible = liveTv.GetInternalChannels(query, options, token).Items;
+        var refreshed = new ChannelGroupResult
+        {
+            Partial = true,
+            UnresolvedChannelIds = ChannelsWithGroupSupport(visible).Select(c => c.ClientId).ToList(),
+        };
+        refreshed.SetChannels(GetVisibleChannelDtos(visible, options, viewer));
+        return refreshed;
     }
 
-    private IEnumerable<BaseItemDto> BuildChannelDtos(IReadOnlyList<BaseItem> channels, DtoOptions options, object viewer)
+    // Jellyfin lists its built-in tuners under the service name "Emby".
+    private static IEnumerable<(string ClientId, string ExternalId)> ChannelsWithGroupSupport(IEnumerable<BaseItem> visible) =>
+        visible.OfType<LiveTvChannel>()
+            .Where(c => c.ServiceName == "Emby" && c.ExternalId is { } id
+                && (id.StartsWith("m3u_", StringComparison.Ordinal) || IsNativeXtreamChannel(id)))
+            .Select(c => (c.Id.ToString("N"), c.ExternalId));
+
+    private IReadOnlyList<BaseItemDto> GetVisibleChannelDtos(IReadOnlyList<BaseItem> channels, DtoOptions options, Lazy<object> viewer)
     {
+        if (channels.Count == 0) return [];
+
         // Jellyfin 12 adds skipVisibilityCheck; leave visibility checks enabled.
         var method = typeof(IDtoService).GetMethod(nameof(IDtoService.GetBaseItemDtos))!;
         object?[] args = method.GetParameters().Length == 4
-            ? [channels, options, viewer, null]
-            : [channels, options, viewer, null, false];
-        return (IEnumerable<BaseItemDto>)method.Invoke(dtos, args)!;
+            ? [channels, options, viewer.Value, null]
+            : [channels, options, viewer.Value, null, false];
+        return (IReadOnlyList<BaseItemDto>)method.Invoke(dtos, args)!;
     }
 
     private string[] ReadCategories(Lazy<object> viewer, Guid[] channelIds, CancellationToken token)

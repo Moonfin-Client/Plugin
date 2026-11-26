@@ -6238,6 +6238,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     // Settings that share a form field, or whose field isn't named Default plus the key.
     var SETTING_FIELD_IDS = {
+        liveTvSavedFilters: 'DefaultPinnedGuideGroups',
         homeBackdropEnabled: 'DefaultHomeBackdropStyle',
         episodePreviewEnabled: 'DefaultMediaPreviewMode',
         homeSections: 'DefaultHomeRowOrder',
@@ -6548,14 +6549,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var profiles = kind === 'apply' ? defaultsState.profiles : state.source || {};
         var fromName = state.from ? userName(state.from) : '';
         return DEFAULTS_PROFILE_NAMES.map(function(name) {
-            var count = countSetDefaults(profiles[name]);
+            var profile = profiles[name];
+            var hiddenPins = kind === 'copy' && name === 'global' ? profiles.liveTvSavedFilterExclusions : null;
+            if (Array.isArray(hiddenPins) && hiddenPins.length && profile && Array.isArray(profile.liveTvSavedFilters)) {
+                // The copy API uses one key for personal pins and hidden defaults.
+                profile = Object.assign({}, profile, {
+                    liveTvSavedFilters: profile.liveTvSavedFilters.length + ' pinned, ' + hiddenPins.length + ' hidden'
+                });
+            }
+            var count = countSetDefaults(profile);
             return {
                 name: name,
                 label: DEFAULTS_PROFILE_LABELS[name],
                 count: count,
                 on: count > 0 && !state.off[name],
                 sub: count ? count + ' set' : kind === 'apply' ? 'No defaults set' : fromName ? fromName + ' has none' : 'Pick a user',
-                profile: profiles[name]
+                profile: profile
             };
         });
     }
@@ -6669,7 +6678,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 : 'From ' + userName(state.from) + '\'s ' + names + (entries.length > 1 ? ' profiles' : ' profile'),
             note: kind === 'apply'
                 ? 'Only settings that have a default are listed. A setting left on Not set has nothing to push.'
-                : 'Only settings ' + userName(state.from) + ' has saved are listed. API keys and hidden items are never copied.',
+                : 'Only settings ' + userName(state.from) + ' has saved are listed. API keys and items hidden from Continue Watching or Next Up are never copied.',
             rows: rows,
             picked: picked && picked.length ? picked : null
         }).then(function(result) {

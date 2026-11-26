@@ -229,18 +229,16 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(400, new { Error = "Invalid saved Live TV filter change" });
 
             var existed = Settings.UserSettingsExist(userId.Value);
+            List<string>? pins;
             try
             {
-                await Settings.SaveProfileAsync(userId.Value, profile, body.Profile, body.ClientId,
+                pins = await Settings.SaveProfileAsync(userId.Value, profile, body.Profile, body.ClientId,
                     savedFilterChange: body.LiveTvSavedFilterChange).ConfigureAwait(false);
             }
             catch (GuidePinLimitException ex)
             {
                 return Json(400, new { Error = ex.Message });
             }
-            var pins = body.LiveTvSavedFilterChange == null
-                ? null
-                : (await Settings.GetResolvedProfileAsync(userId.Value, "global").ConfigureAwait(false))?.LiveTvSavedFilters ?? new List<string>();
             return Json(new { Success = true, Created = !existed, UserId = userId.Value, liveTvSavedFilters = pins });
         }
 

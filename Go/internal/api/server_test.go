@@ -1218,7 +1218,11 @@ func TestPinAwareDevicesSeeAdminCopiesAndResets(t *testing.T) {
 	copySettings := M{"fromUserId": "2~20", "toUserIds": []string{"4"}, "profiles": []string{"global"}, "replace": true}
 	postGuideSettings(t, s, adminMain, path, M{"profile": M{"theme": "dark"}}, 200)
 	wantValue(t, postGuideSettings(t, s, adminMain, "/Moonfin/Admin/CopySettings", copySettings, 200)["usersAffected"], 1.0)
+	assertResolvedGuidePins(t, s, other, nil)
+	postGuideSettings(t, s, other, path, guideEdit("initializeIfAbsent", []string{"group:Old"}), 200)
 	resolved()
+	postGuideSettings(t, s, other, path, guideEdit("add", "group:Old"), 200)
+	resolved("group:Old")
 	postGuideSettings(t, s, adminMain, path, guideEdit("add", "group:News"), 200)
 	delete(copySettings, "replace")
 	copySettings["keys"] = []string{"liveTvSavedFilters"}

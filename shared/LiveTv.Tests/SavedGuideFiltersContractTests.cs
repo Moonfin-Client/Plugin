@@ -28,7 +28,7 @@ public sealed class SavedGuideFiltersContractTests : IDisposable
     }
     public void Dispose() => Directory.Delete(_path, true);
     private Task<MoonfinUserSettings?> Read() => _service.GetUserSettingsAsync(_user);
-    private Task Edit(string profile, string action, string? pin = null, params string[] filters) =>
+    private Task<List<string>?> Edit(string profile, string action, string? pin = null, params string[] filters) =>
         _service.SaveProfileAsync(_user, profile, new MoonfinSettingsProfile(), notifySettingsChanged: false,
             savedFilterChange: new LiveTvSavedFilterChange { Action = action, Filter = pin,
                 Filters = action == "initializeIfAbsent" ? new List<string>(filters) : null });
@@ -39,6 +39,34 @@ public sealed class SavedGuideFiltersContractTests : IDisposable
     private List<string>? Pins(MoonfinUserSettings user, PluginConfiguration config) =>
         _service.ResolveProfile(user, "tv", config).LiveTvSavedFilters;
 
+    [Fact]
+    public async Task PinSaveReturnsCommittedPinsWhenTheFileCannotBeReadAfterWriting()
+    {
+#if MOONFIN_EMBY_TESTS
+        var service = _service;
+#else
+        var provider = RecordingHostProxy.Create<IServiceProvider>((_, _) => null);
+        var service = new MoonfinSettingsService(new NoOpLogger<MoonfinSettingsService>(), _path, provider);
+#endif
+        FileStream? lockedFile = null;
+        // Native preference sync runs after the file has been committed, before the save returns.
+        service.BeforeNativeSyncWaitForTesting = id =>
+            lockedFile = File.Open(Path.Combine(_path, id + ".json"), FileMode.Open, FileAccess.Read, FileShare.None);
+        try
+        {
+            var pins = await service.SaveProfileAsync(_user, "tv", new() { HideWatchedInRecentRows = true },
+                savedFilterChange: Change("add", "group:Sports"));
+            Assert.NotNull(lockedFile);
+            await Assert.ThrowsAsync<SettingsReadError>(() => service.GetResolvedProfileAsync(_user, "global", throwIfUnreadable: true));
+            Assert.Equal(["group:Sports"], pins);
+        }
+        finally
+        {
+            lockedFile?.Dispose();
+        }
+        Assert.Equal(["group:Sports"], (await Read())!.Global!.LiveTvSavedFilters);
+    }
+
     [Theory]
     [InlineData("primary locked")]
     [InlineData("backup locked")]
@@ -46,6 +74,7 @@ public sealed class SavedGuideFiltersContractTests : IDisposable
     public async Task FailedSettingsReadsPreserveBothCopiesAndCanBeRetried(string failure)
     {
         Assert.Null(await _service.GetResolvedProfileAsync(_user, "tv"));
+        Assert.Null(await _service.GetProfileForPullAsync(_user, "tv", includeLiveTvSavedFilters: true));
         await Edit("tv", "add", "group:Sports");
         var primary = Path.Combine(_path, _user + ".json");
         var backup = AtomicFile.BackupPath(primary);
@@ -56,7 +85,12 @@ public sealed class SavedGuideFiltersContractTests : IDisposable
             File.WriteAllText(backup, "{backup");
         }
         using (failure == "both corrupt" ? null : File.Open(failure == "backup locked" ? backup : primary, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) {
-            var error = await Assert.ThrowsAsync<SettingsReadError>(() => _service.GetResolvedProfileAsync(_user, "tv"));
+            Assert.Null(await _service.GetResolvedProfileAsync(_user, "tv"));
+            Assert.Null(await _service.GetProfileForPullAsync(_user, "tv", includeLiveTvSavedFilters: false));
+            var error = await Assert.ThrowsAsync<SettingsReadError>(() =>
+                _service.GetProfileForPullAsync(_user, "tv", includeLiveTvSavedFilters: true));
+            await Assert.ThrowsAsync<SettingsReadError>(() =>
+                _service.GetResolvedProfileAsync(_user, "global", throwIfUnreadable: true));
             Assert.DoesNotContain(primary, error.Message);
             await Assert.ThrowsAsync<SettingsReadError>(() => Edit("tv", "add", "group:News"));
             await Assert.ThrowsAsync<SettingsReadError>(() => _service.SaveUserSettingsAsync(_user, new()));
@@ -154,7 +188,10 @@ public sealed class SavedGuideFiltersContractTests : IDisposable
         Assert.Equal("groups", _service.ResolveProfile(stored, "mobile", config).LiveTvCategoryDisplay);
         var later = Defaults("group:Kids", local);
         Assert.Equal(["group:Kids", local], Pins(stored, later));
-        MoonfinSettingsService.ApplySavedFilterChange(stored, Change("remove", local), later.DefaultUserSettings!.LiveTvSavedFilters);
+        var managedPins = later.DefaultUserSettings!.LiveTvSavedFilters;
+        Assert.Equal(["group:Kids"], MoonfinSettingsService.ApplySavedFilterChange(stored, Change("remove", local), managedPins));
+        Assert.Equal(["group:Kids"], MoonfinSettingsService.ApplySavedFilterChange(stored,
+            new() { Action = "initializeIfAbsent", Filters = ["group:Ignored"] }, managedPins));
         Assert.Equal(["group:Kids"], Pins(stored, later));
         async Task Check(params string[] pins) => Assert.Equal(pins, Pins((await Read())!, config));
         await Check("group:News", local);
@@ -168,6 +205,24 @@ public sealed class SavedGuideFiltersContractTests : IDisposable
     }
 
     [Fact]
+    public async Task ReplacingGlobalSettingsWithoutPinsPreventsReimport()
+    {
+        const string pin = "group:Sports";
+        var source = Guid.NewGuid();
+        Assert.Null(await _service.SaveProfileAsync(source, "global", new() { ClockBehavior = "never" }));
+        Assert.Equal([pin], await Edit("tv", "initializeIfAbsent", null, pin));
+        Assert.Equal([pin], (await Read())!.Global!.LiveTvSavedFilters);
+
+        Assert.Equal(1, await _service.CopySettingsAsync(source, [_user], ["global"], keys: null, replace: true));
+        Assert.Empty((await Read())!.Global!.LiveTvSavedFilters!);
+        Assert.Empty((await Edit("tv", "initializeIfAbsent", null, pin))!);
+        Assert.Empty((await Read())!.Global!.LiveTvSavedFilters!);
+
+        await Edit("tv", "add", pin);
+        Assert.Equal([pin], (await Read())!.Global!.LiveTvSavedFilters);
+    }
+
+    [Fact]
     public async Task AdminCopyAndProfileDeletionPreserveSavedPins()
     {
         var to = Guid.NewGuid();
@@ -178,6 +233,8 @@ public sealed class SavedGuideFiltersContractTests : IDisposable
         Assert.Equal("never", (await _service.GetUserSettingsAsync(to))!.Tv!.ClockBehavior);
 
         await _service.DeleteProfileAsync(to, "tv");
-        Assert.Equal(["group:News"], (await _service.GetUserSettingsAsync(to))!.Global!.LiveTvSavedFilters);
+        var settings = (await _service.GetUserSettingsAsync(to))!;
+        Assert.Null(settings.Tv);
+        Assert.Equal(["group:News"], settings.Global!.LiveTvSavedFilters);
     }
 }

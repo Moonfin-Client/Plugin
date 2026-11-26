@@ -170,6 +170,47 @@ function pageFunction(source, name) {
     return match[0];
 }
 
+for (const [host, source] of [['Jellyfin/Go', page], ['Emby', embyPage]]) {
+    test(host + ' lets an admin copy hidden guide shortcuts as one global setting', () => {
+        const emby = host === 'Emby';
+        const key = 'liveTvSavedFilters';
+        const hiddenOnly = { global: { [key]: [] }, tv: { [key]: [] }, liveTvSavedFilterExclusions: ['group:News'] };
+        const copy = { source: hiddenOnly, off: {}, settings: 'pick', pickedRows: ['DefaultPinnedGuideGroups'] };
+        const pinField = { id: 'DefaultPinnedGuideGroups', closest: () => null };
+        const form = {
+            querySelector: id => id === '#DefaultPinnedGuideGroups' ? pinField : null,
+            getElementById: id => id === 'DefaultPinnedGuideGroups' ? pinField : null,
+        };
+        const context = vm.createContext({
+            actionsState: { copy, apply: { off: {} } }, defaultsState: { profiles: hiddenOnly },
+            DEFAULTS_PROFILE_NAMES: ['global', 'tv'], DEFAULTS_PROFILE_LABELS: { global: 'Global', tv: 'TV' },
+            document: form,
+        });
+        const functions = ['profileEntries', 'countSetDefaults', 'isSetDefault', 'tickedEntries', 'buildSettingRows',
+            'settingFieldId', 'settingFieldLabel', 'settingValueText', 'plural', 'pickedKeys'];
+        const fields = source.slice(source.indexOf('var SETTING_FIELD_IDS'), source.indexOf('function settingFieldId'));
+        vm.runInContext([fields, ...functions.map(name => pageFunction(source, name))].join('\n'), context);
+
+        const rows = () => {
+            const entries = context.tickedEntries('copy');
+            return emby ? context.buildSettingRows(form, entries) : context.buildSettingRows(entries);
+        };
+        assert.equal(context.profileEntries('copy')[0].count, 1);
+        assert.equal(context.profileEntries('copy')[1].on, false);
+        assert.deepEqual(Array.from(rows()[0].values), ['Global: 0 pinned, 1 hidden']);
+        assert.deepEqual(Array.from(emby ? context.pickedKeys(form, 'copy') : context.pickedKeys('copy')), [key]);
+        assert.deepEqual(hiddenOnly.global[key], []);
+        assert.equal(context.profileEntries('apply')[0].on, false);
+
+        copy.source = { global: { [key]: ['group:Sports'], use24HourClock: false }, liveTvSavedFilterExclusions: ['group:News'] };
+        assert.equal(context.profileEntries('copy')[0].count, 2);
+        assert.deepEqual(Array.from(rows().find(row => row.keys.includes(key)).values), ['Global: 1 pinned, 1 hidden']);
+
+        copy.source = { global: { [key]: [] }, liveTvSavedFilterExclusions: [] };
+        assert.equal(rows().length, 0);
+    });
+}
+
 function settingsPage(emby, defaultsState, api, form, globals = {}, loadDraft = '') {
     const source = emby ? embyPage : page;
     const submit = emby ? 'saveConfig' : 'submit';

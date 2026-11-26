@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Jellyfin.Data.Entities;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
@@ -34,7 +35,8 @@ public class LiveTvChannelGroupsServiceTests : IDisposable
         File.SetLastWriteTimeUtc(path, _start.AddMinutes(minute));
     }
 
-    private LiveTvChannelGroupsService Service(Func<Guid, BaseItem[]> channels, bool hasImport = true)
+    private LiveTvChannelGroupsService Service(Func<Guid, BaseItem[]> channels, bool hasImport = true, Action? onBuildDtos = null,
+        Func<BaseItem, bool>? includeInDtos = null, Func<InternalItemsQuery, BaseItem[]>? programmes = null)
     {
         _import.StartTimeUtc = _start;
         _import.EndTimeUtc = _start.AddMinutes(5);
@@ -59,12 +61,41 @@ public class LiveTvChannelGroupsServiceTests : IDisposable
                 "GetConfiguration" => new LiveTvOptions { TunerHosts = [new() { Id = "first", Type = "m3u" }, new() { Id = "native", Type = "xtream-library" }] },
                 _ => throw new NotSupportedException(m.Name)
             }),
-            RecordingHostProxy.Create<ILibraryManager>((_, _) => new QueryResult<BaseItem>()),
+            RecordingHostProxy.Create<ILibraryManager>((_, args) => new QueryResult<BaseItem> { Items = programmes?.Invoke((InternalItemsQuery)args![0]!) ?? [] }),
             RecordingHostProxy.Create<IUserManager>((_, _) => new User("viewer", "auth", "reset")),
             RecordingHostProxy.Create<ITaskManager>((_, _) => hasImport ? new[] { worker } : Array.Empty<IScheduledTaskWorker>()),
             new NoOpLogger<LiveTvChannelGroupsService>(), RecordingHostProxy.Create<IHostApplicationLifetime>((_, _) => CancellationToken.None),
-            RecordingHostProxy.Create<IDtoService>((_, args) => ((IReadOnlyList<BaseItem>)args![0]!)
-                .Select(item => new BaseItemDto { Id = item.Id, Name = item.ExternalId }).ToArray()));
+            RecordingHostProxy.Create<IDtoService>((_, args) =>
+            {
+                onBuildDtos?.Invoke();
+                return ((IReadOnlyList<BaseItem>)args![0]!)
+                    .Where(item => includeInDtos?.Invoke(item) ?? true)
+                    .Select(item => new BaseItemDto { Id = item.Id, Name = item.ExternalId }).ToArray();
+            }));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GuideMetadataUsesTheReturnedChannels(bool returnGroupedChannel)
+    {
+        var other = Channel("other");
+        var returned = returnGroupedChannel ? _m3u : other;
+        var queries = new List<IReadOnlyList<Guid>>();
+        var service = Service(_ => [_m3u, other], includeInDtos: item => item.Id == returned.Id, programmes: query =>
+        {
+            queries.Add(query.ChannelIds);
+            return query.Tags.Contains("News") ? [new LiveTvProgram()] : [];
+        });
+
+        var result = await service.GetAsync(_viewer, default);
+
+        var row = JsonSerializer.SerializeToElement(Assert.Single(result.Channels));
+        Assert.Equal(returned.Id.ToString("N"), row.GetProperty("Id").GetString());
+        Assert.Equal(returnGroupedChannel, result.Supported);
+        Assert.NotEmpty(queries);
+        Assert.All(queries, ids => Assert.Equal([returned.Id], ids));
+        Assert.Equal(["news"], result.ProgrammeCategories);
     }
 
     [Theory]
@@ -117,6 +148,67 @@ public class LiveTvChannelGroupsServiceTests : IDisposable
             Assert.False(after.Partial);
             Assert.Equal("Sports", Assert.Single(after.Groups[m3u]));
         }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task ChannelResponseTracksGuideRefreshDuringLookup(bool refresh, bool removeAll)
+    {
+        BaseItem[] visible = [_native];
+        var queriedUsers = new List<Guid>();
+        var service = Service(userId =>
+        {
+            queriedUsers.Add(userId);
+            return visible;
+        });
+
+        var lookup = service.GetAsync(_viewer, default);
+        await _started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if (refresh)
+        {
+            visible = removeAll ? [] : [_m3u, Channel("other_channel")];
+            _import.EndTimeUtc = _start.AddMinutes(10);
+        }
+        _pending.SetResult(Stations("Old group"));
+        var result = await lookup;
+
+        Assert.Equal(refresh ? 2 : 1, queriedUsers.Count);
+        Assert.All(queriedUsers, userId => Assert.Equal(_viewer, userId));
+        var channels = JsonSerializer.SerializeToElement(result.Channels).EnumerateArray();
+        Assert.Equal(visible.Select(c => c.Id.ToString("N")), channels.Select(c => c.GetProperty("Id").GetString()));
+        Assert.Equal(refresh, result.Partial);
+        if (refresh)
+        {
+            Assert.Empty(result.Groups);
+            Assert.Null(result.ProgrammeCategories);
+            Assert.Equal(removeAll ? Array.Empty<string>() : [_m3u.Id.ToString("N")], result.UnresolvedChannelIds);
+        }
+        else
+        {
+            Assert.Equal("Old group", Assert.Single(result.Groups[_native.Id.ToString("N")]));
+        }
+    }
+
+    [Fact]
+    public async Task RefreshWhileBuildingChannelDtosDiscardsOldLineupAndGroups()
+    {
+        var replacement = Channel("xtream_99");
+        BaseItem[] visible = [_m3u];
+        var service = Service(_ => visible, onBuildDtos: () =>
+        {
+            visible = [replacement];
+            _import.EndTimeUtc = _start.AddMinutes(10);
+        });
+
+        var result = await service.GetAsync(_viewer, default);
+
+        var channel = JsonSerializer.SerializeToElement(Assert.Single(result.Channels));
+        Assert.Equal(replacement.Id.ToString("N"), channel.GetProperty("Id").GetString());
+        Assert.Empty(channel.GetProperty("groups").EnumerateArray());
+        Assert.Equal(replacement.Id.ToString("N"), Assert.Single(result.UnresolvedChannelIds!));
+        Assert.True(result.Partial);
     }
 
     [Fact]

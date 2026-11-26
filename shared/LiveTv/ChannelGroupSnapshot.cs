@@ -11,17 +11,17 @@ namespace Moonfin.LiveTv
 {
     internal sealed class ChannelGroupResult
     {
-        [JsonPropertyName("supported")] public bool Supported => Groups.Count != 0;
+        [JsonPropertyName("supported")] public bool Supported { get; private set; }
         [JsonPropertyName("partial")] public bool Partial { get; set; }
         [JsonIgnore]
         public Dictionary<string, string[]> Groups { get; } = new Dictionary<string, string[]>(StringComparer.Ordinal);
         [JsonPropertyName("channels")] public object[] Channels { get; private set; } = Array.Empty<object>();
 
-        public void SetChannels(IEnumerable<BaseItemDto> channels, Func<BaseItemDto, string> clientId)
+        public void SetChannels(IEnumerable<BaseItemDto> channels)
         {
-            Channels = channels.Select(channel =>
+            var visibleChannels = channels.Select(channel =>
             {
-                var id = clientId(channel);
+                var id = channel.Id.ToString("N");
                 return new
                 {
                     Id = id, channel.Name, channel.ChannelNumber, channel.ServerId,
@@ -30,6 +30,15 @@ namespace Moonfin.LiveTv
                     groups = Groups.TryGetValue(id, out var labels) ? labels : Array.Empty<string>()
                 };
             }).ToArray();
+            Channels = visibleChannels;
+            Supported = visibleChannels.Any(channel => channel.groups.Length != 0);
+
+            // Jellyfin applies the viewer's visibility rules when producing the channel DTOs.
+            if (UnresolvedChannelIds is { Count: > 0 } unresolved)
+            {
+                var visibleIds = visibleChannels.Select(channel => channel.Id).ToHashSet(StringComparer.Ordinal);
+                unresolved.RemoveAll(id => !visibleIds.Contains(id));
+            }
         }
 
         // Include only IDs we couldn't match in a partial result.
