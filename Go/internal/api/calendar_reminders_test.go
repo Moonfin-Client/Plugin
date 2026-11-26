@@ -452,8 +452,20 @@ func TestTheSettingsStreamCarriesEvents(t *testing.T) {
 	if line, _ := lines.ReadString('\n'); line != ":connected\n" {
 		t.Fatalf("first line = %q", line)
 	}
+	pin := `{"profile":{},"liveTvSavedFilterChange":{"action":"add","filter":"group:News"}}`
+	for _, who := range []caller{other, userMain, userMain} {
+		if code, _ := call(t, s, who, "POST", "/Moonfin/Settings/Profile/tv", pin, nil); code != 200 {
+			t.Fatalf("save pin: %d", code)
+		}
+	}
 	s.notifyUser(other.user, M{"type": "seerrNotification", "title": "not yours"})
 	s.notifyUser(userMain.user, M{"type": "seerrNotification", "title": "yours"})
+	for range 2 { // Both successful edits by userMain, including the replay.
+		_, _ = lines.ReadString('\n')
+		if line, _ := lines.ReadString('\n'); line != `data: {"type":"settingsUpdated"}`+"\n" {
+			t.Fatalf("pin event = %q", line)
+		}
+	}
 	_, _ = lines.ReadString('\n')
 	line, err := lines.ReadString('\n')
 	if err != nil && err != io.EOF || line != `data: {"title":"yours","type":"seerrNotification"}`+"\n" {

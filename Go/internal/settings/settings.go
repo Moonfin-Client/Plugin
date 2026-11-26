@@ -10,6 +10,7 @@ package settings
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
@@ -69,7 +70,7 @@ func Clean(in M) M {
 
 // SaveProfile merges incoming into one profile of env (nil for a new user)
 // and returns the envelope to store.
-func SaveProfile(env M, name string, incoming M, clientID string, keys ServerKeys, now time.Time, changes ...SavedFilterChange) M {
+func SaveProfile(env M, name string, incoming M, clientID string, keys ServerKeys, now time.Time) M {
 	if env == nil {
 		env = M{"schemaVersion": 2, "syncEnabled": true}
 	}
@@ -82,9 +83,6 @@ func SaveProfile(env M, name string, incoming M, clientID string, keys ServerKey
 	}
 	finish(env, clientID, keys, now, stored)
 	preserveSavedFilters(env, pins)
-	if len(changes) != 0 {
-		applySavedFilterChange(env, changes[0])
-	}
 	return env
 }
 
@@ -163,7 +161,12 @@ type SavedFilterChange struct {
 	Defaults []any // Inherited admin pins for a first explicit add/remove.
 }
 
-func validSavedFilter(key string) bool {
+const maxSavedFilterKeys = 1000
+
+var ErrSavedFilterLimit = errors.New("a user can store at most 1,000 guide pins and exclusions in total")
+
+// ValidSavedFilter accepts the same keys for admin defaults and user edits.
+func ValidSavedFilter(key string) bool {
 	return len(key) <= 1024 && ((strings.HasPrefix(key, "group:") && len(key) > 6) ||
 		(strings.HasPrefix(key, "category:") && len(key) > 9))
 }
@@ -177,19 +180,19 @@ func ParseSavedFilterChange(raw any) (SavedFilterChange, bool) {
 	switch action {
 	case "add", "remove":
 		key, _ := obj["filter"].(string)
-		if !validSavedFilter(key) {
+		if !ValidSavedFilter(key) {
 			return SavedFilterChange{}, false
 		}
 		return SavedFilterChange{Action: action, Filter: key}, true
 	case "initializeIfAbsent":
 		rawFilters, ok := obj["filters"].([]any)
-		if !ok || len(rawFilters) > 1000 {
+		if !ok || len(rawFilters) > maxSavedFilterKeys {
 			return SavedFilterChange{}, false
 		}
 		filters := make([]string, 0, len(rawFilters))
 		for _, item := range rawFilters {
 			key, ok := item.(string)
-			if !ok || !validSavedFilter(key) {
+			if !ok || !ValidSavedFilter(key) {
 				return SavedFilterChange{}, false
 			}
 			filters = append(filters, key)
@@ -248,12 +251,12 @@ func MergeAdminSavedFilters(env M, raw any) {
 	})
 }
 
-// AdminSavedFilters includes only global defaults; device pin lists are ignored.
-func AdminSavedFilters(global M) []any {
-	list, _ := pinnedStrings(global["liveTvSavedFilters"])
+// AdminSavedFilters removes invalid or repeated keys from the global defaults.
+func AdminSavedFilters(raw any) []any {
+	list, _ := pinnedStrings(raw)
 	pins := []any{}
 	for _, pin := range list {
-		if !slices.Contains(pins, pin) {
+		if ValidSavedFilter(pin.(string)) && !slices.Contains(pins, pin) {
 			pins = append(pins, pin)
 		}
 	}
@@ -262,17 +265,12 @@ func AdminSavedFilters(global M) []any {
 
 // EffectiveSavedFilters resolves current admin defaults and each user's customizations.
 func EffectiveSavedFilters(env M, defaults any) []any {
-	managed, _ := pinnedStrings(defaults)
+	pins := AdminSavedFilters(defaults)
 	excluded, _ := pinnedStrings(env["liveTvSavedFilterExclusions"])
+	pins = slices.DeleteFunc(pins, func(pin any) bool { return slices.Contains(excluded, pin) })
 	personal := savedGlobalFilters(env)
-	pins := make([]any, 0, len(managed)+len(personal))
-	for _, pin := range managed {
-		if !slices.Contains(excluded, pin) && !slices.Contains(pins, pin) {
-			pins = append(pins, pin)
-		}
-	}
 	for _, pin := range personal {
-		if !slices.Contains(pins, pin) {
+		if ValidSavedFilter(pin.(string)) && !slices.Contains(pins, pin) {
 			pins = append(pins, pin)
 		}
 	}
@@ -298,11 +296,11 @@ func preserveSavedFilters(env M, stored []any) {
 	}
 }
 
-// The API invokes this under its per-user settings lock.
-func applySavedFilterChange(env M, change SavedFilterChange) {
+// ApplySavedFilterChange runs under the settings lock before the envelope is stored.
+func ApplySavedFilterChange(env M, change SavedFilterChange) error {
 	personal := savedGlobalFilters(env)
 	if change.Action == "initializeIfAbsent" && personal != nil {
-		return
+		return nil
 	}
 	if personal == nil {
 		personal = []any{}
@@ -331,9 +329,12 @@ func applySavedFilterChange(env M, change SavedFilterChange) {
 		excluded = slices.DeleteFunc(excluded, func(pin any) bool { return pin == change.Filter })
 	case "remove":
 		personal = slices.DeleteFunc(personal, func(pin any) bool { return pin == change.Filter })
-		if !slices.Contains(excluded, any(change.Filter)) {
+		if slices.Contains(change.Defaults, any(change.Filter)) && !slices.Contains(excluded, any(change.Filter)) {
 			excluded = append(excluded, change.Filter)
 		}
+	}
+	if len(personal)+len(excluded) > maxSavedFilterKeys {
+		return ErrSavedFilterLimit
 	}
 	global, ok := env["global"].(M)
 	if !ok {
@@ -342,6 +343,7 @@ func applySavedFilterChange(env M, change SavedFilterChange) {
 	}
 	global["liveTvSavedFilters"] = personal
 	env["liveTvSavedFilterExclusions"] = excluded
+	return nil
 }
 
 func mergeProfile(existing, incoming M) {

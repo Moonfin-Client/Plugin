@@ -721,13 +721,14 @@ public class MoonfinController : ControllerBase
     /// Resolution order: device overrides → global → admin defaults.
     /// </summary>
     /// <param name="profile">Device profile name: desktop, mobile, tv, or global.</param>
+    /// <param name="includeLiveTvSavedFilters">Return an empty list when there are no effective guide pins.</param>
     /// <returns>Flat resolved settings profile.</returns>
     [HttpGet("Settings/Resolved/{profile}")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult<MoonfinSettingsProfile>> GetResolvedProfile([FromRoute] string profile)
+    public async Task<ActionResult<MoonfinSettingsProfile>> GetResolvedProfile([FromRoute] string profile, [FromQuery] bool includeLiveTvSavedFilters = false)
     {
         var config = MoonfinPlugin.Instance?.Configuration;
         
@@ -747,18 +748,8 @@ public class MoonfinController : ControllerBase
             return BadRequest(new { Error = $"Invalid profile: {profile}. Valid profiles: {string.Join(", ", MoonfinUserSettings.ValidProfiles)}" });
         }
 
-        var resolved = await _settingsService.GetResolvedProfileAsync(userId.Value, profile);
-        if (resolved == null)
-        {
-            var adminDefaults = _settingsService.AdminDefaultsFor(profile);
-            return adminDefaults != null ? Ok(adminDefaults) : NotFound(new { Error = "No settings found" });
-        }
-
-        // A pull is the only place a client learns about hides made elsewhere, so this is where
-        // its baseline moves.
-        await _settingsService.RecordHiddenContentBaselineAsync(userId.Value, profile, resolved);
-
-        return Ok(resolved);
+        var resolved = await _settingsService.GetProfileForPullAsync(userId.Value, profile, includeLiveTvSavedFilters);
+        return resolved != null ? Ok(resolved) : NotFound(new { Error = "No settings found", liveTvSavedFilters = Array.Empty<string>() });
     }
 
     /// <summary>
@@ -1031,8 +1022,15 @@ public class MoonfinController : ControllerBase
 
         var existed = _settingsService.UserSettingsExist(userId.Value);
 
-        await _settingsService.SaveProfileAsync(userId.Value, profile, request.Profile, request.ClientId,
-            savedFilterChange: request.LiveTvSavedFilterChange);
+        try
+        {
+            await _settingsService.SaveProfileAsync(userId.Value, profile, request.Profile, request.ClientId,
+                savedFilterChange: request.LiveTvSavedFilterChange);
+        }
+        catch (GuidePinLimitException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
         var updatedPins = request.LiveTvSavedFilterChange == null
             ? null
             : (await _settingsService.GetResolvedProfileAsync(userId.Value, "global"))?.LiveTvSavedFilters ?? new List<string>();

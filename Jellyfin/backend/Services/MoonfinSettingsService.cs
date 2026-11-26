@@ -15,6 +15,11 @@ using Moonfin.Server.Models;
 
 namespace Moonfin.Server.Services;
 
+internal sealed class UnreadableSettingsException(IOException cause)
+    : IOException("Moonfin could not read the saved settings or their backup. Restore a readable copy or retry when the files are accessible.", cause)
+{
+}
+
 /// <summary>
 /// Service for managing Moonfin user settings storage with device profile support.
 /// </summary>
@@ -117,16 +122,24 @@ public class MoonfinSettingsService
     }
 
     /// <summary>
-    /// Loads settings, falling back to the backup copy when the file is missing or unreadable.
+    /// Returns null for missing settings. If neither copy can be read and one
+    /// failed to load, callers must leave the stored settings intact.
     /// </summary>
     private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath)
     {
-        return AtomicFile.ReadWithRecovery(
-            filePath,
-            json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions));
+        try
+        {
+            return AtomicFile.ReadWithRecovery(
+                filePath,
+                json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions), throwIfUnreadable: true);
+        }
+        catch (IOException ex)
+        {
+            throw new UnreadableSettingsException(ex);
+        }
     }
 
-    public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId)
+    public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId, bool throwIfUnreadable = false)
     {
         var filePath = GetUserSettingsPath(userId);
 
@@ -151,7 +164,7 @@ public class MoonfinSettingsService
 
             return settings;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!throwIfUnreadable)
         {
             _logger.LogError(ex, "Error reading settings for user {UserId}", userId);
             return null;
@@ -209,9 +222,23 @@ public class MoonfinSettingsService
         }
     }
 
+    /// <summary>A client pull acknowledges hidden items only for an existing user profile.</summary>
+    public async Task<MoonfinSettingsProfile?> GetProfileForPullAsync(Guid userId, string profileName, bool includeLiveTvSavedFilters)
+    {
+        var resolved = await GetResolvedProfileAsync(userId, profileName);
+        if (resolved == null)
+            resolved = AdminDefaultsFor(profileName);
+        else
+            await RecordHiddenContentBaselineAsync(userId, profileName, resolved);
+
+        if (includeLiveTvSavedFilters && resolved != null)
+            resolved.LiveTvSavedFilters ??= new List<string>();
+        return resolved;
+    }
+
     public async Task<MoonfinSettingsProfile?> GetResolvedProfileAsync(Guid userId, string profileName)
     {
-        var settings = await GetUserSettingsAsync(userId);
+        var settings = await GetUserSettingsAsync(userId, throwIfUnreadable: true);
         if (settings == null) return null;
 
         return ResolveProfile(settings, profileName);
@@ -254,8 +281,13 @@ public class MoonfinSettingsService
             }
         }
 
-        resolved.LiveTvSavedFilters = GuidePinRules.EffectivePins(AdminGuidePins(config),
-            settings.LiveTvSavedFilterExclusions, settings.Global?.LiveTvSavedFilters);
+        var hasGuidePins = config?.DefaultUserSettings?.LiveTvSavedFilters != null
+            || settings.Global?.LiveTvSavedFilters != null
+            || settings.LiveTvSavedFilterExclusions != null;
+        resolved.LiveTvSavedFilters = hasGuidePins
+            ? GuidePinRules.EffectivePins(AdminGuidePins(config),
+                settings.LiveTvSavedFilterExclusions, settings.Global?.LiveTvSavedFilters)
+            : null;
 
         var homeLayout = ResolveHomeLayout(deviceProfile, global, HasHomeLayout(adminDevice) ? adminDevice : null, adminDefaults);
         resolved.HomeSections = homeLayout.HomeSections;
@@ -297,8 +329,7 @@ public class MoonfinSettingsService
     {
         var global = config?.DefaultUserSettings;
         var device = IsDeviceProfile(profileName) ? config?.GetDefaultsFor(profileName) : null;
-        var sharedPins = AdminGuidePins(config);
-        if (device == null && global == null && sharedPins.Count == 0) return null;
+        if (device == null && global == null) return null;
 
         var merged = new MoonfinSettingsProfile();
         foreach (var prop in ProfileProps)
@@ -314,7 +345,7 @@ public class MoonfinSettingsService
         var layout = HasHomeLayout(device) ? device : global;
         merged.HomeSections = layout?.HomeSections;
         merged.HomeRowOrder = layout?.HomeRowOrder;
-        merged.LiveTvSavedFilters = sharedPins;
+        merged.LiveTvSavedFilters = global?.LiveTvSavedFilters == null ? null : AdminGuidePins(config);
         return merged;
     }
 
@@ -473,19 +504,18 @@ public class MoonfinSettingsService
           bool replace = false,
           LiveTvSavedFilterChange? savedFilterChange = null,
           bool mergeAdminGuidePins = false,
-          bool copyGuidePins = false)
+          MoonfinUserSettings? guidePinSource = null)
     {
         var filePath = GetUserSettingsPath(userId);
         bool settingsChanged;
         MoonfinUserSettings saved;
-        long saveGeneration;
+        long? saveGeneration;
 
         await _lock.WaitAsync();
         try
         {
             var settings = ReadSettingsWithRecovery(filePath) ?? new MoonfinUserSettings();
             var storedSavedFilters = settings.Global?.LiveTvSavedFilters?.ToList();
-            var copiedGuidePins = copyGuidePins ? profile.LiveTvSavedFilters?.ToList() : null;
             // Explicit Merge restores selected managed pins without making them permanent.
             if (mergeAdminGuidePins && profile.LiveTvSavedFilters != null)
                 settings.LiveTvSavedFilterExclusions?.RemoveAll(profile.LiveTvSavedFilters.Contains);
@@ -539,10 +569,11 @@ public class MoonfinSettingsService
             var savedProfile = existingProfile ?? profile;
 
             PreserveSavedFilters(settings, storedSavedFilters);
-            if (copyGuidePins)
+            if (guidePinSource != null)
             {
                 settings.Global ??= new MoonfinSettingsProfile();
-                settings.Global.LiveTvSavedFilters = copiedGuidePins;
+                settings.Global.LiveTvSavedFilters = guidePinSource.Global?.LiveTvSavedFilters?.ToList();
+                settings.LiveTvSavedFilterExclusions = guidePinSource.LiveTvSavedFilterExclusions?.ToList();
             }
             ApplySavedFilterChange(settings, savedFilterChange, AdminGuidePins(MoonfinPlugin.Instance?.Configuration));
 
@@ -565,14 +596,16 @@ public class MoonfinSettingsService
             var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
             AtomicFile.WriteAllText(filePath, serialized);
             saved = settings;
-            saveGeneration = NextSaveGeneration(userId);
+            saveGeneration = savedFilterChange == null || profile.HideWatchedInRecentRows.HasValue
+                ? NextSaveGeneration(userId) : (long?)null;
         }
         finally
         {
             _lock.Release();
         }
 
-        await SyncHideWatchedAsync(userId, saved, profileName, saveGeneration).ConfigureAwait(false);
+        if (saveGeneration.HasValue)
+            await SyncHideWatchedAsync(userId, saved, profileName, saveGeneration.Value).ConfigureAwait(false);
 
         // Same echo guard as SaveUserSettingsAsync.
         if (notifySettingsChanged && settingsChanged)
@@ -1466,7 +1499,7 @@ public class MoonfinSettingsService
                 {
                     await SaveProfileAsync(userId, profileName, CloneProfile(copy), "admin-copy",
                         notifySettingsChanged: false, replace: replace,
-                        copyGuidePins: profileName == "global" && (copy.LiveTvSavedFilters != null || replace));
+                        guidePinSource: profileName == "global" && (copy.LiveTvSavedFilters != null || replace) ? source : null);
                 }
 
                 NotifySettingsChanged(userId);

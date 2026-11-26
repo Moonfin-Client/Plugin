@@ -14,6 +14,7 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Services;
 using Moonfin.Calendar;
+using Moonfin.LiveTv;
 
 namespace Emby.Plugins.Moonfin.Api
 {
@@ -210,19 +211,8 @@ namespace Emby.Plugins.Moonfin.Api
             if (!Array.Exists(MoonfinUserSettings.ValidProfiles, p => string.Equals(p, profile, StringComparison.OrdinalIgnoreCase)))
                 return Json(400, new { Error = "Invalid profile: " + profile });
 
-            var resolved = await Settings.GetResolvedProfileAsync(userId.Value, profile).ConfigureAwait(false);
-            if (resolved == null)
-            {
-                var adminDefaults = Settings.AdminDefaultsFor(profile);
-                if (adminDefaults != null) return Json(adminDefaults);
-                return Json(404, new { Error = "No settings found" });
-            }
-
-            // A pull is the only place a client learns about hides made elsewhere, so this is
-            // where its baseline moves.
-            await Settings.RecordHiddenContentBaselineAsync(userId.Value, profile, resolved).ConfigureAwait(false);
-
-            return Json(resolved);
+            var resolved = await Settings.GetProfileForPullAsync(userId.Value, profile, request.IncludeLiveTvSavedFilters).ConfigureAwait(false);
+            return resolved != null ? Json(resolved) : Json(404, new { Error = "No settings found", liveTvSavedFilters = Array.Empty<string>() });
         }
 
         public async Task<object> Post(SaveMyProfileRequest request)
@@ -239,12 +229,19 @@ namespace Emby.Plugins.Moonfin.Api
                 return Json(400, new { Error = "Invalid saved Live TV filter change" });
 
             var existed = Settings.UserSettingsExist(userId.Value);
-            await Settings.SaveProfileAsync(userId.Value, profile, body.Profile, body.ClientId,
-                savedFilterChange: body.LiveTvSavedFilterChange).ConfigureAwait(false);
+            try
+            {
+                await Settings.SaveProfileAsync(userId.Value, profile, body.Profile, body.ClientId,
+                    savedFilterChange: body.LiveTvSavedFilterChange).ConfigureAwait(false);
+            }
+            catch (GuidePinLimitException ex)
+            {
+                return Json(400, new { Error = ex.Message });
+            }
             var pins = body.LiveTvSavedFilterChange == null
                 ? null
                 : (await Settings.GetResolvedProfileAsync(userId.Value, "global").ConfigureAwait(false))?.LiveTvSavedFilters ?? new List<string>();
-            return Json(new { Success = true, Created = !existed, UserId = userId.Value, LiveTvSavedFilters = pins });
+            return Json(new { Success = true, Created = !existed, UserId = userId.Value, liveTvSavedFilters = pins });
         }
 
         public async Task<object> Delete(DeleteMyProfileRequest request)

@@ -158,40 +158,12 @@ func TestCleanLeavesNonASCIIKeysAlone(t *testing.T) {
 	}
 }
 
-func TestGuidePinsKeepAtomicEditsAcrossFullUploads(t *testing.T) {
-	keys := ServerKeys{}
-	env := SaveProfile(nil, "tv", M{}, "tv", keys, now, SavedFilterChange{Action: "add", Filter: "group:Sports"})
-	env = SaveProfile(env, "mobile", M{}, "mobile", keys, now, SavedFilterChange{Action: "add", Filter: "group:News"})
-	env = SaveEnvelope(env, decode(t, `{"global":{"liveTvSavedFilters":[]},"tv":{"liveTvSavedFilters":["group:Stale"]}}`), "replace", "tv", keys, now)
-	if got := StoredSavedFilters(env); !reflect.DeepEqual(got, []any{"group:Sports", "group:News"}) {
-		t.Fatalf("whole settings push replaced atomic pins: %v", got)
+func TestStoredGuidePinsContainOnlyTheViewersChoices(t *testing.T) {
+	env := M{"global": M{"liveTvSavedFilters": []string{"group:News"}}}
+	if pins := StoredSavedFilters(env); !reflect.DeepEqual(pins, []any{"group:News"}) {
+		t.Fatalf("stored pins = %v", pins)
 	}
-	env = SaveProfile(env, "tv", M{}, "tv", keys, now, SavedFilterChange{Action: "remove", Filter: "group:Sports"})
-	if got := StoredSavedFilters(env); !reflect.DeepEqual(got, []any{"group:News"}) {
-		t.Fatalf("removed the wrong pin: %v", got)
-	}
-}
-
-func TestGuidePinsImportDefaultsAndExplicitClear(t *testing.T) {
-	defaults := AdminSavedFilters(M{"liveTvSavedFilters": []any{"group:Sports", "group:Sports"}})
-	if !reflect.DeepEqual(defaults, []any{"group:Sports"}) {
-		t.Fatalf("duplicate defaults: %v", defaults)
-	}
-	if got := Resolve(decode(t, `{"tv":{"liveTvSavedFilters":["group:Device"]}}`), "tv",
-		M{"liveTvSavedFilters": defaults}, ServerKeys{})["liveTvSavedFilters"]; !reflect.DeepEqual(got, defaults) {
-		t.Fatalf("device-only pins leaked: %v", got)
-	}
-	env := SaveProfile(nil, "tv", M{}, "tv", ServerKeys{}, now, SavedFilterChange{
-		Action: "initializeIfAbsent", Filters: []string{"group:Local"}, Defaults: defaults,
-	})
-	if got := EffectiveSavedFilters(env, defaults); !reflect.DeepEqual(got, []any{"group:Local"}) {
-		t.Fatalf("local import ignored: %v", got)
-	}
-	env = SaveProfile(env, "tv", M{}, "tv", ServerKeys{}, now, SavedFilterChange{Action: "remove", Filter: "group:Local"})
-	env = SaveProfile(env, "mobile", M{}, "mobile", ServerKeys{}, now, SavedFilterChange{
-		Action: "initializeIfAbsent", Filters: []string{"group:Ignored"},
-	})
-	if got := EffectiveSavedFilters(env, []any{"group:Tennis"}); !reflect.DeepEqual(got, []any{"group:Tennis"}) {
-		t.Fatalf("empty pins reimported or blocked future defaults: %v", got)
+	if got := EffectiveSavedFilters(env, []string{"group:Sports"}); !reflect.DeepEqual(got, []any{"group:Sports", "group:News"}) {
+		t.Fatalf("guide pins = %v", got)
 	}
 }

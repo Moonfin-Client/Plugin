@@ -306,84 +306,160 @@ func TestDeviceDefaults(t *testing.T) {
 	}
 }
 
-// Exercise the existing pin endpoint, global-only inheritance and admin actions together.
-func TestGuidePinsUseGlobalDefaultsAndAtomicProfileEdits(t *testing.T) {
-	s := newTestServer()
-	saveConfig(t, s, map[string]any{
-		"DefaultUserSettings": map[string]any{
-			"liveTvSavedFilters": []any{"group:Sports", "group:News"}, "liveTvCategoryDisplay": "groups",
-		},
-		"DefaultDeviceSettings": map[string]any{"tv": map[string]any{
-			"liveTvSavedFilters": []any{"group:TV"}, "liveTvCategoryDisplay": "programmes",
-		}},
-	})
-	check := func(want ...any) map[string]any {
-		_, got := call(t, s, userMain, "GET", "/Moonfin/Settings/Resolved/tv", "", nil)
-		if !reflect.DeepEqual(got["liveTvSavedFilters"], want) {
-			t.Fatalf("resolved pins = %v, want %v", got["liveTvSavedFilters"], want)
-		}
-		return got
-	}
-	_, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", map[string]any{"profile": "tv"})
-	if !reflect.DeepEqual(ping["defaultSettings"].(map[string]any)["liveTvSavedFilters"], []any{"group:Sports", "group:News"}) {
-		t.Fatalf("device pin leaked into sign-in defaults: %v", ping)
-	}
-	if got := check("group:Sports", "group:News"); got["liveTvCategoryDisplay"] != "programmes" {
-		t.Fatalf("category display defaults: %v", got)
-	}
-	for _, change := range []string{
-		`{"action":"add","filter":"group:Movies"}`,
-		`{"action":"remove","filter":"group:Sports"}`,
-	} {
-		call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/tv",
-			`{"profile":{},"liveTvSavedFilterChange":`+change+`}`, nil)
-	}
-	call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/mobile", `{"profile":{"liveTvSavedFilters":[]}}`, nil)
-	check("group:News", "group:Movies")
-	for _, profile := range []string{"tv", "global"} {
-		body := `{"profiles":["` + profile + `"],"keys":["liveTvSavedFilters"],"userIds":["3~30"]}`
-		if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults", body, nil); code != 200 {
-			t.Fatalf("apply %s defaults: %d", profile, code)
-		}
-		if profile == "tv" {
-			check("group:News", "group:Movies")
-		}
-	}
-	check("group:Sports", "group:News", "group:Movies")
-	call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults",
-		`{"overwrite":true,"profiles":["global"],"userIds":["3~30"]}`, nil)
-	check("group:Sports", "group:News")
-	call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/tv",
-		`{"profile":{"liveTvCategoryDisplay":"both"}}`, nil)
-	if got := check("group:Sports", "group:News"); got["liveTvCategoryDisplay"] != "both" {
-		t.Fatalf("user category display: %v", got)
-	}
-	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/tv",
-		`{"profile":{},"liveTvSavedFilterChange":{"action":"initializeIfAbsent","filters":[42]}}`, nil); code != 400 {
-		t.Fatalf("invalid pin import accepted: %d", code)
+func wantValue(t *testing.T, got, want any) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
 	}
 }
 
-func TestOptionalGuidePinsDoNotChangeOrdinaryProfileUpdates(t *testing.T) {
+func assertResolvedGuidePins(t *testing.T, s *Server, viewer caller, query M, want ...any) M {
+	t.Helper()
+	code, got := call(t, s, viewer, "GET", "/Moonfin/Settings/Resolved/tv", "", query)
+	wantValue(t, code, 200)
+	wantValue(t, got["liveTvSavedFilters"], append([]any{}, want...))
+	return got
+}
+
+func postGuideSettings(t *testing.T, s *Server, viewer caller, path string, payload M, want int) M {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	wantValue(t, err, nil)
+	code, got := call(t, s, viewer, "POST", path, string(body), nil)
+	if code != want {
+		t.Fatalf("%s returned %d, want %d: %v", path, code, want, got)
+	}
+	return got
+}
+
+func guideEdit(action string, value any) M {
+	key := "filter"
+	if action == "initializeIfAbsent" {
+		key = "filters"
+	}
+	return M{"profile": M{}, "liveTvSavedFilterChange": M{"action": action, key: value}}
+}
+
+func TestGuidePinsUseGlobalDefaultsAndAtomicProfileEdits(t *testing.T) {
 	s := newTestServer()
-	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/global",
-		`{"profile":{"theme":"dark"},"liveTvSavedFilterChange":null}`, nil); code != 200 {
-		t.Fatalf("null pin change rejected: %d", code)
+	const path = "/Moonfin/Settings/Profile/tv"
+	check := func(pins ...any) M { t.Helper(); return assertResolvedGuidePins(t, s, userMain, nil, pins...) }
+	const sports, news, movies = "group:Sports", "group:News", "group:Movies"
+	cfg := M{"DefaultUserSettings": M{"liveTvSavedFilters": []string{sports, news}},
+		"DefaultDeviceSettings": M{"tv": M{"liveTvSavedFilters": []string{"group:TV"}, "liveTvCategoryDisplay": "programmes"}}}
+	saveConfig(t, s, cfg)
+	_, ping := call(t, s, userMain, "GET", "/Moonfin/Ping", "", M{"profile": "tv"})
+	wantValue(t, ping["defaultSettings"].(map[string]any)["liveTvSavedFilters"], []any{sports, news})
+	importPins := guideEdit("initializeIfAbsent", []string{movies})
+	wantValue(t, s.kv.Put(t.Context(), keyConfig, []byte("{")), nil)
+	postGuideSettings(t, s, userMain, path, importPins, 500)
+	cfg["DefaultUserSettings"] = M{"liveTvSavedFilters": []string{sports, "invalid", news, sports}}
+	wantValue(t, s.saveJSON(t.Context(), keyConfig, cfg), nil)
+	wantValue(t, check(sports, news)["liveTvCategoryDisplay"], "programmes")
+
+	wantValue(t, postGuideSettings(t, s, userMain, path, importPins, 200)["Created"], true)
+	check(movies)
+	postGuideSettings(t, s, userMain, path, guideEdit("add", news), 200)
+	postGuideSettings(t, s, userMain, path, guideEdit("remove", sports), 200)
+	postGuideSettings(t, s, userMain, "/Moonfin/Settings/Profile/mobile", M{"profile": M{"liveTvSavedFilters": []any{}}}, 200)
+	postGuideSettings(t, s, userMain, "/Moonfin/Settings", M{"mergeMode": "replace",
+		"settings": M{"global": M{"liveTvSavedFilters": []any{}}, "tv": M{"liveTvSavedFilters": []any{"group:Stale"}}}}, 200)
+	check(news, movies)
+	apply := func(profile string) {
+		postGuideSettings(t, s, adminMain, "/Moonfin/Admin/ApplyDefaults", M{
+			"profiles": []string{profile}, "keys": []string{"liveTvSavedFilters"}, "userIds": []string{"3~30"}}, 200)
 	}
-	_, got := call(t, s, userMain, "GET", "/Moonfin/Settings/Resolved/global", "", nil)
-	if got["theme"] != "dark" {
-		t.Fatalf("ordinary settings were not saved: %v", got)
+	apply("tv")
+	check("group:News", "group:Movies")
+	apply("global")
+	check("group:Sports", "group:News", "group:Movies")
+	postGuideSettings(t, s, adminMain, "/Moonfin/Admin/ApplyDefaults", M{"overwrite": true, "profiles": []string{"global"}, "userIds": []string{"3~30"}}, 200)
+	postGuideSettings(t, s, userMain, path, M{"profile": M{"liveTvCategoryDisplay": "both"}}, 200)
+	wantValue(t, check("group:Sports", "group:News")["liveTvCategoryDisplay"], "both")
+	postGuideSettings(t, s, userMain, path, guideEdit("initializeIfAbsent", []int{42}), 400)
+	postGuideSettings(t, s, userMain, path, guideEdit("add", movies), 200)
+	postGuideSettings(t, s, userMain, path, guideEdit("remove", movies), 200)
+	postGuideSettings(t, s, userMain, "/Moonfin/Settings/Profile/mobile", importPins, 200)
+	check(sports, news)
+	saveConfig(t, s, M{"DefaultUserSettings": M{"liveTvSavedFilters": []string{movies, "group:Tennis"}}})
+	check(movies, "group:Tennis")
+	postGuideSettings(t, s, userMain, path, guideEdit("remove", movies), 200)
+	check("group:Tennis")
+}
+
+func TestGuidePinLimitCountsPersonalPinsAndExclusions(t *testing.T) {
+	s := newTestServer()
+	saveConfig(t, s, M{"DefaultUserSettings": M{"liveTvSavedFilters": []string{"group:Managed"}}})
+	post := func(edit M, code int) {
+		t.Helper()
+		postGuideSettings(t, s, userMain, "/Moonfin/Settings/Profile/tv", edit, code)
 	}
-	if _, present := got["liveTvSavedFilters"]; present {
-		t.Fatalf("unset guide pins should be omitted: %v", got)
+	pins := make([]string, 999)
+	for i := range pins {
+		pins[i] = fmt.Sprintf("group:%d", i)
 	}
-	saveConfig(t, s, map[string]any{
-		"DefaultUserSettings": map[string]any{"liveTvSavedFilters": []any{}},
-	})
-	_, got = call(t, s, userMain, "GET", "/Moonfin/Settings/Resolved/tv", "", nil)
-	if pins, ok := got["liveTvSavedFilters"].([]any); !ok || len(pins) != 0 {
-		t.Fatalf("explicit empty admin pins should be returned: %v", got)
+	post(guideEdit("initializeIfAbsent", pins), 200)
+	post(guideEdit("add", pins[0]), 200)
+	excess := guideEdit("add", "group:extra")
+	excess["profile"] = M{"theme": "over-limit"}
+	post(excess, 400)
+	_, got := call(t, s, userMain, "GET", "/Moonfin/Settings/Resolved/tv", "", nil)
+	wantValue(t, len(got["liveTvSavedFilters"].([]any)), len(pins))
+	wantValue(t, got["theme"], nil)
+	post(guideEdit("add", "group:Managed"), 200)
+	post(guideEdit("remove", pins[0]), 200)
+	post(guideEdit("add", "group:extra"), 200)
+}
+
+type failingIndexStore struct {
+	store.KV
+	fail bool
+}
+
+func (kv *failingIndexStore) Put(ctx context.Context, key string, value []byte) error {
+	if key == keyIndex && kv.fail {
+		return fmt.Errorf("index unavailable")
 	}
+	return kv.KV.Put(ctx, key, value)
+}
+
+func TestGuidePinRetryNotifiesAfterIndexWriteFailure(t *testing.T) {
+	kv := &failingIndexStore{KV: store.NewMemKV(), fail: true}
+	s := NewServer("1", testHost(kv))
+	events := make(chan []byte, 2)
+	s.notify.on = true
+	s.notify.streams = map[int]map[chan []byte]struct{}{userMain.user: {events: {}}}
+	const path = "/Moonfin/Settings/Profile/tv"
+	edit := guideEdit("add", "group:News")
+	postGuideSettings(t, s, userMain, path, edit, 500)
+	wantValue(t, len(events), 0)
+	kv.fail = false
+	postGuideSettings(t, s, userMain, path, edit, 200)
+	wantValue(t, len(events), 1)
+	wantValue(t, string(<-events), `{"type":"settingsUpdated"}`)
+}
+
+func TestAdminGuidePinsRespectTheByteLimitAcrossConfigurationAndProfiles(t *testing.T) {
+	s := newTestServer()
+	atLimit := "group:" + strings.Repeat("é", 509)
+	tooLong := atLimit + "é"
+	config := func(key, pin string) M { return M{"DefaultUserSettings": M{key: []any{pin}}} }
+	saveConfig(t, s, config("liveTvSavedFilters", atLimit))
+	for _, key := range []string{"liveTvSavedFilters", "LiveTvSavedFilters"} {
+		got := postGuideSettings(t, s, adminMain, "/Moonfin/Admin/Configuration", config(key, tooLong), 400)
+		if !strings.Contains(fmt.Sprint(got["Error"]), tooLong) {
+			t.Fatalf("invalid %s: %v", key, got)
+		}
+	}
+	assertResolvedGuidePins(t, s, other, nil, atLimit)
+	legacy := config("liveTvSavedFilters", tooLong)
+	wantValue(t, s.saveJSON(t.Context(), keyConfig, legacy), nil)
+	id := Identity{UserID: userMain.user, ProfileID: userMain.profileID}
+	wantValue(t, s.saveJSON(t.Context(), settingsKey(id), M{"global": legacy["DefaultUserSettings"]}), nil)
+	postGuideSettings(t, s, adminMain, "/Moonfin/Admin/Configuration", legacy, 400)
+	postGuideSettings(t, s, userMain, "/Moonfin/Settings/Profile/tv", guideEdit("remove", tooLong), 400)
+	assertResolvedGuidePins(t, s, userMain, nil)
+	saveConfig(t, s, M{"DefaultUserSettings": M{"liveTvSavedFilters": []any{}}})
 }
 
 func TestWatchPartySubtitlesBelongToTheirHost(t *testing.T) {
@@ -993,7 +1069,7 @@ func TestAdminUsersWithoutProfiles(t *testing.T) {
 }
 
 func TestApplyDefaultsPicksProfilesTargetsAndKeys(t *testing.T) {
-	s := newTestServer()
+	s := reminderServer(store.NewMemKV(), &reminderCatalog{})
 	call(t, s, userMain, "POST", "/Moonfin/Settings/Profile/tv", `{"profile":{"clockBehavior":"inMenus"}}`, nil)
 	call(t, s, userKids, "POST", "/Moonfin/Settings/Profile/global", `{"profile":{"theme":"dark"}}`, nil)
 	call(t, s, other, "POST", "/Moonfin/Settings/Profile/global", `{"profile":{"theme":"dark"}}`, nil)
@@ -1021,8 +1097,17 @@ func TestApplyDefaultsPicksProfilesTargetsAndKeys(t *testing.T) {
 		t.Fatalf("a profile that wasn't picked must stay as it was: %v", tv)
 	}
 
-	if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults", `{"profiles":["global"],"userIds":["3"]}`, nil); code != 200 {
-		t.Fatalf("apply to an account = %d", code)
+	tv, phone, unrelated := make(chan []byte, 2), make(chan []byte, 2), make(chan []byte, 2)
+	s.notify.streams = map[int]map[chan []byte]struct{}{
+		userMain.user: {tv: {}, phone: {}}, other.user: {unrelated: {}},
+	}
+	code, got = call(t, s, adminMain, "POST", "/Moonfin/Admin/ApplyDefaults", `{"profiles":["global"],"userIds":["3"]}`, nil)
+	if code != 200 || got["usersAffected"] != 2.0 || got["liveRefreshDeliveries"] != 2.0 {
+		t.Fatalf("apply to an account = %d %v", code, got)
+	}
+	if len(tv) != 1 || len(phone) != 1 || len(unrelated) != 0 ||
+		string(<-tv) != `{"type":"settingsUpdated"}` || string(<-phone) != `{"type":"settingsUpdated"}` {
+		t.Fatal("each connected device of the affected account should receive one settings update")
 	}
 	main := env(userMain)
 	if profile(main, "global")["clockBehavior"] != "always" || profile(env(userKids), "global")["clockBehavior"] != "always" {
@@ -1042,6 +1127,25 @@ func TestApplyDefaultsPicksProfilesTargetsAndKeys(t *testing.T) {
 	}
 	if code, _ := call(t, s, userMain, "POST", "/Moonfin/Admin/ApplyDefaults", `{}`, nil); code != 403 {
 		t.Errorf("a user must not apply defaults, got %d", code)
+	}
+}
+
+func TestApplyDefaultsRefreshesViewersWithoutStoredSettings(t *testing.T) {
+	s := reminderServer(store.NewMemKV(), &reminderCatalog{})
+	saveConfig(t, s, M{"DefaultUserSettings": M{"liveTvSavedFilters": []any{"group:Sports"}}})
+	for _, overwrite := range []bool{false, true} {
+		for _, targeted := range []bool{false, true} {
+			tv, phone := make(chan []byte, 2), make(chan []byte, 2)
+			s.notify.streams = map[int]map[chan []byte]struct{}{userMain.user: {tv: {}}, other.user: {phone: {}}}
+			params, deliveries := M{"overwrite": overwrite}, 2
+			if targeted {
+				params["userIds"], deliveries = []string{"3"}, 1
+			}
+			got := postGuideSettings(t, s, adminMain, "/Moonfin/Admin/ApplyDefaults", params, 200)
+			if got["usersAffected"] != 0.0 || got["liveRefreshDeliveries"] != float64(deliveries) || len(tv) != 1 || len(phone) != deliveries-1 {
+				t.Fatalf("apply %v: response %v, TV %d, phone %d", params, got, len(tv), len(phone))
+			}
+		}
 	}
 }
 
@@ -1095,28 +1199,43 @@ func TestCopySettingsBetweenProfiles(t *testing.T) {
 	}
 }
 
-func TestAdminCopyCanReplaceSavedGuidePins(t *testing.T) {
+func TestPinAwareDevicesSeeAdminCopiesAndResets(t *testing.T) {
 	s := newTestServer()
-	call(t, s, adminMain, "POST", "/Moonfin/Settings/Profile/global",
-		`{"profile":{},"liveTvSavedFilterChange":{"action":"add","filter":"group:News"}}`, nil)
-	call(t, s, other, "POST", "/Moonfin/Settings/Profile/global",
-		`{"profile":{"theme":"dark"},"liveTvSavedFilterChange":{"action":"add","filter":"group:Old"}}`, nil)
+	const path = "/Moonfin/Settings/Profile/global"
+	query := M{"includeLiveTvSavedFilters": true}
+	resolved := func(pins ...any) M { t.Helper(); return assertResolvedGuidePins(t, s, other, query, pins...) }
+	postGuideSettings(t, s, other, path, M{"profile": M{"theme": "dark"}, "liveTvSavedFilterChange": nil}, 200)
+	_, ordinary := call(t, s, other, "GET", "/Moonfin/Settings/Resolved/global", "", nil)
+	wantValue(t, ordinary["theme"], "dark")
+	if _, present := ordinary["liveTvSavedFilters"]; present {
+		t.Fatal("ordinary pull exposed unset pins")
+	}
+	postGuideSettings(t, s, other, path, guideEdit("add", "group:Old"), 200)
+	call(t, s, other, "DELETE", "/Moonfin/Settings", "", nil)
+	resolved()
+	postGuideSettings(t, s, other, path, guideEdit("add", "group:Old"), 200)
+	resolved("group:Old")
+	copySettings := M{"fromUserId": "2~20", "toUserIds": []string{"4"}, "profiles": []string{"global"}, "replace": true}
+	postGuideSettings(t, s, adminMain, path, M{"profile": M{"theme": "dark"}}, 200)
+	wantValue(t, postGuideSettings(t, s, adminMain, "/Moonfin/Admin/CopySettings", copySettings, 200)["usersAffected"], 1.0)
+	resolved()
+	postGuideSettings(t, s, adminMain, path, guideEdit("add", "group:News"), 200)
+	delete(copySettings, "replace")
+	copySettings["keys"] = []string{"liveTvSavedFilters"}
+	postGuideSettings(t, s, adminMain, "/Moonfin/Admin/CopySettings", copySettings, 200)
+	postGuideSettings(t, s, other, "/Moonfin/Settings/Profile/mobile", M{"profile": M{"liveTvSavedFilters": []string{"group:Stale"}}}, 200)
+	wantValue(t, resolved("group:News")["theme"], "dark")
 
-	body := `{"fromUserId":"2~20","toUserIds":["4"],"profiles":["global"],"keys":["liveTvSavedFilters"]}`
-	if code, _ := call(t, s, adminMain, "POST", "/Moonfin/Admin/CopySettings", body, nil); code != 200 {
-		t.Fatalf("copy pins = %d", code)
-	}
-	_, env := call(t, s, other, "GET", "/Moonfin/Settings", "", nil)
-	global := env["global"].(map[string]any)
-	if !reflect.DeepEqual(global["liveTvSavedFilters"], []any{"group:News"}) || global["theme"] != "dark" {
-		t.Fatalf("explicit copy lost selected pins or other settings: %v", global)
-	}
-	call(t, s, other, "POST", "/Moonfin/Settings/Profile/mobile",
-		`{"profile":{"liveTvSavedFilters":["group:Stale"]}}`, nil)
-	_, env = call(t, s, other, "GET", "/Moonfin/Settings", "", nil)
-	if !reflect.DeepEqual(env["global"].(map[string]any)["liveTvSavedFilters"], []any{"group:News"}) {
-		t.Fatalf("ordinary sync replaced copied pins: %v", env["global"])
-	}
+	saveConfig(t, s, M{"DefaultUserSettings": M{"liveTvSavedFilters": []string{"group:Sports"}}})
+	postGuideSettings(t, s, adminMain, path, guideEdit("remove", "group:Sports"), 200)
+	delete(copySettings, "keys")
+	copySettings["replace"] = true
+	postGuideSettings(t, s, adminMain, "/Moonfin/Admin/CopySettings", copySettings, 200)
+	resolved("group:News")
+	call(t, s, other, "DELETE", "/Moonfin/Settings", "", nil)
+	resolved("group:Sports")
+	saveConfig(t, s, M{"DefaultUserSettings": M{"liveTvSavedFilters": []string{}}})
+	assertResolvedGuidePins(t, s, other, nil)
 }
 
 func TestPingCarriesADevicesDefaults(t *testing.T) {

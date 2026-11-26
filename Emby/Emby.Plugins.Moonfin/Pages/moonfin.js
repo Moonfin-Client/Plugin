@@ -2917,6 +2917,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             DEFAULTS_PROFILE_NAMES.forEach(function (name) {
                 defaultsState.profiles[name] = (name === 'global' ? camelKeysDeep(config.DefaultUserSettings) : deviceDefaults[name]) || {};
             });
+            defaultsState.guidePinBase = defaultsState.profiles.global.liveTvSavedFilters;
             defaultsState.active = 'global';
             fillUploadedThemes(view, config.UploadedThemes);
             populateDefaults(view, defaultsState.profiles.global);
@@ -2933,6 +2934,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     var defaultGuideGroupsMessage = 'Loading available groups…';
     var defaultGuideCategories = [['movies', 'Movies'], ['series', 'Series'], ['sports', 'Sports'],
         ['news', 'News'], ['kids', 'Kids'], ['premiere', 'Premieres']];
+
+    function withGuidePinEdits(profile, originalPins, latestDefaults, changedPins) {
+        var before = new Set(originalPins || []);
+        var selected = new Set(profile.liveTvSavedFilters || []);
+        var latest = (latestDefaults || {}).liveTvSavedFilters;
+        changedPins = changedPins || new Set();
+        before.forEach(function(key) { if (!selected.has(key)) changedPins.add(key); });
+        selected.forEach(function(key) { if (!before.has(key)) changedPins.add(key); });
+        var pins = (latest || []).filter(function(key) { return !changedPins.has(key) || selected.has(key); });
+        selected.forEach(function(key) {
+            if (changedPins.has(key) && !pins.includes(key)) pins.push(key);
+        });
+        return Object.assign({}, profile, { liveTvSavedFilters: pins.length || Array.isArray(latest) ? pins : latest });
+    }
 
     function renderDefaultGuideGroups(view, defaults, preserveSelection) {
         var host = view.querySelector('#DefaultPinnedGuideGroups');
@@ -3322,8 +3337,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function saveConfig(view) {
+        var visit = guideGroupsVisit;
         loading.show();
-        return ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
+        function collectForm(config) {
             config.EnableSettingsSync = view.querySelector('#EnableSettingsSync').checked;
             config.SeerrEnabled = view.querySelector('#SeerrEnabled').checked;
             config.SeerrUrl = view.querySelector('#SeerrUrl').value || null;
@@ -3400,14 +3416,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             config.GamesEnabled = view.querySelector('#GamesEnabled').checked;
             config.GamesIsolateWebApp = view.querySelector('#GamesIsolateWebApp').checked;
-            config.GameLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.gameLibraryCb:checked'))
-                .map(function (cb) { return cb.getAttribute('data-id'); });
+            if (view.querySelector('.gameLibraryCb')) {
+                config.GameLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.gameLibraryCb:checked'))
+                    .map(function (cb) { return cb.getAttribute('data-id'); });
+            }
             config.GamesRommUrl = view.querySelector('#GamesRommUrl').value.trim() || null;
             config.GamesRommToken = view.querySelector('#GamesRommToken').value.trim() || null;
             config.GamesRommLibraryId = view.querySelector('#GamesRommLibraryId').value || null;
 
-            collectActiveDefaults(view);
-            config.DefaultUserSettings = defaultsState.profiles.global;
             config.DefaultDeviceSettings = {};
             DEFAULTS_PROFILE_NAMES.slice(1).forEach(function (name) {
                 var profile = defaultsState.profiles[name];
@@ -3419,15 +3435,68 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 config.DefaultDeviceSettings[name] = countSetDefaults(profile) > 0 ? profile : null;
             });
 
-            return ApiClient.updatePluginConfiguration(PluginUniqueId, config).then(function (result) {
-                Dashboard.processPluginConfigurationUpdateResult(result);
+        }
+        var edit = {
+            visit: visit, profile: { liveTvSavedFilters: (defaultsState.profiles.global || {}).liveTvSavedFilters },
+            base: defaultsState.guidePinBase, changedPins: new Set()
+        };
+        var fields = {};
+        // Pin changes are already in the draft. Read the other controls after the configuration arrives.
+        var formRead = ApiClient.getPluginConfiguration(PluginUniqueId).then(function(config) {
+            if (visit !== guideGroupsVisit) throw new Error('Settings page changed before the save finished. Please save again.');
+            collectActiveDefaults(view);
+            collectForm(fields);
+            edit.profile = Object.assign({}, defaultsState.profiles.global, {
+                liveTvSavedFilters: edit.profile.liveTvSavedFilters
             });
-        }).catch(function (error) {
-            // Rethrown so runApplyDefaults, which chains on this, stops rather than
-            // pushing defaults the save never persisted.
-            reportConfigError(error);
-            return Promise.reject(error);
+            return config;
         });
+        var queue = defaultsState.pendingSaves || (defaultsState.pendingSaves = []);
+        var previous = queue[queue.length - 1];
+        queue.push(edit);
+        function save(results) {
+            // Keep submitted pin edits retryable even if the configuration read fails.
+            var pending = defaultsState.unconfirmedGuidePins;
+            if (pending && pending.visit === visit) {
+                pending.keys.forEach(function(key) { edit.changedPins.add(key); });
+            }
+            defaultsState.unconfirmedGuidePins = { visit: visit, keys: edit.changedPins };
+            var read = results[0];
+            if (read.status === 'rejected') throw read.reason;
+            // A preceding write can change the configuration after this form read.
+            var latest = previous ? ApiClient.getPluginConfiguration(PluginUniqueId) : Promise.resolve(read.value);
+            return latest.then(function (config) {
+                Object.assign(config, fields);
+                var saved = withGuidePinEdits(edit.profile, edit.base, camelKeysDeep(config.DefaultUserSettings), edit.changedPins);
+                config.DefaultUserSettings = saved;
+                return ApiClient.updatePluginConfiguration(PluginUniqueId, config).then(function (result) {
+                    defaultsState.unconfirmedGuidePins = null;
+                    // Apply each queued edit relative to the form submitted just before it.
+                    var previousPins = edit.profile.liveTvSavedFilters;
+                    var rebased = saved;
+                    queue.slice(1).forEach(function (next) {
+                        if (next.visit !== visit) return;
+                        var submittedPins = next.profile.liveTvSavedFilters;
+                        rebased = withGuidePinEdits(next.profile, previousPins, rebased, next.changedPins);
+                        next.profile = rebased;
+                        next.base = saved.liveTvSavedFilters;
+                        previousPins = submittedPins;
+                    });
+                    if (visit === guideGroupsVisit) {
+                        defaultsState.profiles.global = withGuidePinEdits(
+                            defaultsState.profiles.global, previousPins, rebased);
+                        defaultsState.guidePinBase = saved.liveTvSavedFilters;
+                        if (defaultsState.active === 'global') renderDefaultGuideGroups(view, defaultsState.profiles.global);
+                    }
+                    Dashboard.processPluginConfigurationUpdateResult(result);
+                });
+            });
+        }
+        edit.done = Promise.allSettled([formRead, previous && previous.done]).then(save).catch(function (error) {
+            reportConfigError(error);
+            throw error;
+        }).finally(function () { queue.shift(); });
+        return edit.done;
     }
 
     // Reads the User defaults form into d, the profile being edited.
@@ -3771,7 +3840,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 return typeof key === 'string' && (!visiblePins.includes(key) || selectedPins.includes(key));
             });
             selectedPins.forEach(function(key) { if (!keptPins.includes(key)) keptPins.push(key); });
-            d.liveTvSavedFilters = keptPins.length ? keptPins : null;
+            d.liveTvSavedFilters = keptPins.length || Array.isArray(d.liveTvSavedFilters) ? keptPins : null;
         }
         d.epgMobileView = view.querySelector('#DefaultEpgMobileView').value || null;
         d.mediaBarOverlayColor = view.querySelector('#DefaultMediaBarOverlayColor').value || null;
@@ -6639,7 +6708,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var who = state.users === 'all' ? 'every user' : joinWithAnd(state.pickedUsers.map(userName));
         var message = reset
             ? 'Reset ' + who + ' to the defaults?\n\nThis permanently erases their current Moonfin settings, device profiles included, and replaces them with the ' + joinWithAnd(on.map(function(e) { return e.label; })) + ' defaults.'
-            : 'Apply the defaults to ' + who + '?\n\nSelected defaults replace the user\'s choices. Pinned groups already update on Save; Merge restores selected groups they hid and keeps their personal additions.';
+            : 'Apply the defaults to ' + who + '?\n\nEach default you push replaces that user\'s own choice for that setting. Everything else they chose stays.';
         if (!window.confirm(message)) return;
 
         var button = view.querySelector('#ApplyDefaultsBtn');

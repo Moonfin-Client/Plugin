@@ -4598,7 +4598,7 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused">Default Pinned Guide Shortcuts</label>
                                 <div id="DefaultPinnedGuideGroups" role="group" aria-label="Default pinned guide shortcuts" style="max-height:210px;overflow:auto;padding:6px;border:1px solid rgba(128,128,128,.25);border-radius:5px;">Loading available groups…</div>
-                                <div class="fieldDescription">Administrator pins update across devices when Moonfin syncs. Users can add or hide shortcuts. Program-category pins appear when Guide Categories is set to Channel Groups and Program Categories.</div>
+                                <div class="fieldDescription">Administrator pins update across devices when Moonfin syncs. Users can add or hide shortcuts. Including this setting in a Merge restores default shortcuts users hid and keeps the shortcuts they added. Program-category pins appear when Guide Categories is set to Channel Groups and Program Categories.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultEpgMobileView">Guide View (mobile)</label>
@@ -5910,9 +5910,8 @@
                     <div class="verticalSection" id="ApplyDefaultsSection">
                         <h3 class="sectionTitle">Apply Defaults To Users</h3>
                         <div class="fieldDescription" style="margin-bottom: 0.8em;">
-                            Saved pinned groups update automatically for everyone, preserving personal additions and removals.
-                            Other defaults are inherited until users override them. Apply Defaults pushes settings to
-                            existing users; applying saves your changes first.
+                            Users inherit defaults until they choose their own settings. Apply Defaults saves your changes
+                            first, then applies the selected defaults to existing users.
                         </div>
 
                         <div class="moonfinActionRow">
@@ -5957,7 +5956,7 @@
                             <div class="moonfinActionBody moonfinModeCards">
                                 <label class="moonfinModeCard">
                                     <input type="radio" name="ApplyMode" value="merge" checked />
-                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Merge</span><span class="moonfinModeDesc">Selected settings replace the user's choices. Pinned groups already follow saved defaults; Merge restores selected groups users unpinned, keeping personal additions.</span></span>
+                                    <span class="moonfinModeText"><span class="moonfinModeTitle">Merge</span><span class="moonfinModeDesc">The pushed settings replace the user's own. Everything else they chose stays.</span></span>
                                 </label>
                                 <label class="moonfinModeCard is-danger">
                                     <input type="radio" name="ApplyMode" value="reset" />

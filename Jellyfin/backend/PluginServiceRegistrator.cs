@@ -2,6 +2,7 @@ using Jellyfin.Data.Events.Users;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Plugins;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moonfin.Bookmarks;
@@ -11,6 +12,7 @@ using Moonfin.LiveTv;
 using Moonfin.MiniGames;
 using Moonfin.Pin;
 using Moonfin.Romm;
+using Moonfin.Server.Api;
 using Moonfin.Server.Services;
 using Moonfin.WatchParty;
 
@@ -26,6 +28,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     {
         serviceCollection.AddSingleton<LiveTvChannelGroupsService>();
         serviceCollection.AddSingleton<MoonfinSettingsService>();
+        serviceCollection.Configure<MvcOptions>(options => options.Filters.Add(new UnreadableSettingsFilter()));
         serviceCollection.AddSingleton<IUserDirectory, UserDirectory>();
         serviceCollection.AddSingleton<DefaultHiddenLibraries>();
         serviceCollection.AddScoped<IEventConsumer<UserCreatedEventArgs>, DefaultHiddenLibrariesOnUserCreated>();

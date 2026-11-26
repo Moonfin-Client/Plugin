@@ -12,6 +12,7 @@ using Moonfin.LiveTv;
 using System.Threading;
 using System.Threading.Tasks;
 using Emby.Plugins.Moonfin.Models;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Logging;
@@ -92,16 +93,25 @@ namespace Emby.Plugins.Moonfin.Services
             Path.Combine(_dataPath, $"{userId}.json");
 
         /// <summary>
-        /// Loads settings, falling back to the backup copy when the file is missing or unreadable.
+        /// Returns null for missing settings. If neither copy can be read and one
+        /// failed to load, callers must leave the stored settings intact.
         /// </summary>
         private MoonfinUserSettings? ReadSettingsWithRecovery(string filePath)
         {
-            return AtomicFile.ReadWithRecovery(
-                filePath,
-                json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions));
+            try
+            {
+                return AtomicFile.ReadWithRecovery(
+                    filePath,
+                    json => JsonSerializer.Deserialize<MoonfinUserSettings>(json, _jsonOptions), throwIfUnreadable: true);
+            }
+            catch (IOException ex)
+            {
+                _logger.ErrorException("Could not read Moonfin settings at " + filePath, ex);
+                throw new ServiceUnavailableException("Moonfin could not read the saved settings or their backup. Restore a readable copy or retry when the files are accessible.");
+            }
         }
 
-        public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId)
+        public async Task<MoonfinUserSettings?> GetUserSettingsAsync(Guid userId, bool throwIfUnreadable = false)
         {
             var filePath = GetUserSettingsPath(userId);
 
@@ -120,7 +130,7 @@ namespace Emby.Plugins.Moonfin.Services
                 }
                 return settings;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!throwIfUnreadable)
             {
                 _logger.ErrorException("Error reading settings for user " + userId, ex);
                 return null;
@@ -173,9 +183,23 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
+        /// <summary>A client pull acknowledges hidden items only for an existing user profile.</summary>
+        public async Task<MoonfinSettingsProfile?> GetProfileForPullAsync(Guid userId, string profileName, bool includeLiveTvSavedFilters)
+        {
+            var resolved = await GetResolvedProfileAsync(userId, profileName).ConfigureAwait(false);
+            if (resolved == null)
+                resolved = AdminDefaultsFor(profileName);
+            else
+                await RecordHiddenContentBaselineAsync(userId, profileName, resolved).ConfigureAwait(false);
+
+            if (includeLiveTvSavedFilters && resolved != null)
+                resolved.LiveTvSavedFilters ??= new List<string>();
+            return resolved;
+        }
+
         public async Task<MoonfinSettingsProfile?> GetResolvedProfileAsync(Guid userId, string profileName)
         {
-            var settings = await GetUserSettingsAsync(userId).ConfigureAwait(false);
+            var settings = await GetUserSettingsAsync(userId, throwIfUnreadable: true).ConfigureAwait(false);
             if (settings == null) return null;
             return ResolveProfile(settings, profileName);
         }
@@ -223,8 +247,13 @@ namespace Emby.Plugins.Moonfin.Services
             // Home layout (sections + row order) resolves as a unit from a single profile layer
             // rather than field-by-field, so a client's sections and order never come from
             // different profiles.
-            resolved.LiveTvSavedFilters = GuidePinRules.EffectivePins(AdminGuidePins(config),
-                    settings.LiveTvSavedFilterExclusions, settings.Global?.LiveTvSavedFilters);
+            var hasGuidePins = config?.DefaultUserSettings?.LiveTvSavedFilters != null
+                || settings.Global?.LiveTvSavedFilters != null
+                || settings.LiveTvSavedFilterExclusions != null;
+            resolved.LiveTvSavedFilters = hasGuidePins
+                ? GuidePinRules.EffectivePins(AdminGuidePins(config),
+                    settings.LiveTvSavedFilterExclusions, settings.Global?.LiveTvSavedFilters)
+                : null;
 
             var homeLayout = ResolveHomeLayout(deviceProfile, global, HasHomeLayout(adminDevice) ? adminDevice : null, adminDefaults);
             resolved.HomeSections = homeLayout.HomeSections;
@@ -254,8 +283,7 @@ namespace Emby.Plugins.Moonfin.Services
         {
             var global = config?.DefaultUserSettings;
             var device = IsDeviceProfile(profileName) ? config?.GetDefaultsFor(profileName) : null;
-            var sharedPins = AdminGuidePins(config);
-            if (device == null && global == null && sharedPins.Count == 0) return null;
+            if (device == null && global == null) return null;
 
             var merged = new MoonfinSettingsProfile();
             foreach (var prop in ProfileProps)
@@ -268,7 +296,7 @@ namespace Emby.Plugins.Moonfin.Services
             var layout = HasHomeLayout(device) ? device : global;
             merged.HomeSections = layout?.HomeSections;
             merged.HomeRowOrder = layout?.HomeRowOrder;
-            merged.LiveTvSavedFilters = sharedPins;
+            merged.LiveTvSavedFilters = global?.LiveTvSavedFilters == null ? null : AdminGuidePins(config);
             return merged;
         }
 
@@ -421,19 +449,18 @@ namespace Emby.Plugins.Moonfin.Services
         }
 
         public async Task SaveProfileAsync(Guid userId, string profileName, MoonfinSettingsProfile profile, string? clientId = null, bool notifySettingsChanged = true, bool replace = false, LiveTvSavedFilterChange? savedFilterChange = null, bool mergeAdminGuidePins = false,
-            bool copyGuidePins = false)
+            MoonfinUserSettings? guidePinSource = null)
         {
             var filePath = GetUserSettingsPath(userId);
             bool settingsChanged;
             MoonfinUserSettings saved;
-            long saveGeneration;
+            long? saveGeneration;
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
                 var settings = await Task.Run(() => ReadSettingsWithRecovery(filePath)).ConfigureAwait(false)
                     ?? new MoonfinUserSettings();
                 var storedSavedFilters = settings.Global?.LiveTvSavedFilters?.ToList();
-                var copiedGuidePins = copyGuidePins ? profile.LiveTvSavedFilters?.ToList() : null;
                 // Explicit Merge restores selected managed pins without making them permanent.
                 if (mergeAdminGuidePins && profile.LiveTvSavedFilters != null)
                     settings.LiveTvSavedFilterExclusions?.RemoveAll(profile.LiveTvSavedFilters.Contains);
@@ -464,10 +491,11 @@ namespace Emby.Plugins.Moonfin.Services
                     settings.SetProfile(profileName, profile);
 
                 PreserveSavedFilters(settings, storedSavedFilters);
-                if (copyGuidePins)
+                if (guidePinSource != null)
                 {
                     settings.Global ??= new MoonfinSettingsProfile();
-                    settings.Global.LiveTvSavedFilters = copiedGuidePins;
+                    settings.Global.LiveTvSavedFilters = guidePinSource.Global?.LiveTvSavedFilters?.ToList();
+                    settings.LiveTvSavedFilterExclusions = guidePinSource.LiveTvSavedFilterExclusions?.ToList();
                 }
                 ApplySavedFilterChange(settings, savedFilterChange, AdminGuidePins(Plugin.Instance?.Configuration));
                 StripServerWideKeys(settings);
@@ -482,14 +510,16 @@ namespace Emby.Plugins.Moonfin.Services
                 var serialized = JsonSerializer.Serialize(settings, _jsonOptions);
                 await Task.Run(() => AtomicFile.WriteAllText(filePath, serialized)).ConfigureAwait(false);
                 saved = settings;
-                saveGeneration = NextSaveGeneration(userId);
+                saveGeneration = savedFilterChange == null || profile.HideWatchedInRecentRows.HasValue
+                    ? NextSaveGeneration(userId) : (long?)null;
             }
             finally
             {
                 _lock.Release();
             }
 
-            await SyncHideWatchedAsync(userId, saved, profileName, saveGeneration).ConfigureAwait(false);
+            if (saveGeneration.HasValue)
+                await SyncHideWatchedAsync(userId, saved, profileName, saveGeneration.Value).ConfigureAwait(false);
 
             // Same echo guard as SaveUserSettingsAsync.
             if (notifySettingsChanged && settingsChanged) NotifySettingsChanged(userId);
@@ -785,7 +815,7 @@ namespace Emby.Plugins.Moonfin.Services
                     {
                         await SaveProfileAsync(userId, entry.Key, CloneProfile(entry.Value), "admin-copy",
                             notifySettingsChanged: false, replace: replace,
-                            copyGuidePins: entry.Key == "global" && (entry.Value.LiveTvSavedFilters != null || replace)).ConfigureAwait(false);
+                            guidePinSource: entry.Key == "global" && (entry.Value.LiveTvSavedFilters != null || replace) ? source : null).ConfigureAwait(false);
                     }
 
                     NotifySettingsChanged(userId);
