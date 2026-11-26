@@ -41,6 +41,10 @@ public class MoonfinUserSettings
     [JsonPropertyName("hiddenContentBaselines")]
     public Dictionary<string, HiddenContentBaseline>? HiddenContentBaselines { get; set; }
 
+    // Admin groups the user explicitly unpinned. Global.LiveTvSavedFilters stores personal additions.
+    [JsonPropertyName("liveTvSavedFilterExclusions")]
+    public List<string>? LiveTvSavedFilterExclusions { get; set; }
+
     // ─── Legacy v1 flat fields (for migration) ─────────────────────────
     // These are populated when reading a v1 file, then migrated to profiles.
 

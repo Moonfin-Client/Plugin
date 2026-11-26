@@ -32,7 +32,8 @@
                 'PINs',
                 'Studio Logos'
             ],
-            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
+            hiddenFields: ['DefaultWatchPartyService', 'DefaultShowFriendsButton', 'DefaultWatchPartyChatOverlay', 'DefaultWatchPartyAlerts', 'DefaultShowLiveTvButton', 'DefaultLiveTvChannelSortBy', 'DefaultLiveTvCategoryDisplay', 'DefaultEpgMobileView', 'DefaultSeerrOffNote',
+                'DefaultPinnedGuideGroups',
                 'DefaultShowCalendarButton', 'DefaultCalendarStyle', 'DefaultCalendarWeekStart', 'DefaultCalendarScope', 'DefaultCalendarShowEpisodes', 'DefaultCalendarShowMovies', 'DefaultCalendarLibraryPicker', 'DefaultCalendarIncludeUnmonitored', 'DefaultCalendarShowSpecials', 'DefaultCalendarShowBadges', 'DefaultCalendarColorBy', 'DefaultCalendarImageType', 'DefaultCalendarSpoilerSafe', 'DefaultCalendarSelectAction', 'DefaultCalendarRequestButton', 'DefaultCalendarReminders', 'DefaultCalendarRowSeeAll'],
             unsupported: {
                 'IMDb Charts': 'Not supported on Silo yet. These settings do nothing on Silo for now.',
@@ -81,6 +82,15 @@
         }
     };
     var host = hosts[hostName] || hosts.Silo;
+
+    // The admin form is identical to Jellyfin's. Supply only host-specific guide options.
+    window.moonbaseHost.guideCategories = [['movies', 'Movies'], ['series', 'Series'], ['premiere', 'Premieres']];
+    window.moonbaseHost.loadGuideGroups = function () {
+        if (hostName !== 'Plex') return Promise.resolve([]);
+        // The Plex companion already offers these labels on the Defaults route.
+        return window.ApiClient.getJSON(getUrl('Moonfin/Defaults', { includeLiveTvGroups: 'true' }))
+            .then(function (result) { return result.availableGuideGroups || result.AvailableGuideGroups || []; });
+    };
 
     // The page is served at <base>/admin and the routes live under <base>/Moonfin.
     var base = location.origin + location.pathname.replace(/\/admin\/?$/, '');
@@ -156,14 +166,23 @@
             }
             draftOffered = true;
             if (draft) {
-                lastConfig = draft;
-                fillArrFields(draft);
-                fillGamePaths(draft);
-                fillLogUploadField(draft);
-                return Promise.resolve(clone(draft));
+                lastConfig = draft.config;
+                var restored = clone(lastConfig);
+                lastServerGuidePins = draft.guidePinBase || (lastConfig.DefaultUserSettings || {}).liveTvSavedFilters || [];
+                if (Array.isArray(draft.guidePinKeys)) {
+                    // The merged form includes untouched server pins. Replay only the submitted edits.
+                    restored.moonbaseDraftGuidePinKeys = draft.guidePinKeys;
+                } else {
+                    restored.moonbaseDraftGuidePinBase = lastServerGuidePins;
+                }
+                fillArrFields(restored);
+                fillGamePaths(restored);
+                fillLogUploadField(restored);
+                return Promise.resolve(restored);
             }
             return this.getJSON(getUrl('Moonfin/Admin/Configuration')).then(function (config) {
                 lastConfig = config;
+                lastServerGuidePins = (config.DefaultUserSettings || {}).liveTvSavedFilters || [];
                 fillArrFields(config);
                 fillGamePaths(config);
                 fillLogUploadField(config);
@@ -181,19 +200,27 @@
                 throw error;
             });
         },
-        updatePluginConfiguration: function (id, config) {
-            readArrFields(config);
-            readGamePaths(config);
-            readLogUploadField(config);
+        readHostFields: function () {
+            var fields = {};
+            readArrFields(fields);
+            readGamePaths(fields);
+            readLogUploadField(fields);
+            return fields;
+        },
+        updatePluginConfiguration: function (id, config, guidePinKeys, hostFields) {
+            Object.assign(config, hostFields || this.readHostFields());
             return send('POST', getUrl('Moonfin/Admin/Configuration'), JSON.stringify(config), 'application/json').then(function () {
+                lastConfig = clone(config);
+                lastServerGuidePins = (config.DefaultUserSettings || {}).liveTvSavedFilters || [];
                 clearDraft();
-            }, function (error) {
+            }, async function (error) {
                 Dashboard.hideLoadingMsg();
                 var status = error && error.status;
                 if (status === 401) {
-                    saveDraft(config);
+                    saveDraft(config, guidePinKeys);
                 } else {
-                    toast(hostName + ' didn’t save the settings' + (status ? ' (status ' + status + ').' : '.'));
+                    var detail = status === 400 ? await error.json().catch(function () { return null; }) : null;
+                    toast((detail && detail.Error) || hostName + ' didn’t save the settings' + (status ? ' (status ' + status + ').' : '.'));
                 }
                 throw new Error('Saving the Moonbase settings failed' + (status ? ' with status ' + status : ''));
             });
@@ -238,6 +265,7 @@
     };
 
     var lastConfig = null;
+    var lastServerGuidePins = [];
     var draftOffered = false;
 
     function clone(value) {
@@ -251,13 +279,15 @@
     function readDraft() {
         try {
             var draft = JSON.parse(sessionStorage.getItem(draftKey) || 'null');
-            if (draft && Date.now() - draft.savedAt < draftMaxAgeMs) return draft.config;
+            if (draft && draft.config && Date.now() - draft.savedAt < draftMaxAgeMs) return draft;
             clearDraft();
         } catch (e) { /* no usable draft */ }
         return null;
     }
-    function saveDraft(config) {
-        try { sessionStorage.setItem(draftKey, JSON.stringify({ savedAt: Date.now(), config: config })); } catch (e) { /* the banner still explains */ }
+    function saveDraft(config, guidePinKeys) {
+        try { sessionStorage.setItem(draftKey, JSON.stringify({
+            savedAt: Date.now(), config: config, guidePinBase: lastServerGuidePins, guidePinKeys: guidePinKeys
+        })); } catch (e) { /* the banner still explains */ }
     }
     function clearDraft() {
         try { sessionStorage.removeItem(draftKey); } catch (e) { /* nothing stored */ }

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -436,27 +435,51 @@ func TestTheSettingsStreamCarriesEvents(t *testing.T) {
 	s := reminderServer(store.NewMemKV(), &reminderCatalog{})
 	srv := httptest.NewServer(s)
 	t.Cleanup(srv.Close)
-	req, _ := http.NewRequest("GET", srv.URL+"/Moonfin/Settings/Stream", nil)
-	for k, v := range userMain.headers() {
-		req.Header.Set(k, v)
+	srv.Client().Timeout = 5 * time.Second
+	expectFrame := func(lines *bufio.Scanner, want string) {
+		t.Helper()
+		for _, line := range []string{want, ""} {
+			if !lines.Scan() || lines.Text() != line {
+				t.Fatalf("stream line = %q, want %q (read error: %v)", lines.Text(), line, lines.Err())
+			}
+		}
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	openStream := func(who caller) *bufio.Scanner {
+		t.Helper()
+		req, err := http.NewRequest("GET", srv.URL+"/Moonfin/Settings/Stream", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for k, v := range who.headers() {
+			req.Header.Set(k, v)
+		}
+		resp, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { resp.Body.Close() })
+		if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+			t.Fatalf("stream = %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+		lines := bufio.NewScanner(resp.Body)
+		expectFrame(lines, ":connected")
+		return lines
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		t.Fatalf("stream = %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	mine, theirs := openStream(userMain), openStream(other)
+	checkSave := func(who caller, recipient *bufio.Scanner) {
+		t.Helper()
+		const pin = `{"profile":{},"liveTvSavedFilterChange":{"action":"add","filter":"group:News"}}`
+		if code, _ := call(t, s, who, "POST", "/Moonfin/Settings/Profile/tv", pin, nil); code != 200 {
+			t.Fatalf("save pin: %d", code)
+		}
+		// Mark the end of this save on each stream, including the one that should be quiet.
+		s.notifyUser(userMain.user, M{"type": "seerrNotification", "title": "mine"})
+		s.notifyUser(other.user, M{"type": "seerrNotification", "title": "theirs"})
+		expectFrame(recipient, `data: {"type":"settingsUpdated"}`)
+		expectFrame(mine, `data: {"title":"mine","type":"seerrNotification"}`)
+		expectFrame(theirs, `data: {"title":"theirs","type":"seerrNotification"}`)
 	}
-	lines := bufio.NewReader(resp.Body)
-	if line, _ := lines.ReadString('\n'); line != ":connected\n" {
-		t.Fatalf("first line = %q", line)
-	}
-	s.notifyUser(other.user, M{"type": "seerrNotification", "title": "not yours"})
-	s.notifyUser(userMain.user, M{"type": "seerrNotification", "title": "yours"})
-	_, _ = lines.ReadString('\n')
-	line, err := lines.ReadString('\n')
-	if err != nil && err != io.EOF || line != `data: {"title":"yours","type":"seerrNotification"}`+"\n" {
-		t.Fatalf("event line = %q %v", line, err)
-	}
+	checkSave(other, theirs)
+	checkSave(userMain, mine)
+	checkSave(userMain, mine) // Replay the same pin edit.
 }

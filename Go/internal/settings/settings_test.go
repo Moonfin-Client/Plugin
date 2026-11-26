@@ -157,3 +157,13 @@ func TestCleanLeavesNonASCIIKeysAlone(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
+
+func TestStoredGuidePinsContainOnlyTheViewersChoices(t *testing.T) {
+	env := M{"global": M{"liveTvSavedFilters": []string{"group:News"}}}
+	if pins := StoredSavedFilters(env); !reflect.DeepEqual(pins, []any{"group:News"}) {
+		t.Fatalf("stored pins = %v", pins)
+	}
+	if got := EffectiveSavedFilters(env, []string{"group:Sports"}); !reflect.DeepEqual(got, []any{"group:Sports", "group:News"}) {
+		t.Fatalf("guide pins = %v", got)
+	}
+}

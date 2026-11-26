@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -236,8 +237,8 @@ func (s *Server) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 		mode = "merge"
 	}
 	clientID, _ := body["clientid"].(string)
-	s.save(w, r, func(env M) M {
-		return settings.SaveEnvelope(env, incoming, mode, clientID, serverKeys(s.config(r.Context())), time.Now())
+	s.save(w, r, func(env M) (M, error) {
+		return settings.SaveEnvelope(env, incoming, mode, clientID, serverKeys(s.config(r.Context())), time.Now()), nil
 	})
 }
 
@@ -254,25 +255,57 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clientID, _ := body["clientid"].(string)
-	s.saveProfile(w, r, name, settings.Clean(incoming), clientID, nil)
+	cleaned := settings.Clean(incoming)
+	if raw := body["livetvsavedfilterchange"]; raw != nil {
+		change, valid := settings.ParseSavedFilterChange(raw)
+		if !valid {
+			writeError(w, http.StatusBadRequest, "Invalid saved Live TV filter change")
+			return
+		}
+		extra := M{}
+		saved := s.save(w, r, func(env M) (M, error) {
+			stored, err := s.fullConfig(r.Context())
+			if err != nil {
+				return nil, err
+			}
+			cfg := configFrom(stored)
+			change.Defaults = settings.AdminSavedFilters(cfg.Defaults["liveTvSavedFilters"])
+			updated := settings.SaveProfile(env, name, cleaned, clientID, serverKeys(cfg), time.Now())
+			if err := settings.ApplySavedFilterChange(updated, change); err != nil {
+				return nil, err
+			}
+			extra["liveTvSavedFilters"] = settings.EffectiveSavedFilters(updated, change.Defaults)
+			return updated, nil
+		}, extra)
+		// A retry can complete an earlier partial save without changing the pins again.
+		if saved && s.notify.on {
+			s.notifyUser(callerOf(r).UserID, M{"type": "settingsUpdated"})
+		}
+		return
+	}
+	s.saveProfile(w, r, name, cleaned, clientID, nil)
 }
 
 // saveProfile merges one profile and answers like the Jellyfin plugin, with
 // extra fields added to the success body.
 func (s *Server) saveProfile(w http.ResponseWriter, r *http.Request, name string, incoming M, clientID string, extra M) {
-	s.save(w, r, func(env M) M {
-		return settings.SaveProfile(env, name, incoming, clientID, serverKeys(s.config(r.Context())), time.Now())
+	s.save(w, r, func(env M) (M, error) {
+		return settings.SaveProfile(env, name, incoming, clientID, serverKeys(s.config(r.Context())), time.Now()), nil
 	}, extra)
 }
 
-func (s *Server) save(w http.ResponseWriter, r *http.Request, apply func(M) M, extra ...M) {
+func (s *Server) save(w http.ResponseWriter, r *http.Request, apply func(M) (M, error), extra ...M) bool {
 	id := callerOf(r)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	env, err := s.loadEnvelope(r.Context(), id)
 	if err == nil {
 		created := env == nil
-		if err = s.storeEnvelope(r.Context(), id, apply(env)); err == nil {
+		env, err = apply(env)
+		if err == nil {
+			err = s.storeEnvelope(r.Context(), id, env)
+		}
+		if err == nil {
 			body := M{"Success": true, "Created": created, "UserId": strconv.Itoa(id.UserID)}
 			for _, e := range extra {
 				for k, v := range e {
@@ -280,10 +313,15 @@ func (s *Server) save(w http.ResponseWriter, r *http.Request, apply func(M) M, e
 				}
 			}
 			writeJSON(w, http.StatusOK, body)
-			return
+			return true
 		}
 	}
-	storageFailed(w, r, err)
+	if errors.Is(err, settings.ErrSavedFilterLimit) {
+		writeError(w, http.StatusBadRequest, err.Error())
+	} else {
+		storageFailed(w, r, err)
+	}
+	return false
 }
 
 func (s *Server) handleDeleteSettings(w http.ResponseWriter, r *http.Request) {
@@ -362,6 +400,11 @@ func (s *Server) handleResolved(w http.ResponseWriter, r *http.Request) {
 		storageFailed(w, r, err)
 		return
 	}
+	// A pin-aware client must be able to remove a stale cached shortcut after
+	// a reset, even when the user no longer has a settings envelope.
+	if r.URL.Query().Get("includeLiveTvSavedFilters") == "true" && resolved["liveTvSavedFilters"] == nil {
+		resolved["liveTvSavedFilters"] = []any{}
+	}
 	writeJSON(w, http.StatusOK, resolved)
 }
 
@@ -385,6 +428,22 @@ func (s *Server) handleGetDefaults(w http.ResponseWriter, r *http.Request) {
 	d := configFrom(stored).Defaults
 	if d == nil {
 		d = M{}
+	}
+	// The admin picker requests Plex's available groups through this existing
+	// settings route, avoiding browser CORS restrictions and new endpoints.
+	if r.URL.Query().Get("includeLiveTvGroups") == "true" {
+		if provider, ok := s.catalog.(interface {
+			LiveTvFreeGroups(context.Context, string) ([]string, error)
+		}); ok {
+			groups, err := provider.LiveTvFreeGroups(r.Context(), callerOf(r).Token)
+			if err != nil {
+				logError(r, "load Plex Free TV groups", err)
+				writeError(w, http.StatusBadGateway, "Could not load Plex Free TV groups")
+				return
+			}
+			writeJSON(w, http.StatusOK, M{"defaultSettings": d, "availableGuideGroups": groups})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, d)
 }
@@ -462,7 +521,12 @@ func (s *Server) applyDefaults(w http.ResponseWriter, r *http.Request, req apply
 	}
 	push := map[string]M{}
 	for _, p := range profiles {
-		if d := keepOnly(storedDefaults(cfg, p), req.Keys); len(d) > 0 {
+		d := keepOnly(storedDefaults(cfg, p), req.Keys)
+		if p != "global" {
+			d = clone(d)
+			delete(d, "liveTvSavedFilters")
+		}
+		if len(d) > 0 {
 			push[p] = d
 		}
 	}
@@ -501,6 +565,9 @@ func (s *Server) applyDefaults(w http.ResponseWriter, r *http.Request, req apply
 					env[p] = clone(d)
 				}
 			}
+			// Full reset clears personal pins while keeping future admin changes inherited.
+			env["global"].(M)["liveTvSavedFilters"] = []any{}
+			env["liveTvSavedFilterExclusions"] = []any{}
 		} else {
 			if raw := current[e.key()]; len(bytes.TrimSpace(raw)) > 0 {
 				if err := json.Unmarshal(raw, &env); err != nil {
@@ -529,6 +596,9 @@ func (s *Server) applyDefaults(w http.ResponseWriter, r *http.Request, req apply
 				}
 				if len(layer) > 0 {
 					env = settings.SaveProfile(env, p, clone(layer), by, serverKeys(cfg), time.Now())
+					if p == "global" {
+						settings.MergeAdminSavedFilters(env, layer["liveTvSavedFilters"])
+					}
 				}
 			}
 		}
@@ -546,13 +616,34 @@ func (s *Server) applyDefaults(w http.ResponseWriter, r *http.Request, req apply
 		logError(r, "apply defaults", err)
 	}
 	failed += len(notWritten)
-	affected := len(writes) - len(notWritten)
+	for _, key := range notWritten {
+		delete(writes, key)
+	}
+	affected := len(writes)
 	if affected == 0 && failed > 0 {
 		storageFailed(w, r, fmt.Errorf("apply defaults failed for %d profiles", failed))
 		return
 	}
+	deliveries := 0
+	if s.notify.on {
+		savedByUser := map[int]bool{}
+		for i, entry := range entries {
+			_, saved := writes[keys[i]]
+			savedByUser[entry.UserID] = savedByUser[entry.UserID] || saved
+		}
+		for _, userID := range s.connectedUsers() {
+			refresh, indexed := savedByUser[userID]
+			if !indexed {
+				// Even an overwrite leaves users without stored settings inheriting defaults.
+				refresh = targets == nil || slices.ContainsFunc(targets, func(t adminTargetRef) bool { return t.userID == userID })
+			}
+			if refresh {
+				deliveries += s.notifyUser(userID, M{"type": "settingsUpdated"})
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, M{"success": true, "overwrite": req.Overwrite, "usersAffected": affected,
-		"orphansDeleted": 0, "liveRefreshDeliveries": 0})
+		"orphansDeleted": 0, "liveRefreshDeliveries": deliveries})
 }
 
 type copyRequest struct {
@@ -662,6 +753,15 @@ func (s *Server) handleCopySettings(w http.ResponseWriter, r *http.Request) {
 				target = settings.ReplaceProfile(target, p, clone(c), "admin-copy", serverKeys(cfg), time.Now())
 			} else {
 				target = settings.SaveProfile(target, p, clone(c), "admin-copy", serverKeys(cfg), time.Now())
+			}
+			// An explicit copy initializes the target even when the source has no pins.
+			if _, selected := c["liveTvSavedFilters"]; p == "global" && (selected || req.Replace) {
+				target["global"].(M)["liveTvSavedFilters"] = settings.StoredSavedFilters(env)
+				if excluded := env["liveTvSavedFilterExclusions"]; excluded != nil {
+					target["liveTvSavedFilterExclusions"] = excluded
+				} else {
+					delete(target, "liveTvSavedFilterExclusions")
+				}
 			}
 		}
 		raw, err := json.Marshal(target)

@@ -53,6 +53,9 @@ jobs:
       - name: Test
         run: make test
 
+      - name: Test administrator guide picker
+        run: node --test web/admin-guide.test.cjs
+
       - name: Build
         run: make dist
 

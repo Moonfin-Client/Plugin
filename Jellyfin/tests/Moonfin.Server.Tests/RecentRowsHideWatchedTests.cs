@@ -11,6 +11,42 @@ namespace Moonfin.Server.Tests;
 public sealed class RecentRowsHideWatchedTests
 {
     [Fact]
+    public async Task PinOnlySavePreservesNativeHideWatchedAcrossProfiles()
+    {
+        var temp = Directory.CreateTempSubdirectory();
+        try {
+            var user = new User("viewer", "auth", "reset");
+            var config = new MediaBrowser.Model.Configuration.UserConfiguration();
+            var dto = new MediaBrowser.Model.Dto.UserDto { Id = user.Id, Configuration = config };
+            var writes = new List<bool>();
+            var users = RecordingHostProxy.Create<IUserManager>((method, args) => {
+                if (method.Name == "GetUserById") return user;
+                if (method.Name == "GetUserDto") return dto;
+                if (method.Name == "UpdateConfigurationAsync") {
+                    writes.Add(((MediaBrowser.Model.Configuration.UserConfiguration)args![1]!).HidePlayedInLatest);
+                    return Task.CompletedTask;
+                }
+                throw new NotSupportedException(method.Name);
+            });
+            var provider = RecordingHostProxy.Create<IServiceProvider>((_, args) =>
+                args![0] as Type == typeof(IUserManager) ? users : null);
+            var service = new MoonfinSettingsService(NullLogger<MoonfinSettingsService>.Instance, temp.FullName, provider);
+            await service.SaveProfileAsync(user.Id, "mobile", new() { HideWatchedInRecentRows = false }, notifySettingsChanged: false);
+            await service.SaveProfileAsync(user.Id, "tv", new() { HideWatchedInRecentRows = true }, notifySettingsChanged: false);
+            Assert.True(config.HidePlayedInLatest);
+            writes.Clear();
+            await service.SaveProfileAsync(user.Id, "mobile", new(), notifySettingsChanged: false,
+                savedFilterChange: new() { Action = "add", Filter = "group:News" });
+            Assert.True(config.HidePlayedInLatest);
+            Assert.Empty(writes);
+            await service.SaveProfileAsync(user.Id, "tv", new() { HideWatchedInRecentRows = false },
+                notifySettingsChanged: false, savedFilterChange: new() { Action = "remove", Filter = "group:News" });
+            Assert.False(config.HidePlayedInLatest);
+            Assert.Equal(new[] { false }, writes);
+        } finally { temp.Delete(true); }
+    }
+
+    [Fact]
     public void ProfileSerializesHideWatchedUnderTheClientWireKey()
     {
         var profile = new MoonfinSettingsProfile

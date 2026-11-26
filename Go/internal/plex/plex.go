@@ -4,6 +4,7 @@
 package plex
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/rand"
@@ -15,11 +16,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -109,6 +112,109 @@ func New(cfg Config) (*Companion, error) {
 	})
 	c.startWatchParties()
 	return c, nil
+}
+
+// LiveTvFreeGroups supplies the admin picker with the same Plex Cloud genre
+// labels Moonfin uses, without making its browser call Plex across origins.
+func (c *Companion) LiveTvFreeGroups(ctx context.Context, token string) ([]string, error) {
+	get := func(path string, target any) error {
+		status, body, err := c.get(ctx, "https://epg.provider.plex.tv"+path, token,
+			map[string]string{"X-Plex-Provider-Version": "7.2"})
+		if err != nil {
+			return err
+		}
+		if status != http.StatusOK {
+			return fmt.Errorf("Plex guide replied %d", status)
+		}
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.UseNumber()
+		return decoder.Decode(target)
+	}
+	var provider struct {
+		MediaProvider struct {
+			Feature []struct {
+				Type              string `json:"type"`
+				GridChannelFilter []struct {
+					Key   any    `json:"genreRatingKey"`
+					Title string `json:"title"`
+				} `json:"GridChannelFilter"`
+			} `json:"Feature"`
+		} `json:"MediaProvider"`
+	}
+	var lineup struct {
+		MediaContainer struct {
+			Channel []struct {
+				DRM  bool  `json:"drm"`
+				Keys []any `json:"genreRatingKeys"`
+			} `json:"Channel"`
+		} `json:"MediaContainer"`
+	}
+	if err := get("/", &provider); err != nil {
+		return nil, err
+	}
+	if err := get("/lineups/plex/channels", &lineup); err != nil {
+		return nil, err
+	}
+	used := map[string]bool{}
+	for _, channel := range lineup.MediaContainer.Channel {
+		if channel.DRM {
+			continue
+		}
+		for _, key := range channel.Keys {
+			if id := genreKey(key); id != "" {
+				used[id] = true
+			}
+		}
+	}
+	unique := map[string]bool{}
+	var groups []string
+	for _, feature := range provider.MediaProvider.Feature {
+		if feature.Type != "grid" {
+			continue
+		}
+		for _, group := range feature.GridChannelFilter {
+			name := strings.TrimSpace(group.Title)
+			if name != "" && used[genreKey(group.Key)] && !unique[name] {
+				unique[name] = true
+				groups = append(groups, name)
+			}
+		}
+	}
+	sort.Strings(groups)
+	return groups, nil
+}
+
+var genreDecimal = regexp.MustCompile(`^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$`)
+
+// Compare numeric IDs by their significant digits and decimal exponent.
+// This keeps every digit without expanding a short ID such as 1e1000000.
+func genreKey(key any) string {
+	raw, isString := key.(string)
+	if !isString {
+		number, ok := key.(json.Number)
+		if !ok {
+			return ""
+		}
+		raw = number.String()
+	}
+	if raw == "" {
+		return ""
+	}
+	match := genreDecimal.FindStringSubmatch(raw)
+	if match == nil || (isString && (match[4] != "" || strings.HasSuffix(match[3], "0"))) {
+		return "string:" + raw // Preserve opaque or specially formatted string IDs.
+	}
+	digits := strings.TrimLeft(match[2]+match[3], "0")
+	if digits == "" {
+		return match[1] + "0"
+	}
+	significant := strings.TrimRight(digits, "0")
+	var exponent big.Int
+	if match[4] != "" {
+		exponent.SetString(match[4], 10)
+	}
+	exponent.Add(&exponent, big.NewInt(int64(len(digits)-len(significant)-len(match[3]))))
+	return match[1] + significant + "e" + exponent.String()
 }
 
 // loadOrCreateClientID keeps one X-Plex-Client-Identifier per install, so
@@ -427,13 +533,13 @@ func (c *Companion) Genres(ctx context.Context, caller api.Identity) ([]api.Genr
 // plexTypes maps Plex's library types to the ones the admin page knows.
 var plexTypes = map[string]string{"movie": "movie", "show": "tv", "artist": "music", "photo": "photos"}
 
-func (c *Companion) get(ctx context.Context, rawURL, token string) (int, []byte, error) {
-	return c.do(ctx, http.MethodGet, rawURL, token)
+func (c *Companion) get(ctx context.Context, rawURL, token string, headers ...map[string]string) (int, []byte, error) {
+	return c.do(ctx, http.MethodGet, rawURL, token, headers...)
 }
 
 // do calls Plex or plex.tv with the companion's own client headers. The token
 // goes in a header, never the URL, so it stays out of logs.
-func (c *Companion) do(ctx context.Context, method, rawURL, token string) (int, []byte, error) {
+func (c *Companion) do(ctx context.Context, method, rawURL, token string, headers ...map[string]string) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
 	if err != nil {
 		return 0, nil, err
@@ -442,6 +548,11 @@ func (c *Companion) do(ctx context.Context, method, rawURL, token string) (int, 
 	req.Header.Set("X-Plex-Client-Identifier", c.clientID)
 	req.Header.Set("X-Plex-Product", "Moonbase")
 	req.Header.Set("X-Plex-Version", c.cfg.Version)
+	for _, extra := range headers {
+		for key, value := range extra {
+			req.Header.Set(key, value)
+		}
+	}
 	if token != "" {
 		req.Header.Set("X-Plex-Token", token)
 	}

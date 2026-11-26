@@ -54,6 +54,7 @@ namespace Emby.Plugins.Moonfin.Api
     public class GetResolvedProfileRequest : IReturn<object>
     {
         public string? Profile { get; set; }
+        public bool IncludeLiveTvSavedFilters { get; set; }
     }
 
     [Route("/Moonfin/Settings/Profile/{Profile}", "POST")]

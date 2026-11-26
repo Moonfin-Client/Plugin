@@ -70,28 +70,40 @@ namespace Emby.Plugins.Moonfin.Services
         }
 
         /// <summary>
-        /// Reads and parses path, falling back to its .bak when the file is missing, unreadable or
-        /// invalid. Returns null when neither copy is usable. Parse should return null for content
-        /// it rejects, which is how a half-written file gets caught.
+        /// Reads the primary or its backup. Set throwIfUnreadable to distinguish a failed
+        /// read from a missing file when neither copy can be used.
         /// </summary>
-        public static T? ReadWithRecovery<T>(string path, Func<string, T?> parse)
+        public static T? ReadWithRecovery<T>(string path, Func<string, T?> parse, bool throwIfUnreadable = false)
             where T : class
         {
-            T? fromMain;
-            if (TryReadAndParse(path, parse, out fromMain))
+            Exception? failure = null;
+            T? Read(string file)
             {
-                return fromMain;
+                if (!throwIfUnreadable && !File.Exists(file)) return null;
+                try
+                {
+                    return parse(File.ReadAllText(file)) ?? throw new InvalidDataException("Invalid file contents.");
+                }
+                catch (FileNotFoundException)
+                {
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                    return null;
+                }
             }
+
+            var primary = Read(path);
+            if (primary != null) return primary;
 
             var backup = BackupPath(path);
-            T? fromBackup;
-            if (TryReadAndParse(backup, parse, out fromBackup))
-            {
-                TryPromoteBackup(path, backup);
-                return fromBackup;
-            }
-
-            return null;
+            var recovered = Read(backup);
+            if (recovered != null) TryPromoteBackup(path, backup);
+            else if (throwIfUnreadable && failure != null)
+                throw new IOException($"Could not read {path} or its backup.", failure);
+            return recovered;
         }
 
         /// <summary>Deletes a file along with its .bak and .tmp copies.</summary>
@@ -100,26 +112,6 @@ namespace Emby.Plugins.Moonfin.Services
             TryDelete(path);
             TryDelete(BackupPath(path));
             TryDelete(TempPath(path));
-        }
-
-        private static bool TryReadAndParse<T>(string path, Func<string, T?> parse, out T? result)
-            where T : class
-        {
-            result = null;
-            if (!File.Exists(path))
-            {
-                return false;
-            }
-
-            try
-            {
-                result = parse(File.ReadAllText(path));
-                return result != null;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         // Restores the good copy so later reads hit the main file. Copying rather than renaming is

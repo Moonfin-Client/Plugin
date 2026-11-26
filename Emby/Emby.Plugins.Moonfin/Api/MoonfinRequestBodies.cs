@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Emby.Plugins.Moonfin.Models;
+using Moonfin.LiveTv;
 
 namespace Emby.Plugins.Moonfin.Api
 {
@@ -15,6 +16,7 @@ namespace Emby.Plugins.Moonfin.Api
     {
         [JsonPropertyName("profile")] public MoonfinSettingsProfile? Profile { get; set; }
         [JsonPropertyName("clientId")] public string? ClientId { get; set; }
+        [JsonPropertyName("liveTvSavedFilterChange")] public LiveTvSavedFilterChange? LiveTvSavedFilterChange { get; set; }
     }
 
     internal class SaveDetailsBlurBody

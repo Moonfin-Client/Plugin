@@ -367,6 +367,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("personPageGroupItems")] public bool? PersonPageGroupItems { get; set; }
         [JsonPropertyName("personPageSortOption")] public string? PersonPageSortOption { get; set; }
         [JsonPropertyName("liveTvChannelSortBy")] public string? LiveTvChannelSortBy { get; set; }
+        [JsonPropertyName("liveTvCategoryDisplay")] public string? LiveTvCategoryDisplay { get; set; }
+        [JsonPropertyName("liveTvSavedFilters")] public List<string>? LiveTvSavedFilters { get; set; }
         [JsonPropertyName("allGenresImageType")] public string? AllGenresImageType { get; set; }
         [JsonPropertyName("groupItemsIntoCollections")] public bool? GroupItemsIntoCollections { get; set; }
         [JsonPropertyName("showMediaDetailsOnLibraryPage")] public bool? ShowMediaDetailsOnLibraryPage { get; set; }

@@ -154,7 +154,22 @@ func (s *Server) handlePostConfiguration(w http.ResponseWriter, r *http.Request)
 		delete(body, k)
 	}
 	if d, ok := body["DefaultUserSettings"].(M); ok {
-		body["DefaultUserSettings"] = settings.Clean(d)
+		defaults := settings.Clean(d)
+		if raw := defaults["liveTvSavedFilters"]; raw != nil {
+			pins, ok := raw.([]any)
+			if !ok {
+				writeError(w, http.StatusBadRequest, "Expected a list of saved Live TV filters")
+				return
+			}
+			for _, pin := range pins {
+				key, ok := pin.(string)
+				if !ok || !settings.ValidSavedFilter(key) {
+					writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid guide shortcut %q. Use a group or category key of up to 1,024 bytes.", key))
+					return
+				}
+			}
+		}
+		body["DefaultUserSettings"] = defaults
 	}
 	if d, ok := body["DefaultDeviceSettings"].(M); ok {
 		devices := M{}

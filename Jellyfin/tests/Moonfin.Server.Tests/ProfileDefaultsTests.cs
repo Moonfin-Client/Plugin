@@ -98,9 +98,8 @@ public sealed class ProfileDefaultsTests : IDisposable
         Assert.Equal("never", merged.ClockBehavior);
         Assert.True(merged.Use24HourClock);
         Assert.Equal(["lib-global"], merged.MediaBarLibraryIds!);
-        Assert.Same(config.DefaultUserSettings, MoonfinSettingsService.AdminDefaultsFor("global", config));
-        Assert.Same(config.DefaultUserSettings, MoonfinSettingsService.AdminDefaultsFor(null, config));
-        Assert.Same(config.DefaultUserSettings, MoonfinSettingsService.AdminDefaultsFor("mobile", config));
+        foreach (var profile in new string?[] { "global", null, "mobile" })
+            Assert.Equivalent(config.DefaultUserSettings, MoonfinSettingsService.AdminDefaultsFor(profile, config), strict: true);
     }
 
     [Fact]

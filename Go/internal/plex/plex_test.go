@@ -12,6 +12,31 @@ import (
 	"testing"
 )
 
+type guideRoundTripper struct{}
+
+func (guideRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Header.Get("X-Plex-Token") != "owner" || req.Header.Get("X-Plex-Provider-Version") != "7.2" {
+		return &http.Response{StatusCode: 403, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}
+	body := `{"MediaProvider":{"Feature":[{"type":"grid","GridChannelFilter":[
+		{"genreRatingKey":1000000,"title":"News"},{"genreRatingKey":7.0,"title":"Comedy"},{"genreRatingKey":"8","title":"Sports"},
+		{"genreRatingKey":"9007199254740993","title":"Movies"},{"genreRatingKey":"9007199254740995","title":"Local"},
+		{"genreRatingKey":"9007199254740997","title":"Music"},{"genreRatingKey":"9007199254740992","title":"Unavailable"},
+		{"genreRatingKey":"007","title":"Archive"},{"genreRatingKey":"7.0","title":"Replay"}]}]}}`
+	if req.URL.Path == "/lineups/plex/channels" {
+		body = `{"MediaContainer":{"Channel":[{"genreRatingKeys":[1e6,9007199254740993.0,9007199254740995,90071992547409970e-1,"7"]},{"genreRatingKeys":["8"],"drm":true}]}}`
+	}
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+}
+
+func TestAdminGroupsMatchPlayablePlexFreeTvGenres(t *testing.T) {
+	c := &Companion{http: &http.Client{Transport: guideRoundTripper{}}}
+	groups, err := c.LiveTvFreeGroups(t.Context(), "owner")
+	if err != nil || strings.Join(groups, ",") != "Comedy,Local,Movies,Music,News" {
+		t.Fatalf("playable Plex groups: %v, %v", groups, err)
+	}
+}
+
 // fakePlex stands in for a Plex server and plex.tv. "owner" owns the server,
 // "member" and "managed" are Home members whose server tokens plex.tv doesn't
 // know, and anything else is refused.

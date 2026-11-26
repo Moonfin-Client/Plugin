@@ -18,6 +18,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Verify Go admin page mirrors Jellyfin
+        run: |
+          cmp Jellyfin/backend/Pages/configPage.html Go/web/configPage.html || {
+            echo "::error::Go admin page differs from Jellyfin; copy the canonical page into Go/web/configPage.html."
+            exit 1
+          }
+          node --check Go/web/host.js
+          node --test Go/web/admin-guide.test.cjs
+
       - name: Read Jellyfin version and ABI
         id: jf_meta
         run: |

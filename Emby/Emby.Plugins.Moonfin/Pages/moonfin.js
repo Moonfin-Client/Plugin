@@ -2839,6 +2839,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function loadConfig(view) {
+        var visit = ++guideGroupsVisit;
         loading.show();
         ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
             view.querySelector('#EnableSettingsSync').checked = config.EnableSettingsSync;
@@ -2916,13 +2917,96 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             DEFAULTS_PROFILE_NAMES.forEach(function (name) {
                 defaultsState.profiles[name] = (name === 'global' ? camelKeysDeep(config.DefaultUserSettings) : deviceDefaults[name]) || {};
             });
+            defaultsState.guidePinBase = defaultsState.profiles.global.liveTvSavedFilters;
             defaultsState.active = 'global';
             fillUploadedThemes(view, config.UploadedThemes);
             populateDefaults(view, defaultsState.profiles.global);
             refreshDefaultsActions(view);
+            if (visit === guideGroupsVisit) discoverDefaultGuideGroups(view, visit);
 
             loading.hide();
         }).catch(reportConfigError);
+    }
+
+    // The admin selects the same native channel tags used by the guide.
+    var guideGroupsVisit = 0;
+    var availableDefaultGuideGroups = [];
+    var defaultGuideGroupsMessage = 'Loading available groups…';
+    var defaultGuideCategories = [['movies', 'Movies'], ['series', 'Series'], ['sports', 'Sports'],
+        ['news', 'News'], ['kids', 'Kids'], ['premiere', 'Premieres']];
+
+    function withGuidePinEdits(profile, originalPins, latestDefaults, changedPins) {
+        var before = new Set(originalPins || []);
+        var selected = new Set(profile.liveTvSavedFilters || []);
+        var latest = (latestDefaults || {}).liveTvSavedFilters;
+        changedPins = changedPins || new Set();
+        before.forEach(function(key) { if (!selected.has(key)) changedPins.add(key); });
+        selected.forEach(function(key) { if (!before.has(key)) changedPins.add(key); });
+        var pins = (latest || []).filter(function(key) { return !changedPins.has(key) || selected.has(key); });
+        selected.forEach(function(key) {
+            if (changedPins.has(key) && !pins.includes(key)) pins.push(key);
+        });
+        return Object.assign({}, profile, { liveTvSavedFilters: pins.length || Array.isArray(latest) ? pins : latest });
+    }
+
+    function renderDefaultGuideGroups(view, defaults, preserveSelection) {
+        var host = view.querySelector('#DefaultPinnedGuideGroups');
+        if (!host) return;
+        if (defaultsState.active !== 'global') {
+            host.textContent = 'Shared pins are configured on the Global tab.';
+            return;
+        }
+        var current = preserveSelection
+            ? new Map(Array.from(host.querySelectorAll('input[data-guide-filter]'), function(input) {
+                return [input.getAttribute('data-guide-filter'), input.checked];
+            })) : null;
+        var saved = Array.isArray(defaults.liveTvSavedFilters)
+            ? defaults.liveTvSavedFilters.filter(function(key) { return typeof key === 'string'; })
+            : [];
+        var names = Array.from(new Set(saved.filter(function(key) { return key.startsWith('group:'); })
+            .map(function(key) { return key.slice(6); }).concat(availableDefaultGuideGroups)));
+        function checkbox(key, label) {
+            var tooLong = key.length > 1024;
+            var selected = current && current.has(key) ? current.get(key) : saved.includes(key);
+            var state = tooLong ? ' disabled' : selected ? ' checked' : '';
+            return '<label style="display:flex;align-items:center;gap:8px;padding:5px 3px;">' +
+                '<input type="checkbox" data-guide-filter="' + esc(key) + '"' + state + '><span>' +
+                esc(label) + (tooLong ? ' (too long to pin)' : '') + '</span></label>';
+        }
+        host.innerHTML = '<div style="font-weight:600;padding:5px 3px;">Program Categories</div>' +
+            defaultGuideCategories.map(function(category) { return checkbox('category:' + category[0], category[1]); }).join('') +
+            '<div style="font-weight:600;padding:8px 3px 5px;">Channel Groups</div>' +
+            names.map(function(name) { return checkbox('group:' + name, name); }).join('') +
+            (defaultGuideGroupsMessage || (names.length ? '' : 'No channel tags available.'));
+    }
+
+    function discoverDefaultGuideGroups(view, visit) {
+        ApiClient.ajax({
+            type: 'GET',
+            url: ApiClient.getUrl('LiveTv/Channels', {Fields: 'ImageTags,UserData,Tags', EnableTotalRecordCount: false}),
+            dataType: 'json'
+        }).then(function(result) {
+            if (visit !== guideGroupsVisit) return;
+            var names = [];
+            (result.Items || result.items || []).forEach(function(channel) {
+                if (!channel) return;
+                var items = channel.TagItems || channel.tagItems;
+                var tags = Array.isArray(items) ? items.map(function(tag) { return tag && (tag.Name || tag.name); })
+                    .filter(function(name) { return typeof name === 'string' && name.trim(); }) : [];
+                var raw = tags.length ? tags : channel.Tags || channel.tags;
+                if (Array.isArray(raw)) names.push.apply(names, raw);
+            });
+            availableDefaultGuideGroups = Array.from(new Set(names.filter(function(name) {
+                return typeof name === 'string' && name.trim();
+            }).map(function(name) { return name.trim(); }))).sort();
+            defaultGuideGroupsMessage = '';
+        }).catch(function() {
+            if (visit !== guideGroupsVisit) return;
+            defaultGuideGroupsMessage = 'Could not load channel tags. Reload to retry.';
+        }).finally(function() {
+            if (visit !== guideGroupsVisit) return;
+            renderDefaultGuideGroups(view, defaultsState.profiles[defaultsState.active] || {}, true);
+        });
     }
 
     // Fills the User defaults form from one profile's defaults. The same form edits every
@@ -3232,6 +3316,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultAllGenresImageType', defaults.allGenresImageType, 'Configured image type');
         setSelectValue(view, '#DefaultAudioSortOption', defaults.audioSortOption, 'Configured sort');
         setSelectValue(view, '#DefaultLiveTvChannelSortBy', defaults.liveTvChannelSortBy, 'Configured sort');
+        setSelectValue(view, '#DefaultLiveTvCategoryDisplay', defaults.liveTvCategoryDisplay, 'Configured guide layout');
+        renderDefaultGuideGroups(view, defaults);
         setSelectValue(view, '#DefaultEpgMobileView', defaults.epgMobileView, 'Configured view');
         setSelectValue(view, '#DefaultMediaBarOverlayColor', defaults.mediaBarOverlayColor, 'Configured color');
         bindNullableRangeInput(view, '#DefaultMediaBarOpacity', '%');
@@ -3253,8 +3339,9 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     }
 
     function saveConfig(view) {
+        var visit = guideGroupsVisit;
         loading.show();
-        return ApiClient.getPluginConfiguration(PluginUniqueId).then(function (config) {
+        function collectForm(config) {
             config.EnableSettingsSync = view.querySelector('#EnableSettingsSync').checked;
             config.SeerrEnabled = view.querySelector('#SeerrEnabled').checked;
             config.SeerrUrl = view.querySelector('#SeerrUrl').value || null;
@@ -3330,14 +3417,14 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
             config.GamesEnabled = view.querySelector('#GamesEnabled').checked;
             config.GamesIsolateWebApp = view.querySelector('#GamesIsolateWebApp').checked;
-            config.GameLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.gameLibraryCb:checked'))
-                .map(function (cb) { return cb.getAttribute('data-id'); });
+            if (view.querySelector('.gameLibraryCb')) {
+                config.GameLibraryIds = Array.prototype.slice.call(view.querySelectorAll('.gameLibraryCb:checked'))
+                    .map(function (cb) { return cb.getAttribute('data-id'); });
+            }
             config.GamesRommUrl = view.querySelector('#GamesRommUrl').value.trim() || null;
             config.GamesRommToken = view.querySelector('#GamesRommToken').value.trim() || null;
             config.GamesRommLibraryId = view.querySelector('#GamesRommLibraryId').value || null;
 
-            collectActiveDefaults(view);
-            config.DefaultUserSettings = defaultsState.profiles.global;
             config.DefaultDeviceSettings = {};
             DEFAULTS_PROFILE_NAMES.slice(1).forEach(function (name) {
                 var profile = defaultsState.profiles[name];
@@ -3349,15 +3436,68 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 config.DefaultDeviceSettings[name] = countSetDefaults(profile) > 0 ? profile : null;
             });
 
-            return ApiClient.updatePluginConfiguration(PluginUniqueId, config).then(function (result) {
-                Dashboard.processPluginConfigurationUpdateResult(result);
+        }
+        var edit = {
+            visit: visit, profile: { liveTvSavedFilters: (defaultsState.profiles.global || {}).liveTvSavedFilters },
+            base: defaultsState.guidePinBase, changedPins: new Set()
+        };
+        var fields = {};
+        // Pin changes are already in the draft. Read the other controls after the configuration arrives.
+        var formRead = ApiClient.getPluginConfiguration(PluginUniqueId).then(function(config) {
+            if (visit !== guideGroupsVisit) throw new Error('Settings page changed before the save finished. Please save again.');
+            collectActiveDefaults(view);
+            collectForm(fields);
+            edit.profile = Object.assign({}, defaultsState.profiles.global, {
+                liveTvSavedFilters: edit.profile.liveTvSavedFilters
             });
-        }).catch(function (error) {
-            // Rethrown so runApplyDefaults, which chains on this, stops rather than
-            // pushing defaults the save never persisted.
-            reportConfigError(error);
-            return Promise.reject(error);
+            return config;
         });
+        var queue = defaultsState.pendingSaves || (defaultsState.pendingSaves = []);
+        var previous = queue[queue.length - 1];
+        queue.push(edit);
+        function save(results) {
+            // Keep submitted pin edits retryable even if the configuration read fails.
+            var pending = defaultsState.unconfirmedGuidePins;
+            if (pending && pending.visit === visit) {
+                pending.keys.forEach(function(key) { edit.changedPins.add(key); });
+            }
+            defaultsState.unconfirmedGuidePins = { visit: visit, keys: edit.changedPins };
+            var read = results[0];
+            if (read.status === 'rejected') throw read.reason;
+            // A preceding write can change the configuration after this form read.
+            var latest = previous ? ApiClient.getPluginConfiguration(PluginUniqueId) : Promise.resolve(read.value);
+            return latest.then(function (config) {
+                Object.assign(config, fields);
+                var saved = withGuidePinEdits(edit.profile, edit.base, camelKeysDeep(config.DefaultUserSettings), edit.changedPins);
+                config.DefaultUserSettings = saved;
+                return ApiClient.updatePluginConfiguration(PluginUniqueId, config).then(function (result) {
+                    defaultsState.unconfirmedGuidePins = null;
+                    // Apply each queued edit relative to the form submitted just before it.
+                    var previousPins = edit.profile.liveTvSavedFilters;
+                    var rebased = saved;
+                    queue.slice(1).forEach(function (next) {
+                        if (next.visit !== visit) return;
+                        var submittedPins = next.profile.liveTvSavedFilters;
+                        rebased = withGuidePinEdits(next.profile, previousPins, rebased, next.changedPins);
+                        next.profile = rebased;
+                        next.base = saved.liveTvSavedFilters;
+                        previousPins = submittedPins;
+                    });
+                    if (visit === guideGroupsVisit) {
+                        defaultsState.profiles.global = withGuidePinEdits(
+                            defaultsState.profiles.global, previousPins, rebased);
+                        defaultsState.guidePinBase = saved.liveTvSavedFilters;
+                        if (defaultsState.active === 'global') renderDefaultGuideGroups(view, defaultsState.profiles.global);
+                    }
+                    Dashboard.processPluginConfigurationUpdateResult(result);
+                });
+            });
+        }
+        edit.done = Promise.allSettled([formRead, previous && previous.done]).then(save).catch(function (error) {
+            reportConfigError(error);
+            throw error;
+        }).finally(function () { queue.shift(); });
+        return edit.done;
     }
 
     // Reads the User defaults form into d, the profile being edited.
@@ -3691,6 +3831,20 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.allGenresImageType = view.querySelector('#DefaultAllGenresImageType').value || null;
         d.audioSortOption = view.querySelector('#DefaultAudioSortOption').value || null;
         d.liveTvChannelSortBy = view.querySelector('#DefaultLiveTvChannelSortBy').value || null;
+        d.liveTvCategoryDisplay = view.querySelector('#DefaultLiveTvCategoryDisplay').value || null;
+        if (defaultsState.active === 'global') {
+            var inputs = Array.from(view.querySelectorAll('#DefaultPinnedGuideGroups input[data-guide-filter]:not(:disabled)'));
+            var visiblePins = inputs.map(function(input) { return input.getAttribute('data-guide-filter'); });
+            var selectedPins = inputs.filter(function(input) { return input.checked; })
+                .map(function(input) { return input.getAttribute('data-guide-filter'); });
+            // Keep shortcuts that this server's picker does not display.
+            var existingPins = Array.isArray(d.liveTvSavedFilters) ? d.liveTvSavedFilters : [];
+            var keptPins = existingPins.filter(function(key) {
+                return typeof key === 'string' && (!visiblePins.includes(key) || selectedPins.includes(key));
+            });
+            selectedPins.forEach(function(key) { if (!keptPins.includes(key)) keptPins.push(key); });
+            d.liveTvSavedFilters = keptPins.length || Array.isArray(d.liveTvSavedFilters) ? keptPins : null;
+        }
         d.epgMobileView = view.querySelector('#DefaultEpgMobileView').value || null;
         d.mediaBarOverlayColor = view.querySelector('#DefaultMediaBarOverlayColor').value || null;
         d.mediaBarOpacity = getNullableRangeInput(view, '#DefaultMediaBarOpacity');
@@ -6087,6 +6241,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
 
     // Settings that share a form field, or whose field isn't named Default plus the key.
     var SETTING_FIELD_IDS = {
+        liveTvSavedFilters: 'DefaultPinnedGuideGroups',
         homeBackdropEnabled: 'DefaultHomeBackdropStyle',
         episodePreviewEnabled: 'DefaultMediaPreviewMode',
         homeSections: 'DefaultHomeRowOrder',
@@ -6397,14 +6552,22 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var profiles = kind === 'apply' ? defaultsState.profiles : state.source || {};
         var fromName = state.from ? userName(state.from) : '';
         return DEFAULTS_PROFILE_NAMES.map(function(name) {
-            var count = countSetDefaults(profiles[name]);
+            var profile = profiles[name];
+            var hiddenPins = kind === 'copy' && name === 'global' ? profiles.liveTvSavedFilterExclusions : null;
+            if (Array.isArray(hiddenPins) && hiddenPins.length && profile && Array.isArray(profile.liveTvSavedFilters)) {
+                // The copy API uses one key for personal pins and hidden defaults.
+                profile = Object.assign({}, profile, {
+                    liveTvSavedFilters: profile.liveTvSavedFilters.length + ' pinned, ' + hiddenPins.length + ' hidden'
+                });
+            }
+            var count = countSetDefaults(profile);
             return {
                 name: name,
                 label: DEFAULTS_PROFILE_LABELS[name],
                 count: count,
                 on: count > 0 && !state.off[name],
                 sub: count ? count + ' set' : kind === 'apply' ? 'No defaults set' : fromName ? fromName + ' has none' : 'Pick a user',
-                profile: profiles[name]
+                profile: profile
             };
         });
     }
@@ -6518,7 +6681,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 : 'From ' + userName(state.from) + '\'s ' + names + (entries.length > 1 ? ' profiles' : ' profile'),
             note: kind === 'apply'
                 ? 'Only settings that have a default are listed. A setting left on Not set has nothing to push.'
-                : 'Only settings ' + userName(state.from) + ' has saved are listed. API keys and hidden items are never copied.',
+                : 'Only settings ' + userName(state.from) + ' has saved are listed. API keys and items hidden from Continue Watching or Next Up are never copied.',
             rows: rows,
             picked: picked && picked.length ? picked : null
         }).then(function(result) {
@@ -6904,6 +7067,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     };
 
     View.prototype.onPause = function () {
+        guideGroupsVisit++;
         var view = this.view;
         if (view.__moonfinState && view.__moonfinState.timer) {
             clearInterval(view.__moonfinState.timer);
