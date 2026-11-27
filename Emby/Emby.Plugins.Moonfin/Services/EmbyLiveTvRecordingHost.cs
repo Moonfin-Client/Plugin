@@ -279,7 +279,7 @@ namespace Emby.Plugins.Moonfin.Services
                     ? added[0]
                     : added.FirstOrDefault(r => r.SeriesId != null && r.SeriesId == defaults.SeriesId)
                         ?? added.FirstOrDefault(r => r.Name == defaults.Name);
-                return new SeriesRuleCreation(rule?.Id ?? (string.IsNullOrEmpty(created?.Id) ? null : created!.Id));
+                return new SeriesRuleCreation(rule?.Id ?? (string.IsNullOrEmpty(created?.Id) ? null : created!.Id), Accepted: true);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {

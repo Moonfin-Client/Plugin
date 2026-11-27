@@ -72,6 +72,15 @@ public sealed class OwnershipStoreData
     /// <summary>When each owned series rule was first found missing from the server's listing.</summary>
     public Dictionary<string, DateTime> SeriesTimersMissingSince { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Owners of programs the server agreed to record but hadn't listed a timer for yet, kept until a
+    /// listing has it.
+    /// </summary>
+    public List<PendingTimerOwners> PendingTimerOwners { get; set; } = new();
+
+    /// <summary>Owners of series rules the server created from a program but hadn't listed yet, by that program.</summary>
+    public List<PendingTimerOwners> PendingSeriesOwners { get; set; } = new();
+
     /// <summary>Members a newer plugin wrote that this one doesn't know, kept so a save doesn't drop them.</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -104,9 +113,10 @@ public sealed record OwnershipOutcome(string Id, IReadOnlyList<OwnerInfo> Owners
 
 /// <summary>
 /// A series rule the host created: its API id, or null when it couldn't be created or found, with
-/// the server's reason when it refused.
+/// the server's reason when it refused. Accepted is whether the server took the rule, so a null id
+/// with it set means the rule exists but wasn't found yet.
 /// </summary>
-public readonly record struct SeriesRuleCreation(string? RuleId, string? Error = null)
+public readonly record struct SeriesRuleCreation(string? RuleId, string? Error = null, bool Accepted = false)
 {
     public static SeriesRuleCreation Failed(string? error) => new(null, string.IsNullOrWhiteSpace(error) ? null : error);
 }

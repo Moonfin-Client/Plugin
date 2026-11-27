@@ -63,6 +63,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     /// </summary>
     public static readonly TimeSpan PostRecordingAllowance = TimeSpan.FromHours(1);
 
+    /// <summary>How long owners wait for the server to list a timer or rule it agreed to make.</summary>
+    public static readonly TimeSpan PendingOwnersRetention = TimeSpan.FromDays(2);
+
     private const string StatusCancelled = "Cancelled";
     private const string StatusCompleted = "Completed";
     private const string StatusInProgress = "InProgress";
@@ -228,7 +231,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             var timerId = result.ApiId ?? (timer != null ? ApiIdOf(timer) : null);
             if (timerId == null)
             {
-                _logger.Warn(null, "Scheduled program {ProgramId} for user {UserId} but could not find its timer, so it has no owner", programId, userId);
+                AddPending(data.PendingTimerOwners, programId, userId);
+                Save(data);
+                _logger.Warn(null, "Scheduled program {ProgramId} for user {UserId} but the server doesn't list its timer yet; it gets its owner once it does", programId, userId);
                 return new OwnershipAttempt(null);
             }
 
@@ -291,7 +296,17 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 ruleId = creation.RuleId;
                 if (ruleId == null)
                 {
-                    _logger.Warn(null, "Could not create a series rule from program {ProgramId} for user {UserId}", programId, userId);
+                    if (creation.Accepted)
+                    {
+                        AddPending(data.PendingSeriesOwners, programId, userId);
+                        Save(data);
+                        _logger.Warn(null, "Created a series rule from program {ProgramId} for user {UserId} but the server doesn't list it yet; it gets its owner once it does", programId, userId);
+                    }
+                    else
+                    {
+                        _logger.Warn(null, "Could not create a series rule from program {ProgramId} for user {UserId}", programId, userId);
+                    }
+
                     return new OwnershipAttempt(null, creation.Error);
                 }
 
@@ -558,6 +573,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             var cutoff = now - RemovedRetention;
 
             changed |= RekeyServiceIds(data);
+            changed |= ResolvePendingOwners(data, timers, rules, now);
             changed |= ApplySeriesOwners(data, timers);
 
             foreach (var timer in timers)
@@ -571,6 +587,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             if (!_reconciled)
             {
                 changed |= ReconcileItems(data, now);
+                changed |= await RecheckOwnersAsync(data, ct).ConfigureAwait(false);
                 _reconciled = true;
             }
 
@@ -876,21 +893,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             _userNames.TryGetValue(userId, out var name);
             var ownedItems = data.Items.Where(e => e.Value.Contains(userId)).Select(e => e.Key).ToList();
 
-            var changed = RemoveOwner(data.Timers, userId);
-            changed |= RemoveOwner(data.SeriesTimers, userId);
-            changed |= RemoveOwner(data.Items, userId);
-            foreach (var entry in data.Removed.ToList())
-            {
-                if (entry.Value.Owners.Remove(userId))
-                {
-                    changed = true;
-                    if (entry.Value.Owners.Count == 0)
-                    {
-                        data.Removed.Remove(entry.Key);
-                    }
-                }
-            }
-
+            var changed = RemoveUser(data, userId);
             if (changed)
             {
                 Save(data);
@@ -1028,6 +1031,169 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     map.Remove(entry.Key);
                 }
             }
+        }
+
+        return changed;
+    }
+
+    // Takes a user out of every owner list, including those still waiting for their timer or rule.
+    private static bool RemoveUser(OwnershipStoreData data, Guid userId)
+    {
+        var changed = RemoveOwner(data.Timers, userId);
+        changed |= RemoveOwner(data.SeriesTimers, userId);
+        changed |= RemoveOwner(data.Items, userId);
+        foreach (var entry in data.Removed.ToList())
+        {
+            if (entry.Value.Owners.Remove(userId))
+            {
+                changed = true;
+                if (entry.Value.Owners.Count == 0)
+                {
+                    data.Removed.Remove(entry.Key);
+                }
+            }
+        }
+
+        foreach (var pending in data.PendingTimerOwners.Concat(data.PendingSeriesOwners).ToList())
+        {
+            changed |= pending.Owners.Remove(userId);
+        }
+
+        changed |= data.PendingTimerOwners.RemoveAll(p => p.Owners.Count == 0) > 0;
+        changed |= data.PendingSeriesOwners.RemoveAll(p => p.Owners.Count == 0) > 0;
+        return changed;
+    }
+
+    private void AddPending(List<PendingTimerOwners> pending, string programId, Guid userId)
+    {
+        var entry = pending.FirstOrDefault(p => string.Equals(p.ProgramId, programId, StringComparison.OrdinalIgnoreCase));
+        if (entry == null)
+        {
+            pending.Add(new PendingTimerOwners { ProgramId = programId, Owners = { userId }, Since = _utcNow() });
+        }
+        else if (!entry.Owners.Contains(userId))
+        {
+            entry.Owners.Add(userId);
+        }
+    }
+
+    // Owners of a timer or rule the server took but hadn't listed go on once a listing has it.
+    private bool ResolvePendingOwners(OwnershipStoreData data, IReadOnlyList<ScheduledTimer> timers, IReadOnlyList<SeriesRule> rules, DateTime now)
+    {
+        var changed = false;
+        foreach (var pending in data.PendingTimerOwners.ToList())
+        {
+            if (FindLiveTimerForProgram(timers, pending.ProgramId) is { } timer)
+            {
+                var timerId = ApiIdOf(timer);
+                AddOwners(data.Timers, timerId, pending.Owners);
+                Track(data, timer);
+                data.PendingTimerOwners.Remove(pending);
+                _logger.Info("The server now lists timer {TimerId} for program {ProgramId}; added its {Count} waiting owner(s)", timerId, pending.ProgramId, pending.Owners.Count);
+                changed = true;
+            }
+            else if (now - pending.Since > PendingOwnersRetention)
+            {
+                _logger.Warn(null, "Gave up adding the owners of program {ProgramId} to its timer; the server never listed one", pending.ProgramId);
+                data.PendingTimerOwners.Remove(pending);
+                changed = true;
+            }
+        }
+
+        foreach (var pending in data.PendingSeriesOwners.ToList())
+        {
+            var ruleId = rules.FirstOrDefault(r => string.Equals(r.ProgramId, pending.ProgramId, StringComparison.OrdinalIgnoreCase))?.Id
+                ?? (_host.GetProgram(pending.ProgramId) is { } program ? FindRuleForSeries(program, timers, rules) : null);
+            if (ruleId != null)
+            {
+                AddOwners(data.SeriesTimers, ruleId, pending.Owners);
+                data.PendingSeriesOwners.Remove(pending);
+                _logger.Info("The server now lists series rule {RuleId} for program {ProgramId}; added its {Count} waiting owner(s)", ruleId, pending.ProgramId, pending.Owners.Count);
+                changed = true;
+            }
+            else if (now - pending.Since > PendingOwnersRetention)
+            {
+                _logger.Warn(null, "Gave up adding the owners of the series of program {ProgramId} to its rule; the server never listed one", pending.ProgramId);
+                data.PendingSeriesOwners.Remove(pending);
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    // Renames and deletions raise events only while the feature is on and the server is up, so the
+    // first pass after either checks every stored owner: one the server no longer has leaves every
+    // owner list, and a recording whose owner tags name someone no longer among its owners has them
+    // replaced by its owners' current names.
+    private async Task<bool> RecheckOwnersAsync(OwnershipStoreData data, CancellationToken ct)
+    {
+        var owned = data.Items.Keys.ToList();
+        var stored = data.Timers.Values
+            .Concat(data.SeriesTimers.Values)
+            .Concat(data.Items.Values)
+            .Concat(data.Removed.Values.Select(r => r.Owners))
+            .Concat(data.PendingTimerOwners.Concat(data.PendingSeriesOwners).Select(p => p.Owners))
+            .SelectMany(o => o)
+            .Distinct()
+            .ToList();
+
+        var changed = false;
+        foreach (var userId in stored.Where(UserIsGone).ToList())
+        {
+            changed |= RemoveUser(data, userId);
+            _userNames.Remove(userId);
+            _logger.Info("User {UserId} no longer exists; removed them from every recording owner list", userId);
+        }
+
+        foreach (var itemId in owned)
+        {
+            IReadOnlyList<string>? tags;
+            try
+            {
+                tags = _host.GetTags(itemId);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.Warn(ex, "Could not read the tags of recording {ItemId}", itemId);
+                continue;
+            }
+
+            if (tags == null)
+            {
+                continue;
+            }
+
+            var users = (data.Items.TryGetValue(itemId, out var owners) ? owners : new List<Guid>()).Select(TryGetUser).ToList();
+            if (users.Any(u => u == null))
+            {
+                // An owner's name can't be read, so a tag that looks stale may still be theirs.
+                continue;
+            }
+
+            var expected = users.Select(u => TagPrefix + u!.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var stale = tags.Where(t => IsOwnerTag(t) && !expected.Contains(t)).ToList();
+            if (stale.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var tag in stale)
+            {
+                await SetTagAsync(itemId, tag, false, ct).ConfigureAwait(false);
+            }
+
+            foreach (var tag in expected.Where(t => !tags.Contains(t, StringComparer.OrdinalIgnoreCase)))
+            {
+                await SetTagAsync(itemId, tag, true, ct).ConfigureAwait(false);
+            }
+
+            _logger.Info("Replaced {Count} out-of-date owner tag(s) on recording {ItemId}", stale.Count, itemId);
+        }
+
+        foreach (var user in _host.GetUsers())
+        {
+            _userNames[user.Id] = user.Name;
         }
 
         return changed;
@@ -2007,8 +2173,15 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         TimerServiceIds = CopyStrings(read.TimerServiceIds),
         TimersMissingSince = new Dictionary<string, DateTime>(read.TimersMissingSince ?? new Dictionary<string, DateTime>(), StringComparer.OrdinalIgnoreCase),
         SeriesTimersMissingSince = new Dictionary<string, DateTime>(read.SeriesTimersMissingSince ?? new Dictionary<string, DateTime>(), StringComparer.OrdinalIgnoreCase),
+        PendingTimerOwners = CopyPending(read.PendingTimerOwners),
+        PendingSeriesOwners = CopyPending(read.PendingSeriesOwners),
         Extra = read.Extra,
     };
+
+    private static List<PendingTimerOwners> CopyPending(List<PendingTimerOwners>? source) =>
+        (source ?? new List<PendingTimerOwners>())
+            .Where(p => p != null && !string.IsNullOrEmpty(p.ProgramId) && p.Owners is { Count: > 0 })
+            .ToList();
 
     private static Dictionary<string, string> CopyStrings(Dictionary<string, string>? source) =>
         new(
@@ -2087,6 +2260,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         {
             rebuilt.SeriesTimersMissingSince[entry.Key] = entry.Value;
         }
+
+        rebuilt.PendingTimerOwners.AddRange(changes.PendingTimerOwners);
+        rebuilt.PendingSeriesOwners.AddRange(changes.PendingSeriesOwners);
     }
 
     // Rebuilds the recordings' owners from their "Recorded by name" tags. Timer and rule owners

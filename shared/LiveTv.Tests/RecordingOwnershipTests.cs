@@ -2065,6 +2065,149 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
+    public async Task RecordProgram_TimerListedLate_OwnerReachesItOnTheNextSync()
+    {
+        AddProgram("p1", Start);
+        _host.ScheduleReturnsNoIds = true;
+        _host.ScheduledTimersHidden = true;
+        var service = NewService();
+
+        var attempt = await service.TryRecordProgramAsync("p1", Jordan, CancellationToken.None);
+        Assert.Null(attempt.Outcome);
+        Assert.Single(ReadStore().PendingTimerOwners);
+
+        _host.RevealScheduledTimers();
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
+        Assert.Empty(ReadStore().PendingTimerOwners);
+    }
+
+    [Fact]
+    public async Task RecordProgram_TimerNeverListed_PendingOwnerLapses()
+    {
+        AddProgram("p1", Start);
+        _host.ScheduleReturnsNoIds = true;
+        _host.ScheduledTimersHidden = true;
+        var service = NewService();
+        await service.TryRecordProgramAsync("p1", Jordan, CancellationToken.None);
+
+        _clock.Advance(RecordingOwnershipService.PendingOwnersRetention + TimeSpan.FromMinutes(1));
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Empty(ReadStore().PendingTimerOwners);
+        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
+    }
+
+    [Fact]
+    public async Task RecordSeries_RuleListedLate_OwnerReachesItOnTheNextSync()
+    {
+        AddProgram("p1", Start);
+        _host.SeriesRulesHidden = true;
+        var service = NewService();
+
+        var attempt = await service.TryRecordSeriesAsync("p1", Jordan, null, CancellationToken.None);
+        Assert.Null(attempt.Outcome);
+        Assert.Single(ReadStore().PendingSeriesOwners);
+
+        _host.RevealSeriesRules();
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "rule-1" }, (await service.GetMineAsync(Jordan, CancellationToken.None)).SeriesTimerIds);
+        Assert.Empty(ReadStore().PendingSeriesOwners);
+    }
+
+    [Fact]
+    public async Task RecordSeries_RefusedWithoutReason_KeepsNoPendingOwner()
+    {
+        AddProgram("p1", Start);
+        _host.SeriesCreationError = " ";
+        var service = NewService();
+
+        var attempt = await service.TryRecordSeriesAsync("p1", Jordan, null, CancellationToken.None);
+
+        Assert.Null(attempt.Outcome);
+        Assert.Empty(ReadStoreOrEmpty().PendingSeriesOwners);
+    }
+
+    [Fact]
+    public async Task UserRenamedWhileOff_TagIsSwappedWhenTurnedBackOn()
+    {
+        var item = _host.AddItem("/rec/a.ts");
+        var service = NewService();
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        _enabled = false;
+        var renamed = new ServerUser(Jordan, "Grandpa", "jordan-tag", false);
+        _host.Users[_host.Users.FindIndex(u => u.Id == Jordan)] = renamed;
+        await service.OnUserUpdatedAsync(renamed, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+
+        _enabled = true;
+        await service.SyncAsync(CancellationToken.None);
+        Assert.Equal(new[] { "Recorded by Grandpa" }, TagsOf(item));
+
+        // Later renames go by the name it now knows.
+        var again = new ServerUser(Jordan, "Gramps", "jordan-tag", false);
+        _host.Users[_host.Users.FindIndex(u => u.Id == Jordan)] = again;
+        await service.OnUserUpdatedAsync(again, CancellationToken.None);
+        Assert.Equal(new[] { "Recorded by Gramps" }, TagsOf(item));
+    }
+
+    [Fact]
+    public async Task UserRenamedWhileServerWasDown_TagIsSwappedOnTheFirstSync()
+    {
+        var item = _host.AddItem("/rec/a.ts");
+        await NewService().ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+
+        _host.Users[_host.Users.FindIndex(u => u.Id == Jordan)] = new ServerUser(Jordan, "Grandpa", "jordan-tag", false);
+        await NewService().SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "Recorded by Grandpa" }, TagsOf(item));
+    }
+
+    [Fact]
+    public async Task UserDeletedWhileOff_LeavesOwnersAndTagsWhenTurnedBackOn()
+    {
+        var item = _host.AddItem("/rec/a.ts");
+        var service = NewService();
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Alex, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        _enabled = false;
+        _host.Users.RemoveAll(u => u.Id == Jordan);
+        await service.OnUserDeletedAsync(Jordan, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        _enabled = true;
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
+    }
+
+    [Fact]
+    public async Task UserLookupFailsWhenTurnedBackOn_KeepsOwnersAndTags()
+    {
+        var item = _host.AddItem("/rec/a.ts");
+        var service = NewService();
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+        await service.SyncAsync(CancellationToken.None);
+
+        _enabled = false;
+        await service.SyncAsync(CancellationToken.None);
+        _host.UserLookupUnknown = true;
+        _enabled = true;
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
+        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+    }
+
+    [Fact]
     public async Task GetUsersThrows_RecordStillSchedulesAndOwns()
     {
         AddProgram("p1", Start);

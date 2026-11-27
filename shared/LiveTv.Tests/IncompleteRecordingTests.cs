@@ -118,9 +118,15 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     {
         if (SeriesCreationError != null) return Task.FromResult(SeriesRuleCreation.Failed(SeriesCreationError));
         SeriesCreations.Add((programId, overrides));
-        var rule = new SeriesRule("rule-" + (SeriesRules.Count + 1), null, programId);
+        var rule = new SeriesRule("rule-" + (SeriesRules.Count + HiddenSeriesRules.Count + 1), null, programId, ProgramId: programId);
+        if (SeriesRulesHidden)
+        {
+            HiddenSeriesRules.Add(rule);
+            return Task.FromResult(new SeriesRuleCreation(null, Accepted: true));
+        }
+
         SeriesRules.Add(rule);
-        return Task.FromResult(new SeriesRuleCreation(rule.Id));
+        return Task.FromResult(new SeriesRuleCreation(rule.Id, Accepted: true));
     }
 
     /// <summary>Library items that are not Live TV recordings; every other existing item is one.</summary>
@@ -210,6 +216,18 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         ScheduledTimersHidden = false;
         Timers.AddRange(HiddenTimers);
         HiddenTimers.Clear();
+    }
+
+    /// <summary>New series rules are left out of listings until <see cref="RevealSeriesRules"/>.</summary>
+    public bool SeriesRulesHidden { get; set; }
+
+    public List<SeriesRule> HiddenSeriesRules { get; } = new();
+
+    public void RevealSeriesRules()
+    {
+        SeriesRulesHidden = false;
+        SeriesRules.AddRange(HiddenSeriesRules);
+        HiddenSeriesRules.Clear();
     }
 
     public void RaiseItemAdded(LibraryItem item) => ItemAdded?.Invoke(this, item);

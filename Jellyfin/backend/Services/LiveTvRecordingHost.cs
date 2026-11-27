@@ -427,7 +427,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
             var created = (await GetSeriesTimersAsync(cancellationToken).ConfigureAwait(false))
                 .Where(r => !before.Contains(r.Id))
                 .ToList();
-            return new SeriesRuleCreation((created.Count == 1 ? created[0] : created.FirstOrDefault(r => r.Name == rule.Name))?.Id);
+            return new SeriesRuleCreation((created.Count == 1 ? created[0] : created.FirstOrDefault(r => r.Name == rule.Name))?.Id, Accepted: true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
