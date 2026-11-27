@@ -36,8 +36,6 @@ namespace Emby.Plugins.Moonfin
         public SeerrSessionService? SeerrService { get; private set; }
         public MdbListCacheService? MdbListCache { get; private set; }
         public MdbListListsCacheService? MdbListListsCache { get; private set; }
-        public ImdbListsCacheService? ImdbListsCache { get; private set; }
-        public ImdbChartFetcher? ImdbChartFetcher { get; private set; }
         public CustomRowCacheService? CustomRowCache { get; private set; }
         public TmdbRatingCacheService? TmdbRatingCache { get; private set; }
         public TmdbRatingService? TmdbRatings { get; private set; }
@@ -236,8 +234,6 @@ namespace Emby.Plugins.Moonfin
             SeerrService = new SeerrSessionService(seerrLogger);
             MdbListCache = new MdbListCacheService(mdbLogger);
             MdbListListsCache = new MdbListListsCacheService(mdbLogger);
-            ImdbListsCache = new ImdbListsCacheService(mdbLogger);
-            ImdbChartFetcher = new ImdbChartFetcher(mdbLogger);
             CustomRowCache = new CustomRowCacheService(mdbLogger);
             var configManager = appHost.Resolve<IServerConfigurationManager>();
             TmdbRatingCache = new TmdbRatingCacheService(mdbLogger);

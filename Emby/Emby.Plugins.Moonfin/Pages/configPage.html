@@ -2495,16 +2495,6 @@
                                 Cap on items cached per official list (default 250).
                             </div>
                         </div>
-                        <div class="checkboxContainer">
-                            <label>
-                                <input type="checkbox" id="ImdbListsEnabled" is="emby-checkbox" />
-                                <span>Enable IMDb chart home rows</span>
-                            </label>
-                            <div class="fieldDescription">
-                                Fetches IMDb charts (Top 250 movies/TV, Most Popular, and similar) on a schedule so clients
-                                can show them as home rows and custom rows can resolve the IMDb source. No API key required.
-                            </div>
-                        </div>
                     </div>
 
                     <div class="verticalSection">
@@ -2894,6 +2884,26 @@
                                     <option value="true">Yes</option>
                                     <option value="false">No</option>
                                 </select>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultTopNavbarStyle">Top Bar Style</label>
+                                <select id="DefaultTopNavbarStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="classic">Classic</option>
+                                    <option value="tabline">Tabline</option>
+                                    <option value="atlas">Atlas</option>
+                                </select>
+                                <div class="fieldDescription">Devices with the Top navigation style.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultSidebarStyle">Sidebar Style</label>
+                                <select id="DefaultSidebarStyle" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="classic">Classic</option>
+                                    <option value="reel">Reel</option>
+                                    <option value="mosaic">Mosaic</option>
+                                </select>
+                                <div class="fieldDescription">Devices with the Left navigation style.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultBottomNavbarStyle">Bottom Bar Style</label>

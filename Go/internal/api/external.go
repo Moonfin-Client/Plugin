@@ -33,7 +33,7 @@ type external struct {
 	// its answer, since every fetch counts against the MDBList key's quota.
 	watchingNow sync.Mutex
 
-	imdbBase, letterboxdBase string
+	letterboxdBase string
 }
 
 func newExternal() external {
@@ -44,7 +44,6 @@ func newExternal() external {
 		tmdbBase:    "https://api.themoviedb.org",
 		cache:       ttlCache{m: map[string]cached{}},
 
-		imdbBase:       "https://caching.graphql.imdb.com/",
 		letterboxdBase: "https://letterboxd.com",
 	}
 }

@@ -132,6 +132,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("genresRowItemFilter")] public string? GenresRowItemFilter { get; set; }
         [JsonPropertyName("navbarAlwaysExpanded")] public bool? NavbarAlwaysExpanded { get; set; }
         [JsonPropertyName("bottomNavbarStyle")] public string? BottomNavbarStyle { get; set; }
+        [JsonPropertyName("topNavbarStyle")] public string? TopNavbarStyle { get; set; }
+        [JsonPropertyName("sidebarStyle")] public string? SidebarStyle { get; set; }
         [JsonPropertyName("bottomNavbarTabs")] public List<string>? BottomNavbarTabs { get; set; }
         [JsonPropertyName("mediaBarTrailerCaptions")] public bool? MediaBarTrailerCaptions { get; set; }
         [JsonPropertyName("detailScreenStyle")] public string? DetailScreenStyle { get; set; }
@@ -307,7 +309,6 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("imdbMostPopularMoviesEnabled")] public bool? ImdbMostPopularMoviesEnabled { get; set; }
         [JsonPropertyName("imdbMostPopularTvShowsEnabled")] public bool? ImdbMostPopularTvShowsEnabled { get; set; }
         [JsonPropertyName("imdbLowestRatedMoviesEnabled")] public bool? ImdbLowestRatedMoviesEnabled { get; set; }
-        [JsonPropertyName("imdbTopEnglishMoviesEnabled")] public bool? ImdbTopEnglishMoviesEnabled { get; set; }
         [JsonPropertyName("tmdbPopularMoviesEnabled")] public bool? TmdbPopularMoviesEnabled { get; set; }
         [JsonPropertyName("tmdbTopRatedMoviesEnabled")] public bool? TmdbTopRatedMoviesEnabled { get; set; }
         [JsonPropertyName("tmdbNowPlayingMoviesEnabled")] public bool? TmdbNowPlayingMoviesEnabled { get; set; }

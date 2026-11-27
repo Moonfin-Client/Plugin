@@ -8,7 +8,6 @@ namespace Emby.Plugins.Moonfin.Services
 {
     /// <summary>
     /// File-backed cache for fully custom home rows, keyed by "source:type:paramHash".
-    /// Mirrors <see cref="ImdbListsCacheService"/>.
     /// </summary>
     public class CustomRowCacheService : FileBackedCache<CustomRowCacheEntry>
     {

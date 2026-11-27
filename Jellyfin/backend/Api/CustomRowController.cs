@@ -99,9 +99,7 @@ public class CustomRowController : ControllerBase
         // The cache is shared, so the user's own parental limit is applied to a copy on the way out.
         var limit = _ratingLimits.ForUser(userId.Value);
 
-        // IMDb charts keep their own daily cache, which the sync task refreshes, so a copy kept
-        // here could be from before the last refresh.
-        if (!refresh && source != "imdb")
+        if (!refresh)
         {
             var cachedItems = _cacheService.TryGet(cacheKey, CacheTtl);
             if (cachedItems != null)

@@ -7,7 +7,7 @@ package pluginconfig
 func Defaults() map[string]any {
 	return map[string]any{
 		"EnableSettingsSync": true, "SeerrEnabled": false, "JellyseerrEnabled": false,
-		"MdblistOfficialListsEnabled": true, "ImdbListsEnabled": true, "MdblistOfficialListsMaxItems": 250,
+		"MdblistOfficialListsEnabled": true, "MdblistOfficialListsMaxItems": 250,
 		"RecommendationsProviderEnabled": true, "StudioLogosEnabled": true, "StudioLogosMaxAgeDays": 30,
 		"AnimeMarkersEnabled": false, "AnimeMarkerLibraryIds": []any{}, "AnimeMarkerRecapLookup": true,
 		"AnimeMarkerMaxAgeDays": 30, "AnimeMarkerVerboseLogging": false, "AnimeAudioMarkersEnabled": false,

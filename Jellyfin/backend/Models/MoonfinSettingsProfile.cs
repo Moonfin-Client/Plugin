@@ -108,6 +108,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("bottomNavbarStyle")]
     public string? BottomNavbarStyle { get; set; }
 
+    [JsonPropertyName("topNavbarStyle")]
+    public string? TopNavbarStyle { get; set; }
+
+    [JsonPropertyName("sidebarStyle")]
+    public string? SidebarStyle { get; set; }
+
     // Up to three tab ids, empty lets the client pick them from the nav button toggles.
     [JsonPropertyName("bottomNavbarTabs")]
     public List<string>? BottomNavbarTabs { get; set; }
@@ -883,9 +889,6 @@ public class MoonfinSettingsProfile
 
     [JsonPropertyName("imdbLowestRatedMoviesEnabled")]
     public bool? ImdbLowestRatedMoviesEnabled { get; set; }
-
-    [JsonPropertyName("imdbTopEnglishMoviesEnabled")]
-    public bool? ImdbTopEnglishMoviesEnabled { get; set; }
 
     [JsonPropertyName("tmdbPopularMoviesEnabled")]
     public bool? TmdbPopularMoviesEnabled { get; set; }
