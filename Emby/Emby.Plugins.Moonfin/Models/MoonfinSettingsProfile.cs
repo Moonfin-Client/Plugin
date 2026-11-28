@@ -137,6 +137,8 @@ namespace Emby.Plugins.Moonfin.Models
         [JsonPropertyName("bottomNavbarTabs")] public List<string>? BottomNavbarTabs { get; set; }
         [JsonPropertyName("mediaBarTrailerCaptions")] public bool? MediaBarTrailerCaptions { get; set; }
         [JsonPropertyName("detailScreenStyle")] public string? DetailScreenStyle { get; set; }
+        [JsonPropertyName("detailOriginalTitleMode")] public string? DetailOriginalTitleMode { get; set; }
+        [JsonPropertyName("libraryOriginalTitleMode")] public string? LibraryOriginalTitleMode { get; set; }
         [JsonPropertyName("libraryStyle")] public string? LibraryStyle { get; set; }
         [JsonPropertyName("bookLibraryStyle")] public string? BookLibraryStyle { get; set; }
         [JsonPropertyName("musicLibraryStyle")] public string? MusicLibraryStyle { get; set; }

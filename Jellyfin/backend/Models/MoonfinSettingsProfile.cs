@@ -127,6 +127,12 @@ public class MoonfinSettingsProfile
     [JsonPropertyName("detailScreenStyle")]
     public string? DetailScreenStyle { get; set; }
 
+    [JsonPropertyName("detailOriginalTitleMode")]
+    public string? DetailOriginalTitleMode { get; set; }
+
+    [JsonPropertyName("libraryOriginalTitleMode")]
+    public string? LibraryOriginalTitleMode { get; set; }
+
     [JsonPropertyName("libraryStyle")]
     public string? LibraryStyle { get; set; }
 

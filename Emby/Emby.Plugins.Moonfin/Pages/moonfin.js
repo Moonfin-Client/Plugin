@@ -2932,6 +2932,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         setSelectValue(view, '#DefaultInterfaceStyle', defaults.interfaceStyle, 'Configured style');
         setSelectValue(view, '#DefaultVisualTheme', defaults.customThemeId ? 'custom:' + defaults.customThemeId : defaults.visualTheme, 'Configured theme');
         setSelectValue(view, '#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
+        setSelectValue(view, '#DefaultDetailOriginalTitleMode', defaults.detailOriginalTitleMode, 'Configured mode');
+        setSelectValue(view, '#DefaultLibraryOriginalTitleMode', defaults.libraryOriginalTitleMode, 'Configured mode');
         setNullableBoolSelect(view, '#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
         setNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
         setSelectValue(view, '#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
@@ -3368,6 +3370,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         d.visualTheme = uploadedTheme ? null : theme || null;
         d.customThemeId = uploadedTheme ? theme.slice(7) : null;
         d.detailScreenStyle = view.querySelector('#DefaultDetailScreenStyle').value || null;
+        d.detailOriginalTitleMode = view.querySelector('#DefaultDetailOriginalTitleMode').value || null;
+        d.libraryOriginalTitleMode = view.querySelector('#DefaultLibraryOriginalTitleMode').value || null;
         d.detailExpandedTabs = getNullableBoolSelect(view, '#DefaultDetailExpandedTabs');
         d.detailShowTechnicalDetails = getNullableBoolSelect(view, '#DefaultDetailShowTechnicalDetails');
         d.recommendationSystemSource = view.querySelector('#DefaultRecommendationSystemSource').value || null;
