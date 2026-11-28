@@ -110,7 +110,6 @@ public sealed class RecordingOwnershipWatcher : IDisposable
         _host.GuideRefreshed += OnGuideRefreshed;
         _host.ItemAdded += OnItemAdded;
         _host.ItemRemoved += OnItemRemoved;
-        _host.UserUpdated += OnUserUpdated;
         _host.UserDeleted += OnUserDeleted;
 
         try
@@ -144,7 +143,6 @@ public sealed class RecordingOwnershipWatcher : IDisposable
             _host.GuideRefreshed -= OnGuideRefreshed;
             _host.ItemAdded -= OnItemAdded;
             _host.ItemRemoved -= OnItemRemoved;
-            _host.UserUpdated -= OnUserUpdated;
             _host.UserDeleted -= OnUserDeleted;
         }
     }
@@ -380,8 +378,6 @@ public sealed class RecordingOwnershipWatcher : IDisposable
     private void OnItemAdded(object? sender, LibraryItem item) => Handle(() => _service.OnItemAddedAsync(item, CancellationToken.None));
 
     private void OnItemRemoved(object? sender, Guid itemId) => Handle(() => _service.OnItemRemovedAsync(itemId, CancellationToken.None));
-
-    private void OnUserUpdated(object? sender, ServerUser user) => Handle(() => _service.OnUserUpdatedAsync(user, CancellationToken.None));
 
     private void OnUserDeleted(object? sender, Guid userId) => Handle(() => _service.OnUserDeletedAsync(userId, CancellationToken.None));
 

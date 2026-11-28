@@ -100,7 +100,7 @@ public sealed class IncompleteRecordingService : IDisposable
 
     private DateTime Now => _utcNow();
 
-    // How long owners wait for a scheduled showing's timer to be listed before they're dropped.
+    // How long owners wait here for the owners store to take them before they're dropped.
     private static readonly TimeSpan PendingOwnersRetention = TimeSpan.FromDays(2);
 
     public void Dispose() => _lock.Dispose();
@@ -201,6 +201,7 @@ public sealed class IncompleteRecordingService : IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            HandOverPendingOwners();
             if (!_settings().Enabled)
             {
                 // Checked again at the safety-net interval, so turning detection back on is picked up.
@@ -739,9 +740,10 @@ public sealed class IncompleteRecordingService : IDisposable
             }
             else
             {
-                if (!ShareOwners(new[] { userId }, timerId) && _owners != null)
+                // No request to hold the owner, so the owners store keeps it until the server
+                // lists the timer. One it can't take now is kept here and handed over later.
+                if (_owners != null && !ShareOwners(new[] { userId }, timerId) && !ShareProgramOwners(candidate.Id, new[] { userId }))
                 {
-                    // No request to hold the owner: the store keeps it until it can be handed over.
                     data.PendingTimerOwners.Add(new PendingTimerOwners { ProgramId = candidate.Id, Owners = { userId }, Since = Now });
                     Save(data);
                 }
@@ -870,6 +872,57 @@ public sealed class IncompleteRecordingService : IDisposable
         }
     }
 
+    private bool ShareProgramOwners(string programId, IReadOnlyCollection<Guid> owners)
+    {
+        if (_owners == null || owners.Count == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            _owners.AddProgramOwners(programId, owners);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warn(ex, "Could not hand the owners of program {ProgramId} to the owners store", programId);
+            return false;
+        }
+    }
+
+    // Owners the owners store couldn't take when their showing was scheduled. Done before the
+    // detection check, so they reach their timer with detection off too.
+    private void HandOverPendingOwners()
+    {
+        if (_owners == null)
+        {
+            return;
+        }
+
+        var data = Load();
+        var changed = false;
+        foreach (var pending in data.PendingTimerOwners.ToList())
+        {
+            if (ShareProgramOwners(pending.ProgramId, pending.Owners))
+            {
+                data.PendingTimerOwners.Remove(pending);
+                changed = true;
+            }
+            else if (Now - pending.Since > PendingOwnersRetention)
+            {
+                _logger.Warn(null, "Gave up adding the owners of program {ProgramId} to its timer, since the owners store never took them", pending.ProgramId);
+                data.PendingTimerOwners.Remove(pending);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            Save(data);
+        }
+    }
+
     private IReadOnlyList<Guid> OwnersOfItems(IEnumerable<Guid> itemIds)
     {
         if (_owners == null)
@@ -899,21 +952,6 @@ public sealed class IncompleteRecordingService : IDisposable
         }
 
         var changed = false;
-        foreach (var pending in data.PendingTimerOwners.ToList())
-        {
-            if (LiveTimerIdFor(pending.ProgramId) is { } listed && ShareOwners(pending.Owners, listed))
-            {
-                data.PendingTimerOwners.Remove(pending);
-                changed = true;
-            }
-            else if (Now - pending.Since > PendingOwnersRetention)
-            {
-                _logger.Warn(null, "Gave up adding the owners of program {ProgramId} to its timer; the server never listed one", pending.ProgramId);
-                data.PendingTimerOwners.Remove(pending);
-                changed = true;
-            }
-        }
-
         foreach (var request in data.Requests.Where(r => CompleteShowingState.IsOpen(r.State)))
         {
             // Owners handed over before the server listed the timer go on as soon as it does.

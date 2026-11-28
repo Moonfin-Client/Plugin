@@ -298,22 +298,6 @@ public sealed class LiveTvRecordingHostTests : IDisposable
         Assert.Null(context.Host.IsLiveTvRecording(movie.Id, Guid.NewGuid()));
     }
 
-    [Fact]
-    public void TagRebuildListsTheRecordingFoldersFoundByPath()
-    {
-        using var context = new RecordingHostTestContext();
-        context.RecordingLocations.Add("/config/data/livetv/recordings");
-        var folder = new Folder { Id = Guid.NewGuid(), Path = "/config/data/livetv/recordings" };
-        context.FoldersByPath[folder.Path] = folder;
-        var tagged = AddVideo(context, "/config/data/livetv/recordings/a.ts");
-        tagged.Tags = new[] { "Recorded by Alex" };
-
-        var found = context.Host.FindItemsWithTagPrefix(RecordingOwnershipService.TagPrefix);
-
-        Assert.Equal(new[] { tagged.Id }, found.Select(i => i.Id));
-        Assert.Equal(new[] { folder.Id }, context.LastQuery!.AncestorIds);
-    }
-
     [Theory]
     [InlineData(@"D:\Recordings\Show\a.ts", @"D:\Recordings", true)]
     [InlineData(@"D:\Recordings\Show\a.ts", @"d:\recordings\", true)]

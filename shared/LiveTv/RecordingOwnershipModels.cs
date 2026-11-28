@@ -156,4 +156,7 @@ public interface IRecordingOwners
 
     /// <summary>Adds owners to a timer, by either of its ids.</summary>
     void AddTimerOwners(string timerId, IEnumerable<Guid> owners);
+
+    /// <summary>Adds owners to the timer for a program once the server lists one.</summary>
+    void AddProgramOwners(string programId, IEnumerable<Guid> owners);
 }

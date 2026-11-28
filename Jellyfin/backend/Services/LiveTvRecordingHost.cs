@@ -91,83 +91,10 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
 
     public event EventHandler<Guid>? ItemRemoved;
 
-    private readonly object _userEventLock = new();
-    private EventHandler<ServerUser>? _userUpdated;
-    private EventInfo? _userUpdatedEvent;
-    private Delegate? _userUpdatedHandler;
-    private object? _userUpdatedSource;
-
-    // Subscribed on first use rather than in the constructor, so a host nobody watches for user
-    // changes never touches the user manager's event.
-    public event EventHandler<ServerUser>? UserUpdated
-    {
-        add
-        {
-            _userUpdated += value;
-            SubscribeUserUpdated();
-        }
-        remove => _userUpdated -= value;
-    }
-
     public event EventHandler<Guid>? UserDeleted;
 
     /// <summary>Raised by the user deleted event consumer, since the user manager has no event of its own for it.</summary>
     internal void NotifyUserDeleted(Guid userId) => UserDeleted?.Invoke(this, userId);
-
-    private void SubscribeUserUpdated()
-    {
-        lock (_userEventLock)
-        {
-            if (_userUpdatedHandler != null)
-            {
-                return;
-            }
-
-            try
-            {
-                // The event's argument carries Jellyfin's User type, which changed in 10.11, so the
-                // handler is bound to whichever event argument type the running server uses.
-                var userManager = UserReflection.UserManager(_services);
-                var updated = userManager?.GetType().GetInterfaces()
-                    .Select(i => i.GetEvent("OnUserUpdated"))
-                    .FirstOrDefault(e => e != null);
-                if (userManager == null || updated?.EventHandlerType is not { IsGenericType: true } handlerType)
-                {
-                    return;
-                }
-
-                var method = typeof(JellyfinLiveTvRecordingHost)
-                    .GetMethod(nameof(OnUserUpdatedRaw), BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .MakeGenericMethod(handlerType.GetGenericArguments()[0]);
-                var handler = Delegate.CreateDelegate(handlerType, this, method);
-                updated.AddEventHandler(userManager, handler);
-                _userUpdatedEvent = updated;
-                _userUpdatedHandler = handler;
-                _userUpdatedSource = userManager;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not subscribe to user changes");
-            }
-        }
-    }
-
-    private void OnUserUpdatedRaw<TArgs>(object? sender, TArgs e)
-    {
-        try
-        {
-            var user = typeof(TArgs).GetProperty("Argument")?.GetValue(e);
-            var serverUser = user == null ? null : ToServerUser(user);
-            if (serverUser != null)
-            {
-                _userUpdated?.Invoke(this, serverUser);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Could not read an updated user");
-        }
-    }
 
     private ServerUser? ToServerUser(object user)
     {
@@ -209,47 +136,8 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         }
     }
 
-    public IReadOnlyList<ServerUser> GetUsers()
-    {
-        var result = new List<ServerUser>();
-        if (UserReflection.AllUsers(_services) is { } users)
-        {
-            foreach (var user in users)
-            {
-                if (user == null)
-                {
-                    continue;
-                }
-
-                // One user whose DTO can't be built is left out rather than failing the whole list.
-                try
-                {
-                    if (ToServerUser(user) is { } serverUser)
-                    {
-                        result.Add(serverUser);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not read a user while listing users; leaving them out");
-                }
-            }
-        }
-
-        return result;
-    }
-
     public void Dispose()
     {
-        lock (_userEventLock)
-        {
-            if (_userUpdatedHandler != null)
-            {
-                _userUpdatedEvent!.RemoveEventHandler(_userUpdatedSource, _userUpdatedHandler);
-                _userUpdatedHandler = null;
-            }
-        }
-
         _liveTvManager.TimerCreated -= OnTimerCreated;
         _liveTvManager.TimerCancelled -= OnTimerCancelled;
         _liveTvManager.SeriesTimerCreated -= OnTimerEvent;
@@ -679,26 +567,6 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
             .Select(f => f!.Id)
             .Distinct()
             .ToArray();
-
-    public IReadOnlyList<LibraryItem> FindItemsWithTagPrefix(string prefix)
-    {
-        var folders = RecordingFolderIds(RecordingLocations());
-        if (folders.Length == 0)
-        {
-            return Array.Empty<LibraryItem>();
-        }
-
-        // Tags only match whole values in a query, so the recordings are listed and filtered here.
-        return _libraryManager.GetItemsResult(new InternalItemsQuery
-        {
-            AncestorIds = folders,
-            IsFolder = false,
-            IsVirtualItem = false,
-        }).Items
-            .Where(i => (i.Tags ?? Array.Empty<string>()).Any(t => t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
-            .Select(ToLibraryItem)
-            .ToList();
-    }
 
     private bool IsVisibleTo(Guid itemId, object user)
     {

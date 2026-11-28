@@ -376,8 +376,8 @@ public sealed class IncompleteRecordingStoreData
     public List<Guid> PendingUntags { get; set; } = new();
 
     /// <summary>
-    /// Owners of confirmed showings scheduled without a complete-showing request, kept until the
-    /// server lists the showing's timer so they can be added to it.
+    /// Owners of confirmed showings scheduled without a complete-showing request that the owners
+    /// store couldn't take yet. Each run hands them over again.
     /// </summary>
     public List<PendingTimerOwners> PendingTimerOwners { get; set; } = new();
 }

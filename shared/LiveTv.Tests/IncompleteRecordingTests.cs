@@ -77,15 +77,12 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     public event EventHandler<LibraryItem>? ItemAdded;
     public event EventHandler<LibraryItem>? ItemUpdated;
     public event EventHandler<Guid>? ItemRemoved;
-    public event EventHandler<ServerUser>? UserUpdated;
     public event EventHandler<Guid>? UserDeleted;
 #pragma warning restore CS0067
 
     public List<SeriesRule> SeriesRules { get; } = new();
 
     public List<ServerUser> Users { get; } = new();
-
-    public void RaiseUserUpdated(ServerUser user) => UserUpdated?.Invoke(this, user);
 
     public void RaiseUserDeleted(Guid userId) => UserDeleted?.Invoke(this, userId);
 
@@ -96,9 +93,6 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     /// <summary>Every series rule creation, with the settings it was given.</summary>
     public List<(string ProgramId, IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides)> SeriesCreations { get; } = new();
-
-    /// <summary>Every tag write, in order.</summary>
-    public System.Collections.Concurrent.ConcurrentQueue<(Guid ItemId, string Tag, bool Present)> TagWrites { get; } = new();
 
     /// <summary>Library items no user may see.</summary>
     public HashSet<Guid> HiddenItems { get; } = new();
@@ -141,7 +135,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     /// <summary>User lookups answer "can't tell": GetUser null, UserExists null.</summary>
     public bool UserLookupUnknown { get; set; }
 
-    /// <summary>User lookups and the user list throw, as a reflection call into a changed server can.</summary>
+    /// <summary>User lookups throw, as a reflection call into a changed server can.</summary>
     public bool UserLookupThrows { get; set; }
 
     public ServerUser? GetUser(Guid userId)
@@ -155,15 +149,6 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         if (UserLookupThrows) throw new System.Reflection.TargetInvocationException(new InvalidOperationException("GetUserById changed"));
         return UserLookupUnknown ? null : Users.Any(u => u.Id == userId);
     }
-
-    public IReadOnlyList<ServerUser> GetUsers()
-    {
-        if (UserLookupThrows) throw new System.Reflection.TargetInvocationException(new InvalidOperationException("GetUserDto changed"));
-        return Users.ToList();
-    }
-
-    public IReadOnlyList<LibraryItem> FindItemsWithTagPrefix(string prefix) =>
-        Items.Where(i => i.Tags.Any(t => t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToList();
 
     public List<ScheduledTimer> Timers { get; } = new();
 
@@ -335,7 +320,11 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.Where(id => !HiddenItems.Contains(id)).ToHashSet();
 
-    public IReadOnlyList<string>? GetTags(Guid itemId) => Items.FirstOrDefault(i => i.Id == itemId)?.Tags;
+    /// <summary>Item lookups throw, as a library that can't be asked right now does.</summary>
+    public bool ItemLookupThrows { get; set; }
+
+    public IReadOnlyList<string>? GetTags(Guid itemId) =>
+        ItemLookupThrows ? throw new IOException("The library can't be read") : Items.FirstOrDefault(i => i.Id == itemId)?.Tags;
 
     public void CancelTimer(ScheduledTimer timer, bool apiId = false)
     {
@@ -347,7 +336,6 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public Task<bool> SetTagAsync(Guid itemId, string tag, bool present, CancellationToken cancellationToken)
     {
-        TagWrites.Enqueue((itemId, tag, present));
         if (TagWritesFail)
         {
             throw new IOException("The item could not be saved");

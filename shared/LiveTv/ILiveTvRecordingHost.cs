@@ -40,9 +40,6 @@ public interface ILiveTvRecordingHost
 
     event EventHandler<Guid>? ItemRemoved;
 
-    /// <summary>A server user was renamed, disabled or otherwise changed.</summary>
-    event EventHandler<ServerUser>? UserUpdated;
-
     event EventHandler<Guid>? UserDeleted;
 
     /// <summary>
@@ -127,15 +124,10 @@ public interface ILiveTvRecordingHost
     /// </summary>
     bool? UserExists(Guid userId);
 
-    IReadOnlyList<ServerUser> GetUsers();
-
     /// <summary>
     /// Whether a library item is a Live TV recording: true when it is under the server's recording
     /// folders, false when it isn't (or doesn't exist), null when this server can't tell. The user
     /// is the one asking, for servers that can only list recordings as a user.
     /// </summary>
     bool? IsLiveTvRecording(Guid itemId, Guid userId);
-
-    /// <summary>Live TV recordings that carry a tag starting with the prefix.</summary>
-    IReadOnlyList<LibraryItem> FindItemsWithTagPrefix(string prefix);
 }

@@ -14,11 +14,9 @@ namespace Moonfin.LiveTv;
 /// through the plugin and follows the recording from timer to library item.
 ///
 /// All state lives in one JSON file and every read and write goes through one lock, the same
-/// pattern as <see cref="IncompleteRecordingService"/>. Each finished recording also carries one
-/// "Recorded by name" tag per owner, a readable backup the store can be rebuilt from when the file
-/// and its backup are both lost. Owners are only ever added by a timer moving between series rules;
-/// nothing is forgotten because it is missing at the moment, only on the server's cancel and removal
-/// events or once it is gone and its recording has been handed over.
+/// pattern as <see cref="IncompleteRecordingService"/>. Owners are only ever added when a timer
+/// moves between series rules. Nothing is forgotten because it is missing at the moment, only on
+/// the server's cancel and removal events or once it is gone and its recording has been handed over.
 ///
 /// Which owners a recording file carries follows one rule: while a timer is recording to a path, that
 /// timer's owners (none, for a timer nobody owns through Moonfin) replace the owners of the library
@@ -43,15 +41,6 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     /// plugin finds its data intact after an upgrade. Changes made meanwhile last until restart.
     /// </summary>
     public const int CurrentVersion = 1;
-
-    /// <summary>The fixed, non-localized start of each owner tag, so a rebuild can parse it.</summary>
-    public const string TagPrefix = RecordingOwnerTags.Prefix;
-
-    /// <summary>Whether a tag is one of the owner tags this feature stamps on recordings.</summary>
-    public static bool IsOwnerTag(string? tag) => RecordingOwnerTags.IsOwnerTag(tag);
-
-    /// <summary>An item's tags without the owner tags (see <see cref="RecordingOwnerTags.Without"/>).</summary>
-    public static IReadOnlyList<string> WithoutOwnerTags(IEnumerable<string>? tags) => RecordingOwnerTags.Without(tags);
 
     /// <summary>How long a removed recording's owners are kept in case the item comes back.</summary>
     public static readonly TimeSpan RemovedRetention = TimeSpan.FromDays(7);
@@ -93,10 +82,6 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     // The timers as last listed, by API id.
     private readonly Dictionary<string, ScheduledTimer> _timers = new(StringComparer.OrdinalIgnoreCase);
 
-    // Each user's name as last seen, so a rename knows which tag to replace and a deleted user's
-    // tags can still be found.
-    private readonly Dictionary<Guid, string> _userNames = new();
-
     // Owned timers whose service id the last listing couldn't map. Listing again for a cancel
     // only helps when an owned timer has become unmapped since.
     private readonly HashSet<string> _unmappedAtLastListing = new(StringComparer.OrdinalIgnoreCase);
@@ -107,8 +92,8 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
     private OwnershipStoreData? _data;
 
-    // Set when the store was rebuilt from tags: the unusable file must be copied aside before the
-    // first save overwrites it.
+    // Set when the store and its backup were unusable: they are copied aside before the first save
+    // overwrites them.
     private bool _preserveUnusable;
 
     // Set when the store came from a newer plugin, which must find it as it left it.
@@ -121,9 +106,6 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     // the feature was last off; removals while it was off were never seen.
     private bool _reconciled;
 
-    // The stand-in a call gets while a rebuild from tags couldn't run. It is never saved, so it
-    // can't take the place of the owners the rebuild will find.
-    private OwnershipStoreData? _unbuilt;
     private volatile bool _recordingInProgress;
     private long _nextTimerStartTicks;
 
@@ -208,7 +190,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 AddOwners(data.Timers, joinedId, new[] { userId });
                 Track(data, existing);
                 Save(data);
-                await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
+                ApplyRecordings(data);
                 _logger.Info("User {UserId} joined the recording of program {ProgramId} (timer {TimerId})", userId, programId, joinedId);
                 return new OwnershipAttempt(new OwnershipOutcome(joinedId, ToOwnerInfos(data.Timers, joinedId), true));
             }
@@ -249,7 +231,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             }
 
             Save(data);
-            await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
+            ApplyRecordings(data);
             _logger.Info("User {UserId} {Action} program {ProgramId} (timer {TimerId})", userId, joined ? "joined the recording of" : "scheduled", programId, timerId);
             return new OwnershipAttempt(new OwnershipOutcome(timerId, ToOwnerInfos(data.Timers, timerId), joined));
         }
@@ -317,7 +299,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             AddOwners(data.SeriesTimers, ruleId, new[] { userId });
             ApplySeriesOwners(data, timers);
             Save(data);
-            await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
+            ApplyRecordings(data);
             _logger.Info("User {UserId} {Action} series rule {RuleId} from program {ProgramId}", userId, joined ? "joined" : "created", ruleId, programId);
             return new OwnershipAttempt(new OwnershipOutcome(ruleId, ToOwnerInfos(data.SeriesTimers, ruleId), joined));
         }
@@ -328,8 +310,8 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     }
 
     /// <summary>
-    /// Adds a user to the owners of an existing timer, series rule or recording, and for a
-    /// recording stamps the user's tag. Null when the feature is off or the object doesn't exist.
+    /// Adds a user to the owners of an existing timer, series rule or recording. Null when the
+    /// feature is off or the object doesn't exist.
     /// </summary>
     public async Task<IReadOnlyList<OwnerInfo>?> ClaimAsync(OwnedKind kind, string id, Guid userId, CancellationToken ct)
     {
@@ -362,7 +344,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     AddOwners(data.Timers, timerId, new[] { userId });
                     Track(data, timer);
                     Save(data);
-                    await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
+                    ApplyRecordings(data);
                     _logger.Info("User {UserId} claimed timer {TimerId}", userId, timerId);
                     return ToOwnerInfos(data.Timers, timerId);
                 }
@@ -382,7 +364,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     AddOwners(data.SeriesTimers, rule.Id, new[] { userId });
                     ApplySeriesOwners(data, ruleTimers!);
                     Save(data);
-                    await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
+                    ApplyRecordings(data);
                     _logger.Info("User {UserId} claimed series rule {RuleId}", userId, rule.Id);
                     return ToOwnerInfos(data.SeriesTimers, rule.Id);
                 }
@@ -390,8 +372,8 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 case OwnedKind.Item:
                 {
                     // Only a Live TV recording can be claimed. A server that can't tell is refused
-                    // too, so the claim never lets a caller stamp an ordinary library item.
-                    if (!Guid.TryParse(id, out var itemId) || _host.GetTags(itemId) == null || IsRecording(itemId, userId) != true)
+                    // too, so the claim never lets a caller own an ordinary library item.
+                    if (!Guid.TryParse(id, out var itemId) || IsRecording(itemId, userId) != true)
                     {
                         return null;
                     }
@@ -411,7 +393,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     if (recordedBy != null && !data.TimerPathsUntil.ContainsKey(recordedBy))
                     {
                         AddOwners(data.Timers, recordedBy, new[] { userId });
-                        await ApplyTimerOwnersAsync(data, itemId, recordedBy, ct).ConfigureAwait(false);
+                        ApplyTimerOwners(data, itemId, recordedBy);
                         Save(data);
                         _logger.Info("User {UserId} claimed recording {ItemId}, which timer {TimerId} is still recording; they own the timer now", userId, itemId, recordedBy);
                         return ToOwnerInfos(data.Items, itemId);
@@ -419,13 +401,12 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
                     if (recordedBy != null)
                     {
-                        await ApplyTimerOwnersAsync(data, itemId, recordedBy, ct).ConfigureAwait(false);
+                        ApplyTimerOwners(data, itemId, recordedBy);
                         FinishEntry(data, recordedBy);
                     }
 
                     AddOwners(data.Items, itemId, new[] { userId });
                     Save(data);
-                    await StampTagsAsync(itemId, new[] { userId }, ct).ConfigureAwait(false);
                     _logger.Info("User {UserId} claimed recording {ItemId}", userId, itemId);
                     return ToOwnerInfos(data.Items, itemId);
                 }
@@ -586,15 +567,15 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             // arrive as events.
             if (!_reconciled)
             {
-                changed |= ReconcileItems(data, now);
-                changed |= await RecheckOwnersAsync(data, ct).ConfigureAwait(false);
-                _reconciled = true;
+                changed |= ReconcileItems(data, now, out var complete);
+                changed |= RecheckOwners(data);
+                _reconciled = complete;
             }
 
             // Jellyfin adds a recording's item when the recording starts, usually before the file
             // is noted here, so the item's ItemAdded found no entry for it. Give it its timer's
             // owners now, and hand over the recordings that have finished.
-            changed |= await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
+            changed |= ApplyRecordings(data);
 
             // A timer with a recorded file is forgotten along with that file's entry, once its item
             // has taken the owners or the entry lapses. One without a recorded file is forgotten
@@ -647,15 +628,6 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 changed = true;
             }
 
-            foreach (var user in _host.GetUsers())
-            {
-                // Only users not seen yet: a rename's old name is kept until its event arrives.
-                if (!_userNames.ContainsKey(user.Id))
-                {
-                    _userNames[user.Id] = user.Name;
-                }
-            }
-
             if (changed || _unsaved)
             {
                 Save(data);
@@ -694,13 +666,20 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
             var key = Resolve(timerId);
             var until = _utcNow() + PostRecordingAllowance;
-            if (!string.IsNullOrEmpty(activePath))
-            {
-                // The sync may already hold this recording under the timer's API id.
-                key = data.TimerPaths
+
+            // The sync may already hold this recording under the timer's API id. Another timer
+            // noted writing the path before this event's turn came has the file now, so this
+            // one's owners don't go to it.
+            var writers = string.IsNullOrEmpty(activePath)
+                ? new List<string>()
+                : data.TimerPaths
                     .Where(e => string.Equals(e.Value, activePath, StringComparison.OrdinalIgnoreCase) && !data.TimerPathsUntil.ContainsKey(e.Key))
                     .Select(e => e.Key)
-                    .FirstOrDefault() ?? key;
+                    .ToList();
+            var own = writers.FirstOrDefault(k => IsSameTimer(data, k, timerId));
+            if (!string.IsNullOrEmpty(activePath) && (own != null || writers.Count == 0))
+            {
+                key = own ?? key;
                 data.TimerPaths[key] = activePath!;
                 data.TimerPathsUntil[key] = until;
                 Save(data);
@@ -728,7 +707,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 return;
             }
 
-            await ApplyRecordingsAsync(data, ct).ConfigureAwait(false);
+            ApplyRecordings(data);
         }
         finally
         {
@@ -743,8 +722,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     /// A library item arrived. If a timer is recording to its path (or recorded to it and hasn't
     /// handed it over yet) the item takes that timer's owners, replacing any it had. Otherwise a
     /// recording that left the library within the retention gets its owners back (a storage outage
-    /// or rescan), and anything else keeps the owners the store already holds for it. Each owner's
-    /// tag is stamped on it.
+    /// or rescan), and anything else keeps the owners the store already holds for it.
     /// </summary>
     public async Task OnItemAddedAsync(LibraryItem item, CancellationToken ct)
     {
@@ -760,7 +738,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             var key = FindEntryForPath(data, item.Path);
             if (key != null)
             {
-                var changed = await ApplyTimerOwnersAsync(data, item.Id, key, ct).ConfigureAwait(false);
+                var changed = ApplyTimerOwners(data, item.Id, key);
                 if (data.TimerPathsUntil.ContainsKey(key))
                 {
                     FinishEntry(data, key);
@@ -775,25 +753,11 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 return;
             }
 
-            if (!data.Removed.TryGetValue(item.Id, out var removed))
+            if (data.Removed.TryGetValue(item.Id, out var removed))
             {
-                return;
-            }
-
-            data.Removed.Remove(item.Id);
-            if (removed.RemovedAt < _utcNow() - RemovedRetention)
-            {
+                Restore(data, item.Id, removed);
                 Save(data);
-                _logger.Info("Recording {ItemId} came back to the library after its owners were kept for {Days} days; it has no owners", item.Id, RemovedRetention.TotalDays);
-                return;
             }
-
-            // A rerun that is given a wrong tombstone here is put right by the next sync, while
-            // its timer is recording.
-            AddOwners(data.Items, item.Id, removed.Owners);
-            Save(data);
-            _logger.Info("Recording {ItemId} came back to the library; restored its {Count} owner(s)", item.Id, removed.Owners.Count);
-            await StampTagsAsync(item.Id, removed.Owners, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -829,56 +793,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
     }
 
-    /// <summary>A user changed. A rename swaps the user's tag on every recording they own that still has it.</summary>
-    public async Task OnUserUpdatedAsync(ServerUser user, CancellationToken ct)
-    {
-        if (!Enabled)
-        {
-            return;
-        }
-
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            var data = Load();
-            var known = _userNames.TryGetValue(user.Id, out var oldName);
-            _userNames[user.Id] = user.Name;
-            if (!known || string.Equals(oldName, user.Name, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            var oldTag = TagPrefix + oldName;
-            var newTag = TagPrefix + user.Name;
-            var renamed = 0;
-            foreach (var itemId in data.Items.Where(e => e.Value.Contains(user.Id)).Select(e => e.Key).ToList())
-            {
-                // A tag removed outside Moonfin stays gone.
-                if (_host.GetTags(itemId)?.Contains(oldTag, StringComparer.OrdinalIgnoreCase) != true)
-                {
-                    continue;
-                }
-
-                if (!SharesName(data.Items[itemId], user.Id, oldName!))
-                {
-                    await SetTagAsync(itemId, oldTag, false, ct).ConfigureAwait(false);
-                }
-
-                if (await SetTagAsync(itemId, newTag, true, ct).ConfigureAwait(false))
-                {
-                    renamed++;
-                }
-            }
-
-            _logger.Info("User {UserId} was renamed from {OldName} to {NewName}; updated the tag on {Count} recording(s)", user.Id, oldName, user.Name, renamed);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>A user was deleted: they leave every owner set and their tags are removed.</summary>
+    /// <summary>A user was deleted: they leave every owner set.</summary>
     public async Task OnUserDeletedAsync(Guid userId, CancellationToken ct)
     {
         if (!Enabled)
@@ -890,35 +805,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         try
         {
             var data = Load();
-            _userNames.TryGetValue(userId, out var name);
-            var ownedItems = data.Items.Where(e => e.Value.Contains(userId)).Select(e => e.Key).ToList();
-
-            var changed = RemoveUser(data, userId);
-            if (changed)
+            if (RemoveUser(data, userId))
             {
                 Save(data);
-            }
-
-            if (name != null)
-            {
-                var tag = TagPrefix + name;
-                foreach (var itemId in ownedItems)
-                {
-                    var remaining = data.Items.TryGetValue(itemId, out var owners) ? owners : null;
-                    if (remaining == null || !SharesName(remaining, userId, name))
-                    {
-                        await SetTagAsync(itemId, tag, false, ct).ConfigureAwait(false);
-                    }
-                }
-            }
-            else if (ownedItems.Count > 0)
-            {
-                _logger.Warn(null, "Deleted user {UserId} owned {Count} recording(s) but their name is unknown, so their tags were left", userId, ownedItems.Count);
-            }
-
-            _userNames.Remove(userId);
-            if (changed)
-            {
                 _logger.Info("Removed deleted user {UserId} from every recording owner list", userId);
             }
         }
@@ -977,6 +866,31 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             {
                 Save(data);
             }
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public void AddProgramOwners(string programId, IEnumerable<Guid> owners)
+    {
+        if (!Enabled || string.IsNullOrEmpty(programId))
+        {
+            return;
+        }
+
+        _lock.Wait();
+        try
+        {
+            var data = Load();
+            foreach (var owner in owners.Where(o => o != Guid.Empty))
+            {
+                AddPending(data.PendingTimerOwners, programId, owner);
+            }
+
+            Save(data);
         }
         finally
         {
@@ -1122,13 +1036,10 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         return changed;
     }
 
-    // Renames and deletions raise events only while the feature is on and the server is up, so the
-    // first pass after either checks every stored owner: one the server no longer has leaves every
-    // owner list, and a recording whose owner tags name someone no longer among its owners has them
-    // replaced by its owners' current names.
-    private async Task<bool> RecheckOwnersAsync(OwnershipStoreData data, CancellationToken ct)
+    // Deletions raise events only while the feature is on and the server is up, so the first pass
+    // after either checks every stored owner, and one the server no longer has leaves every list.
+    private bool RecheckOwners(OwnershipStoreData data)
     {
-        var owned = data.Items.Keys.ToList();
         var stored = data.Timers.Values
             .Concat(data.SeriesTimers.Values)
             .Concat(data.Items.Values)
@@ -1142,58 +1053,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         foreach (var userId in stored.Where(UserIsGone).ToList())
         {
             changed |= RemoveUser(data, userId);
-            _userNames.Remove(userId);
             _logger.Info("User {UserId} no longer exists; removed them from every recording owner list", userId);
-        }
-
-        foreach (var itemId in owned)
-        {
-            IReadOnlyList<string>? tags;
-            try
-            {
-                tags = _host.GetTags(itemId);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.Warn(ex, "Could not read the tags of recording {ItemId}", itemId);
-                continue;
-            }
-
-            if (tags == null)
-            {
-                continue;
-            }
-
-            var users = (data.Items.TryGetValue(itemId, out var owners) ? owners : new List<Guid>()).Select(TryGetUser).ToList();
-            if (users.Any(u => u == null))
-            {
-                // An owner's name can't be read, so a tag that looks stale may still be theirs.
-                continue;
-            }
-
-            var expected = users.Select(u => TagPrefix + u!.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var stale = tags.Where(t => IsOwnerTag(t) && !expected.Contains(t)).ToList();
-            if (stale.Count == 0)
-            {
-                continue;
-            }
-
-            foreach (var tag in stale)
-            {
-                await SetTagAsync(itemId, tag, false, ct).ConfigureAwait(false);
-            }
-
-            foreach (var tag in expected.Where(t => !tags.Contains(t, StringComparer.OrdinalIgnoreCase)))
-            {
-                await SetTagAsync(itemId, tag, true, ct).ConfigureAwait(false);
-            }
-
-            _logger.Info("Replaced {Count} out-of-date owner tag(s) on recording {ItemId}", stale.Count, itemId);
-        }
-
-        foreach (var user in _host.GetUsers())
-        {
-            _userNames[user.Id] = user.Name;
         }
 
         return changed;
@@ -1234,8 +1094,6 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     // Lists the timers. The id map is merged rather than replaced, so a timer that leaves the
     // listing (Jellyfin drops a cancelled one-off) still resolves from its service id; a mapping
     // is pruned only once its timer is neither listed nor owned.
-    // Uses the caller's store throughout: loading again here could swap in a store that recovered
-    // meanwhile, leaving the caller to save its stand-in over it.
     private async Task<IReadOnlyList<ScheduledTimer>> RefreshTimersAsync(OwnershipStoreData data, CancellationToken ct)
     {
         var timers = await _host.GetTimersAsync(ct).ConfigureAwait(false);
@@ -1557,10 +1415,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     }
 
     // Makes an item's owners exactly the owners of the timer recording it (none for a timer nobody
-    // owns), removing the tombstone it may have, saving before the tags are written, and stamping
-    // the tag of each owner gained and removing that of each lost. Does nothing, and saves nothing,
-    // when the owners already match. True when anything changed.
-    private async Task<bool> ApplyTimerOwnersAsync(OwnershipStoreData data, Guid itemId, string timerKey, CancellationToken ct)
+    // owns), removing the tombstone it may have, and saves. Does nothing, and saves nothing, when
+    // the owners already match. True when anything changed.
+    private bool ApplyTimerOwners(OwnershipStoreData data, Guid itemId, string timerKey)
     {
         var target = data.Timers.TryGetValue(timerKey, out var timerOwners) ? timerOwners.ToList() : new List<Guid>();
         var current = data.Items.TryGetValue(itemId, out var itemOwners) ? itemOwners.ToList() : new List<Guid>();
@@ -1587,24 +1444,13 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             _logger.Info("Recording {ItemId} from timer {TimerId}: {Gained} owner(s) gained, {Lost} lost", itemId, timerKey, gained.Count, lost.Count);
         }
 
-        foreach (var owner in lost)
-        {
-            var name = NameOf(owner);
-            if (!string.IsNullOrEmpty(name) && !SharesName(target, owner, name!))
-            {
-                await SetTagAsync(itemId, TagPrefix + name, false, ct).ConfigureAwait(false);
-            }
-        }
-
-        await StampTagsAsync(itemId, gained, ct).ConfigureAwait(false);
         return true;
     }
 
-    // Walks the noted files: a timer still recording gives its owners to the item at its path,
-    // every pass; one that has stopped gives them once, when its item is first found, and is then
-    // forgotten; one whose allowance has lapsed is forgotten without. Saves before each item's tag
-    // writes. True when anything changed.
-    private async Task<bool> ApplyRecordingsAsync(OwnershipStoreData data, CancellationToken ct)
+    // Walks the noted files. A timer still recording gives its owners to the item at its path on
+    // every pass. One that has stopped gives them once, when its item is first found, and is then
+    // forgotten, and one whose allowance has lapsed is forgotten without. True when anything changed.
+    private bool ApplyRecordings(OwnershipStoreData data)
     {
         var now = _utcNow();
         var changed = false;
@@ -1630,7 +1476,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                 continue;
             }
 
-            changed |= await ApplyTimerOwnersAsync(data, item.Id, entry.Key, ct).ConfigureAwait(false);
+            changed |= ApplyTimerOwners(data, item.Id, entry.Key);
             if (stopped)
             {
                 FinishEntry(data, entry.Key);
@@ -1647,13 +1493,20 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
     }
 
     // Owned recordings the library definitely no longer has become tombstones, as when the server
-    // reports their removal. An item the host can't be asked about is left alone.
-    private bool ReconcileItems(OwnershipStoreData data, DateTime now)
+    // reports their removal, and tombstoned ones that are back get their owners again, as when it
+    // reports them added (both events go unseen while the feature is off or the plugin stops).
+    // Complete is false when the library couldn't be asked about an item, so the next pass checks
+    // again.
+    private bool ReconcileItems(OwnershipStoreData data, DateTime now, out bool complete)
     {
+        complete = true;
         var changed = false;
+        var removed = data.Removed.ToList();
         foreach (var entry in data.Items.ToList())
         {
-            if (!IsGone(entry.Key))
+            var gone = IsGone(entry.Key);
+            complete &= gone != null;
+            if (gone != true)
             {
                 continue;
             }
@@ -1664,11 +1517,45 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             _logger.Info("Recording {ItemId} is no longer in the library; keeping its owners for {Days} days in case it comes back", entry.Key, RemovedRetention.TotalDays);
         }
 
+        foreach (var entry in removed)
+        {
+            var gone = IsGone(entry.Key);
+            complete &= gone != null;
+            if (gone == false)
+            {
+                Restore(data, entry.Key, entry.Value);
+                changed = true;
+            }
+        }
+
         return changed;
     }
 
-    // GetTags is null only when the library has no such item; a lookup that throws can't tell.
-    private bool IsGone(Guid itemId)
+    // Gives a tombstoned recording that is back in the library its owners again, if it left within
+    // the retention. A file written since it left is a new recording at the same path (a
+    // rerun), not the old one coming back, so it doesn't get the old owners.
+    private void Restore(OwnershipStoreData data, Guid itemId, RemovedItem removed)
+    {
+        data.Removed.Remove(itemId);
+        if (removed.RemovedAt < _utcNow() - RemovedRetention)
+        {
+            _logger.Info("Recording {ItemId} came back to the library after its owners were kept for {Days} days, so it has no owners", itemId, RemovedRetention.TotalDays);
+            return;
+        }
+
+        if (FileWrittenAt(itemId) is { } written && written > removed.RemovedAt)
+        {
+            _logger.Info("Recording {ItemId} came back with a file written after it left the library, so it doesn't get the old owners", itemId);
+            return;
+        }
+
+        AddOwners(data.Items, itemId, removed.Owners);
+        _logger.Info("Recording {ItemId} came back to the library and got its {Count} owner(s) back", itemId, removed.Owners.Count);
+    }
+
+    // GetTags is null only when the library has no such item. A lookup that throws can't tell, so
+    // that's null.
+    private bool? IsGone(Guid itemId)
     {
         try
         {
@@ -1677,12 +1564,29 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.Warn(ex, "Could not check whether recording {ItemId} is still in the library", itemId);
-            return false;
+            return null;
         }
     }
 
-    private string? NameOf(Guid userId) =>
-        TryGetUser(userId)?.Name ?? (_userNames.TryGetValue(userId, out var known) ? known : null);
+    private DateTime? FileWrittenAt(Guid itemId)
+    {
+        try
+        {
+            return _host.GetFileWrittenAt(itemId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warn(ex, "Could not read when the file of recording {ItemId} was written", itemId);
+            return null;
+        }
+    }
+
+    // Whether a noted timer is the one a cancel event names, by its API id or its service id.
+    private bool IsSameTimer(OwnershipStoreData data, string key, string eventTimerId) =>
+        string.Equals(key, eventTimerId, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, Resolve(eventTimerId), StringComparison.OrdinalIgnoreCase)
+        || (_recordingServiceIds.TryGetValue(key, out var recording) && string.Equals(recording, eventTimerId, StringComparison.OrdinalIgnoreCase))
+        || (data.TimerServiceIds.TryGetValue(key, out var stored) && string.Equals(stored, eventTimerId, StringComparison.OrdinalIgnoreCase));
 
     private static DateTime ToUtc(DateTime time) => time.Kind == DateTimeKind.Local ? time.ToUniversalTime() : time;
 
@@ -1934,42 +1838,6 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
     }
 
-    // Whether another owner in the set goes by the same name, so a shared tag must stay.
-    private bool SharesName(List<Guid> owners, Guid userId, string name) =>
-        owners.Any(o => o != userId && _userNames.TryGetValue(o, out var other) && string.Equals(other, name, StringComparison.OrdinalIgnoreCase));
-
-    private async Task StampTagsAsync(Guid itemId, IEnumerable<Guid> owners, CancellationToken ct)
-    {
-        foreach (var owner in owners)
-        {
-            var name = TryGetUser(owner)?.Name ?? (_userNames.TryGetValue(owner, out var known) ? known : null);
-            if (!string.IsNullOrEmpty(name))
-            {
-                await SetTagAsync(itemId, TagPrefix + name, true, ct).ConfigureAwait(false);
-            }
-        }
-    }
-
-    // Tags are a readable backup, not the source of truth, so failing to write one is logged only.
-    private async Task<bool> SetTagAsync(Guid itemId, string tag, bool present, CancellationToken ct)
-    {
-        // While a newer store is in use, owners live only in memory; tags would outlive them.
-        if (_readOnly)
-        {
-            return false;
-        }
-
-        try
-        {
-            return await _host.SetTagAsync(itemId, tag, present, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-        {
-            _logger.Warn(ex, "Could not {Action} tag {Tag} on recording {ItemId}", present ? "add" : "remove", tag, itemId);
-            return false;
-        }
-    }
-
     private OwnershipStoreData Load()
     {
         if (_data != null)
@@ -1977,39 +1845,13 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
             return _data;
         }
 
-        // A user list that can't be read only costs the names a rename or delete would look up;
-        // it must not keep the store from loading, or every owner call would fail.
-        try
-        {
-            foreach (var user in _host.GetUsers())
-            {
-                _userNames[user.Id] = user.Name;
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.Warn(ex, "Could not list the server's users while loading recording owners");
-        }
-
         // A newer file is accepted even when this version can't parse it, so the state file never
-        // falls back to promoting the .bak over it and nothing here rebuilds over it.
+        // falls back to promoting the .bak over it.
         var unreadable = false;
         var read = _stateFile.Read(_storePath, json => ParseStore(json, () => unreadable = true));
         if (read != null)
         {
             _data = Normalize(read);
-            if (_unbuilt != null)
-            {
-                // The file became readable again before a rebuild could run: what calls changed
-                // meanwhile is added to it (and, for a newer file, kept until restart).
-                MergeInto(_data, _unbuilt);
-                _unbuilt = null;
-                if (read.Version <= CurrentVersion)
-                {
-                    Save(_data);
-                }
-            }
-
             if (read.Version > CurrentVersion)
             {
                 _readOnly = true;
@@ -2017,7 +1859,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
                     null,
                     unreadable
                         ? "The recording owners file {Path} is version {Version}, which this plugin (version {Current}) can't read; recording owners are unavailable until the plugin is upgraded, and the file is left untouched"
-                        : "The recording owners file {Path} is version {Version}, newer than this plugin's {Current}; it is used but not saved over, and no owner tags are written, so changes to recording owners last until restart",
+                        : "The recording owners file {Path} is version {Version}, newer than this plugin's {Current}. It is used but not saved over, so changes to recording owners last until restart",
                     _storePath,
                     read.Version,
                     CurrentVersion);
@@ -2028,7 +1870,7 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
 
         var fresh = new OwnershipStoreData();
 
-        // Should the read have failed for another reason, a newer file is still never rebuilt over.
+        // Should the read have failed for another reason, a newer file is still never saved over.
         var newest = Math.Max(PeekFileVersion(_storePath) ?? 0, PeekFileVersion(_storePath + BackupSuffix) ?? 0);
         if (newest > CurrentVersion)
         {
@@ -2039,37 +1881,12 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         }
 
         // Read returns null when there is no file yet, when the file and its backup are both
-        // unusable, and when both were deleted. Recordings tagged with owners mean the store was
-        // lost, so their owners are rebuilt from the tags; a first start finds none. The store is
-        // only kept once the rebuild has finished, so a lookup that fails for the moment is tried
-        // again on the next call rather than leaving an empty store to be saved over the tags.
-        var unusable = File.Exists(_storePath) || File.Exists(_storePath + BackupSuffix);
-        try
+        // unusable, and when both were deleted. Unusable copies are set aside before the first save
+        // overwrites them, so a read that failed only for the moment can't lose the owners for good.
+        if (File.Exists(_storePath) || File.Exists(_storePath + BackupSuffix))
         {
-            Rebuild(fresh, unusable);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Users or the library not ready yet (a startup): calls go on with a stand-in that
-            // holds what they change, nothing is saved over the files the rebuild needs, and the
-            // next call rebuilds again, keeping what the stand-in gathered.
-            _logger.Warn(ex, "Could not rebuild recording owners from their tags yet; trying again on the next request");
-            return _unbuilt ??= new OwnershipStoreData();
-        }
-
-        var merged = _unbuilt != null;
-        if (merged)
-        {
-            MergeInto(fresh, _unbuilt!);
-            _unbuilt = null;
-        }
-
-        if (unusable || merged || fresh.Items.Count > 0)
-        {
-            // The unusable copies are set aside before anything overwrites them, so a read that
-            // failed only for the moment can't lose the owners for good.
-            _preserveUnusable = unusable;
-            Save(fresh);
+            _preserveUnusable = true;
+            _logger.Warn(null, "The recording owners file {Path} and its backup were unusable, so recording owners start over", _storePath);
         }
 
         return _data = fresh;
@@ -2206,113 +2023,9 @@ public sealed class RecordingOwnershipService : IRecordingOwners, IDisposable
         return copy;
     }
 
-    // Adds what calls changed while a rebuild couldn't run to the rebuilt store. Owners are only
-    // ever added; a recording that left the library meanwhile goes to the removed list.
-    private static void MergeInto(OwnershipStoreData rebuilt, OwnershipStoreData changes)
-    {
-        foreach (var entry in changes.Timers)
-        {
-            AddOwners(rebuilt.Timers, entry.Key, entry.Value);
-        }
-
-        foreach (var entry in changes.SeriesTimers)
-        {
-            AddOwners(rebuilt.SeriesTimers, entry.Key, entry.Value);
-        }
-
-        foreach (var entry in changes.Items)
-        {
-            AddOwners(rebuilt.Items, entry.Key, entry.Value);
-        }
-
-        foreach (var entry in changes.Removed)
-        {
-            if (rebuilt.Items.TryGetValue(entry.Key, out var tagged))
-            {
-                rebuilt.Items.Remove(entry.Key);
-                entry.Value.Owners = entry.Value.Owners.Union(tagged).ToList();
-            }
-
-            rebuilt.Removed[entry.Key] = entry.Value;
-        }
-
-        foreach (var entry in changes.TimerPaths)
-        {
-            rebuilt.TimerPaths[entry.Key] = entry.Value;
-        }
-
-        foreach (var entry in changes.TimerPathsUntil)
-        {
-            rebuilt.TimerPathsUntil[entry.Key] = entry.Value;
-        }
-
-        foreach (var entry in changes.TimerServiceIds)
-        {
-            rebuilt.TimerServiceIds[entry.Key] = entry.Value;
-        }
-
-        foreach (var entry in changes.TimersMissingSince)
-        {
-            rebuilt.TimersMissingSince[entry.Key] = entry.Value;
-        }
-
-        foreach (var entry in changes.SeriesTimersMissingSince)
-        {
-            rebuilt.SeriesTimersMissingSince[entry.Key] = entry.Value;
-        }
-
-        rebuilt.PendingTimerOwners.AddRange(changes.PendingTimerOwners);
-        rebuilt.PendingSeriesOwners.AddRange(changes.PendingSeriesOwners);
-    }
-
-    // Rebuilds the recordings' owners from their "Recorded by name" tags. Timer and rule owners
-    // have no backup and are lost.
-    private void Rebuild(OwnershipStoreData data, bool unusable)
-    {
-        var tagged = _host.FindItemsWithTagPrefix(TagPrefix);
-        if (tagged.Count == 0 && !unusable)
-        {
-            // A first start: nothing to rebuild, so the users needn't be listed.
-            return;
-        }
-
-        var users = _host.GetUsers();
-        var unmatched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in tagged)
-        {
-            foreach (var tag in item.Tags.Where(t => t.StartsWith(TagPrefix, StringComparison.OrdinalIgnoreCase)))
-            {
-                var name = tag.Substring(TagPrefix.Length).Trim();
-                var matches = users.Where(u => string.Equals(u.Name, name, StringComparison.OrdinalIgnoreCase)).ToList();
-                var user = matches.Count == 1 ? matches[0] : matches.FirstOrDefault(u => string.Equals(u.Name, name, StringComparison.Ordinal));
-                if (user == null)
-                {
-                    unmatched.Add(name);
-                    continue;
-                }
-
-                AddOwners(data.Items, item.Id, new[] { user.Id });
-            }
-        }
-
-        foreach (var name in unmatched)
-        {
-            _logger.Warn(null, "Rebuilding recording owners: no single user is named {Name}, so recordings tagged for them stay without that owner", name);
-        }
-
-        if (unusable)
-        {
-            _logger.Warn(null, "The recording owners file {Path} and its backup were unusable; rebuilt the owners of {Count} recording(s) from their tags. Timer and series rule owners are lost", _storePath, data.Items.Count);
-        }
-        else if (data.Items.Count > 0)
-        {
-            _logger.Warn(null, "The recording owners file {Path} and its backup are missing, but recordings carry owner tags; rebuilt the owners of {Count} recording(s) from them. Timer and series rule owners are lost", _storePath, data.Items.Count);
-        }
-    }
-
     private void Save(OwnershipStoreData data)
     {
-        if (_readOnly || ReferenceEquals(data, _unbuilt))
+        if (_readOnly)
         {
             return;
         }

@@ -59,7 +59,6 @@ namespace Emby.Plugins.Moonfin.Services
             _libraryManager.ItemAdded += OnItemAdded;
             _libraryManager.ItemUpdated += OnItemUpdated;
             _libraryManager.ItemRemoved += OnItemRemoved;
-            _userManager.UserUpdated += OnUserUpdated;
             _userManager.UserDeleted += OnUserDeleted;
         }
 
@@ -77,8 +76,6 @@ namespace Emby.Plugins.Moonfin.Services
 
         public event EventHandler<Guid>? ItemRemoved;
 
-        public event EventHandler<ServerUser>? UserUpdated;
-
         public event EventHandler<Guid>? UserDeleted;
 
         public void Dispose()
@@ -93,7 +90,6 @@ namespace Emby.Plugins.Moonfin.Services
             _libraryManager.ItemAdded -= OnItemAdded;
             _libraryManager.ItemUpdated -= OnItemUpdated;
             _libraryManager.ItemRemoved -= OnItemRemoved;
-            _userManager.UserUpdated -= OnUserUpdated;
             _userManager.UserDeleted -= OnUserDeleted;
         }
 
@@ -530,9 +526,6 @@ namespace Emby.Plugins.Moonfin.Services
             }
         }
 
-        public IReadOnlyList<ServerUser> GetUsers() =>
-            _userManager.Users.Where(u => u != null).Select(ToServerUser).ToList();
-
         // The image tag comes from the user's DTO; a DTO that can't be built costs only the image.
         private ServerUser ToServerUser(User user)
         {
@@ -570,24 +563,6 @@ namespace Emby.Plugins.Moonfin.Services
                 _logger.Warn("{0}", "Could not check whether item " + itemId + " is a Live TV recording: " + ex.Message);
                 return null;
             }
-        }
-
-        public IReadOnlyList<LibraryItem> FindItemsWithTagPrefix(string prefix)
-        {
-            // Tags only match whole values in a query, so the recordings are listed and filtered here.
-            var recordings = _liveTvManager.GetRecordings(new InternalItemsQuery { Recursive = true }, CancellationToken.None).Items;
-            var result = new List<LibraryItem>();
-            foreach (var recording in recordings)
-            {
-                if (Guid.TryParse(recording.Guid, out var id)
-                    && _libraryManager.GetItemById(id) is { } item
-                    && (item.Tags ?? Array.Empty<string>()).Any(t => t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
-                {
-                    result.Add(ToLibraryItem(item));
-                }
-            }
-
-            return result;
         }
 
         private static string? SeriesIdOf(LiveTvProgram? program) =>
@@ -718,14 +693,6 @@ namespace Emby.Plugins.Moonfin.Services
             if (e.Item is { IsVirtualItem: false } && e.Item is not Folder)
             {
                 ItemUpdated?.Invoke(this, ToLibraryItem(e.Item));
-            }
-        }
-
-        private void OnUserUpdated(object? sender, GenericEventArgs<User> e)
-        {
-            if (e.Argument != null)
-            {
-                UserUpdated?.Invoke(this, ToServerUser(e.Argument));
             }
         }
 

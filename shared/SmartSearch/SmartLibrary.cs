@@ -35,9 +35,7 @@ public sealed class SmartLibrary
     {
         var cast = actors.Take(CastPerTitle).ToList();
         var directing = directors.ToList();
-        // Owner tags ("Recorded by Jordan") would make a search for the user's name match recordings.
-        var keywords = Moonfin.LiveTv.RecordingOwnerTags.Without(tags);
-        var text = new StringBuilder(SmartIndex.TitleText(title, year, isSeries ? "TV series" : "Movie", genres, keywords, cast, overview));
+        var text = new StringBuilder(SmartIndex.TitleText(title, year, isSeries ? "TV series" : "Movie", genres, tags, cast, overview));
         SmartIndex.AppendList(text, " Directed by ", directing, 2);
         var people = cast.Concat(directing).Select(SmartQuery.NormalizeName).Distinct().ToArray();
         _items.Add((() => new SmartEntry

@@ -194,7 +194,8 @@ public sealed class RecordingOwnershipTests : IDisposable
 
     private ScheduledTimer TimerOf(string programId) => _host.Timers.Single(t => t.ProgramId == programId);
 
-    private static IReadOnlyList<string> TagsOf(LibraryItem item) => item.Tags.ToList();
+    private List<Guid> OwnersOf(LibraryItem item) =>
+        ReadStoreOrEmpty().Items.TryGetValue(item.Id, out var owners) ? owners : new List<Guid>();
 
     private static async Task WaitFor(Func<bool> condition, string what)
     {
@@ -364,7 +365,7 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task ItemAdded_MatchesRecordedPath_CopiesOwnersAndTags()
+    public async Task ItemAdded_MatchesRecordedPath_CopiesOwners()
     {
         AddProgram("p1", Start);
         var service = NewService();
@@ -377,7 +378,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         var item = _host.AddItem("/rec/a.ts");
         await service.OnItemAddedAsync(item, CancellationToken.None);
 
-        Assert.Equal(new[] { "Recorded by Jordan", "Recorded by Alex" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan, Alex }, OwnersOf(item));
         Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[item.Id]);
         Assert.Equal(new[] { item.Id }, (await service.GetMineAsync(Alex, CancellationToken.None)).ItemIds);
     }
@@ -433,15 +434,12 @@ public sealed class RecordingOwnershipTests : IDisposable
         _clock.Advance(TimeSpan.FromDays(7) + TimeSpan.FromMinutes(1));
         var back = new LibraryItem { Id = item.Id, Path = item.Path };
         _host.Items.Add(back);
-        var tagWrites = _host.TagWrites.Count;
         await service.OnItemAddedAsync(back, CancellationToken.None);
 
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
         var saved = ReadStore();
         Assert.Empty(saved.Items);
         Assert.Empty(saved.Removed);
-        Assert.Equal(tagWrites, _host.TagWrites.Count);
-        Assert.Empty(back.Tags);
     }
 
     // Fix 2: a rerun recorded to a deleted recording's file has the same item id.
@@ -451,7 +449,7 @@ public sealed class RecordingOwnershipTests : IDisposable
     {
         var old = _host.AddItem("/rec/bonanza.ts");
         await service.ClaimAsync(OwnedKind.Item, old.Id.ToString(), Jordan, CancellationToken.None);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(old));
+        Assert.Equal(new[] { Jordan }, OwnersOf(old));
         _host.Items.Remove(old);
         await service.OnItemRemovedAsync(old.Id, CancellationToken.None);
         Assert.True(ReadStore().Removed.ContainsKey(old.Id));
@@ -484,8 +482,8 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         var saved = ReadStore();
         Assert.Equal(new[] { Alex }, saved.Items[item.Id]);
-        Assert.Contains("Recorded by Alex", TagsOf(item));
-        Assert.DoesNotContain("Recorded by Jordan", TagsOf(item));
+        Assert.Contains(Alex, OwnersOf(item));
+        Assert.DoesNotContain(Jordan, OwnersOf(item));
         Assert.False(saved.Removed.ContainsKey(item.Id));
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
@@ -507,7 +505,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         var saved = ReadStore();
         Assert.Equal(new[] { Alex }, saved.Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
+        Assert.Equal(new[] { Alex }, OwnersOf(item));
         Assert.False(saved.Removed.ContainsKey(item.Id));
 
         // The recording finishes and its timer is forgotten; then the item leaves and comes back.
@@ -521,7 +519,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.OnItemAddedAsync(back, CancellationToken.None);
 
         Assert.Equal(new[] { Alex }, ReadStore().Items[back.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(back));
+        Assert.Equal(new[] { Alex }, OwnersOf(back));
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
 
@@ -556,7 +554,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         var saved = ReadStore();
         Assert.Equal(new[] { Alex }, saved.Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
+        Assert.Equal(new[] { Alex }, OwnersOf(item));
         Assert.Empty(saved.Removed);
         Assert.False(saved.Timers.ContainsKey("api-p0"));
     }
@@ -605,7 +603,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         var item = Rerun(old);
         await service.OnItemAddedAsync(item, CancellationToken.None);
         Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
 
         // The sync that sees it recording puts that right.
         await service.SyncAsync(CancellationToken.None);
@@ -613,7 +611,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         var saved = ReadStore();
         Assert.False(saved.Items.ContainsKey(item.Id));
         Assert.Empty(saved.Removed);
-        Assert.Empty(TagsOf(item));
+        Assert.Empty(OwnersOf(item));
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
         Assert.Equal(old.Path, saved.TimerPaths["api-x"]);
     }
@@ -631,7 +629,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         var saved = ReadStore();
         Assert.Empty(saved.Items);
         Assert.Empty(saved.Removed);
-        Assert.Empty(TagsOf(item));
+        Assert.Empty(OwnersOf(item));
     }
 
     [Fact]
@@ -646,7 +644,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
+        Assert.Equal(new[] { Alex }, OwnersOf(item));
         Assert.Empty(ReadStore().Removed);
     }
 
@@ -664,7 +662,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Empty(ReadStore().Items);
-        Assert.Empty(TagsOf(item));
+        Assert.Empty(OwnersOf(item));
     }
 
     [Fact]
@@ -678,7 +676,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
     }
 
     [Fact]
@@ -723,12 +720,66 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.OnItemAddedAsync(back, CancellationToken.None);
 
         Assert.Equal(new[] { Jordan }, ReadStore().Items[back.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(back));
+        Assert.Equal(new[] { Jordan }, OwnersOf(back));
         Assert.Empty(ReadStore().Removed);
 
         // Nothing is recording to the path, so syncs leave it be.
         await service.SyncAsync(CancellationToken.None);
         Assert.Equal(new[] { Jordan }, ReadStore().Items[back.Id]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReturnedFile_KeepsTheOldOwnersOnlyIfWrittenBeforeItLeft(bool writtenAfter)
+    {
+        var service = NewService();
+        var removedAt = _clock.UtcNow;
+        var old = await ClaimedThenRemoved(service, "/rec/a.ts");
+
+        // A file written since it left is a rerun that went to the same path while no listing saw
+        // its timer, not the old recording coming back.
+        _clock.Advance(TimeSpan.FromDays(1));
+        var back = Rerun(old);
+        _host.Files[back.Path!] = 1;
+        _host.LastWrite[back.Path!] = writtenAfter ? _clock.UtcNow : removedAt.AddHours(-1);
+        await service.OnItemAddedAsync(back, CancellationToken.None);
+
+        Assert.Equal(writtenAfter ? Array.Empty<Guid>() : new[] { Jordan }, OwnersOf(back));
+        Assert.Empty(ReadStore().Removed);
+    }
+
+    [Fact]
+    public async Task ReturnedWhileStopped_FirstSyncRestoresItsOwners()
+    {
+        var old = await ClaimedThenRemoved(NewService(), "/rec/a.ts");
+
+        // The library put it back after the watcher stopped taking events, so only the next start sees it.
+        var back = Rerun(old);
+        var service = NewService();
+        await service.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan }, OwnersOf(back));
+        Assert.Empty(ReadStore().Removed);
+    }
+
+    [Fact]
+    public async Task ReconcileLookupFails_TriedAgainOnTheNextSync()
+    {
+        var item = _host.AddItem("/rec/a.ts");
+        await NewService().ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+
+        // Deleted while the plugin was stopped, and the library can't be asked on the first pass.
+        _host.Items.Remove(item);
+        _host.ItemLookupThrows = true;
+        var service = NewService();
+        await service.SyncAsync(CancellationToken.None);
+        Assert.True(ReadStore().Items.ContainsKey(item.Id));
+
+        _host.ItemLookupThrows = false;
+        await service.SyncAsync(CancellationToken.None);
+        Assert.False(ReadStore().Items.ContainsKey(item.Id));
+        Assert.True(ReadStore().Removed.ContainsKey(item.Id));
     }
 
     [Fact]
@@ -789,7 +840,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         var saved = ReadStore();
         Assert.Equal(new[] { Jordan }, saved.Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
         Assert.Empty(saved.Timers);
         Assert.Empty(saved.TimerPaths);
         Assert.Empty(saved.TimerPathsUntil);
@@ -810,7 +861,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         var saved = ReadStore();
         Assert.False(saved.Items.ContainsKey(item.Id));
-        Assert.Empty(TagsOf(item));
+        Assert.Empty(OwnersOf(item));
         Assert.Empty(saved.Timers);
         Assert.Empty(saved.TimerPaths);
     }
@@ -826,7 +877,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.OnTimerCancelledAsync(timer.TimerId, item.Path, CancellationToken.None);
 
         Assert.Empty(ReadStore().Items);
-        Assert.Empty(TagsOf(item));
+        Assert.Empty(OwnersOf(item));
         Assert.Empty(ReadStore().TimerPaths);
     }
 
@@ -842,7 +893,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan", "Recorded by Alex" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan, Alex }, OwnersOf(item));
     }
 
     [Fact]
@@ -859,7 +910,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         await service.SyncAsync(CancellationToken.None);
         Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan", "Recorded by Alex" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan, Alex }, OwnersOf(item));
     }
 
     [Fact]
@@ -873,7 +924,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { Sam }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Sam" }, TagsOf(item));
+        Assert.Equal(new[] { Sam }, OwnersOf(item));
     }
 
     [Fact]
@@ -909,7 +960,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan", "Recorded by Alex" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan, Alex }, OwnersOf(item));
     }
 
     [Fact]
@@ -928,7 +979,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.OnItemAddedAsync(item, CancellationToken.None);
 
         Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
         Assert.Empty(ReadStore().Timers);
         Assert.Empty(ReadStore().TimerPaths);
     }
@@ -1006,7 +1057,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Empty(saved.Items);
         Assert.Empty(saved.Removed);
         Assert.False(saved.Timers.ContainsKey("api-p1"));
-        Assert.Empty(TagsOf(back));
+        Assert.Empty(OwnersOf(back));
     }
 
     [Fact]
@@ -1091,7 +1142,7 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task FutureVersionStore_UnparseableByThisVersion_NeitherPromotedNorRebuilt()
+    public async Task FutureVersionStore_UnparseableByThisVersion_NotPromoted()
     {
         // The newer plugin changed a member's type, so this version can't parse its file; the
         // .bak is the v1 file the newer plugin's first save left, which this version could parse.
@@ -1100,22 +1151,20 @@ public sealed class RecordingOwnershipTests : IDisposable
         File.WriteAllText(StorePath + ".bak", "{\"Version\":1,\"Timers\":{\"api-p1\":[\"" + Jordan + "\"]}}");
         var main = File.ReadAllBytes(StorePath);
         var backup = File.ReadAllBytes(StorePath + ".bak");
-        var tagged = _host.AddItem("/rec/a.ts");
-        tagged.Tags = new[] { "Recorded by Jordan" };
+        var item = _host.AddItem("/rec/a.ts");
         AddProgram("p2", Start);
         var service = NewService();
 
-        // Owners are unavailable, not rebuilt from tags or taken from the .bak.
+        // Owners are unavailable, not taken from the .bak.
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
 
-        // Changes work in memory only, and write no tags.
+        // Changes work in memory only.
         Assert.NotNull(await service.RecordProgramAsync("p2", Alex, CancellationToken.None));
-        await service.ClaimAsync(OwnedKind.Item, tagged.Id.ToString(), Alex, CancellationToken.None);
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Alex, CancellationToken.None);
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(0, _stateFile.Writes);
-        Assert.Empty(_host.TagWrites);
         Assert.Equal(main, File.ReadAllBytes(StorePath));
         Assert.Equal(backup, File.ReadAllBytes(StorePath + ".bak"));
         Assert.Empty(Directory.GetFiles(_dir, "*.corrupt-*"));
@@ -1219,23 +1268,21 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task UserRenamed_RewritesTags()
+    public async Task UserRenamed_OwnersShowTheNewName()
     {
         var item = _host.AddItem("/rec/a.ts");
         var service = NewService();
         await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
 
-        var renamed = new ServerUser(Jordan, "Grandpa", "jordan-tag", false);
-        _host.Users[_host.Users.FindIndex(u => u.Id == Jordan)] = renamed;
-        await service.OnUserUpdatedAsync(renamed, CancellationToken.None);
+        _host.Users[_host.Users.FindIndex(u => u.Id == Jordan)] = new ServerUser(Jordan, "Grandpa", "jordan-tag", false);
 
-        Assert.Equal(new[] { "Recorded by Grandpa" }, TagsOf(item));
+        var lookup = await service.LookupAsync(Array.Empty<string>(), Array.Empty<string>(), new[] { item.Id }, Jordan, CancellationToken.None);
+        Assert.Equal(new[] { "Grandpa" }, lookup.Items[item.Id].Select(o => o.Name));
         Assert.Equal(new[] { item.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
 
     [Fact]
-    public async Task UserDeleted_RemovedFromOwnersAndTags()
+    public async Task UserDeleted_RemovedFromOwners()
     {
         AddProgram("p1", Start);
         _host.SeriesRules.Add(new SeriesRule("rule-a", null, "Bonanza"));
@@ -1258,29 +1305,25 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(new[] { Alex }, saved.Timers["api-p1"]);
         Assert.False(saved.SeriesTimers.ContainsKey("rule-a"));
         Assert.Equal(new[] { Alex }, saved.Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
     }
 
     [Fact]
-    public async Task CorruptStoreAndBackup_RebuildsItemsFromTags()
+    public async Task CorruptStoreAndBackup_StartsOverAndKeepsTheCopies()
     {
-        var tagged = _host.AddItem("/rec/a.ts");
-        tagged.Tags = new[] { "Recorded by Jordan", "Recorded by Nobody", "Favourite" };
-        var shared = _host.AddItem("/rec/b.ts");
-        shared.Tags = new[] { "recorded by alex", "Recorded by Sam" };
+        var item = _host.AddItem("/rec/a.ts");
         Directory.CreateDirectory(_dir);
         File.WriteAllText(StorePath, "{ not json");
         File.WriteAllText(StorePath + ".bak", "also not json");
 
         var service = NewService();
-        var lookup = await service.LookupAsync(Array.Empty<string>(), Array.Empty<string>(), new[] { tagged.Id, shared.Id }, Sam, CancellationToken.None);
+        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
 
-        Assert.Equal(new[] { Jordan }, lookup.Items[tagged.Id].Select(o => o.UserId));
-        Assert.Equal(new[] { Alex, Sam }, lookup.Items[shared.Id].Select(o => o.UserId));
-        Assert.Contains(_log.Entries, e => e.Kind == LogKind.Warn && e.Message.Contains("no single user is named Nobody", StringComparison.Ordinal));
-        Assert.Equal(new[] { tagged.Id }, ReadStore().Items.Where(e => e.Value.Contains(Jordan)).Select(e => e.Key));
+        // Nothing is written over the unusable files until there is something to save.
+        Assert.Equal("{ not json", File.ReadAllText(StorePath));
 
-        // The unusable files were set aside before the rebuilt store replaced them.
+        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
+
+        Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
         Assert.Single(Directory.GetFiles(_dir, RecordingOwnershipService.StoreFileName + ".corrupt-*"));
         Assert.Single(Directory.GetFiles(_dir, RecordingOwnershipService.StoreFileName + ".bak.corrupt-*"));
     }
@@ -1336,7 +1379,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         var service = NewService();
         await service.ClaimAsync(OwnedKind.Item, owned.Id.ToString(), Jordan, CancellationToken.None);
         var writes = _stateFile.Writes;
-        var tagWrites = _host.TagWrites.Count;
         var reads = _host.TimerReads;
 
         _enabled = false;
@@ -1357,7 +1399,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.OnItemRemovedAsync(owned.Id, CancellationToken.None);
         await service.OnItemAddedAsync(_host.AddItem("/rec/b.ts"), CancellationToken.None);
         await service.OnTimerCancelledAsync("t-p1", CancellationToken.None);
-        await service.OnUserUpdatedAsync(new ServerUser(Jordan, "Grandpa", "jordan-tag", false), CancellationToken.None);
         await service.OnUserDeletedAsync(Jordan, CancellationToken.None);
         service.AddTimerOwners("api-p1", new[] { Jordan });
 
@@ -1365,8 +1406,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Empty(_host.SeriesCreations);
         Assert.Equal(reads, _host.TimerReads);
         Assert.Equal(writes, _stateFile.Writes);
-        Assert.Equal(tagWrites, _host.TagWrites.Count);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(owned));
 
         // Turned back on, nothing was lost while it was off.
         _enabled = true;
@@ -1551,7 +1590,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
     // 1
     [Fact]
-    public async Task ItemAddedBeforePathCaptured_SyncAttachesOwnersAndTags()
+    public async Task ItemAddedBeforePathCaptured_SyncAttachesOwners()
     {
         AddProgram("p1", Start);
         var service = NewService();
@@ -1561,13 +1600,13 @@ public sealed class RecordingOwnershipTests : IDisposable
         // Jellyfin adds the item when the recording starts, before any sync saw the file.
         var item = _host.AddItem("/rec/a.ts");
         await service.OnItemAddedAsync(item, CancellationToken.None);
-        Assert.Empty(item.Tags);
+        Assert.Empty(OwnersOf(item));
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
 
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
     }
 
     // 2
@@ -1587,7 +1626,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         Assert.NotNull(item);
         Assert.Equal(new[] { Jordan }, ReadStore().Items[item!.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
     }
 
     // Jellyfin reads a cancel that had to kill ffmpeg as a failed recording and puts the same timer
@@ -1729,6 +1768,28 @@ public sealed class RecordingOwnershipTests : IDisposable
 
     // 3
     [Fact]
+    public async Task CancelWithActivePath_AnotherTimerNowWritingIt_LeavesThatTimerAlone()
+    {
+        AddProgram("p1", Start);
+        AddProgram("p2", Start);
+        var service = NewService();
+        await service.RecordProgramAsync("p1", Jordan, CancellationToken.None);
+        await service.RecordProgramAsync("p2", Alex, CancellationToken.None);
+
+        // The first timer is cancelled while writing the file, and before the cancel's turn comes
+        // a sync notes the second one writing to the same path.
+        _host.StartRecording(TimerOf("p2"), "/rec/a.ts", 1, 1);
+        var item = _host.AddItem("/rec/a.ts");
+        await service.SyncAsync(CancellationToken.None);
+        await service.OnTimerCancelledAsync(TimerOf("p1").TimerId, "/rec/a.ts", CancellationToken.None);
+
+        var saved = ReadStore();
+        Assert.Equal(new[] { Alex }, saved.Timers["api-p2"]);
+        Assert.False(saved.Timers.ContainsKey("api-p1"));
+        Assert.Equal(new[] { Alex }, OwnersOf(item));
+    }
+
+    [Fact]
     public async Task CancelWithActivePath_ItemExists_TakesOwnersAndTimerIsForgotten()
     {
         AddProgram("p1", Start);
@@ -1746,7 +1807,7 @@ public sealed class RecordingOwnershipTests : IDisposable
             item = _host.AddItem("/rec/a.ts");
             _host.RaiseTimerCancelled(timer.TimerId);
 
-            await WaitFor(() => item.Tags.Contains("Recorded by Jordan"), "the cancelled recording's owners");
+            await WaitFor(() => service.OwnersOfItems(new[] { item.Id }).Contains(Jordan), "the cancelled recording's owners");
             await Bounded(service.GetMineAsync(Jordan, CancellationToken.None), "a call after the cancel");
             var saved = ReadStore();
             Assert.Equal(new[] { Jordan }, saved.Items[item.Id]);
@@ -1762,7 +1823,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         var after = ReadStore();
         Assert.Equal(new[] { Jordan }, after.Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
     }
 
     // 4
@@ -1782,7 +1843,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         var item = _host.AddItem("/rec/a.ts");
         await service.OnItemAddedAsync(item, CancellationToken.None);
         Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
     }
 
     // 5
@@ -1828,7 +1889,7 @@ public sealed class RecordingOwnershipTests : IDisposable
 
         var item = _host.AddItem("/rec/a.ts");
         await service.OnItemAddedAsync(item, CancellationToken.None);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
     }
 
     // 7
@@ -1852,12 +1913,12 @@ public sealed class RecordingOwnershipTests : IDisposable
         var saved = ReadStore();
         Assert.Empty(saved.Timers);
         Assert.Equal(new[] { Jordan }, saved.Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
     }
 
     // 8
     [Fact]
-    public async Task JoinInProgress_ItemGainsOnlyNewOwnerWithOneTagWrite()
+    public async Task JoinInProgress_ItemGainsOnlyTheNewOwner()
     {
         AddProgram("p1", Start);
         var service = NewService();
@@ -1865,24 +1926,20 @@ public sealed class RecordingOwnershipTests : IDisposable
         _host.StartRecording(TimerOf("p1"), "/rec/a.ts", 1, 1);
         var item = _host.AddItem("/rec/a.ts");
         await service.SyncAsync(CancellationToken.None);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan }, OwnersOf(item));
 
-        var before = _host.TagWrites.Count;
         var joined = await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
         Assert.True(joined!.Joined);
-        Assert.Equal(new[] { (item.Id, "Recorded by Alex", true) }, _host.TagWrites.Skip(before));
         Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[item.Id]);
 
-        before = _host.TagWrites.Count;
         await service.ClaimAsync(OwnedKind.Timer, "api-p1", Sam, CancellationToken.None);
-        Assert.Equal(new[] { (item.Id, "Recorded by Sam", true) }, _host.TagWrites.Skip(before));
         Assert.Equal(new[] { Jordan, Alex, Sam }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan", "Recorded by Alex", "Recorded by Sam" }, TagsOf(item));
+        Assert.Equal(new[] { Jordan, Alex, Sam }, OwnersOf(item));
     }
 
     // 9
     [Fact]
-    public async Task RepeatedSyncs_AfterAttach_NoExtraTagWritesOrSaves()
+    public async Task RepeatedSyncs_AfterAttach_NoExtraSaves()
     {
         AddProgram("p1", Start);
         var service = NewService();
@@ -1890,7 +1947,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         _host.StartRecording(TimerOf("p1"), "/rec/a.ts", 1, 1);
         _host.AddItem("/rec/a.ts");
         await service.SyncAsync(CancellationToken.None);
-        var tagWrites = _host.TagWrites.Count;
         var saves = _stateFile.Writes;
 
         for (var i = 0; i < 3; i++)
@@ -1898,7 +1954,6 @@ public sealed class RecordingOwnershipTests : IDisposable
             await service.SyncAsync(CancellationToken.None);
         }
 
-        Assert.Equal(tagWrites, _host.TagWrites.Count);
         Assert.Equal(saves, _stateFile.Writes);
     }
 
@@ -1997,7 +2052,7 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task ClaimItem_NotARecording_ReturnsNullAndStampsNothing()
+    public async Task ClaimItem_NotARecording_ReturnsNullAndOwnsNothing()
     {
         var movie = _host.AddItem("/movies/film.mkv");
         _host.NotRecordings.Add(movie.Id);
@@ -2006,12 +2061,12 @@ public sealed class RecordingOwnershipTests : IDisposable
         var owners = await service.ClaimAsync(OwnedKind.Item, movie.Id.ToString(), Jordan, CancellationToken.None);
 
         Assert.Null(owners);
-        Assert.Empty(_host.TagWrites);
+        Assert.Empty(ReadStoreOrEmpty().Items);
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
 
     [Fact]
-    public async Task ClaimItem_HostCantTellRecordings_IsRefusedAndStampsNothing()
+    public async Task ClaimItem_HostCantTellRecordings_IsRefusedAndOwnsNothing()
     {
         var item = _host.AddItem("/rec/a.ts");
         _host.RecordingKindUnknown = true;
@@ -2020,7 +2075,7 @@ public sealed class RecordingOwnershipTests : IDisposable
         var owners = await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
 
         Assert.Null(owners);
-        Assert.Empty(_host.TagWrites);
+        Assert.Empty(ReadStoreOrEmpty().Items);
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
     }
 
@@ -2131,45 +2186,7 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task UserRenamedWhileOff_TagIsSwappedWhenTurnedBackOn()
-    {
-        var item = _host.AddItem("/rec/a.ts");
-        var service = NewService();
-        await service.ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
-        await service.SyncAsync(CancellationToken.None);
-
-        _enabled = false;
-        var renamed = new ServerUser(Jordan, "Grandpa", "jordan-tag", false);
-        _host.Users[_host.Users.FindIndex(u => u.Id == Jordan)] = renamed;
-        await service.OnUserUpdatedAsync(renamed, CancellationToken.None);
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
-
-        _enabled = true;
-        await service.SyncAsync(CancellationToken.None);
-        Assert.Equal(new[] { "Recorded by Grandpa" }, TagsOf(item));
-
-        // Later renames go by the name it now knows.
-        var again = new ServerUser(Jordan, "Gramps", "jordan-tag", false);
-        _host.Users[_host.Users.FindIndex(u => u.Id == Jordan)] = again;
-        await service.OnUserUpdatedAsync(again, CancellationToken.None);
-        Assert.Equal(new[] { "Recorded by Gramps" }, TagsOf(item));
-    }
-
-    [Fact]
-    public async Task UserRenamedWhileServerWasDown_TagIsSwappedOnTheFirstSync()
-    {
-        var item = _host.AddItem("/rec/a.ts");
-        await NewService().ClaimAsync(OwnedKind.Item, item.Id.ToString(), Jordan, CancellationToken.None);
-
-        _host.Users[_host.Users.FindIndex(u => u.Id == Jordan)] = new ServerUser(Jordan, "Grandpa", "jordan-tag", false);
-        await NewService().SyncAsync(CancellationToken.None);
-
-        Assert.Equal(new[] { "Recorded by Grandpa" }, TagsOf(item));
-    }
-
-    [Fact]
-    public async Task UserDeletedWhileOff_LeavesOwnersAndTagsWhenTurnedBackOn()
+    public async Task UserDeletedWhileOff_LeftOutOfOwnersWhenTurnedBackOn()
     {
         var item = _host.AddItem("/rec/a.ts");
         var service = NewService();
@@ -2186,11 +2203,10 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { Alex }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Alex" }, TagsOf(item));
     }
 
     [Fact]
-    public async Task UserLookupFailsWhenTurnedBackOn_KeepsOwnersAndTags()
+    public async Task UserLookupFailsWhenTurnedBackOn_KeepsOwners()
     {
         var item = _host.AddItem("/rec/a.ts");
         var service = NewService();
@@ -2204,16 +2220,14 @@ public sealed class RecordingOwnershipTests : IDisposable
         await service.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { Jordan }, ReadStore().Items[item.Id]);
-        Assert.Equal(new[] { "Recorded by Jordan" }, TagsOf(item));
     }
 
     [Fact]
-    public async Task GetUsersThrows_RecordStillSchedulesAndOwns()
+    public async Task UserLookupThrows_RecordStillSchedulesAndOwns()
     {
         AddProgram("p1", Start);
         _host.UserLookupThrows = true;
 
-        // The first call of a new process loads the store, which lists the users.
         var service = NewService();
         var outcome = await service.RecordProgramAsync("p1", Jordan, CancellationToken.None);
 
@@ -2222,7 +2236,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.Equal(new[] { "p1" }, _host.Scheduled);
         Assert.Equal(new[] { Jordan }, ReadStore().Timers["api-p1"]);
         Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
-        Assert.Contains(_log.Entries, e => e.Kind == LogKind.Warn && e.Message.Contains("list the server's users"));
     }
 
     // PR review fixes
@@ -2354,69 +2367,12 @@ public sealed class RecordingOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task StoreAndBackupBothMissing_RecordingsWithOwnerTags_RebuildsFromTags()
-    {
-        var tagged = _host.AddItem("/rec/a.ts");
-        tagged.Tags = new[] { "Recorded by Jordan" };
-        var service = NewService();
-
-        var mine = await service.GetMineAsync(Jordan, CancellationToken.None);
-
-        Assert.Equal(new[] { tagged.Id }, mine.ItemIds);
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[tagged.Id]);
-        Assert.Contains(_log.Entries, e => e.Kind == LogKind.Warn && e.Message.Contains("are missing"));
-    }
-
-    [Fact]
-    public async Task FirstStart_NoOwnerTags_SavesNothing()
+    public async Task FirstStart_SavesNothing()
     {
         var service = NewService();
 
         Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
         Assert.Equal(0, _stateFile.Writes);
-    }
-
-    [Fact]
-    public async Task RebuildFails_NothingSavedOverTheFiles_NextCallRebuilds()
-    {
-        var tagged = _host.AddItem("/rec/a.ts");
-        tagged.Tags = new[] { "Recorded by Jordan" };
-        Directory.CreateDirectory(_dir);
-        File.WriteAllText(StorePath, "{ not json");
-        File.WriteAllText(StorePath + ".bak", "also not json");
-        _host.UserLookupThrows = true;
-        var service = NewService();
-
-        // A claim made while the rebuild can't run isn't saved over the files the rebuild needs.
-        Assert.Empty((await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        await service.ClaimAsync(OwnedKind.Item, tagged.Id.ToString(), Alex, CancellationToken.None);
-        Assert.Equal(0, _stateFile.Writes);
-        Assert.Equal("{ not json", File.ReadAllText(StorePath));
-
-        _host.UserLookupThrows = false;
-        Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Equal(new[] { Jordan, Alex }, ReadStore().Items[tagged.Id]);
-    }
-
-    [Fact]
-    public async Task RebuildFails_RecordMadeMeanwhile_KeepsItsOwnerOnceRebuilt()
-    {
-        var tagged = _host.AddItem("/rec/a.ts");
-        tagged.Tags = new[] { "Recorded by Jordan" };
-        AddProgram("p1", Start);
-        Directory.CreateDirectory(_dir);
-        File.WriteAllText(StorePath, "{ not json");
-        File.WriteAllText(StorePath + ".bak", "also not json");
-        _host.UserLookupThrows = true;
-        var service = NewService();
-
-        var outcome = await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
-        Assert.Equal("api-p1", outcome!.Id);
-
-        _host.UserLookupThrows = false;
-        Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Alex, CancellationToken.None)).TimerIds);
-        Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p1"]);
     }
 
     [Fact]
@@ -2514,16 +2470,15 @@ public sealed class RecordingOwnershipTests : IDisposable
         Assert.False(options.CanSearch);
 
         Assert.True(await incomplete.ScheduleSuggestedShowingAsync(source.Id, options.Showing!, Jordan, CancellationToken.None));
-        Assert.Single(ReadIncompleteStore().PendingTimerOwners);
+        Assert.Single(ReadStore().PendingTimerOwners);
 
-        // The next pass that lists the timers again finds it.
+        // The owners sync that lists the timers again finds it, with no detection pass, so it
+        // reaches the timer even with detection off.
         _host.RevealScheduledTimers();
-        _clock.Advance(IncompleteRecordingRules.SafetyNetInterval);
-        await incomplete.RunAsync(CancellationToken.None);
         await owners.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { "api-" + future.Id }, (await owners.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
-        Assert.Empty(ReadIncompleteStore().PendingTimerOwners);
+        Assert.Empty(ReadStore().PendingTimerOwners);
     }
 
     [Fact]
@@ -2613,6 +2568,16 @@ public sealed class RecordingOwnershipTests : IDisposable
 
             _inner.AddTimerOwners(timerId, owners);
         }
+
+        public void AddProgramOwners(string programId, IEnumerable<Guid> owners)
+        {
+            if (Fail)
+            {
+                throw new IOException("owners unavailable");
+            }
+
+            _inner.AddProgramOwners(programId, owners);
+        }
     }
 
     [Theory]
@@ -2639,54 +2604,6 @@ public sealed class RecordingOwnershipTests : IDisposable
         await owners.SyncAsync(CancellationToken.None);
 
         Assert.Equal(new[] { "api-" + future.Id }, (await owners.GetMineAsync(Jordan, CancellationToken.None)).TimerIds);
-    }
-
-    [Fact]
-    public async Task RebuildFails_FileReadableAgain_KeepsOwnersRecordedMeanwhile()
-    {
-        var tagged = _host.AddItem("/rec/a.ts");
-        tagged.Tags = new[] { "Recorded by Jordan" };
-        AddProgram("p1", Start);
-        Directory.CreateDirectory(_dir);
-        File.WriteAllText(StorePath, "{ not json");
-        File.WriteAllText(StorePath + ".bak", "also not json");
-        _host.UserLookupThrows = true;
-        var service = NewService();
-        await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
-
-        // The storage comes back with a good copy before the rebuild gets to run.
-        File.WriteAllText(StorePath, JsonSerializer.Serialize(new OwnershipStoreData { Items = { [tagged.Id] = new List<Guid> { Jordan } } }));
-        _host.UserLookupThrows = false;
-
-        Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Alex, CancellationToken.None)).TimerIds);
-        Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p1"]);
-    }
-
-    [Fact]
-    public async Task RebuildFails_FileReadableAgainDuringTheCall_KeepsBothTheFileAndTheCall()
-    {
-        var tagged = _host.AddItem("/rec/a.ts");
-        tagged.Tags = new[] { "Recorded by Jordan" };
-        AddProgram("p1", Start);
-        Directory.CreateDirectory(_dir);
-        File.WriteAllText(StorePath, "{ not json");
-        File.WriteAllText(StorePath + ".bak", "also not json");
-        _host.UserLookupThrows = true;
-        var service = NewService();
-
-        // The storage comes back while the call is listing timers, after it took the stand-in.
-        _host.OnNextTimerRead = () =>
-        {
-            File.WriteAllText(StorePath, JsonSerializer.Serialize(new OwnershipStoreData { Items = { [tagged.Id] = new List<Guid> { Jordan } } }));
-            _host.UserLookupThrows = false;
-        };
-        await service.RecordProgramAsync("p1", Alex, CancellationToken.None);
-
-        Assert.Equal(new[] { "api-p1" }, (await service.GetMineAsync(Alex, CancellationToken.None)).TimerIds);
-        Assert.Equal(new[] { tagged.Id }, (await service.GetMineAsync(Jordan, CancellationToken.None)).ItemIds);
-        Assert.Equal(new[] { Jordan }, ReadStore().Items[tagged.Id]);
-        Assert.Equal(new[] { Alex }, ReadStore().Timers["api-p1"]);
     }
 
     private OwnershipStoreData ReadStoreOrEmpty() =>
