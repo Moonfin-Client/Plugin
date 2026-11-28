@@ -140,19 +140,36 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<GameArtworkReconciliationService>());
 
         // Incomplete Live TV recordings
-        serviceCollection.AddSingleton<ILiveTvRecordingHost, JellyfinLiveTvRecordingHost>();
+        serviceCollection.AddSingleton<JellyfinLiveTvRecordingHost>();
+        serviceCollection.AddSingleton<ILiveTvRecordingHost>(provider => provider.GetRequiredService<JellyfinLiveTvRecordingHost>());
+        serviceCollection.AddScoped<IEventConsumer<UserDeletedEventArgs>, RecordingHostUserDeletedConsumer>();
         serviceCollection.AddSingleton(provider => new IncompleteRecordingService(
             provider.GetRequiredService<ILiveTvRecordingHost>(),
             new JellyfinRecordingLog(provider.GetRequiredService<ILogger<IncompleteRecordingService>>()),
             new JellyfinStateFile(),
             () => DateTime.UtcNow,
             Path.Combine(MoonfinPlugin.ResolveDataFolderPath(), IncompleteRecordingService.StoreFileName),
-            IncompleteRecordingConfig.Read));
+            IncompleteRecordingConfig.Read,
+            provider.GetRequiredService<RecordingOwnershipService>()));
         serviceCollection.AddSingleton(provider => new IncompleteRecordingWatcher(
             provider.GetRequiredService<IncompleteRecordingService>(),
             provider.GetRequiredService<ILiveTvRecordingHost>(),
             new JellyfinRecordingLog(provider.GetRequiredService<ILogger<IncompleteRecordingWatcher>>())));
         serviceCollection.AddHostedService<IncompleteRecordingHostedService>();
+
+        // Who owns each Live TV timer, series rule and recording (My Recordings)
+        serviceCollection.AddSingleton(provider => new RecordingOwnershipService(
+            provider.GetRequiredService<ILiveTvRecordingHost>(),
+            new JellyfinRecordingLog(provider.GetRequiredService<ILogger<RecordingOwnershipService>>()),
+            new JellyfinStateFile(),
+            () => DateTime.UtcNow,
+            RecordingOwnershipConfig.StorePath,
+            RecordingOwnershipConfig.Enabled));
+        serviceCollection.AddSingleton(provider => new RecordingOwnershipWatcher(
+            provider.GetRequiredService<ILiveTvRecordingHost>(),
+            provider.GetRequiredService<RecordingOwnershipService>(),
+            new JellyfinRecordingLog(provider.GetRequiredService<ILogger<RecordingOwnershipWatcher>>())));
+        serviceCollection.AddHostedService<RecordingOwnershipHostedService>();
 
         // Recommendations / Similar Items
         serviceCollection.AddSingleton<MoonfinSimilarItemsService>();

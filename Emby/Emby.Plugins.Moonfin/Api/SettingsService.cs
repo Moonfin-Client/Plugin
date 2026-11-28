@@ -63,6 +63,13 @@ namespace Emby.Plugins.Moonfin.Api
             return true;
         }
 
+        /// <summary>
+        /// Ping's recordingOwnersSupported: the setting, but only once the owners service runs, so a
+        /// client that pings during startup isn't sent to endpoints that would answer 503.
+        /// </summary>
+        internal static bool RecordingOwnersSupported(PluginConfiguration? config, bool serviceReady) =>
+            serviceReady && (config?.LiveTvRecordingOwners ?? true);
+
         public object Get(GetPingRequest request)
         {
             var config = Plugin.Instance?.Configuration;
@@ -101,6 +108,7 @@ namespace Emby.Plugins.Moonfin.Api
                 smartSearchEnabled = config?.SmartSearchEnabled ?? false,
                 recommendationsSupported = config?.RecommendationsProviderEnabled ?? true,
                 incompleteRecordingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
+                recordingOwnersSupported = RecordingOwnersSupported(config, PluginServices.RecordingOwners != null),
                 extendedCompleteShowingsSupported = config?.LiveTvDetectIncompleteRecordings ?? true,
                 clientLogSupported = config?.EnableClientLogUpload ?? false,
                 calendarAvailable = seerrEnabled

@@ -77,7 +77,78 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
     public event EventHandler<LibraryItem>? ItemAdded;
     public event EventHandler<LibraryItem>? ItemUpdated;
     public event EventHandler<Guid>? ItemRemoved;
+    public event EventHandler<Guid>? UserDeleted;
 #pragma warning restore CS0067
+
+    public List<SeriesRule> SeriesRules { get; } = new();
+
+    public List<ServerUser> Users { get; } = new();
+
+    public void RaiseUserDeleted(Guid userId) => UserDeleted?.Invoke(this, userId);
+
+    public void RaiseTimerCreated(ScheduledTimer timer) => TimerCreated?.Invoke(this, timer);
+
+    /// <summary>Raises a cancel without touching the timer or its file, as the server does before it stops the recording.</summary>
+    public void RaiseTimerCancelled(string timerId) => TimerCancelled?.Invoke(this, timerId);
+
+    /// <summary>Every series rule creation, with the settings it was given.</summary>
+    public List<(string ProgramId, IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides)> SeriesCreations { get; } = new();
+
+    /// <summary>Library items no user may see.</summary>
+    public HashSet<Guid> HiddenItems { get; } = new();
+
+    private int _timerReads;
+
+    /// <summary>How many times the timers were listed.</summary>
+    public int TimerReads => Volatile.Read(ref _timerReads);
+
+    public Task<IReadOnlyList<SeriesRule>> GetSeriesTimersAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SeriesRule>>(SeriesRules.ToList());
+
+    /// <summary>When set, series rule creation fails with this reason, as a server refusal does.</summary>
+    public string? SeriesCreationError { get; set; }
+
+    public Task<SeriesRuleCreation> CreateSeriesTimerAsync(string programId, IReadOnlyDictionary<string, System.Text.Json.JsonElement>? overrides, CancellationToken cancellationToken)
+    {
+        if (SeriesCreationError != null) return Task.FromResult(SeriesRuleCreation.Failed(SeriesCreationError));
+        SeriesCreations.Add((programId, overrides));
+        var rule = new SeriesRule("rule-" + (SeriesRules.Count + HiddenSeriesRules.Count + 1), null, programId, ProgramId: programId);
+        if (SeriesRulesHidden)
+        {
+            HiddenSeriesRules.Add(rule);
+            return Task.FromResult(new SeriesRuleCreation(null, Accepted: true));
+        }
+
+        SeriesRules.Add(rule);
+        return Task.FromResult(new SeriesRuleCreation(rule.Id, Accepted: true));
+    }
+
+    /// <summary>Library items that are not Live TV recordings; every other existing item is one.</summary>
+    public HashSet<Guid> NotRecordings { get; } = new();
+
+    /// <summary>The host can't tell which items are recordings, as on Emby.</summary>
+    public bool RecordingKindUnknown { get; set; }
+
+    public bool? IsLiveTvRecording(Guid itemId, Guid userId) =>
+        RecordingKindUnknown ? null : Items.Any(i => i.Id == itemId) && !NotRecordings.Contains(itemId);
+
+    /// <summary>User lookups answer "can't tell": GetUser null, UserExists null.</summary>
+    public bool UserLookupUnknown { get; set; }
+
+    /// <summary>User lookups throw, as a reflection call into a changed server can.</summary>
+    public bool UserLookupThrows { get; set; }
+
+    public ServerUser? GetUser(Guid userId)
+    {
+        if (UserLookupThrows) throw new System.Reflection.TargetInvocationException(new InvalidOperationException("GetUserDto changed"));
+        return UserLookupUnknown ? null : Users.FirstOrDefault(u => u.Id == userId);
+    }
+
+    public bool? UserExists(Guid userId)
+    {
+        if (UserLookupThrows) throw new System.Reflection.TargetInvocationException(new InvalidOperationException("GetUserById changed"));
+        return UserLookupUnknown ? null : Users.Any(u => u.Id == userId);
+    }
 
     public List<ScheduledTimer> Timers { get; } = new();
 
@@ -117,18 +188,74 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public bool SchedulingFails { get; set; }
 
+    /// <summary>Scheduling succeeds but the answer names no timer, so it must be found in a listing.</summary>
+    public bool ScheduleReturnsNoIds { get; set; }
+
+    /// <summary>New timers are left out of listings until <see cref="RevealScheduledTimers"/>, as a server slow to list them.</summary>
+    public bool ScheduledTimersHidden { get; set; }
+
+    public List<ScheduledTimer> HiddenTimers { get; } = new();
+
+    public void RevealScheduledTimers()
+    {
+        ScheduledTimersHidden = false;
+        Timers.AddRange(HiddenTimers);
+        HiddenTimers.Clear();
+    }
+
+    /// <summary>New series rules are left out of listings until <see cref="RevealSeriesRules"/>.</summary>
+    public bool SeriesRulesHidden { get; set; }
+
+    public List<SeriesRule> HiddenSeriesRules { get; } = new();
+
+    public void RevealSeriesRules()
+    {
+        SeriesRulesHidden = false;
+        SeriesRules.AddRange(HiddenSeriesRules);
+        HiddenSeriesRules.Clear();
+    }
+
+    public void RaiseItemAdded(LibraryItem item) => ItemAdded?.Invoke(this, item);
+
+    public void RaiseItemRemoved(Guid itemId) => ItemRemoved?.Invoke(this, itemId);
+
+    /// <summary>When set, scheduling fails with this reason, as the host reports a server refusal.</summary>
+    public string? SchedulingError { get; set; }
+
     public TaskCompletionSource? TimerReadGate { get; set; }
 
     public int ProgramLookups { get; set; }
 
     public HashSet<string> HiddenPrograms { get; } = new();
 
+    /// <summary>Runs once, inside the next timer listing (storage coming back mid-call, say).</summary>
+    public Action? OnNextTimerRead;
+
     public async Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _timerReads);
+        Interlocked.Exchange(ref OnNextTimerRead, null)?.Invoke();
         if (TimerReadGate != null) await TimerReadGate.Task.WaitAsync(cancellationToken);
         if (TimerBackendTimesOut) throw new TaskCanceledException("DVR backend timed out");
         if (TimersUnavailable) throw new InvalidOperationException("Live TV is not ready");
-        return Timers.ToList();
+        lock (Timers)
+        {
+            return Timers.ToList();
+        }
+    }
+
+    /// <summary>Ids passed to CancelTimerAsync, in order.</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> CancelRequests { get; } = new();
+
+    public Task CancelTimerAsync(string apiId, CancellationToken cancellationToken)
+    {
+        CancelRequests.Enqueue(apiId);
+        lock (Timers)
+        {
+            Timers.RemoveAll(t => string.Equals(t.ApiId ?? t.TimerId, apiId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return Task.CompletedTask;
     }
 
     public string? GetActiveRecordingPath(string timerId) => ActivePaths.GetValueOrDefault(timerId);
@@ -157,6 +284,7 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public Task<ScheduleResult> ScheduleProgramAsync(string programId, CancellationToken cancellationToken)
     {
+        if (SchedulingError != null) return Task.FromResult(ScheduleResult.FailedWith(SchedulingError));
         if (SchedulingFails) return Task.FromResult(ScheduleResult.Failed);
         Scheduled.Add(programId);
         var program = Programs.First(p => p.Id == programId);
@@ -171,10 +299,11 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
         };
         timer.Status = "New";
         timer.IsManual = true;
-        if (!Timers.Contains(timer)) Timers.Add(timer);
+        if (ScheduledTimersHidden) HiddenTimers.Add(timer);
+        else if (!Timers.Contains(timer)) Timers.Add(timer);
         TimerCreated?.Invoke(this, timer);
         TimerScheduled?.Invoke(timer);
-        return Task.FromResult(ScheduleResult.Created);
+        return Task.FromResult(ScheduleReturnsNoIds ? ScheduleResult.Created : ScheduleResult.CreatedWith(timer.TimerId, timer.ApiId));
     }
 
     public LibraryItem? FindItemByPath(string path) => Items.FirstOrDefault(i => i.Path == path);
@@ -183,11 +312,19 @@ internal sealed class FakeRecordingHost : ILiveTvRecordingHost
 
     public IReadOnlyList<string> FindRenamedSiblings(string path) => RenamedSiblingLookup?.Invoke(path) ?? Array.Empty<string>();
 
-    public bool IsVisibleTo(Guid itemId, Guid userId) => !HiddenPrograms.Contains(itemId.ToString("N"));
+    /// <summary>Accounts missing from Users see nothing, as a deleted user on a real server.</summary>
+    public bool UnlistedUsersSeeNothing { get; set; }
 
-    public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.ToHashSet();
+    public bool IsVisibleTo(Guid itemId, Guid userId) =>
+        !(UnlistedUsersSeeNothing && Users.All(u => u.Id != userId)) && !HiddenPrograms.Contains(itemId.ToString("N")) && !HiddenItems.Contains(itemId);
 
-    public IReadOnlyList<string>? GetTags(Guid itemId) => Items.FirstOrDefault(i => i.Id == itemId)?.Tags;
+    public ISet<Guid> VisibleTo(IReadOnlyCollection<Guid> itemIds, Guid userId) => itemIds.Where(id => !HiddenItems.Contains(id)).ToHashSet();
+
+    /// <summary>Item lookups throw, as a library that can't be asked right now does.</summary>
+    public bool ItemLookupThrows { get; set; }
+
+    public IReadOnlyList<string>? GetTags(Guid itemId) =>
+        ItemLookupThrows ? throw new IOException("The library can't be read") : Items.FirstOrDefault(i => i.Id == itemId)?.Tags;
 
     public void CancelTimer(ScheduledTimer timer, bool apiId = false)
     {
@@ -996,6 +1133,29 @@ public sealed class IncompleteRecordingTests : IDisposable
         Assert.Equal(CompleteShowingState.Waiting, failed.Request!.State);
         Assert.Null(failed.Request.ScheduledStart);
         Assert.Null(failed.Request.ScheduledChannelName);
+    }
+
+    [Fact]
+    public async Task ADeletedRequesterDoesNotStallTheSearchForTheirCoOwners()
+    {
+        var other = Guid.NewGuid();
+        var source = AddAiring(Guid.NewGuid().ToString("N"), Start);
+        _clock.UtcNow = Start.AddMinutes(25);
+        _host.Users.Add(new ServerUser(User, "Requester", null, false));
+        _host.Users.Add(new ServerUser(other, "Other", null, false));
+        var service = NewService();
+        await service.RequestCompleteShowingAsync(source.Id, User, CancellationToken.None);
+        await service.RequestCompleteShowingAsync(source.Id, other, CancellationToken.None);
+        // The requester is deleted; only the co-owner is left, and the server shows a deleted user nothing.
+        _host.Users.RemoveAll(u => u.Id == User);
+        _host.UnlistedUsersSeeNothing = true;
+        var later = AddAiring(Guid.NewGuid().ToString("N"), Start.AddDays(1));
+
+        service.MarkGuideRefreshed();
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { later.Id }, _host.Scheduled);
+        Assert.Equal(CompleteShowingState.Scheduled, ReadStore().Requests.Single().State);
     }
 
     [Fact]

@@ -226,6 +226,9 @@ namespace Emby.Plugins.Moonfin
         /// </summary>
         public bool LiveTvDetectIncompleteRecordings { get; set; } = true;
 
+        /// <summary>Tracks which users own each Live TV timer, series rule and recording, for My Recordings.</summary>
+        public bool LiveTvRecordingOwners { get; set; } = true;
+
         /// <summary>When a Live TV recording comes out incomplete, schedule the earliest later showing of the same episode.</summary>
         public bool LiveTvAutoRecordCompleteShowing { get; set; }
 

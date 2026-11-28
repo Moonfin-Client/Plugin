@@ -1,6 +1,9 @@
+using System.Reflection;
 using System.Text.Json;
 using Jellyfin.Data.Events;
 using Jellyfin.Data.Enums;
+using Jellyfin.Data.Events.Users;
+using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -13,6 +16,29 @@ using Moonfin.LiveTv;
 using Moonfin.Server.Helpers;
 
 namespace Moonfin.Server.Services;
+
+/// <summary>Tells the recording host a user was deleted, which the user manager has no event for.</summary>
+public sealed class RecordingHostUserDeletedConsumer : IEventConsumer<UserDeletedEventArgs>
+{
+    private readonly JellyfinLiveTvRecordingHost _host;
+
+    public RecordingHostUserDeletedConsumer(JellyfinLiveTvRecordingHost host)
+    {
+        _host = host;
+    }
+
+    public Task OnEvent(UserDeletedEventArgs eventArgs)
+    {
+        // The User the event carries changed type in 10.11, so its id is read by reflection.
+        var user = eventArgs.GetType().GetProperty("Argument")?.GetValue(eventArgs);
+        if (user?.GetType().GetProperty("Id")?.GetValue(user) is Guid id)
+        {
+            _host.NotifyUserDeleted(id);
+        }
+
+        return Task.CompletedTask;
+    }
+}
 
 /// <summary>The Jellyfin implementation of <see cref="ILiveTvRecordingHost"/>.</summary>
 public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposable
@@ -65,6 +91,51 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
 
     public event EventHandler<Guid>? ItemRemoved;
 
+    public event EventHandler<Guid>? UserDeleted;
+
+    /// <summary>Raised by the user deleted event consumer, since the user manager has no event of its own for it.</summary>
+    internal void NotifyUserDeleted(Guid userId) => UserDeleted?.Invoke(this, userId);
+
+    private ServerUser? ToServerUser(object user)
+    {
+        var dto = UserReflection.ToDto(_services, user);
+        return dto == null ? null : new ServerUser(dto.Id, dto.Name ?? string.Empty, dto.PrimaryImageTag, dto.Policy?.IsDisabled == true);
+    }
+
+    public ServerUser? GetUser(Guid userId)
+    {
+        try
+        {
+            var user = UserReflection.ResolveUser(_services, userId);
+            return user == null ? null : ToServerUser(user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not read user {UserId}", userId);
+            return null;
+        }
+    }
+
+    // Only the lookup by id: the DTO a ServerUser is built from can fail on its own, which says
+    // nothing about whether the user exists.
+    public bool? UserExists(Guid userId)
+    {
+        try
+        {
+            if (!UserReflection.CanResolveUsers(_services))
+            {
+                return null;
+            }
+
+            return UserReflection.ResolveUser(_services, userId) != null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not check whether user {UserId} exists", userId);
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         _liveTvManager.TimerCreated -= OnTimerCreated;
@@ -76,6 +147,8 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         _libraryManager.ItemUpdated -= OnItemUpdated;
         _libraryManager.ItemRemoved -= OnItemRemoved;
     }
+
+    public Task CancelTimerAsync(string apiId, CancellationToken cancellationToken) => _liveTvManager.CancelTimer(apiId);
 
     public async Task<IReadOnlyList<ScheduledTimer>> GetTimersAsync(CancellationToken cancellationToken)
     {
@@ -113,6 +186,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
                 PrePaddingSeconds = t.PrePaddingSeconds,
                 PostPaddingSeconds = t.PostPaddingSeconds,
                 Status = t.Status.ToString(),
+                SeriesTimerId = string.IsNullOrEmpty(t.SeriesTimerId) ? null : t.SeriesTimerId,
                 IsManual = manual.TryGetValue(t.ServiceName + "\0" + t.ExternalId, out var isManual) ? isManual : null,
             })
             .ToList();
@@ -207,6 +281,76 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         }).Items.OfType<LiveTvProgram>().Select(p => ToGuideProgram(p, channels)).ToList();
     }
 
+    public async Task<IReadOnlyList<SeriesRule>> GetSeriesTimersAsync(CancellationToken cancellationToken)
+    {
+        var result = await _liveTvManager.GetSeriesTimers(new SeriesTimerQuery(), cancellationToken).ConfigureAwait(false);
+
+        // The public DTO carries no guide series id, so beyond the API id and name a rule is told
+        // apart by the program it was made from and the channel it records on.
+        return result.Items
+            .Where(t => !string.IsNullOrEmpty(t.Id))
+            .Select(t => new SeriesRule(
+                t.Id,
+                null,
+                t.Name,
+                string.IsNullOrEmpty(t.ProgramId) ? null : t.ProgramId,
+                t.ChannelId == Guid.Empty ? null : t.ChannelId.ToString("N"),
+                t.RecordAnyChannel))
+            .ToList();
+    }
+
+    public async Task<SeriesRuleCreation> CreateSeriesTimerAsync(string programId, IReadOnlyDictionary<string, JsonElement>? overrides, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var before = (await GetSeriesTimersAsync(cancellationToken).ConfigureAwait(false))
+                .Select(r => r.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var rule = await _liveTvManager.GetNewTimerDefaults(programId, cancellationToken).ConfigureAwait(false);
+            ApplyOverrides(rule, overrides);
+
+            await _liveTvManager.CreateSeriesTimer(rule, cancellationToken).ConfigureAwait(false);
+
+            // The server returns no id, so the new rule is the one that wasn't there before.
+            var created = (await GetSeriesTimersAsync(cancellationToken).ConfigureAwait(false))
+                .Where(r => !before.Contains(r.Id))
+                .ToList();
+            return new SeriesRuleCreation((created.Count == 1 ? created[0] : created.FirstOrDefault(r => r.Name == rule.Name))?.Id, Accepted: true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not create a series rule for program {ProgramId}", programId);
+            return SeriesRuleCreation.Failed(ex.Message);
+        }
+    }
+
+    // The client's settings map names the rule's properties directly (RecordNewOnly, KeepUpTo, ...).
+    private void ApplyOverrides(SeriesTimerInfoDto rule, IReadOnlyDictionary<string, JsonElement>? overrides)
+    {
+        if (overrides == null)
+        {
+            return;
+        }
+
+        foreach (var (name, value) in overrides)
+        {
+            var property = typeof(SeriesTimerInfoDto).GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (property is not { CanWrite: true } || property.Name is "Id" or "ServerId" or "ProgramId")
+            {
+                continue;
+            }
+
+            try
+            {
+                property.SetValue(rule, value.Deserialize(property.PropertyType));
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+            {
+                _logger.LogWarning(ex, "Ignored series rule setting {Setting}", name);
+            }
+        }
+    }
+
     public async Task<ScheduleResult> ScheduleProgramAsync(string programId, CancellationToken cancellationToken)
     {
         try
@@ -222,7 +366,8 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
             }
 
             await _liveTvManager.CreateTimer(timer, cancellationToken).ConfigureAwait(false);
-            return ScheduleResult.Created;
+            var created = await FindTimerAsync(programId, cancellationToken).ConfigureAwait(false);
+            return ScheduleResult.CreatedWith(created?.TimerId, created?.ApiId);
         }
         catch (ArgumentException)
         {
@@ -231,8 +376,25 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         }
         catch (Exception ex)
         {
+            // The reason reaches the client, which shows it (a tuner conflict, say).
             _logger.LogWarning(ex, "Could not schedule program {ProgramId}", programId);
-            return ScheduleResult.Failed;
+            return ScheduleResult.FailedWith(ex.Message);
+        }
+    }
+
+    // The timer just created, by its program. Null when the lookup fails; the recording is scheduled regardless.
+    private async Task<ScheduledTimer?> FindTimerAsync(string programId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await GetTimersAsync(cancellationToken).ConfigureAwait(false))
+                .FirstOrDefault(t => string.Equals(t.ProgramId, programId, StringComparison.OrdinalIgnoreCase)
+                    && t.Status != nameof(RecordingStatus.Cancelled));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not look up the timer for program {ProgramId}", programId);
+            return null;
         }
     }
 
@@ -350,6 +512,62 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
         return true;
     }
 
+    // A finished recording's DTO type is Episode, Movie or Video, so only its place under the
+    // recording locations tells it apart from any other library item.
+    public bool? IsLiveTvRecording(Guid itemId, Guid userId)
+    {
+        try
+        {
+            if (_libraryManager.GetItemById(itemId) is not { IsFolder: false } item)
+            {
+                return false;
+            }
+
+            var locations = RecordingLocations();
+            if (!string.IsNullOrEmpty(item.Path) && locations.Any(l => IsUnderLocation(item.Path, l)))
+            {
+                return true;
+            }
+
+            // Elsewhere means "not a recording" only once the recording locations are known to
+            // the library; with none of them resolving, this server's setup can't be read.
+            return RecordingFolderIds(locations).Length == 0 ? null : false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not check whether item {ItemId} is a Live TV recording", itemId);
+            return null;
+        }
+    }
+
+    /// <summary>Whether a file path lies inside a folder, ignoring case and either separator.</summary>
+    internal static bool IsUnderLocation(string path, string location)
+    {
+        var folder = location.TrimEnd('/', '\\');
+        return folder.Length > 0
+            && path.Length > folder.Length
+            && path.StartsWith(folder, StringComparison.OrdinalIgnoreCase)
+            && path[folder.Length] is '/' or '\\';
+    }
+
+    // GetRecordingFolders builds its folder infos from the configured paths and never sets their
+    // ItemId, so the paths are all there is to go on.
+    private string[] RecordingLocations() =>
+        _recordingsManager.GetRecordingFolders()
+            .SelectMany(f => f.Locations ?? Array.Empty<string>())
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    // The library folders at the recording locations, found the way LiveTvManager finds them.
+    private Guid[] RecordingFolderIds(IEnumerable<string> locations) =>
+        locations
+            .Select(l => _libraryManager.FindByPath(l, true))
+            .Where(f => f != null)
+            .Select(f => f!.Id)
+            .Distinct()
+            .ToArray();
+
     private bool IsVisibleTo(Guid itemId, object user)
     {
         var item = _libraryManager.GetItemById(itemId);
@@ -391,6 +609,7 @@ public sealed class JellyfinLiveTvRecordingHost : ILiveTvRecordingHost, IDisposa
             StartDate = program.StartDate,
             EndDate = program.EndDate ?? program.StartDate,
             ChannelName = channel?.Name,
+            ChannelId = program.ChannelId == Guid.Empty ? null : program.ChannelId.ToString("N"),
             ChannelNumber = (channel as LiveTvChannel)?.Number,
             IsHD = channel?.IsHD ?? false,
         };
