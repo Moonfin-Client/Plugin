@@ -4254,6 +4254,15 @@
                                 </select>
                             </div>
                             <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultLibraryOriginalTitleMode">Show Original Title</label>
+                                <select id="DefaultLibraryOriginalTitleMode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="off">Off</option>
+                                    <option value="replace">Show Original Title</option>
+                                    <option value="parentheses">Show in Parentheses</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultUseDetailedSubHeadings">Use Detailed Subheadings</label>
                                 <select id="DefaultUseDetailedSubHeadings" is="emby-select">
                                     <option value="">Not set (user decides)</option>
@@ -4425,6 +4434,16 @@
                                     <option value="frost">Frost</option>
                                 </select>
                                 <div class="fieldDescription">Default layout for item detail pages. Keep Not set to let users choose.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="DefaultDetailOriginalTitleMode">Show Original Title</label>
+                                <select id="DefaultDetailOriginalTitleMode" is="emby-select">
+                                    <option value="">Not set (user decides)</option>
+                                    <option value="off">Off</option>
+                                    <option value="replace">Show Original Title</option>
+                                    <option value="subtitle">Show as Sub-Title</option>
+                                    <option value="parentheses">Show in Parentheses</option>
+                                </select>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="DefaultPersonalRatingStyle">Personal Rating Style</label>
@@ -11471,6 +11490,8 @@
                     setSelectValue('#DefaultInterfaceStyle', defaults.interfaceStyle, 'Configured style');
                     setSelectValue('#DefaultVisualTheme', defaults.customThemeId ? 'custom:' + defaults.customThemeId : defaults.visualTheme, 'Configured theme');
                     setSelectValue('#DefaultDetailScreenStyle', defaults.detailScreenStyle, 'Configured style');
+                    setSelectValue('#DefaultDetailOriginalTitleMode', defaults.detailOriginalTitleMode, 'Configured mode');
+                    setSelectValue('#DefaultLibraryOriginalTitleMode', defaults.libraryOriginalTitleMode, 'Configured mode');
                     setNullableBoolSelect('#DefaultDetailExpandedTabs', defaults.detailExpandedTabs);
                     setNullableBoolSelect('#DefaultDetailShowTechnicalDetails', defaults.detailShowTechnicalDetails);
                     setSelectValue('#DefaultRecommendationSystemSource', defaults.recommendationSystemSource, 'Configured source');
@@ -12444,6 +12465,8 @@
                     ds.visualTheme = uploadedTheme ? null : theme || null;
                     ds.customThemeId = uploadedTheme ? theme.slice(7) : null;
                     ds.detailScreenStyle = document.querySelector('#DefaultDetailScreenStyle').value || null;
+                    ds.detailOriginalTitleMode = document.querySelector('#DefaultDetailOriginalTitleMode').value || null;
+                    ds.libraryOriginalTitleMode = document.querySelector('#DefaultLibraryOriginalTitleMode').value || null;
                     ds.detailExpandedTabs = getNullableBoolSelect('#DefaultDetailExpandedTabs');
                     ds.detailShowTechnicalDetails = getNullableBoolSelect('#DefaultDetailShowTechnicalDetails');
                     ds.recommendationSystemSource = document.querySelector('#DefaultRecommendationSystemSource').value || null;
